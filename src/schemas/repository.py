@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 class RepositoryBase(BaseModel):
     """Base repository schema with common attributes"""
-    repository_id: str = Field(..., min_length=1, max_length=64, description="Unique repository identifier")
+    repository_id: int = Field(..., gt=0, description="Unique repository identifier")
     repository_name: str = Field(..., min_length=1, max_length=128, description="Repository name")
     repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
     repository_url: HttpUrl = Field(..., description="Repository URL")

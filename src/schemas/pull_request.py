@@ -7,6 +7,7 @@ class ReviewBase(BaseModel):
     """Base pull request review schema with common attributes"""
     pull_request_id: str = Field(..., min_length=1, max_length=64, description="Unique pull request identifier")
     project_id: int = Field(..., gt=0, description="Project ID the review belongs to")
+    repository_id: int = Field(..., gt=0, description="Repository ID the review belongs to")
     pull_request_user_id: int = Field(..., gt=0, description="User ID who created the pull request")
     reviewer_id: int = Field(..., gt=0, description="User ID of the reviewer")
     source_branch: str = Field(..., min_length=1, max_length=64, description="Source branch name")
@@ -101,6 +102,7 @@ class ReviewResponse(ReviewBase):
                 "id": 1,
                 "pull_request_id": "pr-123",
                 "project_id": 1,
+                "repository_id": 1,
                 "pull_request_user_id": 2,
                 "reviewer_id": 3,
                 "source_branch": "feature/new-feature",
@@ -138,6 +140,7 @@ class ReviewDetailResponse(ReviewResponse):
                 "id": 1,
                 "pull_request_id": "pr-123",
                 "project_id": 1,
+                "repository_id": 1,
                 "pull_request_user_id": 2,
                 "reviewer_id": 3,
                 "source_branch": "feature/new-feature",
@@ -189,6 +192,7 @@ class ReviewListResponse(BaseModel):
                         "id": 1,
                         "pull_request_id": "pr-123",
                         "project_id": 1,
+                        "repository_id": 1,
                         "pull_request_user_id": 2,
                         "reviewer_id": 3,
                         "source_branch": "feature/new-feature",
@@ -286,6 +290,7 @@ class ReviewWithProject(ReviewResponse):
                 "id": 1,
                 "pull_request_id": "pr-123",
                 "project_id": 1,
+                "repository_id": 1,
                 "pull_request_user_id": 2,
                 "reviewer_id": 3,
                 "source_branch": "feature/new-feature",

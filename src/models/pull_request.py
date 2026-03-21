@@ -41,6 +41,13 @@ class PullRequestReview(Base):
         index=True
     )
     
+    repository_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("repository.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    
     # Pull request information
     pull_request_id: Mapped[str] = mapped_column(
         String(64),
@@ -104,6 +111,10 @@ class PullRequestReview(Base):
         back_populates="pull_request_reviews"
     )
     
+    repository: Mapped["Repository"] = relationship(
+        back_populates="pull_request_reviews"
+    )
+    
     pull_request_user: Mapped["User"] = relationship(
         foreign_keys=[pull_request_user_id],
         back_populates="authored_reviews"
@@ -140,7 +151,7 @@ class PullRequestReview(Base):
         """String representation of the pull request review"""
         return (
             f"<PullRequestReview(id={self.id}, pull_request_id='{self.pull_request_id}', "
-            f"project_id={self.project_id}, reviewer_id={self.reviewer_id}, "
+            f"project_id={self.project_id}, repository_id={self.repository_id}, reviewer_id={self.reviewer_id}, "
             f"status='{self.pull_request_status}')>"
         )
     
@@ -150,6 +161,7 @@ class PullRequestReview(Base):
             "id": self.id,
             "pull_request_id": self.pull_request_id,
             "project_id": self.project_id,
+            "repository_id": self.repository_id,
             "pull_request_user_id": self.pull_request_user_id,
             "reviewer_id": self.reviewer_id,
             "source_branch": self.source_branch,
@@ -171,6 +183,7 @@ class PullRequestReview(Base):
         return cls(
             pull_request_id=data.get("pull_request_id"),
             project_id=data.get("project_id"),
+            repository_id=data.get("repository_id"),
             pull_request_user_id=data.get("pull_request_user_id"),
             reviewer_id=data.get("reviewer_id"),
             source_branch=data.get("source_branch"),

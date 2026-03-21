@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -29,8 +29,8 @@ class Repository(Base):
     )
     
     # Repository information
-    repository_id: Mapped[str] = mapped_column(
-        String(64),
+    repository_id: Mapped[int] = mapped_column(
+        Integer,
         nullable=False,
         index=True
     )
@@ -54,6 +54,12 @@ class Repository(Base):
     project: Mapped["Project"] = relationship(
         "Project",
         back_populates="repositories"
+    )
+    
+    # Relationship to pull request reviews
+    pull_request_reviews: Mapped[List["PullRequestReview"]] = relationship(
+        "PullRequestReview",
+        back_populates="repository"
     )
     
     # Timestamps
