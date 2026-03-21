@@ -253,13 +253,13 @@ class ReviewFilter(BaseModel):
     reviewer_id: Optional[int] = Field(None, gt=0, description="Filter by reviewer ID")
     source_branch: Optional[str] = Field(None, description="Filter by source branch")
     target_branch: Optional[str] = Field(None, description="Filter by target branch")
-    status: Optional[str] = Field(None, description="Filter by pull request status (open, merged, closed, draft)")
+    pull_request_status: Optional[str] = Field(None, description="Filter by pull request status (open, merged, closed, draft)")
     score_min: Optional[int] = Field(None, ge=0, le=10, description="Filter by minimum score")
     score_max: Optional[int] = Field(None, ge=0, le=10, description="Filter by maximum score")
     date_from: Optional[datetime] = Field(None, description="Filter reviews created after this date")
     date_to: Optional[datetime] = Field(None, description="Filter reviews created before this date")
     
-    @validator("status")
+    @validator("pull_request_status")
     def validate_status(cls, v):
         """Validate status if provided"""
         if v is not None:

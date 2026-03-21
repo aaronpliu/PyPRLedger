@@ -165,7 +165,7 @@ async def list_reviews(
     reviewer_id: Optional[int] = Query(None, gt=0, description="Filter by reviewer ID"),
     source_branch: Optional[str] = Query(None, description="Filter by source branch"),
     target_branch: Optional[str] = Query(None, description="Filter by target branch"),
-    status: Optional[str] = Query(None, description="Filter by pull request status (open, merged, closed, draft)"),
+    pull_request_status: Optional[str] = Query(None, description="Filter by pull request status (open, merged, closed, draft)"),
     score_min: Optional[int] = Query(None, ge=0, le=10, description="Filter by minimum score"),
     score_max: Optional[int] = Query(None, ge=0, le=10, description="Filter by maximum score"),
     date_from: Optional[datetime] = Query(None, description="Filter reviews created after this date"),
@@ -183,7 +183,7 @@ async def list_reviews(
         reviewer_id: Filter by reviewer ID
         source_branch: Filter by source branch
         target_branch: Filter by target branch
-        status: Filter by pull request status
+        pull_request_status: Filter by pull request status
         score_min: Filter by minimum score
         score_max: Filter by maximum score
         date_from: Filter reviews created after this date
@@ -204,7 +204,7 @@ async def list_reviews(
             reviewer_id=reviewer_id,
             source_branch=source_branch,
             target_branch=target_branch,
-            status=status,
+            pull_request_status=pull_request_status,
             score_min=score_min,
             score_max=score_max,
             date_from=date_from,
