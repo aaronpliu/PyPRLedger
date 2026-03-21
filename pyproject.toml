@@ -4,4 +4,25 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "aiomysql>=0.3.2",
+    "alembic>=1.18.4",
+    "fastapi>=0.135.1",
+    "httpx>=0.28.1",
+    "orjson>=3.11.7",
+    "prometheus-client>=0.24.1",
+    "prometheus-fastapi-instrumentator>=7.1.0",
+    "pydantic>=2.12.5",
+    "python-dotenv>=1.2.2",
+    "python-jose[cryptography]>=3.5.0",
+    "redis>=7.3.0",
+    "sqlalchemy>=2.0.48",
+    "sqlmodel>=0.0.37",
+    "uvicorn[standard]>=0.42.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.15.7",
+]
