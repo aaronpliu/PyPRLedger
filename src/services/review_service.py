@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from src.models.pull_request import PullRequestReview
 from src.models.project import Project
+from src.models.repository import Repository
 from src.models.user import User
 from src.schemas.pull_request import (
     ReviewCreate,
@@ -108,35 +109,66 @@ class ReviewService:
             UserNotFoundException: If either user doesn't exist
             ReviewAlreadyExistsException: If a review with the same PR ID already exists
         """
-        # Check if project exists
+        # Upsert project using business project_id (integer)
         project_result = await db.execute(
-            select(Project).where(Project.id == review_data.project_id)
+            select(Project).where(Project.project_id == review_data.project_id)
         )
         project = project_result.scalar_one_or_none()
         if not project:
+            logger.warning(f"Project {review_data.project_id} not found. Please create it first.")
             raise ProjectNotFoundException(project_id=review_data.project_id)
         
-        # Check if pull request user exists
+        # Upsert repository if not exists
+        repo_result = await db.execute(
+            select(Repository).where(Repository.repository_id == review_data.repository_id)
+        )
+        repository = repo_result.scalar_one_or_none()
+        if not repository:
+            logger.warning(f"Repository {review_data.repository_id} not found. Please create it first.")
+            from src.core.exceptions import RepositoryNotFoundException
+            raise RepositoryNotFoundException(repository_id=review_data.repository_id)
+        
+        # Upsert pull request user if not exists (using business user_id)
         user_result = await db.execute(
-            select(User).where(User.id == review_data.pull_request_user_id)
+            select(User).where(User.user_id == review_data.pull_request_user_id)
         )
         user = user_result.scalar_one_or_none()
         if not user:
-            raise UserNotFoundException(user_id=review_data.pull_request_user_id)
-        
-        # Check if reviewer exists and is a reviewer
-        reviewer_result = await db.execute(
-            select(User).where(
-                and_(
-                    User.id == review_data.reviewer_id,
-                    User.is_reviewer == True,
-                    User.active == True
-                )
+            # Auto-create user with minimal info
+            user = User(
+                user_id=review_data.pull_request_user_id,
+                username=f"user_{review_data.pull_request_user_id}",
+                display_name=f"User {review_data.pull_request_user_id}",
+                email_address=f"user_{review_data.pull_request_user_id}@example.com",
+                active=True,
+                is_reviewer=False
             )
+            db.add(user)
+            await db.flush()
+            logger.info(f"Auto-created user: {review_data.pull_request_user_id}")
+        
+        # Upsert reviewer if not exists (using business user_id)
+        reviewer_result = await db.execute(
+            select(User).where(User.user_id == review_data.reviewer_id)
         )
         reviewer = reviewer_result.scalar_one_or_none()
         if not reviewer:
-            raise UserNotFoundException(user_id=review_data.reviewer_id)
+            # Auto-create reviewer with minimal info
+            reviewer = User(
+                user_id=review_data.reviewer_id,
+                username=f"reviewer_{review_data.reviewer_id}",
+                display_name=f"Reviewer {review_data.reviewer_id}",
+                email_address=f"reviewer_{review_data.reviewer_id}@example.com",
+                active=True,
+                is_reviewer=True
+            )
+            db.add(reviewer)
+            await db.flush()
+            logger.info(f"Auto-created reviewer: {review_data.reviewer_id}")
+        elif not reviewer.is_reviewer:
+            # Update existing user to be a reviewer
+            reviewer.is_reviewer = True
+            logger.info(f"Updated user {review_data.reviewer_id} to reviewer status")
         
         # Check if review with same pull_request_id already exists
         existing_review_result = await db.execute(
@@ -148,8 +180,24 @@ class ReviewService:
         if existing_review:
             raise ReviewAlreadyExistsException(review_id=review_data.pull_request_id)
         
-        # Create new review
-        new_review = PullRequestReview.from_dict(review_data.dict())
+        # Create new review using business IDs
+        new_review = PullRequestReview(
+            pull_request_id=review_data.pull_request_id,
+            pull_request_commit_id=review_data.pull_request_commit_id,
+            project_id=project.project_id,  # Use business ID
+            repository_id=repository.repository_id,  # Use business ID
+            pull_request_user_id=user.user_id,  # Use business ID
+            reviewer_id=reviewer.user_id,  # Use business ID
+            source_branch=review_data.source_branch,
+            target_branch=review_data.target_branch,
+            git_code_diff=review_data.git_code_diff,
+            source_filename=review_data.source_filename,
+            ai_suggestions=review_data.ai_suggestions,
+            reviewer_comments=review_data.reviewer_comments,
+            score=review_data.score,
+            pull_request_status=review_data.pull_request_status,
+            metadata=review_data.metadata
+        )
         db.add(new_review)
         await db.flush()
         await db.refresh(new_review)
@@ -160,12 +208,12 @@ class ReviewService:
             # Add project and user details
             review_dict["project_name"] = project.project_name
             review_dict["pull_request_user"] = {
-                "id": user.id,
+                "id": user.user_id,
                 "username": user.username,
                 "display_name": user.display_name
             }
             review_dict["reviewer"] = {
-                "id": reviewer.id,
+                "id": reviewer.user_id,
                 "username": reviewer.username,
                 "display_name": reviewer.display_name
             }
@@ -174,7 +222,7 @@ class ReviewService:
         # Update metrics
         self.metrics.increment_review(
             project_id=project.project_id,
-            reviewer_id=reviewer.id
+            reviewer_id=reviewer.user_id
         )
         
         # Invalidate list cache
@@ -182,6 +230,59 @@ class ReviewService:
         
         logger.info(f"Created new review: {new_review.pull_request_id}")
         return ReviewResponse(**new_review.to_dict())
+    
+    async def upsert_review(
+        self,
+        review_data: ReviewCreate,
+        db: AsyncSession,
+        include_details: bool = False
+    ) -> tuple[PullRequestReview, bool]:
+        """
+        Upsert a pull request review - create if not exists, update if exists
+        
+        Args:
+            review_data: The review data to upsert
+            db: Database session
+            include_details: Whether to include detailed information
+            
+        Returns:
+            tuple[PullRequestReview, bool]: The review and whether it was created
+            
+        Raises:
+            ProjectNotFoundException: If the project doesn't exist
+            UserNotFoundException: If either user doesn't exist
+        """
+        # Check if review already exists
+        existing_review_result = await db.execute(
+            select(PullRequestReview).where(
+                PullRequestReview.pull_request_id == review_data.pull_request_id
+            )
+        )
+        existing_review = existing_review_result.scalar_one_or_none()
+        
+        if existing_review:
+            # Update existing review
+            for field, value in review_data.dict().items():
+                if hasattr(existing_review, field):
+                    setattr(existing_review, field, value)
+            
+            existing_review.updated_date = datetime.utcnow()
+            await db.flush()
+            await db.refresh(existing_review)
+            
+            # Invalidate cache
+            await self._invalidate_review_cache(existing_review.pull_request_id)
+            await self._invalidate_list_cache()
+            
+            logger.info(f"Updated existing review: {existing_review.pull_request_id}")
+            return existing_review, False
+        else:
+            # Create new review
+            new_review_response = await self.create_review(review_data, db, include_details)
+            await db.commit()
+            # Convert response back to model for consistency
+            new_review = PullRequestReview.from_dict(new_review_response.dict())
+            return new_review, True
     
     async def get_review(
         self,
@@ -400,41 +501,6 @@ class ReviewService:
         
         logger.info(f"Deleted review: {review_id}")
         return True
-    
-    async def upsert_review(
-        self,
-        review_data: ReviewCreate,
-        db: AsyncSession
-    ) -> tuple[PullRequestReview, bool]:
-        """
-        Create or update a pull request review (upsert operation)
-        
-        Args:
-            review_data: The review data to upsert
-            db: Database session
-            
-        Returns:
-            tuple[PullRequestReview, bool]: The review and whether it was created (True) or updated (False)
-        """
-        existing_review = await self.get_review(review_data.pull_request_id, db, use_cache=False)
-        
-        if existing_review:
-            # Update existing review
-            update_data = ReviewUpdate(
-                git_code_diff=review_data.git_code_diff,
-                source_filename=review_data.source_filename,
-                ai_suggestions=review_data.ai_suggestions,
-                reviewer_comments=review_data.reviewer_comments,
-                score=review_data.score,
-                pull_request_status=review_data.pull_request_status,
-                metadata=review_data.metadata
-            )
-            updated_review = await self.update_review(review_data.pull_request_id, update_data, db)
-            return updated_review, False
-        else:
-            # Create new review
-            new_review = await self.create_review(review_data, db)
-            return new_review, True
     
     async def get_review_statistics(
         self,

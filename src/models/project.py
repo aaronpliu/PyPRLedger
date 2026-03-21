@@ -21,8 +21,8 @@ class Project(Base):
     )
     
     # Project information
-    project_id: Mapped[str] = mapped_column(
-        String(64),
+    project_id: Mapped[int] = mapped_column(
+        Integer,
         unique=True,
         nullable=False,
         index=True

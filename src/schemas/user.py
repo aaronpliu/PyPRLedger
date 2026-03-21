@@ -5,7 +5,8 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 class UserBase(BaseModel):
     """Base user schema with common attributes"""
-    username: str = Field(..., min_length=3, max_length=64, description="Unique username")
+    user_id: int = Field(..., gt=0, description="Unique user business identifier (e.g., GitHub user ID)")
+    username: str = Field(..., min_length=3, max_length=64, description="Username")
     display_name: str = Field(..., min_length=1, max_length=128, description="Display name")
     email_address: EmailStr = Field(..., description="User's email address")
     
@@ -19,7 +20,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """Schema for creating a new user"""
-    password: str = Field(..., min_length=8, max_length=128, description="User's password")
+    password: Optional[str] = Field(None, min_length=8, max_length=128, description="User's password")
     is_reviewer: bool = Field(default=False, description="Whether the user is a reviewer")
     
     @field_validator("password")

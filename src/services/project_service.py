@@ -151,6 +151,52 @@ class ProjectService:
         logger.info(f"Created new project: {new_project.project_id} (ID: {new_project.id})")
         return ProjectResponse(**project_dict)
     
+    async def upsert_project(
+        self,
+        project_data: ProjectCreate,
+        db: AsyncSession
+    ) -> Tuple[Project, bool]:
+        """
+        Upsert a project - create if not exists, update if exists
+        
+        Args:
+            project_data: The project data to upsert
+            db: Database session
+            
+        Returns:
+            Tuple[Project, bool]: The project and whether it was created
+        """
+        # Check if project exists by business ID
+        existing = await db.execute(
+            select(Project).where(Project.project_id == project_data.project_id)
+        )
+        project = existing.scalar_one_or_none()
+        
+        created = False
+        if not project:
+            # Create new project
+            project = Project.from_dict(project_data.dict())
+            db.add(project)
+            created = True
+            logger.info(f"Created new project: {project.project_id}")
+        else:
+            # Update existing project
+            project.update(project_data.dict())
+            logger.info(f"Updated existing project: {project.project_id}")
+        
+        await db.flush()
+        await db.refresh(project)
+        
+        # Cache the project
+        await self._set_project_in_cache(project.id, project.to_dict())
+        
+        # Invalidate list cache if created
+        if created:
+            await self._invalidate_list_cache()
+            self.metrics.increment_project_count()
+        
+        return project, created
+    
     async def get_project_by_id(
         self,
         project_id: int,

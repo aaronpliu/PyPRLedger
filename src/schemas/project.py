@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 class ProjectBase(BaseModel):
     """Base project schema with common attributes"""
-    project_id: str = Field(..., min_length=1, max_length=64, description="Unique project identifier")
+    project_id: int = Field(..., description="Unique project business identifier (integer)")
     project_name: str = Field(..., min_length=1, max_length=128, description="Project name")
     project_key: str = Field(..., min_length=1, max_length=32, description="Unique project key")
     project_url: HttpUrl = Field(..., description="Project URL")
@@ -15,13 +15,6 @@ class ProjectBase(BaseModel):
         """Validate project key is uppercase"""
         return v.upper()
     
-    @field_validator("project_id")
-    def project_id_alphanumeric(cls, v):
-        """Validate project ID contains only alphanumeric characters and hyphens"""
-        if not all(c.isalnum() or c == "-" for c in v):
-            raise ValueError("Project ID must contain only alphanumeric characters and hyphens")
-        return v
-
 
 class ProjectCreate(ProjectBase):
     """Schema for creating a new project"""

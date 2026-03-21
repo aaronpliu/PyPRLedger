@@ -7,10 +7,10 @@ class ReviewBase(BaseModel):
     """Base pull request review schema with common attributes"""
     pull_request_id: str = Field(..., min_length=1, max_length=64, description="Unique pull request identifier")
     pull_request_commit_id: Optional[str] = Field(None, min_length=1, max_length=64, description="Git commit SHA/hash associated with the pull request")
-    project_id: int = Field(..., gt=0, description="Project ID the review belongs to")
-    repository_id: int = Field(..., gt=0, description="Repository ID the review belongs to")
-    pull_request_user_id: int = Field(..., gt=0, description="User ID who created the pull request")
-    reviewer_id: int = Field(..., gt=0, description="User ID of the reviewer")
+    project_id: int = Field(..., gt=0, description="Project business ID the review belongs to")
+    repository_id: int = Field(..., gt=0, description="Repository business ID the review belongs to")
+    pull_request_user_id: int = Field(..., gt=0, description="User business ID who created the pull request")
+    reviewer_id: int = Field(..., gt=0, description="User business ID of the reviewer")
     source_branch: str = Field(..., min_length=1, max_length=64, description="Source branch name")
     target_branch: str = Field(..., min_length=1, max_length=64, description="Target branch name")
     

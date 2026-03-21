@@ -21,7 +21,7 @@ class RepositoryBase(BaseModel):
 
 class RepositoryCreate(RepositoryBase):
     """Schema for creating a new repository"""
-    project_id: int = Field(..., description="Project ID the repository belongs to")
+    project_id: int = Field(..., gt=0, description="Project business ID the repository belongs to")
     description: Optional[str] = Field(None, max_length=500, description="Repository description")
     is_public: bool = Field(default=False, description="Whether the repository is public")
     default_branch: Optional[str] = Field(None, max_length=64, description="Default branch name (e.g., 'main', 'master')")

@@ -336,6 +336,13 @@ class OperationNotAllowedException(BadRequestException):
             message += f": {reason}"
         super().__init__(code=ErrorCode.OPERATION_NOT_ALLOWED, message=message)
 
+class RepositoryNotFoundException(Exception):
+    """Raised when a repository is not found"""
+    
+    def __init__(self, repository_id: str, message: str = None):
+        self.repository_id = repository_id
+        self.message = message or f"Repository not found: {repository_id}"
+        super().__init__(self.message)
 
 class GitServiceException(AppException):
     """Git service error"""
