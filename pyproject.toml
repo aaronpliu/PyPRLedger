@@ -17,6 +17,7 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.2.2",
     "python-jose[cryptography]>=3.5.0",
+    "pyyaml>=6.0",
     "redis>=7.3.0",
     "sqlalchemy>=2.0.48",
     "sqlmodel>=0.0.37",

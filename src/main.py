@@ -16,13 +16,11 @@ from src.api.v1.api import api_router
 from src.core.database import init_db, close_db
 from src.utils.redis import init_redis, close_redis
 from src.utils.metrics import MetricsCollector
+from src.utils.log import setup_logging, get_logger
 
-# 配置日志
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# 配置日志系统
+setup_logging()
+logger = get_logger(__name__)
 
 
 # 初始化指标收集器
