@@ -60,10 +60,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# 配置CORS
+# 配置 CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origins=settings.BACKEND_CORS_ORIGINS_LIST,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

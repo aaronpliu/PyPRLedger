@@ -93,9 +93,21 @@ class RedisCache:
         Initialize Redis cache utility
         
         Args:
-            redis_client: Optional Redis client. If not provided, uses the global client.
+            redis_client: Optional Redis client. If not provided, uses the global client (lazy-loaded).
         """
-        self.client = redis_client or get_redis_client()
+        self._client = redis_client
+    
+    @property
+    def client(self) -> Redis:
+        """Lazy-load Redis client"""
+        if self._client is None:
+            self._client = get_redis_client()
+        return self._client
+    
+    @client.setter
+    def client(self, value: Redis):
+        """Set Redis client"""
+        self._client = value
     
     async def get(self, key: str) -> Optional[str]:
         """

@@ -92,10 +92,11 @@ class PullRequestReview(Base):
         nullable=False
     )
     
-    # Metadata
-    metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+    # Metadata (renamed from 'metadata' to avoid SQLAlchemy reserved name conflict)
+    review_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSON,
-        nullable=True
+        nullable=True,
+        name="metadata"  # Database column name remains 'metadata'
     )
     
     # Relationships
@@ -162,7 +163,7 @@ class PullRequestReview(Base):
             "reviewer_comments": self.reviewer_comments,
             "score": self.score,
             "pull_request_status": self.pull_request_status,
-            "metadata": self.metadata,
+            "metadata": self.review_metadata,
             "created_date": self.created_date.isoformat() if self.created_date else None,
             "updated_date": self.updated_date.isoformat() if self.updated_date else None
         }
@@ -183,7 +184,7 @@ class PullRequestReview(Base):
             reviewer_comments=data.get("reviewer_comments"),
             score=data.get("score"),
             pull_request_status=data.get("pull_request_status"),
-            metadata=data.get("metadata")
+            review_metadata=data.get("metadata")
         )
     
     def update(self, data: Dict[str, Any]) -> None:
@@ -195,7 +196,7 @@ class PullRequestReview(Base):
             "reviewer_comments",
             "score",
             "pull_request_status",
-            "metadata"
+            "review_metadata"
         ]
         
         for key, value in data.items():
