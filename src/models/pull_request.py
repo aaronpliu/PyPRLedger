@@ -101,18 +101,15 @@ class PullRequestReview(Base):
     
     # Relationships
     project: Mapped["Project"] = relationship(
-        "Project",
         back_populates="pull_request_reviews"
     )
     
     pull_request_user: Mapped["User"] = relationship(
-        "User",
         foreign_keys=[pull_request_user_id],
         back_populates="authored_reviews"
     )
     
     reviewer: Mapped["User"] = relationship(
-        "User",
         foreign_keys=[reviewer_id],
         back_populates="reviewed_reviews"
     )

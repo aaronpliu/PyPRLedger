@@ -2,14 +2,9 @@ from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String
 from sqlalchemy.ext.asyncio import AsyncAttrs
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
-
-
-class Base(AsyncAttrs, DeclarativeBase):
-    """Base class for all models"""
-    pass
 
 
 class User(Base):
@@ -74,13 +69,11 @@ class User(Base):
     
     # Relationships
     authored_reviews: Mapped[List["PullRequestReview"]] = relationship(
-        "PullRequestReview",
         foreign_keys="PullRequestReview.pull_request_user_id",
         back_populates="pull_request_user"
     )
     
     reviewed_reviews: Mapped[List["PullRequestReview"]] = relationship(
-        "PullRequestReview",
         foreign_keys="PullRequestReview.reviewer_id",
         back_populates="reviewer"
     )
