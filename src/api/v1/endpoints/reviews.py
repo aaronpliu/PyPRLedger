@@ -157,6 +157,8 @@ async def upsert_review(
 
 @router.get("", response_model=ReviewListResponse)
 async def list_reviews(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
     pull_request_id: Optional[str] = Query(None, description="Filter by pull request ID"),
     project_id: Optional[int] = Query(None, gt=0, description="Filter by project ID"),
     pull_request_user_id: Optional[int] = Query(None, gt=0, description="Filter by pull request user ID"),
@@ -169,9 +171,7 @@ async def list_reviews(
     date_from: Optional[datetime] = Query(None, description="Filter reviews created after this date"),
     date_to: Optional[datetime] = Query(None, description="Filter reviews created before this date"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    review_service: Annotated[ReviewService, Depends(get_review_service)]
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page")
 ) -> ReviewListResponse:
     """
     List pull request reviews with filtering and pagination
@@ -235,9 +235,9 @@ async def list_reviews(
 
 @router.get("/statistics", response_model=ReviewStats)
 async def get_review_statistics(
-    project_id: Optional[int] = Query(None, gt=0, description="Filter statistics by project ID"),
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    review_service: Annotated[ReviewService, Depends(get_review_service)]
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+    project_id: Optional[int] = Query(None, gt=0, description="Filter statistics by project ID")
 ) -> ReviewStats:
     """
     Get pull request review statistics
@@ -481,10 +481,10 @@ async def delete_review(
 @router.get("/project/{project_id}", response_model=ReviewListResponse)
 async def get_reviews_by_project(
     project_id: int,
-    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    review_service: Annotated[ReviewService, Depends(get_review_service)]
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page")
 ) -> ReviewListResponse:
     """
     Get pull request reviews by project
@@ -525,10 +525,10 @@ async def get_reviews_by_project(
 @router.get("/reviewer/{reviewer_id}", response_model=ReviewListResponse)
 async def get_reviews_by_reviewer(
     reviewer_id: int,
-    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    review_service: Annotated[ReviewService, Depends(get_review_service)]
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page")
 ) -> ReviewListResponse:
     """
     Get pull request reviews by reviewer
@@ -569,11 +569,11 @@ async def get_reviews_by_reviewer(
 @router.get("/status/{status}", response_model=ReviewListResponse)
 async def get_reviews_by_status(
     status: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
     project_id: Optional[int] = Query(None, gt=0, description="Filter by project ID"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    review_service: Annotated[ReviewService, Depends(get_review_service)]
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page")
 ) -> ReviewListResponse:
     """
     Get pull request reviews by status

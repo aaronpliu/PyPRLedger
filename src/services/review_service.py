@@ -228,9 +228,9 @@ class ReviewService:
     async def list_reviews(
         self,
         filters: ReviewFilter,
+        db: AsyncSession,
         page: int = 1,
         page_size: int = 20,
-        db: AsyncSession,
         use_cache: bool = True
     ) -> tuple[List[PullRequestReview], int]:
         """
@@ -438,8 +438,8 @@ class ReviewService:
     
     async def get_review_statistics(
         self,
-        project_id: Optional[int] = None,
         db: AsyncSession,
+        project_id: Optional[int] = None,
         use_cache: bool = True
     ) -> ReviewStats:
         """
@@ -544,9 +544,9 @@ class ReviewService:
     async def get_reviews_by_reviewer(
         self,
         reviewer_id: int,
+        db: AsyncSession,
         page: int = 1,
-        page_size: int = 20,
-        db: AsyncSession
+        page_size: int = 20
     ) -> tuple[List[PullRequestReview], int]:
         """
         Get reviews by reviewer
@@ -561,14 +561,14 @@ class ReviewService:
             tuple[List[PullRequestReview], int]: List of reviews and total count
         """
         filters = ReviewFilter(reviewer_id=reviewer_id)
-        return await self.list_reviews(filters, page, page_size, db)
+        return await self.list_reviews(filters, db, page, page_size)
     
     async def get_reviews_by_project(
         self,
         project_id: int,
+        db: AsyncSession,
         page: int = 1,
-        page_size: int = 20,
-        db: AsyncSession
+        page_size: int = 20
     ) -> tuple[List[PullRequestReview], int]:
         """
         Get reviews by project
@@ -583,15 +583,15 @@ class ReviewService:
             tuple[List[PullRequestReview], int]: List of reviews and total count
         """
         filters = ReviewFilter(project_id=project_id)
-        return await self.list_reviews(filters, page, page_size, db)
+        return await self.list_reviews(filters, db, page, page_size)
     
     async def get_reviews_by_status(
         self,
         status: str,
+        db: AsyncSession,
         project_id: Optional[int] = None,
         page: int = 1,
-        page_size: int = 20,
-        db: AsyncSession
+        page_size: int = 20
     ) -> tuple[List[PullRequestReview], int]:
         """
         Get reviews by status
@@ -607,7 +607,7 @@ class ReviewService:
             tuple[List[PullRequestReview], int]: List of reviews and total count
         """
         filters = ReviewFilter(status=status, project_id=project_id)
-        return await self.list_reviews(filters, page, page_size, db)
+        return await self.list_reviews(filters, db, page, page_size)
     
     async def update_review_status(
         self,

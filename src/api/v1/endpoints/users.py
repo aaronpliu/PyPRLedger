@@ -82,13 +82,13 @@ async def create_user(
 
 @router.get("", response_model=UserListResponse)
 async def list_users(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    user_service: Annotated[UserService, Depends(get_user_service)],
     active: Optional[bool] = Query(None, description="Filter by active status"),
     is_reviewer: Optional[bool] = Query(None, description="Filter by reviewer status"),
     username: Optional[str] = Query(None, description="Filter by username (partial match)"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_service: Annotated[UserService, Depends(get_user_service)]
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page")
 ) -> UserListResponse:
     """
     List users with filtering and pagination
@@ -176,9 +176,9 @@ async def get_user_statistics(
 
 @router.get("/active", response_model=UserListResponse)
 async def get_active_users(
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of users to return"),
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_service: Annotated[UserService, Depends(get_user_service)]
+    user_service: Annotated[UserService, Depends(get_user_service)],
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of users to return")
 ) -> UserListResponse:
     """
     Get active users
@@ -216,9 +216,9 @@ async def get_active_users(
 
 @router.get("/reviewers", response_model=UserListResponse)
 async def get_reviewers(
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of reviewers to return"),
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    user_service: Annotated[UserService, Depends(get_user_service)]
+    user_service: Annotated[UserService, Depends(get_user_service)],
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of reviewers to return")
 ) -> UserListResponse:
     """
     Get active reviewers

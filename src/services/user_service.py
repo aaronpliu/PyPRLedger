@@ -298,12 +298,12 @@ class UserService:
     
     async def list_users(
         self,
+        db: AsyncSession,
         active: Optional[bool] = None,
         is_reviewer: Optional[bool] = None,
         username: Optional[str] = None,
         page: int = 1,
         page_size: int = 20,
-        db: AsyncSession,
         use_cache: bool = True
     ) -> tuple[List[User], int]:
         """
