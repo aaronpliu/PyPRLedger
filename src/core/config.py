@@ -1,7 +1,8 @@
 import os
 from functools import lru_cache
 from typing import List, Optional
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -30,10 +31,10 @@ class Settings(BaseSettings):
     
     @property
     def DATABASE_URL(self) -> str:
-        """获取数据库连接URL"""
+        """获取数据库连接 URL"""
         return f"mysql+aiomysql://{self.DATABASE_USER}:{self.DATABASE_PASSWORD}@{self.DATABASE_HOST}:{self.DATABASE_PORT}/{self.DATABASE_NAME}"
     
-    # Redis配置
+    # Redis 配置
     REDIS_HOST: str = Field(default="localhost", env="REDIS_HOST")
     REDIS_PORT: int = Field(default=6379, env="REDIS_PORT")
     REDIS_PASSWORD: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
@@ -42,34 +43,39 @@ class Settings(BaseSettings):
     
     @property
     def REDIS_URL(self) -> str:
-        """获取Redis连接URL"""
+        """获取 Redis 连接 URL"""
         password_part = f":{self.REDIS_PASSWORD}@" if self.REDIS_PASSWORD else ""
         return f"redis://{password_part}{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
     
-    # Redis缓存TTL设置(秒)
-    CACHE_TTL_REVIEWS: int = Field(default=3600, env="CACHE_TTL_REVIEWS")  # 1小时
-    CACHE_TTL_PROJECTS: int = Field(default=21600, env="CACHE_TTL_PROJECTS")  # 6小时
-    CACHE_TTL_USERS: int = Field(default=43200, env="CACHE_TTL_USERS")  # 12小时
-    CACHE_TTL_STATS: int = Field(default=3600, env="CACHE_TTL_STATS")  # 1小时
+    # Redis 缓存 TTL 设置 (秒)
+    CACHE_TTL_REVIEWS: int = Field(default=3600, env="CACHE_TTL_REVIEWS")  # 1 小时
+    CACHE_TTL_PROJECTS: int = Field(default=21600, env="CACHE_TTL_PROJECTS")  # 6 小时
+    CACHE_TTL_USERS: int = Field(default=43200, env="CACHE_TTL_USERS")  # 12 小时
+    CACHE_TTL_STATS: int = Field(default=3600, env="CACHE_TTL_STATS")  # 1 小时
     
     # 安全配置
     SECRET_KEY: str = Field(default="development-secret-key-change-in-production", env="SECRET_KEY")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     
-    # CORS配置
+    # CORS 配置
     BACKEND_CORS_ORIGINS: List[str] = Field(
         default=["http://localhost:3000", "http://localhost:8000"],
         env="BACKEND_CORS_ORIGINS"
     )
     
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: str | List[str]) -> List[str]:
-        if isinstance(v, str):
-            return [i.strip() for i in v.split(",")]
-        return v
+    @model_validator(mode='before')
+    @classmethod
+    def parse_cors_origins(cls, values):
+        """Parse BACKEND_CORS_ORIGINS from comma-separated string to list"""
+        if isinstance(values, dict):
+            cors_origins = values.get('BACKEND_CORS_ORIGINS')
+            if isinstance(cors_origins, str):
+                # Parse comma-separated string to list
+                values['BACKEND_CORS_ORIGINS'] = [origin.strip() for origin in cors_origins.split(',')]
+        return values
     
-    # API限流配置
+    # API 限流配置
     RATE_LIMIT_ENABLED: bool = Field(default=True, env="RATE_LIMIT_ENABLED")
     RATE_LIMIT_MAX_REQUESTS: int = Field(default=1000, env="RATE_LIMIT_MAX_REQUESTS")
     RATE_LIMIT_PERIOD_SECONDS: int = Field(default=60, env="RATE_LIMIT_PERIOD_SECONDS")
@@ -78,7 +84,7 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_OPERATIONS: int = Field(default=1000, env="MAX_CONCURRENT_OPERATIONS")
     DB_QUERY_TIMEOUT: int = Field(default=30, env="DB_QUERY_TIMEOUT")
     
-    # Prometheus监控配置
+    # Prometheus 监控配置
     PROMETHEUS_ENABLED: bool = Field(default=True, env="PROMETHEUS_ENABLED")
     PROMETHEUS_METRICS_PATH: str = Field(default="/metrics", env="PROMETHEUS_METRICS_PATH")
     
@@ -86,7 +92,7 @@ class Settings(BaseSettings):
     DEFAULT_PAGE_SIZE: int = Field(default=20, env="DEFAULT_PAGE_SIZE")
     MAX_PAGE_SIZE: int = Field(default=100, env="MAX_PAGE_SIZE")
     
-    # Git配置
+    # Git 配置
     GIT_MAX_DIFF_SIZE: int = Field(default=1048576, env="GIT_MAX_DIFF_SIZE")  # 1MB
     GIT_MAX_FILES_IN_PR: int = Field(default=100, env="GIT_MAX_FILES_IN_PR")
     
