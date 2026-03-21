@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy import text
 
 from src.core.config import settings
 
@@ -33,20 +34,35 @@ def get_engine() -> AsyncEngine:
 
 def create_engine() -> AsyncEngine:
     """创建数据库引擎"""
-    engine = create_async_engine(
-        settings.DATABASE_URL,
-        echo=settings.DEBUG,
-        pool_size=settings.DATABASE_POOL_SIZE,
-        max_overflow=settings.DATABASE_MAX_OVERFLOW,
-        pool_timeout=settings.DATABASE_POOL_TIMEOUT,
-        pool_recycle=settings.DATABASE_POOL_RECYCLE,
-        pool_pre_ping=True,
-        poolclass=QueuePool,
-        connect_args={
+    # 准备连接池相关参数（仅在使用非 NullPool 时需要）
+    engine_kwargs = {
+        "echo": settings.DEBUG,
+        "pool_pre_ping": True,
+        "connect_args": {
             "charset": "utf8mb4",
             "connect_timeout": settings.DATABASE_POOL_TIMEOUT,
         },
-        future=True,
+        "future": True,
+    }
+    
+    # 根据是否使用 NullPool 来决定是否添加连接池参数
+    # NullPool 不支持 pool_size, max_overflow, pool_timeout 等参数
+    if settings.DATABASE_POOL_SIZE > 0:
+        # 如果不使用 NullPool，可以添加连接池参数
+        # 但异步引擎默认会使用 AsyncAdaptedQueuePool，所以这里不指定 poolclass
+        engine_kwargs.update({
+            "pool_size": settings.DATABASE_POOL_SIZE,
+            "max_overflow": settings.DATABASE_MAX_OVERFLOW,
+            "pool_timeout": settings.DATABASE_POOL_TIMEOUT,
+            "pool_recycle": settings.DATABASE_POOL_RECYCLE,
+        })
+    else:
+        # 使用 NullPool 模式
+        engine_kwargs["poolclass"] = NullPool
+    
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        **engine_kwargs
     )
     return engine
 
@@ -72,7 +88,7 @@ async def init_db() -> None:
         
         # 测试数据库连接
         async with _engine.begin() as conn:
-            await conn.execute("SELECT 1")
+            await conn.execute(text("SELECT 1"))
         
         logger.info("Database connection initialized successfully")
         
