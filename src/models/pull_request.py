@@ -55,6 +55,12 @@ class PullRequestReview(Base):
         index=True
     )
     
+    pull_request_commit_id: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True
+    )
+    
     source_branch: Mapped[str] = mapped_column(
         String(64),
         nullable=False
@@ -151,7 +157,8 @@ class PullRequestReview(Base):
         """String representation of the pull request review"""
         return (
             f"<PullRequestReview(id={self.id}, pull_request_id='{self.pull_request_id}', "
-            f"project_id={self.project_id}, repository_id={self.repository_id}, reviewer_id={self.reviewer_id}, "
+            f"commit_id='{self.pull_request_commit_id}', project_id={self.project_id}, "
+            f"repository_id={self.repository_id}, reviewer_id={self.reviewer_id}, "
             f"status='{self.pull_request_status}')>"
         )
     
@@ -160,6 +167,7 @@ class PullRequestReview(Base):
         return {
             "id": self.id,
             "pull_request_id": self.pull_request_id,
+            "pull_request_commit_id": self.pull_request_commit_id,
             "project_id": self.project_id,
             "repository_id": self.repository_id,
             "pull_request_user_id": self.pull_request_user_id,
@@ -182,6 +190,7 @@ class PullRequestReview(Base):
         """Create pull request review instance from dictionary"""
         return cls(
             pull_request_id=data.get("pull_request_id"),
+            pull_request_commit_id=data.get("pull_request_commit_id"),
             project_id=data.get("project_id"),
             repository_id=data.get("repository_id"),
             pull_request_user_id=data.get("pull_request_user_id"),

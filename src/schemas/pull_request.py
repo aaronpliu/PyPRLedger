@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 class ReviewBase(BaseModel):
     """Base pull request review schema with common attributes"""
     pull_request_id: str = Field(..., min_length=1, max_length=64, description="Unique pull request identifier")
+    pull_request_commit_id: Optional[str] = Field(None, min_length=1, max_length=64, description="Git commit SHA/hash associated with the pull request")
     project_id: int = Field(..., gt=0, description="Project ID the review belongs to")
     repository_id: int = Field(..., gt=0, description="Repository ID the review belongs to")
     pull_request_user_id: int = Field(..., gt=0, description="User ID who created the pull request")
@@ -25,6 +26,13 @@ class ReviewBase(BaseModel):
         """Validate pull request ID format"""
         if not all(c.isalnum() or c == "-" for c in v):
             raise ValueError("Pull request ID must contain only alphanumeric characters and hyphens")
+        return v
+    
+    @field_validator("pull_request_commit_id")
+    def validate_commit_id(cls, v):
+        """Validate commit ID format (hexadecimal characters)"""
+        if v is not None and not all(c in '0123456789abcdef' for c in v.lower()):
+            raise ValueError("Commit ID must contain only hexadecimal characters (0-9, a-f)")
         return v
 
 

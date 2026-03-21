@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, List, Optional
+from typing import Annotated, Optional
 import logging
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from fastapi.responses import JSONResponse
@@ -13,16 +13,15 @@ from src.schemas.pull_request import (
     ReviewListResponse,
     ReviewFilter,
     ReviewStats,
-    ReviewWithProject,
 )
 from src.services.review_service import ReviewService
 from src.core.exceptions import (
+    ProjectNotFoundException,
     ReviewNotFoundException,
-    ReviewAlreadyExistsException,
-    InvalidReviewDataException,
     ReviewStatusException,
+    UserNotFoundException,
 )
-from src.utils.metrics import MetricsCollector, OperationTimer, metrics
+from src.utils.metrics import OperationTimer, metrics
 
 logger = logging.getLogger(__name__)
 
