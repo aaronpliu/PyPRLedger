@@ -82,15 +82,15 @@ async def create_project(
 
 @router.get("", response_model=ProjectListResponse)
 async def list_projects(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    project_service: Annotated[ProjectService, Depends(get_project_service)],
     project_id: Optional[str] = Query(None, description="Filter by project ID"),
     project_key: Optional[str] = Query(None, description="Filter by project key"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     date_from: Optional[datetime] = Query(None, description="Filter projects created after this date"),
     date_to: Optional[datetime] = Query(None, description="Filter projects created before this date"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    project_service: Annotated[ProjectService, Depends(get_project_service)]
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page")
 ) -> ProjectListResponse:
     """
     List projects with filtering and pagination
@@ -142,9 +142,9 @@ async def list_projects(
 
 @router.get("/statistics", response_model=ProjectStats)
 async def get_project_statistics(
-    project_id: Optional[int] = Query(None, gt=0, description="Filter statistics by project ID"),
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    project_service: Annotated[ProjectService, Depends(get_project_service)]
+    project_service: Annotated[ProjectService, Depends(get_project_service)],
+    project_id: Optional[int] = Query(None, gt=0, description="Filter statistics by project ID")
 ) -> ProjectStats:
     """
     Get project statistics
@@ -181,9 +181,9 @@ async def get_project_statistics(
 
 @router.get("/active", response_model=ProjectListResponse)
 async def get_active_projects(
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of projects to return"),
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    project_service: Annotated[ProjectService, Depends(get_project_service)]
+    project_service: Annotated[ProjectService, Depends(get_project_service)],
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of projects to return")
 ) -> ProjectListResponse:
     """
     Get active projects
@@ -221,11 +221,11 @@ async def get_active_projects(
 
 @router.get("/search", response_model=ProjectListResponse)
 async def search_projects(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    project_service: Annotated[ProjectService, Depends(get_project_service)],
     search_term: str = Query(..., min_length=1, description="The search term"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    project_service: Annotated[ProjectService, Depends(get_project_service)]
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page")
 ) -> ProjectListResponse:
     """
     Search projects by name, ID, or key
@@ -265,10 +265,10 @@ async def search_projects(
 
 @router.get("/top/reviews", response_model=list)
 async def get_projects_with_most_reviews(
-    limit: int = Query(10, ge=1, le=100, description="Maximum number of projects to return"),
-    days: int = Query(30, ge=1, le=365, description="Number of days to look back"),
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    project_service: Annotated[ProjectService, Depends(get_project_service)]
+    project_service: Annotated[ProjectService, Depends(get_project_service)],
+    limit: int = Query(10, ge=1, le=100, description="Maximum number of projects to return"),
+    days: int = Query(30, ge=1, le=365, description="Number of days to look back")
 ) -> list:
     """
     Get projects with the most reviews in a given time period
@@ -301,10 +301,10 @@ async def get_projects_with_most_reviews(
 
 @router.get("/top/reviewers", response_model=list)
 async def get_projects_with_most_active_reviewers(
-    limit: int = Query(10, ge=1, le=100, description="Maximum number of projects to return"),
-    days: int = Query(30, ge=1, le=365, description="Number of days to look back"),
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    project_service: Annotated[ProjectService, Depends(get_project_service)]
+    project_service: Annotated[ProjectService, Depends(get_project_service)],
+    limit: int = Query(10, ge=1, le=100, description="Maximum number of projects to return"),
+    days: int = Query(30, ge=1, le=365, description="Number of days to look back")
 ) -> list:
     """
     Get projects with the most active reviewers in a given time period

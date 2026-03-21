@@ -268,10 +268,10 @@ class ProjectService:
     
     async def list_projects(
         self,
+        db: AsyncSession,
         filters: Optional[ProjectFilter] = None,
         page: int = 1,
         page_size: int = 20,
-        db: AsyncSession,
         use_cache: bool = True
     ) -> Tuple[List[Project], int]:
         """
@@ -428,8 +428,8 @@ class ProjectService:
     
     async def get_project_statistics(
         self,
-        project_id: Optional[int] = None,
         db: AsyncSession,
+        project_id: Optional[int] = None,
         use_cache: bool = True
     ) -> ProjectStats:
         """
@@ -676,10 +676,10 @@ class ProjectService:
     
     async def search_projects(
         self,
+        db: AsyncSession,
         search_term: str,
         page: int = 1,
         page_size: int = 20,
-        db: AsyncSession
     ) -> Tuple[List[Project], int]:
         """
         Search projects by name, ID, or key
