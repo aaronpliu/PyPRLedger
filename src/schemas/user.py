@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserBase(BaseModel):
@@ -9,7 +9,7 @@ class UserBase(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=128, description="Display name")
     email_address: EmailStr = Field(..., description="User's email address")
     
-    @validator("username")
+    @field_validator("username")
     def username_alphanumeric(cls, v):
         """Validate username contains only alphanumeric characters and underscores"""
         if not all(c.isalnum() or c == "_" for c in v):
@@ -22,7 +22,7 @@ class UserCreate(UserBase):
     password: str = Field(..., min_length=8, max_length=128, description="User's password")
     is_reviewer: bool = Field(default=False, description="Whether the user is a reviewer")
     
-    @validator("password")
+    @field_validator("password")
     def password_strength(cls, v):
         """Validate password strength"""
         if len(v) < 8:

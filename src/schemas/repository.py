@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field, HttpUrl, validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
 class RepositoryBase(BaseModel):
@@ -10,14 +10,14 @@ class RepositoryBase(BaseModel):
     repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
     repository_url: HttpUrl = Field(..., description="Repository URL")
     
-    @validator("repository_slug")
+    @field_validator("repository_slug")
     def repository_slug_format(cls, v):
         """Validate repository slug format"""
         if not all(c.isalnum() or c in "-_" for c in v):
             raise ValueError("Repository slug must contain only alphanumeric characters, hyphens, and underscores")
         return v.lower()  # Store lowercase
     
-    @validator("repository_id")
+    @field_validator("repository_id")
     def repository_id_alphanumeric(cls, v):
         """Validate repository ID contains only alphanumeric characters and hyphens"""
         if not all(c.isalnum() or c == "-" for c in v):
@@ -42,7 +42,7 @@ class RepositoryUpdate(BaseModel):
     is_public: Optional[bool] = None
     default_branch: Optional[str] = Field(None, max_length=64)
     
-    @validator("repository_slug")
+    @field_validator("repository_slug")
     def repository_slug_format(cls, v):
         """Validate repository slug format if provided"""
         if v is not None:

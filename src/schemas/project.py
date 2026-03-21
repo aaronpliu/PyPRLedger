@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field, HttpUrl, validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
 class ProjectBase(BaseModel):
@@ -10,12 +10,12 @@ class ProjectBase(BaseModel):
     project_key: str = Field(..., min_length=1, max_length=32, description="Unique project key")
     project_url: HttpUrl = Field(..., description="Project URL")
     
-    @validator("project_key")
+    @field_validator("project_key")
     def project_key_uppercase(cls, v):
         """Validate project key is uppercase"""
         return v.upper()
     
-    @validator("project_id")
+    @field_validator("project_id")
     def project_id_alphanumeric(cls, v):
         """Validate project ID contains only alphanumeric characters and hyphens"""
         if not all(c.isalnum() or c == "-" for c in v):

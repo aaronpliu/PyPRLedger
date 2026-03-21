@@ -260,8 +260,8 @@ class ReviewService:
             conditions.append(PullRequestReview.source_branch == filters.source_branch)
         if filters.target_branch:
             conditions.append(PullRequestReview.target_branch == filters.target_branch)
-        if filters.status:
-            conditions.append(PullRequestReview.pull_request_status == filters.status)
+        if filters.pull_request_status:
+            conditions.append(PullRequestReview.pull_request_status == filters.pull_request_status)
         if filters.score_min is not None:
             conditions.append(PullRequestReview.score >= filters.score_min)
         if filters.score_max is not None:

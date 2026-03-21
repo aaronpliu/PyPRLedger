@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class ReviewBase(BaseModel):
@@ -12,14 +12,14 @@ class ReviewBase(BaseModel):
     source_branch: str = Field(..., min_length=1, max_length=64, description="Source branch name")
     target_branch: str = Field(..., min_length=1, max_length=64, description="Target branch name")
     
-    @validator("source_branch", "target_branch")
+    @field_validator("source_branch", "target_branch")
     def validate_branch_name(cls, v):
         """Validate branch name format"""
         if not all(c.isalnum() or c in "-_./" for c in v):
             raise ValueError("Branch name must contain only alphanumeric characters, hyphens, underscores, dots, and forward slashes")
         return v
     
-    @validator("pull_request_id")
+    @field_validator("pull_request_id")
     def validate_pr_id(cls, v):
         """Validate pull request ID format"""
         if not all(c.isalnum() or c == "-" for c in v):
@@ -37,7 +37,7 @@ class ReviewCreate(ReviewBase):
     pull_request_status: str = Field(default="open", description="Pull request status (open, merged, closed, draft)")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata in JSON format")
     
-    @validator("pull_request_status")
+    @field_validator("pull_request_status")
     def validate_status(cls, v):
         """Validate pull request status"""
         valid_statuses = {"open", "merged", "closed", "draft"}
@@ -45,7 +45,7 @@ class ReviewCreate(ReviewBase):
             raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
         return v
     
-    @validator("ai_suggestions", "metadata")
+    @field_validator("ai_suggestions", "metadata")
     def validate_json_fields(cls, v):
         """Validate JSON fields are properly formatted"""
         if v is not None and not isinstance(v, dict):
@@ -63,7 +63,7 @@ class ReviewUpdate(BaseModel):
     pull_request_status: Optional[str] = Field(None)
     metadata: Optional[Dict[str, Any]] = Field(None)
     
-    @validator("pull_request_status")
+    @field_validator("pull_request_status")
     def validate_status(cls, v):
         """Validate pull request status if provided"""
         if v is not None:
@@ -72,7 +72,7 @@ class ReviewUpdate(BaseModel):
                 raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
         return v
     
-    @validator("ai_suggestions", "metadata")
+    @field_validator("ai_suggestions", "metadata")
     def validate_json_fields(cls, v):
         """Validate JSON fields are properly formatted if provided"""
         if v is not None and not isinstance(v, dict):
@@ -259,7 +259,7 @@ class ReviewFilter(BaseModel):
     date_from: Optional[datetime] = Field(None, description="Filter reviews created after this date")
     date_to: Optional[datetime] = Field(None, description="Filter reviews created before this date")
     
-    @validator("pull_request_status")
+    @field_validator("pull_request_status")
     def validate_status(cls, v):
         """Validate status if provided"""
         if v is not None:
@@ -316,7 +316,7 @@ class ReviewTransition(BaseModel):
     current_status: str = Field(..., description="Current pull request status")
     new_status: str = Field(..., description="New pull request status to transition to")
     
-    @validator("current_status", "new_status")
+    @field_validator("current_status", "new_status")
     def validate_status(cls, v):
         """Validate status"""
         valid_statuses = {"open", "merged", "closed", "draft"}
@@ -324,7 +324,7 @@ class ReviewTransition(BaseModel):
             raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
         return v
     
-    @validator("new_status")
+    @field_validator("new_status")
     def validate_transition(cls, v, values):
         """Validate the status transition is valid"""
         if "current_status" in values:
