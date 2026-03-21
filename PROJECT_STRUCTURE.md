@@ -34,8 +34,7 @@
 ##### 📁 api/v1/endpoints/ - API Endpoint Handlers
 
 - **`reviews.py`** - Pull request review endpoints
-  - POST `/api/v1/reviews` - Create review
-  - POST `/api/v1/reviews/upsert` - Create or update review
+  - POST `/api/v1/reviews` - Create or update review (upsert)
   - GET `/api/v1/reviews` - List reviews with filters
   - GET `/api/v1/reviews/{review_id}` - Get specific review
   - PUT `/api/v1/reviews/{review_id}` - Update review

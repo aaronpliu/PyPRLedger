@@ -34,64 +34,7 @@ def get_review_service() -> ReviewService:
     return ReviewService(metrics_collector=metrics)
 
 
-@router.post("", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
-async def create_review(
-    review_data: ReviewCreate,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    review_service: Annotated[ReviewService, Depends(get_review_service)]
-) -> ReviewResponse:
-    """
-    Create a new pull request review
-    
-    Args:
-        review_data: The review data to create
-        db: Database session
-        review_service: Review service instance
-        
-    Returns:
-        ReviewResponse: The created review
-        
-    Raises:
-        ProjectNotFoundException: If the project doesn't exist
-        UserNotFoundException: If either user doesn't exist
-        ReviewAlreadyExistsException: If a review with the same PR ID already exists
-    """
-    with OperationTimer(
-        metrics,
-        operation_type="review",
-        labels={"project": review_data.project_id}
-    ):
-        try:
-            review = await review_service.create_review(review_data, db)
-            return ReviewResponse(**review.dict())
-        except (ProjectNotFoundException, UserNotFoundException, ReviewAlreadyExistsException) as e:
-            metrics.increment_error(
-                error_type=e.code,
-                endpoint="POST /api/v1/reviews"
-            )
-            raise HTTPException(
-                status_code=e.status_code,
-                detail={
-                    "error": e.code,
-                    "message": e.message,
-                    "detail": e.detail
-                }
-            )
-        except Exception as e:
-            metrics.increment_error(
-                error_type="INTERNAL_SERVER_ERROR",
-                endpoint="POST /api/v1/reviews"
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={
-                    "error": "INTERNAL_SERVER_ERROR",
-                    "message": "Failed to create review"
-                }
-            )
-
-
-@router.post("/upsert", response_model=ReviewResponse)
+@router.post("", response_model=ReviewResponse)
 async def upsert_review(
     review_data: ReviewCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -114,6 +57,7 @@ async def upsert_review(
     Raises:
         ProjectNotFoundException: If the project doesn't exist
         UserNotFoundException: If either user doesn't exist
+        HTTPException: 201 Created if new review, 200 OK if updated
     """
     with OperationTimer(
         metrics,
@@ -134,7 +78,7 @@ async def upsert_review(
         except (ProjectNotFoundException, UserNotFoundException) as e:
             metrics.increment_error(
                 error_type=e.code,
-                endpoint="POST /api/v1/reviews/upsert"
+                endpoint="POST /api/v1/reviews"
             )
             raise HTTPException(
                 status_code=e.status_code,
@@ -147,7 +91,7 @@ async def upsert_review(
         except Exception as e:
             metrics.increment_error(
                 error_type="INTERNAL_SERVER_ERROR",
-                endpoint="POST /api/v1/reviews/upsert"
+                endpoint="POST /api/v1/reviews"
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

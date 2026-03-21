@@ -113,8 +113,7 @@ uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
 ### Reviews (`/api/v1/reviews`)
 
-- `POST /api/v1/reviews` - Create a new review
-- `POST /api/v1/reviews/upsert` - Create or update a review
+- `POST /api/v1/reviews` - Create or update a review (upsert operation)
 - `GET /api/v1/reviews` - List reviews with filters
 - `GET /api/v1/reviews/{review_id}` - Get a specific review
 - `PUT /api/v1/reviews/{review_id}` - Update a review
