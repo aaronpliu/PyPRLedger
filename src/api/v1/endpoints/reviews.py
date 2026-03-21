@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Annotated, List, Optional
+import logging
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,8 @@ from src.core.exceptions import (
     ReviewStatusException,
 )
 from src.utils.metrics import MetricsCollector, OperationTimer, metrics
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -211,7 +214,7 @@ async def list_reviews(
             date_to=date_to
         )
         
-        reviews, total = await review_service.list_reviews(filters, page, page_size, db)
+        reviews, total = await review_service.list_reviews(filters, db, page, page_size)
         
         return ReviewListResponse(
             items=[ReviewResponse(**r.to_dict()) for r in reviews],
@@ -220,6 +223,7 @@ async def list_reviews(
             page_size=page_size
         )
     except Exception as e:
+        logger.error(f"Failed to list reviews: {str(e)}", exc_info=True)
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR",
             endpoint="GET /api/v1/reviews"
