@@ -1,8 +1,8 @@
-"""Add repository_id as Integer type to pull_request_review table
+"""Add repository_id foreign key to pull_request_review table
 
 Revision ID: 002
 Revises: 001
-Create Date: 2026-03-21 23:37:41.000000
+Create Date: 2026-03-21 23:21:00.000000
 
 """
 from alembic import op
@@ -19,44 +19,39 @@ depends_on = None
 def upgrade() -> None:
     """
     Upgrade database schema:
-    1. Add pull_request_review.repository_id as INTEGER foreign key
-    Note: repository.repository_id is already INTEGER in model (was changed from String)
+    Add repository_id column to pull_request_review table with foreign key constraint
     """
     
     # Add repository_id column to pull_request_review table
-    op.add_column(
-        'pull_request_review',
-        sa.Column('repository_id', sa.Integer(), nullable=True)
-    )
+    op.add_column('pull_request_review', 
+                  sa.Column('repository_id', sa.Integer(), nullable=True))
     
-    # Set default value for existing records (use first repository or project's default)
-    # This assumes each review belongs to a repository in the same project
+    # Populate existing records with a default repository ID from same project
+    # This assumes each project has at least one repository
     op.execute("""
-        UPDATE pull_request_review 
+        UPDATE pull_request_review pr
         SET repository_id = (
-            SELECT MIN(r.id) 
-            FROM repository r 
-            WHERE r.project_id = pull_request_review.project_id
+            SELECT MIN(r.id)
+            FROM repository r
+            WHERE r.project_id = pr.project_id
+            LIMIT 1
         )
-        WHERE repository_id IS NULL
+        WHERE pr.repository_id IS NULL
     """)
     
-    # Make repository_id NOT NULL (MySQL requires type specification)
+    # Make repository_id NOT NULL after population
     op.alter_column('pull_request_review', 'repository_id',
                     existing_type=sa.Integer(),
-                    nullable=False,
-                    type_=sa.Integer())
+                    nullable=False)
     
-    # Create index on repository_id in pull_request_review table
+    # Create index on repository_id for faster lookups
     op.create_index('idx_repository_id', 'pull_request_review', ['repository_id'])
     
     # Add foreign key constraint
     op.create_foreign_key(
         'fk_pull_request_review_repository',
-        'pull_request_review',
-        'repository',
-        'repository_id',
-        'id',
+        'pull_request_review', 'repository',
+        ['repository_id'], ['id'],
         ondelete='CASCADE'
     )
 
@@ -64,14 +59,15 @@ def upgrade() -> None:
 def downgrade() -> None:
     """
     Downgrade database schema:
-    1. Remove pull_request_review.repository_id
+    Remove repository_id column from pull_request_review table
     """
     
-    # Drop foreign key constraint
-    op.drop_constraint('fk_pull_request_review_repository', 'pull_request_review', type_='foreignkey')
+    # Drop foreign key
+    op.drop_constraint('fk_pull_request_review_repository', 
+                      'pull_request_review', type_='foreignkey')
     
-    # Drop index on pull_request_review.repository_id
+    # Drop index
     op.drop_index('idx_repository_id', 'pull_request_review')
     
-    # Drop repository_id column from pull_request_review
+    # Drop column
     op.drop_column('pull_request_review', 'repository_id')

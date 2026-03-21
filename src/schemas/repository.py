@@ -17,12 +17,6 @@ class RepositoryBase(BaseModel):
             raise ValueError("Repository slug must contain only alphanumeric characters, hyphens, and underscores")
         return v.lower()  # Store lowercase
     
-    @field_validator("repository_id")
-    def repository_id_alphanumeric(cls, v):
-        """Validate repository ID contains only alphanumeric characters and hyphens"""
-        if not all(c.isalnum() or c == "-" for c in v):
-            raise ValueError("Repository ID must contain only alphanumeric characters and hyphens")
-        return v
 
 
 class RepositoryCreate(RepositoryBase):
