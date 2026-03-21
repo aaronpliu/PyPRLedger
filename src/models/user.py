@@ -1,0 +1,129 @@
+from datetime import datetime
+from typing import List, Optional
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String
+from sqlalchemy.ext.asyncio import AsyncAttrs
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from src.core.database import Base
+
+
+class Base(AsyncAttrs, DeclarativeBase):
+    """Base class for all models"""
+    pass
+
+
+class User(Base):
+    """User model representing the user table in the database"""
+    
+    __tablename__ = "user"
+    
+    # Primary key
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+        index=True
+    )
+    
+    # User information
+    username: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+        index=True
+    )
+    
+    display_name: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False
+    )
+    
+    email_address: Mapped[str] = mapped_column(
+        String(255),
+        unique=True,
+        nullable=False,
+        index=True
+    )
+    
+    # Status fields
+    active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True
+    )
+    
+    is_reviewer: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False
+    )
+    
+    # Timestamps
+    created_date: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow
+    )
+    
+    updated_date: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+    
+    # Relationships
+    authored_reviews: Mapped[List["PullRequestReview"]] = relationship(
+        "PullRequestReview",
+        foreign_keys="PullRequestReview.pull_request_user_id",
+        back_populates="pull_request_user"
+    )
+    
+    reviewed_reviews: Mapped[List["PullRequestReview"]] = relationship(
+        "PullRequestReview",
+        foreign_keys="PullRequestReview.reviewer_id",
+        back_populates="reviewer"
+    )
+    
+    # Indexes
+    __table_args__ = (
+        Index("idx_username", "username"),
+        Index("idx_email", "email_address"),
+    )
+    
+    def __repr__(self) -> str:
+        """String representation of the user"""
+        return (
+            f"<User(id={self.id}, username='{self.username}', "
+            f"display_name='{self.display_name}', email='{self.email_address}')>"
+        )
+    
+    def to_dict(self) -> dict:
+        """Convert user model to dictionary"""
+        return {
+            "id": self.id,
+            "username": self.username,
+            "display_name": self.display_name,
+            "email_address": self.email_address,
+            "active": self.active,
+            "is_reviewer": self.is_reviewer,
+            "created_date": self.created_date.isoformat() if self.created_date else None,
+            "updated_date": self.updated_date.isoformat() if self.updated_date else None
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "User":
+        """Create user instance from dictionary"""
+        return cls(
+            username=data.get("username"),
+            display_name=data.get("display_name"),
+            email_address=data.get("email_address"),
+            active=data.get("active", True),
+            is_reviewer=data.get("is_reviewer", False)
+        )
+    
+    def update(self, data: dict) -> None:
+        """Update user attributes from dictionary"""
+        for key, value in data.items():
+            if hasattr(self, key) and key not in ["id", "created_date"]:
+                setattr(self, key, value)
