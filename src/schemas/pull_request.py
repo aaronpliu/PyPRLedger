@@ -15,16 +15,8 @@ class ReviewBase(BaseModel):
         max_length=64,
         description="Git commit SHA/hash associated with the pull request",
     )
-    project_id: int = Field(..., gt=0, description="Project business ID the review belongs to")
-    repository_id: int = Field(
-        ..., gt=0, description="Repository business ID the review belongs to"
-    )
-    pull_request_user_id: int = Field(
-        ..., gt=0, description="User business ID who created the pull request"
-    )
-    reviewer_id: int = Field(..., gt=0, description="User business ID of the reviewer")
     
-    # New fields for direct relationships (business keys)
+    # Business keys (only required fields - API caller doesn't need to pass IDs)
     project_key: str = Field(..., min_length=1, max_length=32, description="Project key")
     repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
     reviewer: str = Field(..., min_length=1, max_length=64, description="Reviewer username")
