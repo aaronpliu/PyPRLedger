@@ -291,11 +291,10 @@ class ReviewFilter(BaseModel):
     """Schema for pull request review filtering parameters"""
 
     pull_request_id: Optional[str] = Field(None, description="Filter by pull request ID")
-    project_id: Optional[int] = Field(None, gt=0, description="Filter by project ID")
-    pull_request_user_id: Optional[int] = Field(
-        None, gt=0, description="Filter by pull request user ID"
-    )
-    reviewer_id: Optional[int] = Field(None, gt=0, description="Filter by reviewer ID")
+    project_key: Optional[str] = Field(None, min_length=1, max_length=32, description="Filter by project key")
+    repository_slug: Optional[str] = Field(None, min_length=1, max_length=128, description="Filter by repository slug")
+    pull_request_user: Optional[str] = Field(None, min_length=1, max_length=64, description="Filter by pull request user username")
+    reviewer: Optional[str] = Field(None, min_length=1, max_length=64, description="Filter by reviewer username")
     source_branch: Optional[str] = Field(None, description="Filter by source branch")
     target_branch: Optional[str] = Field(None, description="Filter by target branch")
     pull_request_status: Optional[str] = Field(

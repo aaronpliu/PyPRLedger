@@ -92,11 +92,10 @@ async def list_reviews(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
     pull_request_id: Optional[str] = Query(None, description="Filter by pull request ID"),
-    project_id: Optional[int] = Query(None, gt=0, description="Filter by project ID"),
-    pull_request_user_id: Optional[int] = Query(
-        None, gt=0, description="Filter by pull request user ID"
-    ),
-    reviewer_id: Optional[int] = Query(None, gt=0, description="Filter by reviewer ID"),
+    project_key: Optional[str] = Query(None, min_length=1, max_length=32, description="Filter by project key"),
+    repository_slug: Optional[str] = Query(None, min_length=1, max_length=128, description="Filter by repository slug"),
+    pull_request_user: Optional[str] = Query(None, min_length=1, max_length=64, description="Filter by pull request user username"),
+    reviewer: Optional[str] = Query(None, min_length=1, max_length=64, description="Filter by reviewer username"),
     source_branch: Optional[str] = Query(None, description="Filter by source branch"),
     target_branch: Optional[str] = Query(None, description="Filter by target branch"),
     pull_request_status: Optional[str] = Query(
@@ -118,9 +117,10 @@ async def list_reviews(
 
     Args:
         pull_request_id: Filter by pull request ID
-        project_id: Filter by project ID
-        pull_request_user_id: Filter by pull request user ID
-        reviewer_id: Filter by reviewer ID
+        project_key: Filter by project key
+        repository_slug: Filter by repository slug
+        pull_request_user: Filter by pull request user username
+        reviewer: Filter by reviewer username
         source_branch: Filter by source branch
         target_branch: Filter by target branch
         pull_request_status: Filter by pull request status
@@ -139,9 +139,10 @@ async def list_reviews(
     try:
         filters = ReviewFilter(
             pull_request_id=pull_request_id,
-            project_id=project_id,
-            pull_request_user_id=pull_request_user_id,
-            reviewer_id=reviewer_id,
+            project_key=project_key,
+            repository_slug=repository_slug,
+            pull_request_user=pull_request_user,
+            reviewer=reviewer,
             source_branch=source_branch,
             target_branch=target_branch,
             pull_request_status=pull_request_status,

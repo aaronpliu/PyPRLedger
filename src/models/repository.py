@@ -1,8 +1,7 @@
 from datetime import datetime
-from typing import List, Optional
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String
-from sqlalchemy.ext.asyncio import AsyncAttrs
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from typing import List
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
 

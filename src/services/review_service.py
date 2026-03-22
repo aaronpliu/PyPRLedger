@@ -306,7 +306,7 @@ class ReviewService:
         List pull request reviews with filtering and pagination
 
         Args:
-            filters: Filter criteria
+            filters: Filter criteria using business keys
             page: Page number (1-indexed)
             page_size: Number of items per page
             db: Database session
@@ -315,18 +315,18 @@ class ReviewService:
         Returns:
             Tuple[List[PullRequestReview], int]: List of reviews and total count
         """
-        # Build query conditions
+        # Build query conditions using business keys
         conditions = []
         if filters.pull_request_id:
             conditions.append(PullRequestReview.pull_request_id == filters.pull_request_id)
-        if filters.project_id:
-            conditions.append(PullRequestReview.project_id == filters.project_id)
-        if filters.pull_request_user_id:
-            conditions.append(
-                PullRequestReview.pull_request_user_id == filters.pull_request_user_id
-            )
-        if filters.reviewer_id:
-            conditions.append(PullRequestReview.reviewer_id == filters.reviewer_id)
+        if filters.project_key:
+            conditions.append(PullRequestReview.project_key == filters.project_key)
+        if filters.repository_slug:
+            conditions.append(PullRequestReview.repository_slug == filters.repository_slug)
+        if filters.pull_request_user:
+            conditions.append(PullRequestReview.pull_request_user == filters.pull_request_user)
+        if filters.reviewer:
+            conditions.append(PullRequestReview.reviewer == filters.reviewer)
         if filters.source_branch:
             conditions.append(PullRequestReview.source_branch == filters.source_branch)
         if filters.target_branch:
@@ -365,13 +365,13 @@ class ReviewService:
         count_result = await db.execute(count_query)
         total = count_result.scalar()
 
-        # Get reviews
+        # Get reviews with eager loading of relationships
         query = (
             select(PullRequestReview)
             .options(
                 selectinload(PullRequestReview.project),
-                selectinload(PullRequestReview.pull_request_user),
-                selectinload(PullRequestReview.reviewer),
+                selectinload(PullRequestReview.pull_request_user_rel),
+                selectinload(PullRequestReview.reviewer_rel),
             )
             .order_by(desc(PullRequestReview.created_date))
             .limit(page_size)
