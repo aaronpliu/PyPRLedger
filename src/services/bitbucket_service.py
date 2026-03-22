@@ -2,22 +2,45 @@
 
 This service provides methods to fetch project, repository, and user information
 from Bitbucket API when inserting PR review results.
+
+Supports both Bitbucket Cloud and Bitbucket Server (Data Center).
 """
+import logging
+
 import httpx
 from typing import Optional, Dict, Any
-from loguru import logger
 
+from src.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 class BitbucketService:
     """Service for interacting with Bitbucket API"""
 
     def __init__(self):
-        self.base_url = "https://api.bitbucket.org/2.0"
-        self.headers = {
-            "Accept": "application/json",
-        }
-        # Add authentication if available (can be extended later)
-        # For now, assuming public access or token-based auth
+        # Support both Cloud and Server versions
+        self.is_cloud = getattr(settings, 'BITBUCKET_CLOUD', False)
+        
+        if self.is_cloud:
+            self.base_url = "https://api.bitbucket.org/2.0"
+            self.headers = {
+                "Accept": "application/json",
+            }
+        else:
+            # Bitbucket Server/Data Center
+            base_url = getattr(settings, 'BITBUCKET_SERVER_URL', 'http://localhost:7990')
+            self.base_url = f"{base_url}/rest/api/latest"
+            self.headers = {
+                "Accept": "application/json",
+            }
+            # Add authentication for Server if provided
+            bitbucket_user = getattr(settings, 'BITBUCKET_USER', None)
+            bitbucket_password = getattr(settings, 'BITBUCKET_PASSWORD', None)
+            if bitbucket_user and bitbucket_password:
+                import base64
+                credentials = f"{bitbucket_user}:{bitbucket_password}"
+                encoded = base64.b64encode(credentials.encode()).decode()
+                self.headers["Authorization"] = f"Basic {encoded}"
         
     async def _make_request(self, url: str) -> Optional[Dict[str, Any]]:
         """Make HTTP request to Bitbucket API"""
@@ -43,27 +66,55 @@ class BitbucketService:
         Returns:
             Dictionary containing project info or None if not found
             
-        Example response:
+        Bitbucket Server API Response:
         {
-            "project_id": 12345,
-            "project_name": "My Project",
-            "project_key": "PROJ",
-            "project_url": "https://bitbucket.org/workspace/PROJ"
+            "key": "PROJ",
+            "name": "My Project",
+            "description": "Project description",
+            "public": false,
+            "links": {
+                "self": [{"href": "http://host:port/projects/PROJ"}]
+            }
         }
         """
-        # Note: Bitbucket doesn't have a direct "project" endpoint
-        # We'll need to infer from repositories or use workspace info
-        # For now, return minimal info that can be enhanced later
-        logger.info(f"Fetching project info for key: {project_key}")
-        
-        # Try to get project from a known repository pattern
-        # This is a placeholder - actual implementation depends on your Bitbucket setup
-        return {
-            "project_id": hash(project_key) % 100000,  # Generate pseudo-ID
-            "project_name": f"Project {project_key}",
-            "project_key": project_key,
-            "project_url": f"https://bitbucket.org/{project_key}"
-        }
+        if self.is_cloud:
+            # Cloud version - use workspace-based URL
+            logger.info(f"Fetching project info from Cloud: {project_key}")
+            # Note: Bitbucket Cloud doesn't have a direct project endpoint
+            # Return minimal info as fallback
+            return {
+                "project_id": hash(project_key) % 100000,
+                "project_name": f"Project {project_key}",
+                "project_key": project_key,
+                "project_url": f"https://bitbucket.org/{project_key}"
+            }
+        else:
+            # Server version - use REST API
+            url = f"{self.base_url}/projects/{project_key}"
+            logger.info(f"Fetching project info from Server: {url}")
+            
+            api_response = await self._make_request(url)
+            if not api_response:
+                # Fallback to minimal info if API fails
+                return {
+                    "project_id": hash(project_key) % 100000,
+                    "project_name": f"Project {project_key}",
+                    "project_key": project_key,
+                    "project_url": f"{self.base_url}/projects/{project_key}"
+                }
+            
+            # Map Bitbucket Server API response to our format
+            links = api_response.get("links", {})
+            self_links = links.get("self", [])
+            project_url = self_links[0]["href"] if self_links else f"{self.base_url}/projects/{project_key}"
+            
+            return {
+                "project_id": api_response.get("id", hash(project_key) % 100000),
+                "project_name": api_response.get("name", project_key),
+                "project_key": api_response.get("key", project_key),
+                "project_url": project_url,
+                "description": api_response.get("description", "")
+            }
 
     async def get_repository_info(
         self, 
@@ -74,36 +125,86 @@ class BitbucketService:
         Fetch repository information from Bitbucket API
         
         Args:
-            workspace: Bitbucket workspace name
+            workspace: Bitbucket workspace name (Cloud) or project key (Server)
             repo_slug: Repository slug (e.g., "my-repo")
             
         Returns:
             Dictionary containing repository info or None if not found
             
-        Example response:
+        Bitbucket Server API Response:
         {
-            "repository_id": 67890,
-            "repository_name": "My Repo",
-            "repository_slug": "my-repo",
-            "repository_url": "https://bitbucket.org/workspace/my-repo",
-            "project_id": 12345
+            "slug": "my-repo",
+            "name": "My Repo",
+            "description": "Repository description",
+            "public": false,
+            "project": {
+                "key": "PROJ",
+                "name": "My Project"
+            },
+            "links": {
+                "self": [{"href": "..."}],
+                "clone": [{"href": "...", "name": "http"}, ...]
+            }
         }
         """
-        url = f"{self.base_url}/repositories/{workspace}/{repo_slug}"
-        logger.info(f"Fetching repository info: {workspace}/{repo_slug}")
-        
-        api_response = await self._make_request(url)
-        if not api_response:
-            return None
-        
-        # Map Bitbucket API response to our format
-        return {
-            "repository_id": api_response.get("uuid", "").replace("{", "").replace("}", "") or hash(repo_slug) % 100000,
-            "repository_name": api_response.get("name", repo_slug),
-            "repository_slug": repo_slug,
-            "repository_url": api_response.get("links", {}).get("html", {}).get("href", ""),
-            "project_id": None  # Will be linked to parent project
-        }
+        if self.is_cloud:
+            # Cloud version
+            url = f"{self.base_url}/repositories/{workspace}/{repo_slug}"
+            logger.info(f"Fetching repository info from Cloud: {workspace}/{repo_slug}")
+            
+            api_response = await self._make_request(url)
+            if not api_response:
+                return None
+            
+            # Map Cloud API response
+            links = api_response.get("links", {})
+            html_link = links.get("html", {}).get("href", "")
+            
+            return {
+                "repository_id": api_response.get("uuid", "").replace("{", "").replace("}", "") or hash(repo_slug) % 100000,
+                "repository_name": api_response.get("name", repo_slug),
+                "repository_slug": repo_slug,
+                "repository_url": html_link,
+                "project_id": None
+            }
+        else:
+            # Server version - use project key + repo slug
+            url = f"{self.base_url}/projects/{workspace}/repos/{repo_slug}"
+            logger.info(f"Fetching repository info from Server: {url}")
+            
+            api_response = await self._make_request(url)
+            if not api_response:
+                # Fallback to minimal info
+                return {
+                    "repository_id": hash(repo_slug) % 100000,
+                    "repository_name": repo_slug,
+                    "repository_slug": repo_slug,
+                    "repository_url": f"{self.base_url}/projects/{workspace}/repos/{repo_slug}",
+                    "project_id": None
+                }
+            
+            # Map Server API response
+            links = api_response.get("links", {})
+            self_links = links.get("self", [])
+            clone_links = links.get("clone", [])
+            
+            # Prefer HTTPS clone URL
+            https_url = next((link["href"] for link in clone_links if link.get("name") == "https"), None)
+            http_url = next((link["href"] for link in clone_links if link.get("name") == "http"), None)
+            repository_url = https_url or http_url or (self_links[0]["href"] if self_links else "")
+            
+            # Get project info if available
+            project = api_response.get("project", {})
+            project_id = project.get("id", hash(workspace) % 100000) if project else None
+            
+            return {
+                "repository_id": api_response.get("id", hash(repo_slug) % 100000),
+                "repository_name": api_response.get("name", repo_slug),
+                "repository_slug": repo_slug,
+                "repository_url": repository_url,
+                "project_id": project_id,
+                "description": api_response.get("description", "")
+            }
 
     async def get_user_info(self, username: str) -> Optional[Dict[str, Any]]:
         """
@@ -114,40 +215,57 @@ class BitbucketService:
             
         Returns:
             Dictionary containing user info or None if not found
-            
-        Example response:
-        {
-            "user_id": 11111,
-            "username": "john_doe",
-            "display_name": "John Doe",
-            "email_address": "john@example.com"
-        }
         """
-        url = f"{self.base_url}/users/{username}"
-        logger.info(f"Fetching user info for: {username}")
-        
-        api_response = await self._make_request(url)
-        if not api_response:
-            # If user endpoint fails, try accounts endpoint
-            url = f"{self.base_url}/accounts/{username}"
+        if self.is_cloud:
+            # Cloud version
+            url = f"{self.base_url}/users/{username}"
+            logger.info(f"Fetching user info from Cloud: {username}")
+            
             api_response = await self._make_request(url)
-        
-        if not api_response:
-            # Return minimal info if API fails
+            if not api_response:
+                # Try accounts endpoint as fallback
+                url = f"{self.base_url}/accounts/{username}"
+                api_response = await self._make_request(url)
+            
+            if not api_response:
+                # Return minimal info if API fails
+                return {
+                    "user_id": hash(username) % 100000,
+                    "username": username,
+                    "display_name": username.replace("_", " ").title(),
+                    "email_address": f"{username}@example.com"
+                }
+            
+            # Map Cloud API response
             return {
-                "user_id": hash(username) % 100000,
+                "user_id": api_response.get("account_id", hash(username) % 100000),
                 "username": username,
-                "display_name": username.replace("_", " ").title(),
-                "email_address": f"{username}@example.com"
+                "display_name": api_response.get("display_name", username),
+                "email_address": api_response.get("email", f"{username}@example.com")
             }
-        
-        # Map Bitbucket API response to our format
-        return {
-            "user_id": api_response.get("account_id", hash(username) % 100000),
-            "username": username,
-            "display_name": api_response.get("display_name", username),
-            "email_address": api_response.get("email", f"{username}@example.com")
-        }
+        else:
+            # Server version
+            url = f"{self.base_url}/users/{username}"
+            logger.info(f"Fetching user info from Server: {url}")
+            
+            api_response = await self._make_request(url)
+            if not api_response:
+                # Return minimal info if API fails
+                return {
+                    "user_id": hash(username) % 100000,
+                    "username": username,
+                    "display_name": username.replace("_", " ").title(),
+                    "email_address": f"{username}@example.com"
+                }
+            
+            # Map Server API response
+            return {
+                "user_id": api_response.get("id", hash(username) % 100000),
+                "username": api_response.get("name", username),
+                "display_name": api_response.get("displayName", username),
+                "email_address": api_response.get("emailAddress", f"{username}@example.com"),
+                "active": api_response.get("active", True)
+            }
 
 
 # Singleton instance

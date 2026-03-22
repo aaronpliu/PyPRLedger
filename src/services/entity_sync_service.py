@@ -3,16 +3,18 @@
 This service handles automatic synchronization of related entities (Project, Repository, User)
 when inserting PR reviews. It queries existing records and fetches from Bitbucket API if needed.
 """
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Tuple
-from loguru import logger
 
 from src.models.project import Project
 from src.models.repository import Repository
 from src.models.user import User
 from src.services.bitbucket_service import get_bitbucket_service
 
+logger = logging.getLogger(__name__)
 
 class EntitySyncService:
     """Service for synchronizing entities from Bitbucket API"""

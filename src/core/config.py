@@ -98,6 +98,13 @@ class Settings(BaseSettings):
     REVIEW_MIN_SCORE: int = Field(default=0)
     REVIEW_MAX_SCORE: int = Field(default=10)
 
+    # Bitbucket API 配置
+    BITBUCKET_CLOUD: bool = Field(default=False, description="Whether to use Bitbucket Cloud (True) or Server/Data Center (False)")
+    BITBUCKET_SERVER_URL: str = Field(default="http://localhost:7990", description="Bitbucket Server/Data Center base URL")
+    BITBUCKET_USER: Optional[str] = Field(default=None, description="Bitbucket username for authentication")
+    BITBUCKET_PASSWORD: Optional[str] = Field(default=None, description="Bitbucket password or app password for authentication")
+    BITBUCKET_DEFAULT_WORKSPACE: str = Field(default="default", description="Default workspace/project key for Bitbucket repositories")
+
     # 审查状态
     REVIEW_STATUS_OPEN: str = "open"
     REVIEW_STATUS_MERGED: str = "merged"
