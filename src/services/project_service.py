@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy import select, and_, func, desc, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -852,7 +852,7 @@ class ProjectService:
             List[Dict[str, Any]]: List of projects with review counts
         """
         # Calculate date threshold
-        date_threshold = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        date_threshold = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         date_threshold = (
             date_threshold.replace(day=date_threshold.day - days)
             if date_threshold.day > days
@@ -903,7 +903,7 @@ class ProjectService:
             List[Dict[str, Any]]: List of projects with active reviewer counts
         """
         # Calculate date threshold
-        date_threshold = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        date_threshold = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         date_threshold = (
             date_threshold.replace(day=date_threshold.day - days)
             if date_threshold.day > days
