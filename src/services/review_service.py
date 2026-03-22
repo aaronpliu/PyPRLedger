@@ -364,7 +364,7 @@ class ReviewService:
             conditions.append(PullRequestReview.created_date <= filters.date_to)
 
         # Try cache first for list results
-        filter_dict = filters.dict(exclude_unset=True)
+        filter_dict = filters.model_dump(exclude_unset=True)
         if use_cache:
             try:
                 cache_key = self._get_list_cache_key(filter_dict, page, page_size)
@@ -451,7 +451,7 @@ class ReviewService:
                 )
 
         # Update review
-        review.update(update_data.dict(exclude_unset=True))
+        review.update(update_data.model_dump(exclude_unset=True))
 
         # Invalidate cache
         await self._invalidate_review_cache(review_id)

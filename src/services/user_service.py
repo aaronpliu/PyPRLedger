@@ -383,7 +383,7 @@ class UserService:
                 raise UserAlreadyExistsException(email=update_data.email_address)
 
         # Update user
-        for field, value in update_data.dict(exclude_unset=True).items():
+        for field, value in update_data.model_dump(exclude_unset=True).items():
             setattr(user, field, value)
 
         # Invalidate cache

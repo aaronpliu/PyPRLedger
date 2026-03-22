@@ -315,7 +315,7 @@ class ProjectService:
         filters = filters or ProjectFilter()
 
         # Build filter dictionary for cache key
-        filter_dict = filters.dict(exclude_unset=True)
+        filter_dict = filters.model_dump(exclude_unset=True)
 
         # Try cache first for list results
         if use_cache:
@@ -400,7 +400,7 @@ class ProjectService:
             raise ProjectNotFoundException(project_id=project_id)
 
         # Update project
-        for field, value in update_data.dict(exclude_unset=True).items():
+        for field, value in update_data.model_dump(exclude_unset=True).items():
             setattr(project, field, value)
 
         # Invalidate cache
