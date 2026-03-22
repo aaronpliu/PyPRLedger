@@ -57,7 +57,9 @@ class ReviewCreate(ReviewBase):
     git_code_diff: Optional[str] = Field(
         None, max_length=1048576, description="Git code diff content"
     )
-    source_filename: Optional[str] = Field(None, max_length=255, description="Source file name")
+    source_filename: Optional[str] = Field(
+        None, max_length=255, description="Source file being reviewed (null for overall PR review)"
+    )
     ai_suggestions: Optional[Dict[str, Any]] = Field(
         None, description="AI-generated suggestions in JSON format"
     )
@@ -70,6 +72,11 @@ class ReviewCreate(ReviewBase):
     )
     metadata: Optional[Dict[str, Any]] = Field(
         None, description="Additional metadata in JSON format"
+    )
+    
+    # Optional field to specify when the review was completed (defaults to now)
+    reviewed_date: Optional[datetime] = Field(
+        None, description="When the review was completed (defaults to current time)"
     )
 
     @field_validator("pull_request_status")
@@ -85,6 +92,16 @@ class ReviewCreate(ReviewBase):
         """Validate JSON fields are properly formatted"""
         if v is not None and not isinstance(v, dict):
             raise ValueError("This field must be a valid JSON object")
+        return v
+    
+    @field_validator("reviewed_date")
+    def validate_reviewed_date(cls, v):
+        """Validate reviewed_date is timezone-aware or convert to UTC"""
+        if v is not None:
+            # If naive datetime, make it timezone-aware (assume UTC)
+            if v.tzinfo is None:
+                from datetime import timezone
+                v = v.replace(tzinfo=timezone.utc)
         return v
 
 
@@ -116,19 +133,33 @@ class ReviewUpdate(BaseModel):
         return v
 
 
-class ReviewResponse(ReviewBase):
+class ReviewResponse(BaseModel):
     """Schema for pull request review response"""
 
     id: int = Field(..., description="Review database ID")
+    pull_request_id: str = Field(..., description="Pull request identifier")
+    pull_request_commit_id: Optional[str] = Field(None, description="Commit ID for this specific review")
+    project_key: str = Field(..., description="Project key")
+    repository_slug: str = Field(..., description="Repository slug")
+    pull_request_user: str = Field(..., description="Username of PR author")
+    reviewer: str = Field(..., description="Reviewer username")
+    source_branch: str = Field(..., description="Source branch name")
+    target_branch: str = Field(..., description="Target branch name")
     git_code_diff: Optional[str] = Field(None, description="Git code diff content")
-    source_filename: Optional[str] = Field(None, description="Source file name")
+    source_filename: Optional[str] = Field(None, description="Source file being reviewed (null for overall PR review)")
     ai_suggestions: Optional[Dict[str, Any]] = Field(None, description="AI-generated suggestions")
     reviewer_comments: Optional[str] = Field(None, description="Reviewer's comments")
-    score: Optional[int] = Field(None, description="Review score")
+    score: Optional[int] = Field(None, description="Review score (0-10)")
     pull_request_status: str = Field(..., description="Pull request status")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
-    created_date: datetime = Field(..., description="Review creation timestamp")
-    updated_date: datetime = Field(..., description="Review last update timestamp")
+    
+    # Review tracking fields
+    reviewed_date: datetime = Field(..., description="When the review was completed")
+    is_latest_review: bool = Field(True, description="Whether this is the latest review for this file")
+    review_iteration: int = Field(1, description="Review iteration number (1st, 2nd, etc.)")
+    
+    created_date: datetime = Field(..., description="Record creation timestamp")
+    updated_date: datetime = Field(..., description="Record last update timestamp")
 
     class Config:
         """Pydantic configuration"""
@@ -138,7 +169,8 @@ class ReviewResponse(ReviewBase):
             "example": {
                 "id": 1,
                 "pull_request_id": "pr-123",
-                "project_key": "CRS",
+                "pull_request_commit_id": "abc123def456",
+                "project_key": "PROJ",
                 "repository_slug": "code-review",
                 "reviewer": "john_doe",
                 "pull_request_user": "jane_smith",
@@ -154,10 +186,11 @@ class ReviewResponse(ReviewBase):
                 "score": 8,
                 "pull_request_status": "open",
                 "metadata": {"labels": ["bugfix", "enhancement"], "priority": "high"},
-                "created_date": "2023-01-01T00:00:00",
-                "updated_date": "2023-01-01T00:00:00",
-                "project_name": "Code Review System",
-                "project_key": "CRS",
+                "reviewed_date": "2023-01-01T12:00:00Z",
+                "is_latest_review": True,
+                "review_iteration": 1,
+                "created_date": "2023-01-01T10:00:00",
+                "updated_date": "2023-01-01T12:00:00",
             }
         }
 

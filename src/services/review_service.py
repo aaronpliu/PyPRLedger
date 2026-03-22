@@ -132,7 +132,37 @@ class ReviewService:
         if existing_review:
             raise ReviewAlreadyExistsException(review_id=review_data.pull_request_id)
 
-        # Create new review using only business keys (no database IDs needed)
+        # Determine review iteration number by checking previous reviews for same file by same reviewer
+        iteration_query = select(func.max(PullRequestReview.review_iteration)).where(
+            PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
+            PullRequestReview.project_key == project.project_key,
+            PullRequestReview.repository_slug == repository.repository_slug,
+            PullRequestReview.source_filename == review_data.source_filename,
+            PullRequestReview.reviewer == reviewer.username
+        )
+        iteration_result = await db.execute(iteration_query)
+        max_iteration = iteration_result.scalar() or 0
+        new_iteration = max_iteration + 1
+        
+        # Mark previous latest reviews as not latest
+        if max_iteration > 0:
+            await db.execute(
+                update(PullRequestReview)
+                .where(
+                    PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
+                    PullRequestReview.project_key == project.project_key,
+                    PullRequestReview.repository_slug == repository.repository_slug,
+                    PullRequestReview.source_filename == review_data.source_filename,
+                    PullRequestReview.reviewer == reviewer.username,
+                    PullRequestReview.is_latest_review == True
+                )
+                .values(is_latest_review=False)
+            )
+        
+        # Set reviewed_date (use provided value or current time)
+        reviewed_date = review_data.reviewed_date or datetime.now(timezone.utc)
+        
+        # Create new review
         new_review = PullRequestReview(
             pull_request_id=review_data.pull_request_id,
             pull_request_commit_id=review_data.pull_request_commit_id,
@@ -149,6 +179,9 @@ class ReviewService:
             score=review_data.score,
             pull_request_status=review_data.pull_request_status,
             metadata=review_data.metadata,
+            reviewed_date=reviewed_date,
+            is_latest_review=True,
+            review_iteration=new_iteration,
         )
         db.add(new_review)
         await db.flush()
@@ -178,7 +211,7 @@ class ReviewService:
         # Invalidate list cache
         await self._invalidate_list_cache()
 
-        logger.info(f"Created new review: {new_review.pull_request_id}")
+        logger.info(f"Created new review: {new_review.pull_request_id}, iteration: {new_iteration}")
         return ReviewResponse(**new_review.to_dict())
 
     async def upsert_review(
