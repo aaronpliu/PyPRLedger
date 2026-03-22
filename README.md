@@ -1,6 +1,6 @@
 # PRLedger
 
-A production-ready FastAPI-based Pull Request Code Review System with MySQL, Redis, and Prometheus integration.
+A production-ready FastAPI-based PR Code Review Result Saver System with MySQL, Redis, and Prometheus integration.
 
 ## Features
 
