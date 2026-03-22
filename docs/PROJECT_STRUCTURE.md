@@ -10,7 +10,10 @@
 - **`docker-compose.yml`** - Docker Compose configuration for all services
 - **`alembic.ini`** - Alembic database migration configuration
 - **`prometheus.yml`** - Prometheus monitoring configuration
-- **`README.md`** - Project documentation
+- **`README.md`** - Project documentation (main)
+- **`CHANGELOG.md`** - Version history and release notes
+- **`docs/`** - Additional documentation directory
+  - Contains deployment guides, system design, and version management docs
 
 ### 📁 Requirements Directory
 

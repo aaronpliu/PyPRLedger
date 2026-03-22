@@ -1,7 +1,15 @@
 # Pull Request Code Review System
 # FastAPI-based Pull Request Code Review System
 
-__version__ = "1.0.0"
+import importlib.metadata
+
+# Single source of truth: version is managed in pyproject.toml
+try:
+    __version__ = importlib.metadata.version("pycodereviewsaver")
+except importlib.metadata.PackageNotFoundError:
+    # Fallback for development environments
+    __version__ = "0.1.0-dev"
+
 __author__ = "CodeGeeX"
 __description__ = "FastAPI-based Pull Request Code Review System with MySQL, Redis, and Prometheus integration"
 

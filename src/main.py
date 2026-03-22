@@ -1,4 +1,3 @@
-import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -6,7 +5,6 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from prometheus_client import make_asgi_app
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.core.config import settings
@@ -47,11 +45,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info("Application shutdown complete")
 
 
-# 创建FastAPI应用
+# 创建 FastAPI 应用
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Pull Request Code Review System API",
-    version="1.0.0",
+    version=__version__,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",

@@ -2,6 +2,8 @@
 
 A production-ready FastAPI-based PR Code Review Result Saver System with MySQL, Redis, and Prometheus integration.
 
+**Current Version**: See `pyproject.toml` or run `python scripts/bump_version.py show`
+
 ## Features
 
 - **RESTful API**: Complete REST API for managing pull request reviews, users, and projects
@@ -279,3 +281,12 @@ MIT License
 ## Support
 
 For issues and questions, please open an issue on GitHub.
+
+## Documentation
+
+Additional documentation is available in the [`docs/`](docs/) directory:
+
+- **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Production deployment instructions
+- **[Project Structure](docs/PROJECT_STRUCTURE.md)** - Detailed codebase overview
+- **[System Design](docs/FastAPI_code_review_system_design.md)** - Architecture documentation
+- **[Versioning Guide](docs/VERSIONING.md)** - Version management instructions
