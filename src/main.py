@@ -94,13 +94,23 @@ async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     """请求验证异常处理"""
-    logger.error(f"Validation error: {exc.errors()}", extra={"request": str(request)})
+    logger.error(f"Validation error", extra={"request": str(request)})
+    
+    # Convert validation errors to simple strings to ensure JSON serialization
+    detail = "Validation failed"
+    try:
+        error_list = exc.errors()
+        # Just convert the entire error list to string representation
+        detail = str(error_list)
+    except Exception as e:
+        detail = f"Error: {str(e)}"
+    
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "error": ErrorCode.VALIDATION_ERROR,
             "message": "Request validation failed",
-            "detail": exc.errors(),
+            "detail": detail,
         },
     )
 
@@ -109,12 +119,21 @@ async def validation_exception_handler(
 async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """通用异常处理"""
     logger.error(f"Unexpected error: {str(exc)}", extra={"request": str(request)})
+    
+    # Safely convert exception to string for JSON serialization
+    detail = None
+    if settings.DEBUG:
+        try:
+            detail = str(exc)
+        except Exception as e:
+            detail = f"Error converting exception to string: {type(exc).__name__}"
+    
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "error": ErrorCode.INTERNAL_SERVER_ERROR,
             "message": "An unexpected error occurred",
-            "detail": str(exc) if settings.DEBUG else None,
+            "detail": detail,
         },
     )
 

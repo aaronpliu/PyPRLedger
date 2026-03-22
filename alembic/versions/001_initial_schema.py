@@ -86,6 +86,7 @@ def upgrade() -> None:
         sa.Column('project_name', sa.String(length=128), nullable=False),
         sa.Column('project_key', sa.String(length=32), nullable=False),
         sa.Column('project_url', sa.String(length=255), nullable=False),
+        sa.Column('is_active', sa.Boolean(), nullable=False, server_default='1'),
         sa.Column('created_date', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.Column('updated_date', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
         sa.PrimaryKeyConstraint('id'),

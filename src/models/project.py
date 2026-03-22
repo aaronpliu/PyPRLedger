@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import Column, DateTime, Index, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -23,6 +23,9 @@ class Project(Base):
     project_key: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
 
     project_url: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Status fields
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Timestamps
     created_date: Mapped[datetime] = mapped_column(

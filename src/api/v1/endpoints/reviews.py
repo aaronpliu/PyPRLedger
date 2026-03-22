@@ -54,7 +54,7 @@ async def upsert_review(
         HTTPException: 201 Created if new review, 200 OK if updated
     """
     with OperationTimer(
-        metrics, operation_type="review", labels={"project": review_data.project_id}
+        metrics, operation_type="review", labels={"project": review_data.project_key}
     ):
         try:
             review, is_created = await review_service.upsert_review(review_data, db)
