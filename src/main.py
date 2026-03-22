@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
+from src import __version__
 from src.core.config import settings
 from src.core.exceptions import AppException, ErrorCode
 from src.core.middleware import LoggingMiddleware, RateLimitMiddleware

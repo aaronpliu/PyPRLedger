@@ -1,0 +1,37 @@
+#.pre-commit-config.yaml
+
+repos:
+  # --------------------------------------------
+  # Ruff: format + lint using locally installed ruff
+  # --------------------------------------------
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff-format
+        description: Format files with ruff
+        entry: uv run ruff format
+        language: system
+        types: [python]
+        exclude: ^tests/data/  # optional: exclude test fixtures
+
+      - id: ruff-check
+        name: ruff-check
+        description: Lint files with ruff
+        entry: uv run ruff check --fix --exit-non-zero-on-fix
+        language: system
+        types: [python]
+        exclude: ^tests/data/
+        always_run: true
+
+  # --------------------------------------------
+  # Simple commit message validation (local script)
+  # --------------------------------------------
+  - repo: local
+    hooks:
+      - id: commit-message-validation
+        name: Validate commit message
+        description: Enforce basic commit message rules
+        entry: python3 scripts/validate_commit_msg.py
+        language: system
+        stages: [commit-msg]
+        pass_filenames: true

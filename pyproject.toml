@@ -1,9 +1,42 @@
 [project]
-name = "pycodereviewsaver"
+name = "pypreledger"
 version = "1.0.0"
-description = "Add your description here"
+description = "A production-ready FastAPI-based Pull Request Code Review System with MySQL, Redis, and Prometheus integration"
 readme = "README.md"
 requires-python = ">=3.12"
+license = { text = "MIT" }
+keywords = [
+    "fastapi",
+    "code-review",
+    "pull-request",
+    "pr-management",
+    "mysql",
+    "redis",
+    "prometheus",
+    "async",
+    "api",
+    "developer-tools"
+]
+authors = [
+    { name = "Aaron P LIU", email = "aaron.p.liu@outlook.com" }
+]
+maintainers = [
+    { name = "Aaron P LIU", email = "aaron.p.liu@outlook.com" }
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: Version Control :: Git",
+    "Typing :: Typed"
+]
 dependencies = [
     "aiomysql>=0.3.2",
     "alembic>=1.18.4",
@@ -24,8 +57,38 @@ dependencies = [
     "uvicorn[standard]>=0.42.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.2",
+    "pre-commit>=4.2.0",
+]
+monitoring = [
+    "psutil>=7.0.0",
+    "opentelemetry-api>=1.30.0",
+    "sentry-sdk[fastapi]>=2.25.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/aaronpliu/PyPRLedger"
+Repository = "https://github.com/aaronpliu/PyPRLedger.git"
+Documentation = "https://github.com/aaronpliu/PyPRLedger#readme"
+Issues = "https://github.com/aaronpliu/PyPRLedger/issues"
+Changelog = "https://github.com/aaronpliu/PyPRLedger/blob/main/CHANGELOG.md"
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
-    "ruff>=0.15.7",
 ]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --tb=short"

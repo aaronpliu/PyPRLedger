@@ -1,6 +1,6 @@
 # PRLedger
 
-A production-ready FastAPI-based PR Code Review Result Saver System with MySQL, Redis, and Prometheus integration.
+A production-ready FastAPI-based PR Code Review Result Storage System with MySQL, Redis, and Prometheus integration.
 
 **Current Version**: See `pyproject.toml` or run `python scripts/bump_version.py show`
 

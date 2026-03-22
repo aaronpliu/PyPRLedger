@@ -1,17 +1,14 @@
-# Pull Request Code Review System
-# FastAPI-based Pull Request Code Review System
-
 import importlib.metadata
 
 # Single source of truth: version is managed in pyproject.toml
 try:
-    __version__ = importlib.metadata.version("pycodereviewsaver")
+    __version__ = importlib.metadata.version("pyledger")
 except importlib.metadata.PackageNotFoundError:
     # Fallback for development environments
     __version__ = "0.1.0-dev"
 
-__author__ = "CodeGeeX"
-__description__ = "FastAPI-based Pull Request Code Review System with MySQL, Redis, and Prometheus integration"
+__author__ = "Aaron P LIU"
+__description__ = "FastAPI-based Pull Request Code Review Result Storage System with MySQL, Redis, and Prometheus integration"
 
 # Lazy imports to avoid circular dependency issues
 def __getattr__(name):
