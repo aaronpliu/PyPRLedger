@@ -1,4 +1,4 @@
-# FastAPI Pull Request Code Review System - Project Structure
+# PRLedger - Project Structure
 
 ## 📁 Project Root Directory
 
@@ -283,7 +283,7 @@
 1. **Clone and Setup**
    ```bash
    git clone <repository-url>
-   cd fastapi-code-review
+   cd PRLedger
    cp .env.example .env
    ```
 

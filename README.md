@@ -1,4 +1,4 @@
-# FastAPI Pull Request Code Review System
+# PRLedger
 
 A production-ready FastAPI-based Pull Request Code Review System with MySQL, Redis, and Prometheus integration.
 
@@ -16,7 +16,7 @@ A production-ready FastAPI-based Pull Request Code Review System with MySQL, Red
 ## Project Structure
 
 ```
-fastapi-code-review/
+PRLedger/
 ├── alembic/                  # Database migrations
 │   ├── versions/               # Migration scripts
 │   ├── env.py                 # Alembic environment
@@ -66,7 +66,7 @@ fastapi-code-review/
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd fastapi-code-review
+cd PRLedger
 ```
 
 2. Copy environment variables:

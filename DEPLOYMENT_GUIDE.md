@@ -1,4 +1,4 @@
-# FastAPI Pull Request Code Review System - Deployment Guide
+# PRLedger - Deployment Guide
 
 ## 📋 Table of Contents
 
@@ -35,7 +35,7 @@
 
 ```bash
 git clone <repository-url>
-cd fastapi-code-review
+cd PRLedger
 ```
 
 ### 2. Create Virtual Environment
@@ -112,7 +112,7 @@ docker-compose ps
 Expected output:
 ```
 NAME                     STATUS
-fastapi-code-review-api     Up
+PRLedger-api              Up
 code-review-mysql          Up
 code-review-redis           Up
 code-review-prometheus      Up

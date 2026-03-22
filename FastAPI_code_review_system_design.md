@@ -1,11 +1,11 @@
-# FastAPI Pull Request Code Review System: Design and Implementation Guide
+# PRLedger: Design and Implementation Guide
 
 ## 1. Project Structure Best Practices
 
 Based on industry best practices and the referenced GitHub repository [zhanymkanov/fastapi-best-practices](https://github.com/zhanymkanov/fastapi-best-practices), the following project structure is recommended for a robust FastAPI application:
 
 ```
-fastapi-code-review/
+PRLedger/
 ├── alembic/                  # Database migrations
 ├── src/
 │   ├── api/                  # API routers
@@ -58,23 +58,27 @@ This structure promotes separation of concerns, making the application more main
 
 Based on the requirements, the following database schema is optimized for MySQL:
 
-```sql
+``sql
+-- User table with business user_id (e.g., GitHub user ID)
 CREATE TABLE user (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(64) NOT NULL UNIQUE,
+    user_id INT NOT NULL UNIQUE,  -- Business ID (e.g., GitHub user ID)
+    username VARCHAR(64) NOT NULL,
     display_name VARCHAR(128) NOT NULL,
     email_address VARCHAR(255) NOT NULL UNIQUE,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     is_reviewer BOOLEAN NOT NULL DEFAULT FALSE,
     created_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_user_id (user_id),
     INDEX idx_username (username),
     INDEX idx_email (email_address)
 );
 
+-- Project table with business project_id
 CREATE TABLE project (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    project_id VARCHAR(64) NOT NULL UNIQUE,
+    project_id INT NOT NULL UNIQUE,  -- Business ID (e.g., GitHub project ID)
     project_name VARCHAR(128) NOT NULL,
     project_key VARCHAR(32) NOT NULL UNIQUE,
     project_url VARCHAR(255) NOT NULL,
@@ -83,63 +87,109 @@ CREATE TABLE project (
     INDEX idx_project_id (project_id)
 );
 
+-- Repository table linked to project via business IDs
 CREATE TABLE repository (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    project_id INT NOT NULL,
-    repository_id VARCHAR(64) NOT NULL,
+    repository_id INT NOT NULL UNIQUE,  -- Business ID (e.g., GitHub repo ID)
+    project_id INT NOT NULL,  -- FK to project.project_id (business ID)
     repository_name VARCHAR(128) NOT NULL,
     repository_slug VARCHAR(128) NOT NULL,
     repository_url VARCHAR(255) NOT NULL,
     created_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES project(project_id) ON DELETE CASCADE,
     INDEX idx_repository_id (repository_id),
-    INDEX idx_project_id (project_id)
+    INDEX idx_repository_project_id (project_id)
 );
 
+-- Pull request review table with all business ID foreign keys
 CREATE TABLE pull_request_review (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    
+    -- Foreign keys to business IDs (not database auto-IDs)
+    project_id INT NOT NULL,  -- FK to project.project_id
+    pull_request_user_id INT NOT NULL,  -- FK to user.user_id (author)
+    reviewer_id INT NOT NULL,  -- FK to user.user_id (reviewer)
+    repository_id INT NOT NULL,  -- FK to repository.repository_id
+    
+    -- Pull request information
     pull_request_id VARCHAR(64) NOT NULL,
-    project_id INT NOT NULL,
-    pull_request_user_id INT NOT NULL,
-    reviewer_id INT NOT NULL,
+    pull_request_commit_id VARCHAR(64),
     source_branch VARCHAR(64) NOT NULL,
     target_branch VARCHAR(64) NOT NULL,
+    
+    -- Code review details
     git_code_diff TEXT,
     source_filename VARCHAR(255),
     ai_suggestions JSON,
     reviewer_comments TEXT,
+    
+    -- Review metrics
     score INT,
+    
+    -- Status
     pull_request_status VARCHAR(32) NOT NULL,
+    
+    -- Metadata
+    metadata JSON,
+    
+    -- Timestamps
     created_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    metadata JSON,
-    FOREIGN KEY (project_id) REFERENCES project(id) ON DELETE CASCADE,
-    FOREIGN KEY (pull_request_user_id) REFERENCES user(id) ON DELETE CASCADE,
-    FOREIGN KEY (reviewer_id) REFERENCES user(id) ON DELETE CASCADE,
+    
+    -- Foreign key constraints
+    FOREIGN KEY (project_id) REFERENCES project(project_id) ON DELETE CASCADE,
+    FOREIGN KEY (pull_request_user_id) REFERENCES user(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (reviewer_id) REFERENCES user(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (repository_id) REFERENCES repository(repository_id) ON DELETE CASCADE,
+    
+    -- Indexes
     INDEX idx_pull_request_id (pull_request_id),
-    INDEX idx_project_id (project_id),
+    INDEX idx_pr_project_id (project_id),
     INDEX idx_reviewer_id (reviewer_id),
     INDEX idx_created_date (created_date)
 );
 ```
 
+### Key Design Decisions
+
+1. **Business ID Strategy**:
+   - All tables use business IDs (e.g., GitHub IDs) passed by API callers
+   - Foreign keys reference business IDs (`user_id`, `project_id`, `repository_id`), not auto-generated database IDs
+   - This ensures consistency with external systems and simplifies data synchronization
+
+2. **Indexing Strategy**:
+   - Business ID columns have unique constraints and indexes for fast lookups
+   - Foreign key columns are indexed for efficient joins
+   - Temporal index on `created_date` for time-based queries
+   - Composite indexes can be added based on query patterns
+
+3. **Data Types**:
+   - `JSON` type for flexible metadata storage (AI suggestions, custom metadata)
+   - `TEXT` for large text fields (code diff, reviewer comments)
+   - `DATETIME` with automatic timestamp updates for audit trails
+
 ### Optimization Strategies
 
-1. **Indexing Strategy**:
-   - Create indexes on frequently queried columns: pull_request_id, project_id, reviewer_id, and created_date
-   - Use composite indexes for common query patterns like (project_id, created_date)
-
-2. **Connection Pooling**:
-   - Use a connection pool to manage database connections efficiently
+1. **Connection Pooling**:
+   - Use async database drivers with connection pooling
    - Configure appropriate pool size based on expected concurrent requests
+   - Default pool size: 20 connections, adjustable via environment variables
 
-3. **Query Optimization**:
+2. **Query Optimization**:
    - Use EXPLAIN to analyze query execution plans
-   - Avoid N+1 query problem by using eager loading where appropriate
+   - Avoid N+1 query problem by using eager loading for relationships
+   - Leverage indexes for WHERE clauses and JOIN operations
+   - Use pagination for large result sets (LIMIT/OFFSET)
 
-4. **Partitioning**:
-   - Consider partitioning the pull_request_review table by date range for better performance with time-based queries
+3. **Partitioning** (Future Enhancement):
+   - Consider partitioning the `pull_request_review` table by date range for better performance with time-based queries
+   - Range partitioning by `created_date` (monthly or quarterly)
+
+4. **Caching Integration**:
+   - Redis cache for frequently accessed reviews and statistics
+   - Cache invalidation on write operations
+   - TTL-based expiration for time-sensitive data
 
 ## 3. Redis Caching Strategies
 
@@ -346,7 +396,7 @@ Based on the requirements, the following metrics should be monitored:
 
 ### Docker Compose Setup
 
-```yaml
+```
 version: '3'
 
 services:
@@ -651,7 +701,7 @@ uvicorn>=0.24.0
 
 ### Docker Configuration
 
-```dockerfile
+```
 FROM python:3.11-slim
 
 WORKDIR /app

@@ -16,7 +16,7 @@ rule_files:
 # Scrape configurations
 scrape_configs:
   # FastAPI Application Metrics
-  - job_name: 'fastapi-code-review'
+  - job_name: 'PRLedger'
     static_configs:
       - targets: ['api:8000']
     metrics_path: '/metrics'
