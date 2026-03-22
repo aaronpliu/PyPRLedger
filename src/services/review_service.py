@@ -122,10 +122,16 @@ class ReviewService:
             is_reviewer=True
         )
 
-        # Check if review with same pull_request_id already exists
+        # Check if review already exists for the same reviewer and file
+        # A review is uniquely identified by (commit_id, project_key, repository_slug, source_filename, reviewer)
         existing_review_result = await db.execute(
             select(PullRequestReview).where(
-                PullRequestReview.pull_request_id == review_data.pull_request_id
+                PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
+                PullRequestReview.project_key == project.project_key,
+                PullRequestReview.repository_slug == repository.repository_slug,
+                PullRequestReview.source_filename == review_data.source_filename,
+                PullRequestReview.reviewer == reviewer.username,
+                PullRequestReview.is_latest_review == True
             )
         )
         existing_review = existing_review_result.scalar_one_or_none()
@@ -202,10 +208,10 @@ class ReviewService:
             }
         await self._set_review_in_cache(new_review.pull_request_id, review_dict)
 
-        # Update metrics (use hash of usernames as temporary IDs for metrics)
+        # Update metrics (use project_key and username directly)
         self.metrics.increment_review(
-            project_id=hash(project.project_key) % 100000, 
-            reviewer_id=hash(reviewer.username) % 100000
+            project=project.project_key, 
+            reviewer=reviewer.username
         )
 
         # Invalidate list cache
@@ -249,10 +255,16 @@ class ReviewService:
             is_reviewer=True
         )
 
-        # Check if review already exists
+        # Check if review already exists for the same reviewer and file
+        # A review is uniquely identified by (commit_id, project_key, repository_slug, source_filename, reviewer)
         existing_review_result = await db.execute(
             select(PullRequestReview).where(
-                PullRequestReview.pull_request_id == review_data.pull_request_id
+                PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
+                PullRequestReview.project_key == project.project_key,
+                PullRequestReview.repository_slug == repository.repository_slug,
+                PullRequestReview.source_filename == review_data.source_filename,
+                PullRequestReview.reviewer == reviewer.username,
+                PullRequestReview.is_latest_review == True
             )
         )
         existing_review = existing_review_result.scalar_one_or_none()

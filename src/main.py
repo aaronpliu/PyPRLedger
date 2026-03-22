@@ -118,7 +118,9 @@ async def validation_exception_handler(
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """通用异常处理"""
-    logger.error(f"Unexpected error: {str(exc)}", extra={"request": str(request)})
+    import traceback
+    error_traceback = traceback.format_exc()
+    logger.error(f"Unexpected error: {str(exc)}\n{error_traceback}", extra={"request": str(request)})
     
     # Safely convert exception to string for JSON serialization
     detail = None

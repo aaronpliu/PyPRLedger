@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,9 @@ from src.core.exceptions import (
     ResourceAlreadyExistsException,
 )
 from src.utils.metrics import metrics
+from src.utils.log import get_logger
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -111,7 +115,14 @@ async def list_projects(
             date_to=date_to,
         )
 
-        projects, total = await project_service.list_projects(filters, page, page_size, db)
+        projects, total = await project_service.list_projects(
+            db=db,
+            filters=filters,
+            page=page,
+            page_size=page_size,
+        )
+        
+        logger.info(f"Retrieved {len(projects)} projects from database")
 
         return ProjectListResponse(
             items=[ProjectResponse(**p.to_dict()) for p in projects],
@@ -120,6 +131,9 @@ async def list_projects(
             page_size=page_size,
         )
     except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to list projects: {str(e)}\n{error_traceback}")
         metrics.increment_error(error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/projects")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -59,11 +59,12 @@ async def upsert_review(
         try:
             review, is_created = await review_service.upsert_review(review_data, db)
             metrics.increment_pull_request(
-                project=review.project_id, status=review.pull_request_status
+                project=review.project_key, status=review.pull_request_status
             )
             status_code = status.HTTP_201_CREATED if is_created else status.HTTP_200_OK
+            # Use to_dict() directly to avoid datetime serialization issues
             return JSONResponse(
-                status_code=status_code, content=ReviewResponse(**review.model_dump()).model_dump()
+                status_code=status_code, content=review.to_dict()
             )
         except (ProjectNotFoundException, UserNotFoundException) as e:
             metrics.increment_error(error_type=e.code, endpoint="POST /api/v1/reviews")
@@ -72,6 +73,9 @@ async def upsert_review(
                 detail={"error": e.code, "message": e.message, "detail": e.detail},
             )
         except Exception as e:
+            import traceback
+            error_traceback = traceback.format_exc()
+            logger.error(f"Failed to upsert review: {str(e)}\n{error_traceback}")
             metrics.increment_error(
                 error_type="INTERNAL_SERVER_ERROR", endpoint="POST /api/v1/reviews"
             )
