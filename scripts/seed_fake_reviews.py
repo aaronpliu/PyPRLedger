@@ -11,10 +11,15 @@ This script creates:
 
 import asyncio
 import sys
+import os
+from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add src to path
 sys.path.insert(0, 'src')
@@ -23,8 +28,19 @@ sys.path.insert(0, 'src')
 async def seed_data():
     """Insert fake data for testing multi-reviewer and multi-file reviews"""
     
-    # Database connection
-    engine = create_async_engine('mysql+aiomysql://root:0000abc!@192.168.64.2:3306/code_review')
+    # Read database credentials from environment variables
+    db_user = os.getenv('DATABASE_USER', 'root')
+    db_password = os.getenv('DATABASE_PASSWORD', '')
+    db_host = os.getenv('DATABASE_HOST', 'localhost')
+    db_port = os.getenv('DATABASE_PORT', '3306')
+    db_name = os.getenv('DATABASE_NAME', 'code_review')
+    
+    # Construct database URL
+    database_url = f'mysql+aiomysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
+    
+    print(f"🔧 Connecting to database: {db_user}@{db_host}:{db_port}/{db_name}")
+    
+    engine = create_async_engine(database_url)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     
     async with async_session() as session:
@@ -33,14 +49,20 @@ async def seed_data():
             
             # 1. Create Projects
             print("\n📁 Creating projects...")
-            await session.execute(text("""
-                INSERT INTO project (project_id, project_name, project_key, project_url, created_date, updated_date) 
-                VALUES 
-                (1, 'E-Commerce Platform', 'ECOM', 'https://bitbucket.org/company/ecom', NOW(), NOW()),
-                (2, 'Analytics Dashboard', 'ANALYTICS', 'https://bitbucket.org/company/analytics', NOW(), NOW()),
-                (3, 'Mobile App Backend', 'MOBILE-API', 'https://bitbucket.org/company/mobile-api', NOW(), NOW())
-            """))
-            print("✅ Created 3 projects: ECOM, ANALYTICS, MOBILE-API")
+            try:
+                await session.execute(text("""
+                    INSERT INTO project (project_id, project_name, project_key, project_url, created_date, updated_date) 
+                    VALUES 
+                    (1, 'E-Commerce Platform', 'ECOM', 'https://bitbucket.org/company/ecom', NOW(), NOW()),
+                    (2, 'Analytics Dashboard', 'ANALYTICS', 'https://bitbucket.org/company/analytics', NOW(), NOW()),
+                    (3, 'Mobile App Backend', 'MOBILE-API', 'https://bitbucket.org/company/mobile-api', NOW(), NOW())
+                """))
+                print("✅ Created 3 projects: ECOM, ANALYTICS, MOBILE-API")
+            except Exception as e:
+                if "Duplicate entry" in str(e):
+                    print("ℹ️ Projects already exist, skipping...")
+                else:
+                    raise
             
             # Get the auto-generated IDs for projects
             result = await session.execute(text("SELECT id, project_key FROM project"))
