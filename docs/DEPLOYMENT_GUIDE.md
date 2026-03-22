@@ -41,7 +41,7 @@ cd PRLedger
 ### 2. Create Virtual Environment
 
 ```bash
-python3.11 -m venv venv
+python3.12 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 

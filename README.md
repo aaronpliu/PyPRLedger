@@ -18,42 +18,73 @@ A production-ready FastAPI-based PR Code Review Result Storage System with MySQL
 ## Project Structure
 
 ```
-PRLedger/
-├── alembic/                  # Database migrations
-│   ├── versions/               # Migration scripts
-│   ├── env.py                 # Alembic environment
-│   └── script.py.mako         # Migration template
-├── grafana/                   # Grafana configuration
-│   ├── provisioning/            # Data sources and dashboard provisioning
-│   └── dashboards/             # Dashboard definitions
-├── src/                       # Application source code
-│   ├── api/                    # API routes
-│   │   └── v1/                # API v1 endpoints
-│   ├── core/                   # Core functionality
-│   │   ├── config.py           # Application configuration
-│   │   ├── database.py         # Database configuration
-│   │   ├── exceptions.py       # Custom exceptions
-│   │   └── middleware.py       # Custom middleware
-│   ├── models/                 # SQLAlchemy models
-│   ├── schemas/                # Pydantic schemas
-│   ├── services/               # Business logic
-│   ├── utils/                  # Utilities
-│   │   ├── cache.py           # Cache utilities
-│   │   └── metrics.py         # Metrics collection
-│   └── main.py                # Application entry point
-├── tests/                      # Test suite
-│   ├── unit/                   # Unit tests
-│   └── integration/            # Integration tests
-├── requirements/               # Python dependencies
-│   ├── base.txt               # Base dependencies
-│   ├── dev.txt                # Development dependencies
-│   └── prod.txt               # Production dependencies
-├── .env.example              # Environment variables template
-├── Dockerfile               # Docker image definition
-├── docker-compose.yml        # Docker Compose configuration
-├── alembic.ini            # Alembic configuration
-├── prometheus.yml          # Prometheus configuration
-└── README.md              # This file
+PyPRLedger/
+├── alembic/                      # Database migrations
+│   ├── versions/                 # Migration scripts
+│   └── env.py                    # Alembic environment
+├── docs/                         # Documentation
+├── grafana/                      # Grafana configuration
+│   └── provisioning/             # Data sources and dashboard 
+├── logs/                         # Application logs
+├── requirements/                 # Python dependencies
+│   ├── base.txt                  # Base dependencies
+│   ├── dev.txt                   # Development dependencies
+│   └── prod.txt                  # Production dependencies
+├── scripts/                      # Utility scripts
+│   ├── bump_version.py           # Version management
+│   └── validate_commit_msg.py    # Commit message validation
+├── src/                          # Application source code
+│   ├── api/                      # API routes
+│   │   └── v1/                   # API v1 endpoints
+│   │       ├── endpoints/        # Endpoint handlers
+│   │       │   ├── __init__.py
+│   │       │   ├── projects.py   # Project endpoints
+│   │       │   ├── reviews.py    # Review endpoints
+│   │       │   └── users.py      # User endpoints
+│   │       ├── __init__.py
+│   │       └── api.py            # API router
+│   ├── conf/                     # Configuration files
+│   │   ├── LOGGING_GUIDE.md      # Logging documentation
+│   │   └── logging.yaml          # Logging configuration
+│   ├── core/                     # Core functionality
+│   │   ├── config.py             # Application configuration
+│   │   ├── database.py           # Database configuration
+│   │   ├── exceptions.py         # Custom exceptions
+│   │   └── middleware.py         # Custom middleware
+│   ├── models/                   # SQLAlchemy models
+│   │   ├── project.py            # Project model
+│   │   ├── pull_request.py       # Pull request model
+│   │   ├── repository.py         # Repository model
+│   │   └── user.py               # User model
+│   ├── schemas/                  # Pydantic schemas
+│   │   ├── project.py            # Project schemas
+│   │   ├── pull_request.py       # Pull request schemas
+│   │   ├── repository.py         # Repository schemas
+│   │   └── user.py               # User schemas
+│   ├── services/                 # Business logic
+│   │   ├── project_service.py    # Project service
+│   │   ├── review_service.py     # Review service
+│   │   └── user_service.py       # User service
+│   ├── utils/                    # Utilities
+│   │   ├── log.py                # Logging utilities
+│   │   ├── metrics.py            # Metrics collection
+│   │   └── redis.py              # Redis utilities
+│   ├── __init__.py
+│   └── main.py                   # Application entry point
+├── tests/                        # Test suite
+│   └── conftest.py               # Pytest fixtures and configuration
+├── .env.example                  # Environment variables template
+├── .gitignore                    # Git ignore rules
+├── .pre-commit-config.yaml       # Pre-commit hooks configuration
+├── alembic.ini                   # Alembic configuration
+├── docker-compose.yml            # Docker Compose configuration
+├── Dockerfile                    # Docker image definition
+├── init.sql                      # Database initialization script
+├── prometheus.yml                # Prometheus configuration
+├── pyproject.toml                # Python project metadata
+├── pytest.ini                    # Pytest configuration
+├── ruff.toml                     # Ruff linter configuration
+└── README.md                     # This file
 ```
 
 ## Quick Start
@@ -61,7 +92,7 @@ PRLedger/
 ### Prerequisites
 
 - Docker and Docker Compose
-- Python 3.11+ (for local development)
+- Python 3.12+ (for local development)
 
 ### Using Docker Compose (Recommended)
 
