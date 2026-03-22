@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-from sqlalchemy import select, and_, or_, func, desc
+from sqlalchemy import select, and_, or_, func, desc, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -224,7 +224,13 @@ class ReviewService:
         self, review_data: ReviewCreate, db: AsyncSession, include_details: bool = False
     ) -> tuple[PullRequestReview, bool]:
         """
-        Upsert a pull request review - create if not exists, update if exists
+        Upsert a pull request review - create if not exists, or create new iteration if exists
+
+        For existing reviews, instead of updating the record, we:
+        1. Mark the existing latest review as not latest
+        2. Create a new review record with incremented iteration number
+        
+        This preserves the history of all review iterations.
 
         Args:
             review_data: The review data to upsert
@@ -232,7 +238,7 @@ class ReviewService:
             include_details: Whether to include detailed information
 
         Returns:
-            tuple[PullRequestReview, bool]: The review and whether it was created
+            tuple[PullRequestReview, bool]: The new review and True (always created a new record)
         """
         # Initialize entity sync service
         entity_sync_service = EntitySyncService(db)
@@ -257,6 +263,7 @@ class ReviewService:
 
         # Check if review already exists for the same reviewer and file
         # A review is uniquely identified by (commit_id, project_key, repository_slug, source_filename, reviewer)
+        # For upsert operation, we check if there's an existing latest review to update
         existing_review_result = await db.execute(
             select(PullRequestReview).where(
                 PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
@@ -270,35 +277,82 @@ class ReviewService:
         existing_review = existing_review_result.scalar_one_or_none()
 
         if existing_review:
-            # Update existing review - only update mutable fields
-            update_fields = [
-                'pull_request_commit_id', 'source_branch', 'target_branch',
-                'git_code_diff', 'source_filename', 'ai_suggestions',
-                'reviewer_comments', 'score', 'pull_request_status', 'metadata'
-            ]
-            
-            for field in update_fields:
-                value = getattr(review_data, field, None)
-                if value is not None and hasattr(existing_review, field):
-                    setattr(existing_review, field, value)
-            
+            # Mark the existing latest review as not latest
+            existing_review.is_latest_review = False
             existing_review.updated_date = datetime.now(timezone.utc)
             await db.flush()
-            await db.refresh(existing_review)
+            
+            # Create a new review record for this iteration
+            # First, get the next iteration number
+            iteration_query = select(func.max(PullRequestReview.review_iteration)).where(
+                PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
+                PullRequestReview.project_key == project.project_key,
+                PullRequestReview.repository_slug == repository.repository_slug,
+                PullRequestReview.source_filename == review_data.source_filename,
+                PullRequestReview.reviewer == reviewer.username
+            )
+            iteration_result = await db.execute(iteration_query)
+            max_iteration = iteration_result.scalar() or 0
+            new_iteration = max_iteration + 1
+            
+            # Create new review with incremented iteration
+            new_review = PullRequestReview(
+                pull_request_id=review_data.pull_request_id,
+                pull_request_commit_id=review_data.pull_request_commit_id,
+                project_key=project.project_key,
+                repository_slug=repository.repository_slug,
+                pull_request_user=pr_user.username,
+                reviewer=reviewer.username,
+                source_branch=review_data.source_branch,
+                target_branch=review_data.target_branch,
+                git_code_diff=review_data.git_code_diff,
+                source_filename=review_data.source_filename,
+                ai_suggestions=review_data.ai_suggestions,
+                reviewer_comments=review_data.reviewer_comments,
+                score=review_data.score,
+                pull_request_status=review_data.pull_request_status,
+                metadata=review_data.metadata,
+                reviewed_date=datetime.now(timezone.utc),
+                is_latest_review=True,
+                review_iteration=new_iteration
+            )
+            
+            db.add(new_review)
+            await db.flush()
+            await db.refresh(new_review)
+
+            # Cache the new review
+            review_dict = new_review.to_dict()
+            if include_details:
+                # Add project and user details
+                review_dict["project_name"] = project.project_name
+                review_dict["pull_request_user_info"] = {
+                    "username": pr_user.username,
+                    "display_name": pr_user.display_name,
+                }
+                review_dict["reviewer_info"] = {
+                    "username": reviewer.username,
+                    "display_name": reviewer.display_name,
+                }
+            await self._set_review_in_cache(new_review.pull_request_id, review_dict)
+
+            # Update metrics
+            self.metrics.increment_review(
+                project=project.project_key, 
+                reviewer=reviewer.username
+            )
 
             # Invalidate cache
-            await self._invalidate_review_cache(existing_review.pull_request_id)
+            await self._invalidate_review_cache(new_review.pull_request_id)
             await self._invalidate_list_cache()
 
-            logger.info(f"Updated existing review: {existing_review.pull_request_id}")
-            return existing_review, False
-        else:
-            # Create new review
-            new_review_response = await self.create_review(review_data, db, include_details)
-            await db.commit()
-            # Convert response back to model for consistency
-            new_review = PullRequestReview.from_dict(new_review_response.model_dump())
+            logger.info(f"Created new review iteration: {new_review.pull_request_id}, iteration: {new_review.review_iteration}")
             return new_review, True
+        else:
+            # Create new review (first iteration)
+            new_review_response = await self.create_review(review_data, db, include_details)
+            logger.info(f"Created new review: {new_review_response.pull_request_id}, iteration: {new_review_response.review_iteration}")
+            return new_review_response, True
 
     async def get_review(
         self, review_id: str, db: AsyncSession, use_cache: bool = True

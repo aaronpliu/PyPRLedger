@@ -62,9 +62,19 @@ async def upsert_review(
                 project=review.project_key, status=review.pull_request_status
             )
             status_code = status.HTTP_201_CREATED if is_created else status.HTTP_200_OK
-            # Use to_dict() directly to avoid datetime serialization issues
+            # Handle both ORM object and Pydantic model
+            if hasattr(review, 'to_dict'):
+                # ORM object (PullRequestReview) - to_dict already converts datetime to ISO format
+                review_data_dict = review.to_dict()
+            elif hasattr(review, 'model_dump'):
+                # Pydantic model (ReviewResponse) - use mode='json' for proper datetime serialization
+                review_data_dict = review.model_dump(mode='json')
+            else:
+                # Fallback to dict() method
+                review_data_dict = dict(review)
+            
             return JSONResponse(
-                status_code=status_code, content=review.to_dict()
+                status_code=status_code, content=review_data_dict
             )
         except (ProjectNotFoundException, UserNotFoundException) as e:
             metrics.increment_error(error_type=e.code, endpoint="POST /api/v1/reviews")
