@@ -1,4 +1,5 @@
 """Alembic Environment Configuration - Async Support"""
+
 from logging.config import fileConfig
 from dotenv import load_dotenv
 
@@ -44,7 +45,7 @@ def get_database_url() -> str:
     database_user = os.getenv("DATABASE_USER", "root")
     database_password = os.getenv("DATABASE_PASSWORD", "")
     database_name = os.getenv("DATABASE_NAME", "code_review")
-    
+
     # Build the async database URL
     return f"mysql+aiomysql://{database_user}:{database_password}@{database_host}:{database_port}/{database_name}"
 
@@ -82,7 +83,7 @@ async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async engine"""
     configuration = config.get_section(config.config_ini_section)
     configuration["sqlalchemy.url"] = get_database_url()
-    
+
     # Create async engine from configuration
     connectable: AsyncEngine = async_engine_from_config(
         configuration,

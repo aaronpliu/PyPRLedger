@@ -35,9 +35,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     await init_redis()
     metrics_collector.startup()
     logger.info("Application started successfully")
-    
+
     yield
-    
+
     # 关闭时执行
     logger.info("Shutting down application...")
     await close_db()
@@ -54,7 +54,7 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # 配置 CORS
@@ -81,21 +81,18 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
     """自定义应用异常处理"""
     logger.error(
-        f"Application error occurred: {exc.code} - {exc.message}",
-        extra={"request": str(request)}
+        f"Application error occurred: {exc.code} - {exc.message}", extra={"request": str(request)}
     )
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "error": exc.code,
-            "message": exc.message,
-            "detail": exc.detail
-        }
+        content={"error": exc.code, "message": exc.message, "detail": exc.detail},
     )
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     """请求验证异常处理"""
     logger.error(f"Validation error: {exc.errors()}", extra={"request": str(request)})
     return JSONResponse(
@@ -103,8 +100,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={
             "error": ErrorCode.VALIDATION_ERROR,
             "message": "Request validation failed",
-            "detail": exc.errors()
-        }
+            "detail": exc.errors(),
+        },
     )
 
 
@@ -117,18 +114,15 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
         content={
             "error": ErrorCode.INTERNAL_SERVER_ERROR,
             "message": "An unexpected error occurred",
-            "detail": str(exc) if settings.DEBUG else None
-        }
+            "detail": str(exc) if settings.DEBUG else None,
+        },
     )
 
 
 @app.get("/health")
 async def health_check() -> dict:
     """健康检查端点"""
-    return {
-        "status": "healthy",
-        "version": "1.0.0"
-    }
+    return {"status": "healthy", "version": "1.0.0"}
 
 
 @app.get("/")
@@ -137,5 +131,5 @@ async def root() -> dict:
     return {
         "message": "Pull Request Code Review System API",
         "version": "1.0.0",
-        "docs": "/api/docs"
+        "docs": "/api/docs",
     }
