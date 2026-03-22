@@ -88,7 +88,3 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["src*"]
 
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-addopts = "-v --tb=short"
