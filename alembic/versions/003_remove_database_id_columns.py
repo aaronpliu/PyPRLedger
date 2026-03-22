@@ -33,80 +33,37 @@ def upgrade() -> None:
     
     These columns are no longer needed since we use business keys for relationships.
     """
+    from sqlalchemy import text, inspect
     
-    # 1. Drop foreign key constraints (if they exist)
-    # Note: MySQL requires checking if constraint exists before dropping
-    op.execute("""
-        SET @fk_name = (
-            SELECT CONSTRAINT_NAME 
-            FROM information_schema.TABLE_CONSTRAINTS 
-            WHERE TABLE_SCHEMA = DATABASE() 
-            AND TABLE_NAME = 'pull_request_review' 
-            AND CONSTRAINT_NAME = 'fk_pull_request_review_project_id'
-        )
-    """)
-    op.execute("""
-        SET @sql = IF(@fk_name IS NOT NULL, 
-                     CONCAT('ALTER TABLE pull_request_review DROP FOREIGN KEY ', @fk_name), 
-                     'SELECT "Foreign key fk_pull_request_review_project_id does not exist"')
-    """)
-    op.execute("@sql")
+    conn = op.get_bind()
+    inspector = inspect(conn)
     
-    op.execute("""
-        SET @fk_name = (
-            SELECT CONSTRAINT_NAME 
-            FROM information_schema.TABLE_CONSTRAINTS 
-            WHERE TABLE_SCHEMA = DATABASE() 
-            AND TABLE_NAME = 'pull_request_review' 
-            AND CONSTRAINT_NAME = 'fk_pull_request_review_repository_id'
-        )
-    """)
-    op.execute("""
-        SET @sql = IF(@fk_name IS NOT NULL, 
-                     CONCAT('ALTER TABLE pull_request_review DROP FOREIGN KEY ', @fk_name), 
-                     'SELECT "Foreign key fk_pull_request_review_repository_id does not exist"')
-    """)
-    op.execute("@sql")
+    # 1. Get all foreign keys and drop them
+    fks = inspector.get_foreign_keys('pull_request_review')
+    for fk in fks:
+        fk_name = fk['name']
+        try:
+            conn.execute(text(f"ALTER TABLE pull_request_review DROP FOREIGN KEY {fk_name}"))
+        except Exception as e:
+            pass
     
-    op.execute("""
-        SET @fk_name = (
-            SELECT CONSTRAINT_NAME 
-            FROM information_schema.TABLE_CONSTRAINTS 
-            WHERE TABLE_SCHEMA = DATABASE() 
-            AND TABLE_NAME = 'pull_request_review' 
-            AND CONSTRAINT_NAME = 'fk_pull_request_review_reviewer_id'
-        )
-    """)
-    op.execute("""
-        SET @sql = IF(@fk_name IS NOT NULL, 
-                     CONCAT('ALTER TABLE pull_request_review DROP FOREIGN KEY ', @fk_name), 
-                     'SELECT "Foreign key fk_pull_request_review_reviewer_id does not exist"')
-    """)
-    op.execute("@sql")
+    # 2. Drop indexes using raw SQL
+    indexes = inspector.get_indexes('pull_request_review')
+    index_names_to_drop = [
+        'idx_project_id',
+        'idx_repository_id', 
+        'idx_reviewer_id',
+        'idx_pull_request_user_id'
+    ]
     
-    op.execute("""
-        SET @fk_name = (
-            SELECT CONSTRAINT_NAME 
-            FROM information_schema.TABLE_CONSTRAINTS 
-            WHERE TABLE_SCHEMA = DATABASE() 
-            AND TABLE_NAME = 'pull_request_review' 
-            AND CONSTRAINT_NAME = 'fk_pull_request_review_pull_request_user_id'
-        )
-    """)
-    op.execute("""
-        SET @sql = IF(@fk_name IS NOT NULL, 
-                     CONCAT('ALTER TABLE pull_request_review DROP FOREIGN KEY ', @fk_name), 
-                     'SELECT "Foreign key fk_pull_request_review_pull_request_user_id does not exist"')
-    """)
-    op.execute("@sql")
+    for idx in indexes:
+        if idx['name'] in index_names_to_drop:
+            try:
+                conn.execute(text(f"DROP INDEX {idx['name']} ON pull_request_review"))
+            except Exception as e:
+                pass
     
-    # 2. Drop indexes
-    op.drop_index('idx_project_id', table_name='pull_request_review', if_exists=True)
-    op.drop_index('idx_repository_id', table_name='pull_request_review', if_exists=True)
-    op.drop_index('idx_reviewer_id', table_name='pull_request_review', if_exists=True)
-    op.drop_index('idx_pull_request_user_id', table_name='pull_request_review', if_exists=True)
-    
-    # 3. Drop columns
+    # 3. Finally drop the columns
     op.drop_column('pull_request_review', 'project_id')
     op.drop_column('pull_request_review', 'repository_id')
     op.drop_column('pull_request_review', 'reviewer_id')

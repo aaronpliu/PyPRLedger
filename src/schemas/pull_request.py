@@ -138,11 +138,7 @@ class ReviewResponse(ReviewBase):
             "example": {
                 "id": 1,
                 "pull_request_id": "pr-123",
-                "project_id": 1,
-                "repository_id": 1,
-                "pull_request_user_id": 2,
-                "reviewer_id": 3,
-                "project_key": "PROJ",
+                "project_key": "CRS",
                 "repository_slug": "code-review",
                 "reviewer": "john_doe",
                 "pull_request_user": "jane_smith",
@@ -160,6 +156,8 @@ class ReviewResponse(ReviewBase):
                 "metadata": {"labels": ["bugfix", "enhancement"], "priority": "high"},
                 "created_date": "2023-01-01T00:00:00",
                 "updated_date": "2023-01-01T00:00:00",
+                "project_name": "Code Review System",
+                "project_key": "CRS",
             }
         }
 
@@ -230,10 +228,10 @@ class ReviewListResponse(BaseModel):
                     {
                         "id": 1,
                         "pull_request_id": "pr-123",
-                        "project_id": 1,
-                        "repository_id": 1,
-                        "pull_request_user_id": 2,
-                        "reviewer_id": 3,
+                        "project_key": "PROJ",
+                        "repository_slug": "my-repo",
+                        "reviewer": "john_doe",
+                        "pull_request_user": "jane_smith",
                         "source_branch": "feature/new-feature",
                         "target_branch": "main",
                         "git_code_diff": "diff --git a/file.py b/file.py\n...",

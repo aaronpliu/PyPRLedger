@@ -173,13 +173,13 @@ async def list_reviews(
 async def get_review_statistics(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
-    project_id: Optional[int] = Query(None, gt=0, description="Filter statistics by project ID"),
+    project_key: Optional[str] = Query(None, min_length=1, max_length=32, description="Filter statistics by project key"),
 ) -> ReviewStats:
     """
     Get pull request review statistics
 
     Args:
-        project_id: Optional project ID to filter statistics
+        project_key: Optional project key to filter statistics
         db: Database session
         review_service: Review service instance
 
@@ -187,7 +187,7 @@ async def get_review_statistics(
         ReviewStats: Review statistics
     """
     try:
-        stats = await review_service.get_review_statistics(project_id, db)
+        stats = await review_service.get_review_statistics(project_key, db)
         return stats
     except Exception as e:
         metrics.increment_error(

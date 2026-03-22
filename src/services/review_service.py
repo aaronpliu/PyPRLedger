@@ -464,13 +464,16 @@ class ReviewService:
         return True
 
     async def get_review_statistics(
-        self, db: AsyncSession, project_id: Optional[int] = None, use_cache: bool = True
+        self,
+        project_key: Optional[str] = None,
+        db: AsyncSession = None,
+        use_cache: bool = True,
     ) -> ReviewStats:
         """
         Get pull request review statistics
 
         Args:
-            project_id: Optional project ID to filter statistics
+            project_key: Optional project key to filter statistics
             db: Database session
             use_cache: Whether to use cache
 
@@ -478,7 +481,7 @@ class ReviewService:
             ReviewStats: Review statistics
         """
         # Try cache first
-        cache_key = f"stats:reviews:{project_id or 'all'}"
+        cache_key = f"stats:reviews:{project_key or 'all'}"
         if use_cache:
             try:
                 cached = await self.redis_client.get(cache_key)
@@ -489,8 +492,8 @@ class ReviewService:
 
         # Build base query
         base_query = select(PullRequestReview)
-        if project_id:
-            base_query = base_query.where(PullRequestReview.project_id == project_id)
+        if project_key:
+            base_query = base_query.where(PullRequestReview.project_key == project_key)
 
         # Get total reviews
         total_query = select(func.count()).select_from(base_query.subquery())
