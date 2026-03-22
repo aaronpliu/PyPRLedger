@@ -10,9 +10,13 @@ This migration enhances the pull_request_review table to support:
 3. Unique commit-based identification across projects/repositories
 4. Review iteration tracking (save latest review for same file by same reviewer)
 """
+from typing import TYPE_CHECKING
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
+if TYPE_CHECKING:
+    from alembic.runtime.environment import MigrationContext
 
 # revision identifiers, used by Alembic.
 revision = '004'
@@ -83,11 +87,25 @@ def upgrade() -> None:
         ['is_latest_review']
     )
     
-    # 5. Drop old indexes that are no longer needed
-    op.drop_index('idx_pull_request_id', table_name='pull_request_review')
-    op.drop_index('idx_project_key', table_name='pull_request_review')
-    op.drop_index('idx_repository_slug', table_name='pull_request_review')
-    op.drop_index('idx_reviewer', table_name='pull_request_review')
+    # 5. Drop old indexes that are no longer needed (if they exist)
+    from alembic import context
+    from sqlalchemy import inspect
+    
+    inspector = inspect(context.get_bind())
+    existing_indexes = [idx['name'] for idx in inspector.get_indexes('pull_request_review')]
+    
+    # Only drop indexes that actually exist
+    if 'idx_pull_request_id' in existing_indexes:
+        op.drop_index('idx_pull_request_id', table_name='pull_request_review')
+    
+    if 'idx_project_key' in existing_indexes:
+        op.drop_index('idx_project_key', table_name='pull_request_review')
+    
+    if 'idx_repository_slug' in existing_indexes:
+        op.drop_index('idx_repository_slug', table_name='pull_request_review')
+    
+    if 'idx_reviewer' in existing_indexes:
+        op.drop_index('idx_reviewer', table_name='pull_request_review')
     
     # 6. Create new composite indexes
     op.create_index(

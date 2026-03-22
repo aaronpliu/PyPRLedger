@@ -682,3 +682,226 @@ class ReviewService:
         """
         update_data = ReviewUpdate(pull_request_status=new_status)
         return await self.update_review(review_id, update_data, db)
+
+    async def _enrich_review_with_entities(
+        self, review: PullRequestReview, db: AsyncSession
+    ) -> Dict[str, Any]:
+        """
+        Enrich a review with full entity information
+        
+        Args:
+            review: The review to enrich
+            db: Database session
+            
+        Returns:
+            Dict containing review data with embedded entity information
+        """
+        from sqlalchemy import text
+        
+        # Convert review to dict first
+        review_dict = review.to_dict()
+        
+        # Query related entities using business keys
+        project = None
+        repository = None
+        pr_user = None
+        reviewer_user = None
+        
+        try:
+            # Get project info using raw SQL for debugging
+            logger.info(f"Querying project with key: {review.project_key}")
+            project_result = await db.execute(
+                text(f"""
+                    SELECT id, project_id, project_name, project_key, project_url, created_date, updated_date 
+                    FROM project 
+                    WHERE project_key = '{review.project_key}'
+                """)
+            )
+            project_row = project_result.fetchone()
+            logger.info(f"Project query result: {project_row is not None}")
+            
+            if project_row:
+                project = {
+                    'id': project_row[0],
+                    'project_id': project_row[1],
+                    'project_name': project_row[2],
+                    'project_key': project_row[3],
+                    'project_url': project_row[4],
+                    'created_date': project_row[5],
+                    'updated_date': project_row[6]
+                }
+                
+                logger.info(f"Looking for repository: slug={review.repository_slug}, project_id={project['project_id']}")
+                # Get repository info using raw SQL
+                repo_result = await db.execute(
+                    text(f"""
+                        SELECT id, repository_id, repository_name, repository_slug, repository_url, created_date, updated_date 
+                        FROM repository 
+                        WHERE repository_slug = '{review.repository_slug}' 
+                        AND project_id = {project['project_id']}
+                    """)
+                )
+                repo_row = repo_result.fetchone()
+                logger.info(f"Repository query result: {repo_row is not None}")
+                
+                if repo_row:
+                    repository = {
+                        'id': repo_row[0],
+                        'repository_id': repo_row[1],
+                        'repository_name': repo_row[2],
+                        'repository_slug': repo_row[3],
+                        'repository_url': repo_row[4],
+                        'created_date': repo_row[5],
+                        'updated_date': repo_row[6]
+                    }
+                else:
+                    # Debug: check what repositories exist
+                    debug_result = await db.execute(text("SELECT repository_slug, project_id FROM repository"))
+                    all_repos = debug_result.fetchall()
+                    logger.warning(f"All repositories in DB: {[(r[0], r[1]) for r in all_repos]}")
+            
+            # Get PR author info
+            pr_user_result = await db.execute(
+                text(f"""
+                    SELECT id, user_id, username, display_name, email_address, active, is_reviewer, created_date, updated_date 
+                    FROM user 
+                    WHERE username = '{review.pull_request_user}'
+                """)
+            )
+            pr_user_row = pr_user_result.fetchone()
+            
+            if pr_user_row:
+                pr_user = {
+                    'id': pr_user_row[0],
+                    'user_id': pr_user_row[1],
+                    'username': pr_user_row[2],
+                    'display_name': pr_user_row[3],
+                    'email_address': pr_user_row[4],
+                    'active': pr_user_row[5],
+                    'is_reviewer': pr_user_row[6],
+                    'created_date': pr_user_row[7],
+                    'updated_date': pr_user_row[8]
+                }
+            
+            # Get reviewer info
+            reviewer_result = await db.execute(
+                text(f"""
+                    SELECT id, user_id, username, display_name, email_address, active, is_reviewer, created_date, updated_date 
+                    FROM user 
+                    WHERE username = '{review.reviewer}'
+                """)
+            )
+            reviewer_row = reviewer_result.fetchone()
+            
+            if reviewer_row:
+                reviewer_user = {
+                    'id': reviewer_row[0],
+                    'user_id': reviewer_row[1],
+                    'username': reviewer_row[2],
+                    'display_name': reviewer_row[3],
+                    'email_address': reviewer_row[4],
+                    'active': reviewer_row[5],
+                    'is_reviewer': reviewer_row[6],
+                    'created_date': reviewer_row[7],
+                    'updated_date': reviewer_row[8]
+                }
+            
+        except Exception as e:
+            logger.warning(f"Failed to load entity information for review: {str(e)}")
+        
+        # Build enriched response
+        enriched_review = review_dict.copy()
+        
+        # Add project information
+        if project:
+            enriched_review["project"] = {
+                "id": project["id"],
+                "project_id": project["project_id"],
+                "project_name": project["project_name"],
+                "project_key": project["project_key"],
+                "project_url": str(project["project_url"]),
+                "created_date": project["created_date"].isoformat() if project["created_date"] else None,
+                "updated_date": project["updated_date"].isoformat() if project["updated_date"] else None,
+            }
+        else:
+            enriched_review["project"] = None
+            
+        # Add repository information
+        if repository:
+            enriched_review["repository"] = {
+                "id": repository["id"],
+                "repository_id": repository["repository_id"],
+                "repository_name": repository["repository_name"],
+                "repository_slug": repository["repository_slug"],
+                "repository_url": str(repository["repository_url"]),
+                "created_date": repository["created_date"].isoformat() if repository["created_date"] else None,
+                "updated_date": repository["updated_date"].isoformat() if repository["updated_date"] else None,
+            }
+        else:
+            enriched_review["repository"] = None
+            
+        # Add PR author information
+        if pr_user:
+            enriched_review["pull_request_user_info"] = {
+                "id": pr_user["id"],
+                "user_id": pr_user["user_id"],
+                "username": pr_user["username"],
+                "display_name": pr_user["display_name"],
+                "email_address": pr_user["email_address"],
+                "active": pr_user["active"],
+                "is_reviewer": pr_user["is_reviewer"],
+                "created_date": pr_user["created_date"].isoformat() if pr_user["created_date"] else None,
+                "updated_date": pr_user["updated_date"].isoformat() if pr_user["updated_date"] else None,
+            }
+        else:
+            enriched_review["pull_request_user_info"] = None
+            
+        # Add reviewer information
+        if reviewer_user:
+            enriched_review["reviewer_info"] = {
+                "id": reviewer_user["id"],
+                "user_id": reviewer_user["user_id"],
+                "username": reviewer_user["username"],
+                "display_name": reviewer_user["display_name"],
+                "email_address": reviewer_user["email_address"],
+                "active": reviewer_user["active"],
+                "is_reviewer": reviewer_user["is_reviewer"],
+                "created_date": reviewer_user["created_date"].isoformat() if reviewer_user["created_date"] else None,
+                "updated_date": reviewer_user["updated_date"].isoformat() if reviewer_user["updated_date"] else None,
+            }
+        else:
+            enriched_review["reviewer_info"] = None
+        
+        return enriched_review
+    
+    async def list_reviews_with_entities(
+        self,
+        filters: ReviewFilter,
+        db: AsyncSession,
+        page: int = 1,
+        page_size: int = 20,
+        use_cache: bool = False,  # Disable cache for enriched queries
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """
+        List pull request reviews with full entity information
+        
+        Args:
+            filters: Filter criteria using business keys
+            page: Page number (1-indexed)
+            page_size: Number of items per page
+            db: Database session
+            use_cache: Whether to use cache (disabled for enriched queries)
+            
+        Returns:
+            Tuple[List[Dict], int]: List of enriched reviews and total count
+        """
+        # Get basic reviews from database
+        reviews, total = await self.list_reviews(filters, db, page, page_size, use_cache=False)
+        
+        # Enrich each review with entity information
+        enriched_reviews = []
+        for review in reviews:
+            enriched = await self._enrich_review_with_entities(review, db)
+            enriched_reviews.append(enriched)
+        
+        return enriched_reviews, total

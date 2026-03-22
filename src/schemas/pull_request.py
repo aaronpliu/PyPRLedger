@@ -134,7 +134,7 @@ class ReviewUpdate(BaseModel):
 
 
 class ReviewResponse(BaseModel):
-    """Schema for pull request review response"""
+    """Schema for pull request review response with full entity information"""
 
     id: int = Field(..., description="Review database ID")
     pull_request_id: str = Field(..., description="Pull request identifier")
@@ -160,6 +160,12 @@ class ReviewResponse(BaseModel):
     
     created_date: datetime = Field(..., description="Record creation timestamp")
     updated_date: datetime = Field(..., description="Record last update timestamp")
+    
+    # Embedded entity information - always included in response
+    project: Optional[Dict[str, Any]] = Field(None, description="Full project information")
+    repository: Optional[Dict[str, Any]] = Field(None, description="Full repository information")
+    pull_request_user_info: Optional[Dict[str, Any]] = Field(None, description="Full information about PR author")
+    reviewer_info: Optional[Dict[str, Any]] = Field(None, description="Full information about reviewer")
 
     class Config:
         """Pydantic configuration"""
@@ -172,8 +178,8 @@ class ReviewResponse(BaseModel):
                 "pull_request_commit_id": "abc123def456",
                 "project_key": "PROJ",
                 "repository_slug": "code-review",
-                "reviewer": "john_doe",
                 "pull_request_user": "jane_smith",
+                "reviewer": "john_doe",
                 "source_branch": "feature/new-feature",
                 "target_branch": "main",
                 "git_code_diff": "diff --git a/file.py b/file.py\n...",
@@ -191,61 +197,56 @@ class ReviewResponse(BaseModel):
                 "review_iteration": 1,
                 "created_date": "2023-01-01T10:00:00",
                 "updated_date": "2023-01-01T12:00:00",
-            }
-        }
-
-
-class ReviewDetailResponse(ReviewResponse):
-    """Schema for detailed pull request review response with additional information"""
-
-    project_name: str = Field(..., description="Project name")
-    pull_request_user: Dict[str, Any] = Field(
-        ..., description="Information about the user who created the pull request"
-    )
-    reviewer: Dict[str, Any] = Field(..., description="Information about the reviewer")
-
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "id": 1,
-                "pull_request_id": "pr-123",
-                "project_id": 1,
-                "repository_id": 1,
-                "pull_request_user_id": 2,
-                "reviewer_id": 3,
-                "source_branch": "feature/new-feature",
-                "target_branch": "main",
-                "git_code_diff": "diff --git a/file.py b/file.py\n...",
-                "source_filename": "src/file.py",
-                "ai_suggestions": {
-                    "suggestion_1": "Consider using list comprehension instead of loop",
-                    "suggestion_2": "Add type hints for better code clarity",
+                "project": {
+                    "id": 1,
+                    "project_id": 1234,
+                    "project_name": "Code Review System",
+                    "project_key": "PROJ",
+                    "project_url": "https://bitbucket.org/company/proj",
+                    "created_date": "2023-01-01T00:00:00",
+                    "updated_date": "2023-01-01T00:00:00",
                 },
-                "reviewer_comments": "Overall good code, but consider the suggestions from AI",
-                "score": 8,
-                "pull_request_status": "open",
-                "metadata": {"labels": ["bugfix", "enhancement"], "priority": "high"},
-                "created_date": "2023-01-01T00:00:00",
-                "updated_date": "2023-01-01T00:00:00",
-                "project_name": "Code Review System",
-                "pull_request_user": {
+                "repository": {
+                    "id": 1,
+                    "repository_id": 5678,
+                    "repository_name": "Code Review API",
+                    "repository_slug": "code-review",
+                    "repository_url": "https://bitbucket.org/company/proj/code-review",
+                    "created_date": "2023-01-01T00:00:00",
+                    "updated_date": "2023-01-01T00:00:00",
+                },
+                "pull_request_user_info": {
                     "id": 2,
-                    "username": "dev_user",
-                    "display_name": "Developer User",
+                    "user_id": 1002,
+                    "username": "jane_smith",
+                    "display_name": "Jane Smith",
+                    "email_address": "jane@example.com",
+                    "active": True,
+                    "is_reviewer": False,
+                    "created_date": "2023-01-01T00:00:00",
+                    "updated_date": "2023-01-01T00:00:00",
                 },
-                "reviewer": {"id": 3, "username": "reviewer_user", "display_name": "Code Reviewer"},
+                "reviewer_info": {
+                    "id": 3,
+                    "user_id": 1003,
+                    "username": "john_doe",
+                    "display_name": "John Doe",
+                    "email_address": "john@example.com",
+                    "active": True,
+                    "is_reviewer": True,
+                    "created_date": "2023-01-01T00:00:00",
+                    "updated_date": "2023-01-01T00:00:00",
+                },
             }
         }
+
 
 
 class ReviewListResponse(BaseModel):
     """Schema for paginated pull request review list response"""
 
     items: List[ReviewResponse] = Field(
-        default_factory=list, description="List of pull request reviews"
+        default_factory=list, description="List of pull request reviews with embedded entity data"
     )
     total: int = Field(..., description="Total number of reviews")
     page: int = Field(default=1, ge=1, description="Current page number")
@@ -279,6 +280,46 @@ class ReviewListResponse(BaseModel):
                         "metadata": {"labels": ["bugfix", "enhancement"], "priority": "high"},
                         "created_date": "2023-01-01T00:00:00",
                         "updated_date": "2023-01-01T00:00:00",
+                        "project": {
+                            "id": 1,
+                            "project_id": 1234,
+                            "project_name": "Code Review System",
+                            "project_key": "PROJ",
+                            "project_url": "https://bitbucket.org/company/proj",
+                            "created_date": "2023-01-01T00:00:00",
+                            "updated_date": "2023-01-01T00:00:00",
+                        },
+                        "repository": {
+                            "id": 1,
+                            "repository_id": 5678,
+                            "repository_name": "Code Review API",
+                            "repository_slug": "my-repo",
+                            "repository_url": "https://bitbucket.org/company/proj/my-repo",
+                            "created_date": "2023-01-01T00:00:00",
+                            "updated_date": "2023-01-01T00:00:00",
+                        },
+                        "pull_request_user_info": {
+                            "id": 2,
+                            "user_id": 1002,
+                            "username": "jane_smith",
+                            "display_name": "Jane Smith",
+                            "email_address": "jane@example.com",
+                            "active": True,
+                            "is_reviewer": False,
+                            "created_date": "2023-01-01T00:00:00",
+                            "updated_date": "2023-01-01T00:00:00",
+                        },
+                        "reviewer_info": {
+                            "id": 3,
+                            "user_id": 1003,
+                            "username": "john_doe",
+                            "display_name": "John Doe",
+                            "email_address": "john@example.com",
+                            "active": True,
+                            "is_reviewer": True,
+                            "created_date": "2023-01-01T00:00:00",
+                            "updated_date": "2023-01-01T00:00:00",
+                        },
                     }
                 ],
                 "total": 1,

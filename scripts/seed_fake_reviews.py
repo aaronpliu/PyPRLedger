@@ -65,20 +65,26 @@ async def seed_data():
                     raise
             
             # Get the auto-generated IDs for projects
-            result = await session.execute(text("SELECT id, project_key FROM project"))
-            project_ids = {row[1]: row[0] for row in result}  # Map project_key to database id
+            result = await session.execute(text("SELECT project_id, project_key FROM project"))
+            project_ids = {row[1]: row[0] for row in result}  # Map project_key to business ID (project_id)
             
-            # 2. Create Repositories using correct project database IDs
+            # 2. Create Repositories using correct project business IDs (project_id)
             print("\n🗂️ Creating repositories...")
-            await session.execute(text(f"""
-                INSERT INTO repository (repository_id, project_id, repository_name, repository_slug, repository_url, created_date, updated_date) 
-                VALUES 
-                (1, {project_ids['ECOM']}, 'Frontend Store', 'frontend-store', 'https://bitbucket.org/company/ecom/frontend-store', NOW(), NOW()),
-                (2, {project_ids['ECOM']}, 'Payment Service', 'payment-service', 'https://bitbucket.org/company/ecom/payment-service', NOW(), NOW()),
-                (3, {project_ids['ANALYTICS']}, 'Dashboard UI', 'dashboard-ui', 'https://bitbucket.org/company/analytics/dashboard-ui', NOW(), NOW()),
-                (4, {project_ids['MOBILE-API']}, 'API Gateway', 'api-gateway', 'https://bitbucket.org/company/mobile-api/api-gateway', NOW(), NOW())
-            """))
-            print("✅ Created 4 repositories")
+            try:
+                await session.execute(text(f"""
+                    INSERT INTO repository (repository_id, project_id, repository_name, repository_slug, repository_url, created_date, updated_date) 
+                    VALUES 
+                    (1, {project_ids['ECOM']}, 'Frontend Store', 'frontend-store', 'https://bitbucket.org/company/ecom/frontend-store', NOW(), NOW()),
+                    (2, {project_ids['ECOM']}, 'Payment Service', 'payment-service', 'https://bitbucket.org/company/ecom/payment-service', NOW(), NOW()),
+                    (3, {project_ids['ANALYTICS']}, 'Dashboard UI', 'dashboard-ui', 'https://bitbucket.org/company/analytics/dashboard-ui', NOW(), NOW()),
+                    (4, {project_ids['MOBILE-API']}, 'API Gateway', 'api-gateway', 'https://bitbucket.org/company/mobile-api/api-gateway', NOW(), NOW())
+                """))
+                print("✅ Created 4 repositories")
+            except Exception as e:
+                if "Duplicate entry" in str(e):
+                    print("ℹ️ Repositories already exist, skipping...")
+                else:
+                    raise
             
             # 3. Create Users with business ID (user_id)
             print("\n👥 Creating users...")

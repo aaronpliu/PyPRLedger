@@ -6,14 +6,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
-from src.schemas.pull_request import (
-    ReviewCreate,
-    ReviewResponse,
-    ReviewUpdate,
-    ReviewListResponse,
-    ReviewFilter,
-    ReviewStats,
-)
+from src.schemas.pull_request import ReviewCreate, ReviewResponse, ReviewUpdate
+from src.schemas.pull_request import ReviewListResponse, ReviewFilter, ReviewStats
 from src.services.review_service import ReviewService
 from src.core.exceptions import (
     ProjectNotFoundException,
@@ -114,6 +108,8 @@ async def list_reviews(
 ) -> ReviewListResponse:
     """
     List pull request reviews with filtering and pagination
+    
+    Response includes full entity information for project, repository, and users.
 
     Args:
         pull_request_id: Filter by pull request ID
@@ -134,7 +130,7 @@ async def list_reviews(
         review_service: Review service instance
 
     Returns:
-        ReviewListResponse: List of reviews with pagination info
+        ReviewListResponse: List of reviews with full entity information and pagination info
     """
     try:
         filters = ReviewFilter(
@@ -152,10 +148,13 @@ async def list_reviews(
             date_to=date_to,
         )
 
-        reviews, total = await review_service.list_reviews(filters, db, page, page_size)
-
+        # Get enriched reviews with full entity information
+        enriched_reviews, total = await review_service.list_reviews_with_entities(
+            filters, db, page, page_size
+        )
+        
         return ReviewListResponse(
-            items=[ReviewResponse(**r.to_dict()) for r in reviews],
+            items=enriched_reviews,
             total=total,
             page=page,
             page_size=page_size,
