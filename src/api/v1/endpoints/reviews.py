@@ -69,7 +69,7 @@ async def upsert_review(
             )
             status_code = status.HTTP_201_CREATED if is_created else status.HTTP_200_OK
             return JSONResponse(
-                status_code=status_code, content=ReviewResponse(**review.dict()).dict()
+                status_code=status_code, content=ReviewResponse(**review.model_dump()).model_dump()
             )
         except (ProjectNotFoundException, UserNotFoundException) as e:
             metrics.increment_error(error_type=e.code, endpoint="POST /api/v1/reviews")

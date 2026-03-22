@@ -53,7 +53,7 @@ async def create_user(
     try:
         user = await user_service.create_user(user_data, db)
         metrics.increment_user_count()
-        return UserResponse(**user.dict())
+        return UserResponse(**user.model_dump())
     except UserAlreadyExistsException as e:
         metrics.increment_error(error_type=e.code, endpoint="POST /api/v1/users")
         raise HTTPException(

@@ -130,7 +130,7 @@ class ProjectService:
             )
 
         # Create new project
-        new_project = Project.from_dict(project_data.dict())
+        new_project = Project.from_dict(project_data.model_dump())
 
         db.add(new_project)
         await db.flush()
@@ -171,13 +171,13 @@ class ProjectService:
         created = False
         if not project:
             # Create new project
-            project = Project.from_dict(project_data.dict())
+            project = Project.from_dict(project_data.model_dump())
             db.add(project)
             created = True
             logger.info(f"Created new project: {project.project_id}")
         else:
             # Update existing project
-            project.update(project_data.dict())
+            project.update(project_data.model_dump())
             logger.info(f"Updated existing project: {project.project_id}")
 
         await db.flush()
@@ -506,7 +506,7 @@ class ProjectService:
         if use_cache:
             try:
                 await self.redis_client.setex(
-                    cache_key, settings.CACHE_TTL_STATS, json.dumps(stats.dict())
+                    cache_key, settings.CACHE_TTL_STATS, json.dumps(stats.model_dump())
                 )
             except Exception as e:
                 logger.warning(f"Failed to cache project stats: {str(e)}")
@@ -586,7 +586,7 @@ class ProjectService:
                 "repository_count": repository_count,
                 "review_count": review_count,
                 "active_reviewer_count": active_reviewer_count,
-                "statistics": stats.dict(),
+                "statistics": stats.model_dump(),
             }
         )
 

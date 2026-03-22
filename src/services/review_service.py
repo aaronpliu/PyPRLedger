@@ -254,7 +254,7 @@ class ReviewService:
 
         if existing_review:
             # Update existing review
-            for field, value in review_data.dict().items():
+            for field, value in review_data.model_dump().items():
                 if hasattr(existing_review, field):
                     setattr(existing_review, field, value)
 
@@ -273,7 +273,7 @@ class ReviewService:
             new_review_response = await self.create_review(review_data, db, include_details)
             await db.commit()
             # Convert response back to model for consistency
-            new_review = PullRequestReview.from_dict(new_review_response.dict())
+            new_review = PullRequestReview.from_dict(new_review_response.model_dump())
             return new_review, True
 
     async def get_review(
@@ -580,7 +580,7 @@ class ReviewService:
         if use_cache:
             try:
                 await self.redis_client.setex(
-                    cache_key, settings.CACHE_TTL_STATS, json.dumps(stats.dict())
+                    cache_key, settings.CACHE_TTL_STATS, json.dumps(stats.model_dump())
                 )
             except Exception as e:
                 logger.warning(f"Failed to cache review stats: {str(e)}")

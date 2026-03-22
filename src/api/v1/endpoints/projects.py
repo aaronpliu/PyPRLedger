@@ -1,7 +1,6 @@
 from datetime import datetime
-from typing import Annotated, List, Optional
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Query, status, HTTPException
-from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
@@ -19,7 +18,7 @@ from src.core.exceptions import (
     ProjectNotFoundException,
     ResourceAlreadyExistsException,
 )
-from src.utils.metrics import MetricsCollector, OperationTimer, metrics
+from src.utils.metrics import metrics
 
 router = APIRouter()
 
@@ -53,7 +52,7 @@ async def create_project(
     try:
         project = await project_service.create_project(project_data, db)
         metrics.increment_project_count()
-        return ProjectResponse(**project.dict())
+        return ProjectResponse(**project.model_dump())
     except ResourceAlreadyExistsException as e:
         metrics.increment_error(error_type=e.code, endpoint="POST /api/v1/projects")
         raise HTTPException(

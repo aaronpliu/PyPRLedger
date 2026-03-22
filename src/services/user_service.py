@@ -518,7 +518,7 @@ class UserService:
         if use_cache:
             try:
                 await self.redis_client.setex(
-                    cache_key, settings.CACHE_TTL_STATS, json.dumps(stats.dict())
+                    cache_key, settings.CACHE_TTL_STATS, json.dumps(stats.model_dump())
                 )
             except Exception as e:
                 logger.warning(f"Failed to cache user stats: {str(e)}")
