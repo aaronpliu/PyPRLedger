@@ -122,14 +122,14 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 @app.get("/health")
 async def health_check() -> dict:
     """健康检查端点"""
-    return {"status": "healthy", "version": "1.0.0"}
+    return {"status": "healthy", "version": __version__}
 
 
 @app.get("/")
 async def root() -> dict:
     """根路径"""
     return {
-        "message": "Pull Request Code Review System API",
-        "version": "1.0.0",
+        "message": "Pull Request Code Review Result Storage System API",
+        "version": __version__,
         "docs": "/api/docs",
     }

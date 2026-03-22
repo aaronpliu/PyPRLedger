@@ -47,12 +47,12 @@ class ProjectResponse(ProjectBase):
         json_schema_extra = {
             "example": {
                 "id": 1,
-                "project_id": "PROJ-001",
-                "project_name": "Code Review System",
+                "project_id": 1234,
+                "project_name": "AI Code Review Result Storage System",
                 "project_key": "CRS",
                 "project_url": "https://github.com/example/code-review",
-                "created_date": "2023-01-01T00:00:00",
-                "updated_date": "2023-01-01T00:00:00",
+                "created_date": "2026-01-01T00:00:00",
+                "updated_date": "2026-01-01T00:00:00",
             }
         }
 
@@ -89,12 +89,12 @@ class ProjectListResponse(BaseModel):
                 "items": [
                     {
                         "id": 1,
-                        "project_id": "PROJ-001",
-                        "project_name": "Code Review System",
+                        "project_id": 1234,
+                        "project_name": "AI Code Review Result Storage System",
                         "project_key": "CRS",
                         "project_url": "https://github.com/example/code-review",
-                        "created_date": "2023-01-01T00:00:00",
-                        "updated_date": "2023-01-01T00:00:00",
+                        "created_date": "2026-01-01T00:00:00",
+                        "updated_date": "2026-01-01T00:00:00",
                     }
                 ],
                 "total": 1,
