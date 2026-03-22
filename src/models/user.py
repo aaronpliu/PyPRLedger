@@ -41,11 +41,11 @@ class User(Base):
 
     # Relationships
     authored_reviews: Mapped[List["PullRequestReview"]] = relationship(
-        foreign_keys="PullRequestReview.pull_request_user_id", back_populates="pull_request_user"
+        foreign_keys="PullRequestReview.pull_request_user_id", back_populates="pull_request_user_rel"
     )
 
     reviewed_reviews: Mapped[List["PullRequestReview"]] = relationship(
-        foreign_keys="PullRequestReview.reviewer_id", back_populates="reviewer"
+        foreign_keys="PullRequestReview.reviewer_id", back_populates="reviewer_rel"
     )
 
     # Indexes

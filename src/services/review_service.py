@@ -85,6 +85,123 @@ class ReviewService:
         except Exception as e:
             logger.warning(f"Failed to invalidate list cache: {str(e)}")
 
+    async def _sync_related_entities(
+        self,
+        review_data: ReviewCreate,
+        db: AsyncSession,
+    ) -> tuple[Project, Repository, User, User]:
+        """
+        Synchronize related entities (project, repository, users) based on business keys.
+        Auto-creates or updates entities if they don't exist.
+        
+        Args:
+            review_data: The review data containing business keys
+            db: Database session
+            
+        Returns:
+            tuple[Project, Repository, User, User]: Project, Repository, PR user, Reviewer
+        """
+        # 1. Sync project using project_key
+        project_result = await db.execute(
+            select(Project).where(Project.project_key == review_data.project_key)
+        )
+        project = project_result.scalar_one_or_none()
+        if not project:
+            # Auto-create project with minimal info
+            project = Project(
+                project_id=review_data.project_id,
+                project_name=f"Project_{review_data.project_key}",
+                project_key=review_data.project_key,
+                project_url="https://example.com",
+            )
+            db.add(project)
+            await db.flush()
+            logger.info(f"Auto-created project: {review_data.project_key}")
+        else:
+            # Update project_id if changed
+            if project.project_id != review_data.project_id:
+                project.project_id = review_data.project_id
+                logger.info(f"Updated project {review_data.project_key} project_id")
+
+        # 2. Sync repository using repository_slug
+        repo_result = await db.execute(
+            select(Repository).where(Repository.repository_slug == review_data.repository_slug)
+        )
+        repository = repo_result.scalar_one_or_none()
+        if not repository:
+            # Auto-create repository with minimal info
+            repository = Repository(
+                repository_id=review_data.repository_id,
+                project_id=project.project_id,
+                repository_name=review_data.repository_slug,
+                repository_slug=review_data.repository_slug,
+                repository_url="https://example.com",
+            )
+            db.add(repository)
+            await db.flush()
+            logger.info(f"Auto-created repository: {review_data.repository_slug}")
+        else:
+            # Update repository info if needed
+            if repository.repository_id != review_data.repository_id:
+                repository.repository_id = review_data.repository_id
+            if repository.project_id != project.project_id:
+                repository.project_id = project.project_id
+            logger.debug(f"Verified repository: {review_data.repository_slug}")
+
+        # 3. Sync pull request user using username
+        pr_user_result = await db.execute(
+            select(User).where(User.username == review_data.pull_request_user)
+        )
+        pr_user = pr_user_result.scalar_one_or_none()
+        if not pr_user:
+            # Auto-create user with minimal info
+            pr_user = User(
+                user_id=review_data.pull_request_user_id,
+                username=review_data.pull_request_user,
+                display_name=review_data.pull_request_user,
+                email_address=f"{review_data.pull_request_user}@example.com",
+                active=True,
+                is_reviewer=False,
+            )
+            db.add(pr_user)
+            await db.flush()
+            logger.info(f"Auto-created PR user: {review_data.pull_request_user}")
+        else:
+            # Update user info if needed
+            if pr_user.user_id != review_data.pull_request_user_id:
+                pr_user.user_id = review_data.pull_request_user_id
+            logger.debug(f"Verified PR user: {review_data.pull_request_user}")
+
+        # 4. Sync reviewer using username
+        reviewer_result = await db.execute(
+            select(User).where(User.username == review_data.reviewer)
+        )
+        reviewer = reviewer_result.scalar_one_or_none()
+        if not reviewer:
+            # Auto-create reviewer with minimal info
+            reviewer = User(
+                user_id=review_data.reviewer_id,
+                username=review_data.reviewer,
+                display_name=review_data.reviewer,
+                email_address=f"{review_data.reviewer}@example.com",
+                active=True,
+                is_reviewer=True,
+            )
+            db.add(reviewer)
+            await db.flush()
+            logger.info(f"Auto-created reviewer: {review_data.reviewer}")
+        elif not reviewer.is_reviewer:
+            # Update existing user to be a reviewer
+            reviewer.is_reviewer = True
+            logger.info(f"Updated user {review_data.reviewer} to reviewer status")
+        else:
+            # Update reviewer info if needed
+            if reviewer.user_id != review_data.reviewer_id:
+                reviewer.user_id = review_data.reviewer_id
+            logger.debug(f"Verified reviewer: {review_data.reviewer}")
+
+        return project, repository, pr_user, reviewer
+
     async def create_review(
         self, review_data: ReviewCreate, db: AsyncSession, include_details: bool = False
     ) -> ReviewResponse:
@@ -98,75 +215,11 @@ class ReviewService:
 
         Returns:
             ReviewResponse: The created review
-
-        Raises:
-            ProjectNotFoundException: If the project doesn't exist
-            UserNotFoundException: If either user doesn't exist
-            ReviewAlreadyExistsException: If a review with the same PR ID already exists
         """
-        # Upsert project using business project_id (integer)
-        project_result = await db.execute(
-            select(Project).where(Project.project_id == review_data.project_id)
+        # Sync all related entities using business keys
+        project, repository, pr_user, reviewer = await self._sync_related_entities(
+            review_data, db
         )
-        project = project_result.scalar_one_or_none()
-        if not project:
-            logger.warning(f"Project {review_data.project_id} not found. Please create it first.")
-            raise ProjectNotFoundException(project_id=review_data.project_id)
-
-        # Upsert repository if not exists
-        repo_result = await db.execute(
-            select(Repository).where(Repository.repository_id == review_data.repository_id)
-        )
-        repository = repo_result.scalar_one_or_none()
-        if not repository:
-            logger.warning(
-                f"Repository {review_data.repository_id} not found. Please create it first."
-            )
-            from src.core.exceptions import RepositoryNotFoundException
-
-            raise RepositoryNotFoundException(repository_id=review_data.repository_id)
-
-        # Upsert pull request user if not exists (using business user_id)
-        user_result = await db.execute(
-            select(User).where(User.user_id == review_data.pull_request_user_id)
-        )
-        user = user_result.scalar_one_or_none()
-        if not user:
-            # Auto-create user with minimal info
-            user = User(
-                user_id=review_data.pull_request_user_id,
-                username=f"user_{review_data.pull_request_user_id}",
-                display_name=f"User {review_data.pull_request_user_id}",
-                email_address=f"user_{review_data.pull_request_user_id}@example.com",
-                active=True,
-                is_reviewer=False,
-            )
-            db.add(user)
-            await db.flush()
-            logger.info(f"Auto-created user: {review_data.pull_request_user_id}")
-
-        # Upsert reviewer if not exists (using business user_id)
-        reviewer_result = await db.execute(
-            select(User).where(User.user_id == review_data.reviewer_id)
-        )
-        reviewer = reviewer_result.scalar_one_or_none()
-        if not reviewer:
-            # Auto-create reviewer with minimal info
-            reviewer = User(
-                user_id=review_data.reviewer_id,
-                username=f"reviewer_{review_data.reviewer_id}",
-                display_name=f"Reviewer {review_data.reviewer_id}",
-                email_address=f"reviewer_{review_data.reviewer_id}@example.com",
-                active=True,
-                is_reviewer=True,
-            )
-            db.add(reviewer)
-            await db.flush()
-            logger.info(f"Auto-created reviewer: {review_data.reviewer_id}")
-        elif not reviewer.is_reviewer:
-            # Update existing user to be a reviewer
-            reviewer.is_reviewer = True
-            logger.info(f"Updated user {review_data.reviewer_id} to reviewer status")
 
         # Check if review with same pull_request_id already exists
         existing_review_result = await db.execute(
@@ -178,14 +231,18 @@ class ReviewService:
         if existing_review:
             raise ReviewAlreadyExistsException(review_id=review_data.pull_request_id)
 
-        # Create new review using business IDs
+        # Create new review using business IDs and business keys
         new_review = PullRequestReview(
             pull_request_id=review_data.pull_request_id,
             pull_request_commit_id=review_data.pull_request_commit_id,
             project_id=project.project_id,  # Use business ID
             repository_id=repository.repository_id,  # Use business ID
-            pull_request_user_id=user.user_id,  # Use business ID
+            pull_request_user_id=pr_user.user_id,  # Use business ID
             reviewer_id=reviewer.user_id,  # Use business ID
+            project_key=project.project_key,  # Use business key
+            repository_slug=repository.repository_slug,  # Use business key
+            reviewer=reviewer.username,  # Use business key
+            pull_request_user=pr_user.username,  # Use business key
             source_branch=review_data.source_branch,
             target_branch=review_data.target_branch,
             git_code_diff=review_data.git_code_diff,
@@ -205,12 +262,12 @@ class ReviewService:
         if include_details:
             # Add project and user details
             review_dict["project_name"] = project.project_name
-            review_dict["pull_request_user"] = {
-                "id": user.user_id,
-                "username": user.username,
-                "display_name": user.display_name,
+            review_dict["pull_request_user_info"] = {
+                "id": pr_user.user_id,
+                "username": pr_user.username,
+                "display_name": pr_user.display_name,
             }
-            review_dict["reviewer"] = {
+            review_dict["reviewer_info"] = {
                 "id": reviewer.user_id,
                 "username": reviewer.username,
                 "display_name": reviewer.display_name,
@@ -239,11 +296,12 @@ class ReviewService:
 
         Returns:
             tuple[PullRequestReview, bool]: The review and whether it was created
-
-        Raises:
-            ProjectNotFoundException: If the project doesn't exist
-            UserNotFoundException: If either user doesn't exist
         """
+        # Sync all related entities using business keys
+        project, repository, pr_user, reviewer = await self._sync_related_entities(
+            review_data, db
+        )
+
         # Check if review already exists
         existing_review_result = await db.execute(
             select(PullRequestReview).where(
@@ -257,6 +315,12 @@ class ReviewService:
             for field, value in review_data.model_dump().items():
                 if hasattr(existing_review, field):
                     setattr(existing_review, field, value)
+            
+            # Also update the new business key fields
+            existing_review.project_key = project.project_key
+            existing_review.repository_slug = repository.repository_slug
+            existing_review.reviewer = reviewer.username
+            existing_review.pull_request_user = pr_user.username
 
             existing_review.updated_date = datetime.now(timezone.utc)
             await db.flush()

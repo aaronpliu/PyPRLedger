@@ -23,6 +23,13 @@ class ReviewBase(BaseModel):
         ..., gt=0, description="User business ID who created the pull request"
     )
     reviewer_id: int = Field(..., gt=0, description="User business ID of the reviewer")
+    
+    # New fields for direct relationships (business keys)
+    project_key: str = Field(..., min_length=1, max_length=32, description="Project key")
+    repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
+    reviewer: str = Field(..., min_length=1, max_length=64, description="Reviewer username")
+    pull_request_user: str = Field(..., min_length=1, max_length=64, description="Pull request user username")
+    
     source_branch: str = Field(..., min_length=1, max_length=64, description="Source branch name")
     target_branch: str = Field(..., min_length=1, max_length=64, description="Target branch name")
 
@@ -143,6 +150,10 @@ class ReviewResponse(ReviewBase):
                 "repository_id": 1,
                 "pull_request_user_id": 2,
                 "reviewer_id": 3,
+                "project_key": "PROJ",
+                "repository_slug": "code-review",
+                "reviewer": "john_doe",
+                "pull_request_user": "jane_smith",
                 "source_branch": "feature/new-feature",
                 "target_branch": "main",
                 "git_code_diff": "diff --git a/file.py b/file.py\n...",

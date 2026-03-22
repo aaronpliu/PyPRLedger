@@ -35,6 +35,23 @@ class PullRequestReview(Base):
         index=True,
     )
 
+    # New columns for direct relationships (business keys instead of database IDs)
+    project_key: Mapped[str] = mapped_column(
+        String(32), ForeignKey("project.project_key", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    repository_slug: Mapped[str] = mapped_column(
+        String(128), ForeignKey("repository.repository_slug", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    reviewer: Mapped[str] = mapped_column(
+        String(64), ForeignKey("user.username", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    pull_request_user: Mapped[str] = mapped_column(
+        String(64), ForeignKey("user.username", ondelete="CASCADE"), nullable=False, index=True
+    )
+
     # Pull request information
     pull_request_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
@@ -70,31 +87,39 @@ class PullRequestReview(Base):
     )
 
     # Relationships
-    project: Mapped["Project"] = relationship(back_populates="pull_request_reviews")
+    project: Mapped["Project"] = relationship(
+        foreign_keys=[project_id], back_populates="pull_request_reviews"
+    )
 
-    repository: Mapped["Repository"] = relationship(back_populates="pull_request_reviews")
+    repository: Mapped["Repository"] = relationship(
+        foreign_keys=[repository_id], back_populates="pull_request_reviews"
+    )
 
-    pull_request_user: Mapped["User"] = relationship(
+    pull_request_user_rel: Mapped["User"] = relationship(
         foreign_keys=[pull_request_user_id], back_populates="authored_reviews"
     )
 
-    reviewer: Mapped["User"] = relationship(
+    reviewer_rel: Mapped["User"] = relationship(
         foreign_keys=[reviewer_id], back_populates="reviewed_reviews"
     )
 
     # Timestamps
     created_date: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
     )
 
     updated_date: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
     )
 
     # Indexes
     __table_args__ = (
         Index("idx_pull_request_id", "pull_request_id"),
         Index("idx_project_id", "project_id"),
+        Index("idx_project_key", "project_key"),
+        Index("idx_repository_slug", "repository_slug"),
+        Index("idx_reviewer", "reviewer"),
+        Index("idx_pull_request_user", "pull_request_user"),
         Index("idx_reviewer_id", "reviewer_id"),
         Index("idx_created_date", "created_date"),
     )
