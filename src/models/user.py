@@ -19,7 +19,7 @@ class User(Base):
     user_id: Mapped[int] = mapped_column(Integer, unique=True, nullable=False, index=True)
 
     # User information
-    username: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
 
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
 

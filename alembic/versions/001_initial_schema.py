@@ -4,11 +4,15 @@ Revision ID: 001
 Revises: 
 Create Date: 2024-01-01 00:00:00.000000
 
-This migration creates the complete initial schema with:
+This migration creates the complete initial schema with all enhancements:
 - user table with business user_id (Integer)
 - project table with business project_id (Integer)
 - repository table with business repository_id (Integer) and FK to project.project_id
-- pull_request_review table with all business ID foreign keys
+- pull_request_review table with:
+  * Business key columns: project_key, repository_slug, reviewer, pull_request_user
+  * Enhanced fields: reviewed_date, is_latest_review, review_iteration
+  * Composite indexes for performance
+  * No database ID foreign keys (project_id, repository_id, etc.)
 
 All tables use business IDs (passed by API callers) for foreign key relationships,
 not database auto-generated IDs.
@@ -26,13 +30,27 @@ depends_on = None
 
 def upgrade() -> None:
     """
-    Create initial database schema with all tables and relationships
+    Create complete initial database schema
+    
+    This consolidated migration includes all previous migrations:
+    
+    Phase 1: Base Tables (from original 001)
+    1. user - User accounts with business user_id
+    2. project - Projects with business project_id
+    3. repository - Repositories linked to projects via business IDs
+    
+    Phase 2: Pull Request Review Table (consolidated from 001, 002, 003, 004)
+    4. pull_request_review - Code reviews with:
+       - Business key columns only (no database ID FKs)
+       - Enhanced fields for multi-reviewer/multi-file support
+       - Review iteration tracking
+       - Comprehensive indexing
     
     Tables created:
     1. user - User accounts with business user_id
     2. project - Projects with business project_id
     3. repository - Repositories linked to projects via business IDs
-    4. pull_request_review - Code reviews linked to all entities via business IDs
+    4. pull_request_review - Code reviews linked to all entities via business keys
     """
     
     # ============================================
@@ -55,8 +73,7 @@ def upgrade() -> None:
     )
     
     # Create indexes for user table
-    op.create_index('idx_user_id', 'user', ['user_id'])  # Business ID index
-    op.create_index('idx_username', 'user', ['username'])
+    op.create_index('idx_username', 'user', ['username'], unique=True)  # Business ID index with unique constraint
     op.create_index('idx_email', 'user', ['email_address'])
     
     # ============================================
@@ -102,17 +119,17 @@ def upgrade() -> None:
     op.create_index('idx_repository_project_id', 'repository', ['project_id'])  # FK index
     
     # ============================================
-    # 4. Create pull_request_review table
+    # PHASE 2: Create pull_request_review table (consolidated version)
     # ============================================
     op.create_table(
         'pull_request_review',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         
-        # Foreign keys to business IDs (not database auto-IDs)
-        sa.Column('project_id', sa.Integer(), nullable=False),  # FK to project.project_id
-        sa.Column('pull_request_user_id', sa.Integer(), nullable=False),  # FK to user.user_id
-        sa.Column('reviewer_id', sa.Integer(), nullable=False),  # FK to user.user_id
-        sa.Column('repository_id', sa.Integer(), nullable=False),  # FK to repository.repository_id
+        # Business key columns (replacing database ID foreign keys)
+        sa.Column('project_key', sa.String(length=32), nullable=False),
+        sa.Column('repository_slug', sa.String(length=128), nullable=False),
+        sa.Column('reviewer', sa.String(length=64), nullable=False),
+        sa.Column('pull_request_user', sa.String(length=64), nullable=False),
         
         # Pull request information
         sa.Column('pull_request_id', sa.String(length=64), nullable=False),
@@ -135,23 +152,55 @@ def upgrade() -> None:
         # Metadata
         sa.Column('metadata', sa.JSON(), nullable=True),
         
+        # Enhanced fields for multi-reviewer/multi-file support
+        sa.Column('reviewed_date', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
+        sa.Column('is_latest_review', sa.Boolean(), nullable=False, server_default='1'),
+        sa.Column('review_iteration', sa.Integer(), nullable=False, server_default='1'),
+        
         # Timestamps
         sa.Column('created_date', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.Column('updated_date', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
         
         # Constraints
-        sa.PrimaryKeyConstraint('id'),
-        sa.ForeignKeyConstraint(['project_id'], ['project.project_id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['pull_request_user_id'], ['user.user_id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['reviewer_id'], ['user.user_id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['repository_id'], ['repository.repository_id'], ondelete='CASCADE')
+        sa.PrimaryKeyConstraint('id')
     )
     
-    # Create indexes for pull_request_review table
+    # ============================================
+    # PHASE 3: Create comprehensive indexes
+    # ============================================
+    
+    # Core business key indexes
+    op.create_index('idx_pull_request_review_project_key', 'pull_request_review', ['project_key'])
+    op.create_index('idx_pull_request_review_repository_slug', 'pull_request_review', ['repository_slug'])
+    op.create_index('idx_pull_request_review_reviewer', 'pull_request_review', ['reviewer'])
+    op.create_index('idx_pull_request_review_pull_request_user', 'pull_request_review', ['pull_request_user'])
+    
+    # Pull request identification
     op.create_index('idx_pull_request_id', 'pull_request_review', ['pull_request_id'])
-    op.create_index('idx_pr_project_id', 'pull_request_review', ['project_id'])
-    op.create_index('idx_reviewer_id', 'pull_request_review', ['reviewer_id'])
+    
+    # Enhanced query performance indexes
+    op.create_index(
+        'idx_unique_review_identifier',
+        'pull_request_review',
+        ['pull_request_commit_id', 'project_key', 'repository_slug', 'source_filename', 'reviewer']
+    )
+    
+    op.create_index('idx_reviewed_date', 'pull_request_review', ['reviewed_date'])
+    op.create_index('idx_is_latest_review', 'pull_request_review', ['is_latest_review'])
     op.create_index('idx_created_date', 'pull_request_review', ['created_date'])
+    
+    # Composite indexes for common query patterns
+    op.create_index(
+        'idx_pr_commit_project_repo',
+        'pull_request_review',
+        ['pull_request_commit_id', 'project_key', 'repository_slug']
+    )
+    
+    op.create_index(
+        'idx_reviewer_file',
+        'pull_request_review',
+        ['reviewer', 'source_filename']
+    )
 
 
 def downgrade() -> None:
