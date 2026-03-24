@@ -1,5 +1,6 @@
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -9,19 +10,21 @@ class ReviewBase(BaseModel):
     pull_request_id: str = Field(
         ..., min_length=1, max_length=64, description="Unique pull request identifier"
     )
-    pull_request_commit_id: Optional[str] = Field(
+    pull_request_commit_id: str | None = Field(
         None,
         min_length=1,
         max_length=64,
         description="Git commit SHA/hash associated with the pull request",
     )
-    
+
     # Business keys (only required fields - API caller doesn't need to pass IDs)
     project_key: str = Field(..., min_length=1, max_length=32, description="Project key")
     repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
     reviewer: str = Field(..., min_length=1, max_length=64, description="Reviewer username")
-    pull_request_user: str = Field(..., min_length=1, max_length=64, description="Pull request user username")
-    
+    pull_request_user: str = Field(
+        ..., min_length=1, max_length=64, description="Pull request user username"
+    )
+
     source_branch: str = Field(..., min_length=1, max_length=64, description="Source branch name")
     target_branch: str = Field(..., min_length=1, max_length=64, description="Target branch name")
 
@@ -54,28 +57,22 @@ class ReviewBase(BaseModel):
 class ReviewCreate(ReviewBase):
     """Schema for creating a new pull request review"""
 
-    git_code_diff: Optional[str] = Field(
-        None, max_length=1048576, description="Git code diff content"
-    )
-    source_filename: Optional[str] = Field(
+    git_code_diff: str | None = Field(None, max_length=1048576, description="Git code diff content")
+    source_filename: str | None = Field(
         None, max_length=255, description="Source file being reviewed (null for overall PR review)"
     )
-    ai_suggestions: Optional[Dict[str, Any]] = Field(
+    ai_suggestions: dict[str, Any] | None = Field(
         None, description="AI-generated suggestions in JSON format"
     )
-    reviewer_comments: Optional[str] = Field(
-        None, max_length=10000, description="Reviewer's comments"
-    )
-    score: Optional[int] = Field(None, ge=0, le=10, description="Review score between 0 and 10")
+    reviewer_comments: str | None = Field(None, max_length=10000, description="Reviewer's comments")
+    score: int | None = Field(None, ge=0, le=10, description="Review score between 0 and 10")
     pull_request_status: str = Field(
         default="open", description="Pull request status (open, merged, closed, draft)"
     )
-    metadata: Optional[Dict[str, Any]] = Field(
-        None, description="Additional metadata in JSON format"
-    )
-    
+    metadata: dict[str, Any] | None = Field(None, description="Additional metadata in JSON format")
+
     # Optional field to specify when the review was completed (defaults to now)
-    reviewed_date: Optional[datetime] = Field(
+    reviewed_date: datetime | None = Field(
         None, description="When the review was completed (defaults to current time)"
     )
 
@@ -93,28 +90,27 @@ class ReviewCreate(ReviewBase):
         if v is not None and not isinstance(v, dict):
             raise ValueError("This field must be a valid JSON object")
         return v
-    
+
     @field_validator("reviewed_date")
     def validate_reviewed_date(cls, v):
         """Validate reviewed_date is timezone-aware or convert to UTC"""
         if v is not None:
             # If naive datetime, make it timezone-aware (assume UTC)
             if v.tzinfo is None:
-                from datetime import timezone
-                v = v.replace(tzinfo=timezone.utc)
+                v = v.replace(tzinfo=UTC)
         return v
 
 
 class ReviewUpdate(BaseModel):
     """Schema for updating an existing pull request review"""
 
-    git_code_diff: Optional[str] = Field(None, max_length=1048576)
-    source_filename: Optional[str] = Field(None, max_length=255)
-    ai_suggestions: Optional[Dict[str, Any]] = Field(None)
-    reviewer_comments: Optional[str] = Field(None, max_length=10000)
-    score: Optional[int] = Field(None, ge=0, le=10)
-    pull_request_status: Optional[str] = Field(None)
-    metadata: Optional[Dict[str, Any]] = Field(None)
+    git_code_diff: str | None = Field(None, max_length=1048576)
+    source_filename: str | None = Field(None, max_length=255)
+    ai_suggestions: dict[str, Any] | None = Field(None)
+    reviewer_comments: str | None = Field(None, max_length=10000)
+    score: int | None = Field(None, ge=0, le=10)
+    pull_request_status: str | None = Field(None)
+    metadata: dict[str, Any] | None = Field(None)
 
     @field_validator("pull_request_status")
     def validate_status(cls, v):
@@ -138,34 +134,44 @@ class ReviewResponse(BaseModel):
 
     id: int = Field(..., description="Review database ID")
     pull_request_id: str = Field(..., description="Pull request identifier")
-    pull_request_commit_id: Optional[str] = Field(None, description="Commit ID for this specific review")
+    pull_request_commit_id: str | None = Field(
+        None, description="Commit ID for this specific review"
+    )
     project_key: str = Field(..., description="Project key")
     repository_slug: str = Field(..., description="Repository slug")
     pull_request_user: str = Field(..., description="Username of PR author")
     reviewer: str = Field(..., description="Reviewer username")
     source_branch: str = Field(..., description="Source branch name")
     target_branch: str = Field(..., description="Target branch name")
-    git_code_diff: Optional[str] = Field(None, description="Git code diff content")
-    source_filename: Optional[str] = Field(None, description="Source file being reviewed (null for overall PR review)")
-    ai_suggestions: Optional[Dict[str, Any]] = Field(None, description="AI-generated suggestions")
-    reviewer_comments: Optional[str] = Field(None, description="Reviewer's comments")
-    score: Optional[int] = Field(None, description="Review score (0-10)")
+    git_code_diff: str | None = Field(None, description="Git code diff content")
+    source_filename: str | None = Field(
+        None, description="Source file being reviewed (null for overall PR review)"
+    )
+    ai_suggestions: dict[str, Any] | None = Field(None, description="AI-generated suggestions")
+    reviewer_comments: str | None = Field(None, description="Reviewer's comments")
+    score: int | None = Field(None, description="Review score (0-10)")
     pull_request_status: str = Field(..., description="Pull request status")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
-    
+    metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
+
     # Review tracking fields
     reviewed_date: datetime = Field(..., description="When the review was completed")
-    is_latest_review: bool = Field(True, description="Whether this is the latest review for this file")
+    is_latest_review: bool = Field(
+        True, description="Whether this is the latest review for this file"
+    )
     review_iteration: int = Field(1, description="Review iteration number (1st, 2nd, etc.)")
-    
+
     created_date: datetime = Field(..., description="Record creation timestamp")
     updated_date: datetime = Field(..., description="Record last update timestamp")
-    
+
     # Embedded entity information - always included in response
-    project: Optional[Dict[str, Any]] = Field(None, description="Full project information")
-    repository: Optional[Dict[str, Any]] = Field(None, description="Full repository information")
-    pull_request_user_info: Optional[Dict[str, Any]] = Field(None, description="Full information about PR author")
-    reviewer_info: Optional[Dict[str, Any]] = Field(None, description="Full information about reviewer")
+    project: dict[str, Any] | None = Field(None, description="Full project information")
+    repository: dict[str, Any] | None = Field(None, description="Full repository information")
+    pull_request_user_info: dict[str, Any] | None = Field(
+        None, description="Full information about PR author"
+    )
+    reviewer_info: dict[str, Any] | None = Field(
+        None, description="Full information about reviewer"
+    )
 
     class Config:
         """Pydantic configuration"""
@@ -241,11 +247,10 @@ class ReviewResponse(BaseModel):
         }
 
 
-
 class ReviewListResponse(BaseModel):
     """Schema for paginated pull request review list response"""
 
-    items: List[ReviewResponse] = Field(
+    items: list[ReviewResponse] = Field(
         default_factory=list, description="List of pull request reviews with embedded entity data"
     )
     total: int = Field(..., description="Total number of reviews")
@@ -362,22 +367,28 @@ class ReviewStats(BaseModel):
 class ReviewFilter(BaseModel):
     """Schema for pull request review filtering parameters"""
 
-    pull_request_id: Optional[str] = Field(None, description="Filter by pull request ID")
-    project_key: Optional[str] = Field(None, min_length=1, max_length=32, description="Filter by project key")
-    repository_slug: Optional[str] = Field(None, min_length=1, max_length=128, description="Filter by repository slug")
-    pull_request_user: Optional[str] = Field(None, min_length=1, max_length=64, description="Filter by pull request user username")
-    reviewer: Optional[str] = Field(None, min_length=1, max_length=64, description="Filter by reviewer username")
-    source_branch: Optional[str] = Field(None, description="Filter by source branch")
-    target_branch: Optional[str] = Field(None, description="Filter by target branch")
-    pull_request_status: Optional[str] = Field(
+    pull_request_id: str | None = Field(None, description="Filter by pull request ID")
+    project_key: str | None = Field(
+        None, min_length=1, max_length=32, description="Filter by project key"
+    )
+    repository_slug: str | None = Field(
+        None, min_length=1, max_length=128, description="Filter by repository slug"
+    )
+    pull_request_user: str | None = Field(
+        None, min_length=1, max_length=64, description="Filter by pull request user username"
+    )
+    reviewer: str | None = Field(
+        None, min_length=1, max_length=64, description="Filter by reviewer username"
+    )
+    source_branch: str | None = Field(None, description="Filter by source branch")
+    target_branch: str | None = Field(None, description="Filter by target branch")
+    pull_request_status: str | None = Field(
         None, description="Filter by pull request status (open, merged, closed, draft)"
     )
-    score_min: Optional[int] = Field(None, ge=0, le=10, description="Filter by minimum score")
-    score_max: Optional[int] = Field(None, ge=0, le=10, description="Filter by maximum score")
-    date_from: Optional[datetime] = Field(
-        None, description="Filter reviews created after this date"
-    )
-    date_to: Optional[datetime] = Field(None, description="Filter reviews created before this date")
+    score_min: int | None = Field(None, ge=0, le=10, description="Filter by minimum score")
+    score_max: int | None = Field(None, ge=0, le=10, description="Filter by maximum score")
+    date_from: datetime | None = Field(None, description="Filter reviews created after this date")
+    date_to: datetime | None = Field(None, description="Filter reviews created before this date")
 
     @field_validator("pull_request_status")
     def validate_status(cls, v):

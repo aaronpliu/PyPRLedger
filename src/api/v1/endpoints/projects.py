@@ -1,26 +1,27 @@
-from datetime import datetime
 import logging
-from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, Query, status, HTTPException
+from datetime import datetime
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
-from src.schemas.project import (
-    ProjectCreate,
-    ProjectResponse,
-    ProjectUpdate,
-    ProjectListResponse,
-    ProjectFilter,
-    ProjectStats,
-    ProjectDetailResponse,
-)
-from src.services.project_service import ProjectService
 from src.core.exceptions import (
     ProjectNotFoundException,
     ResourceAlreadyExistsException,
 )
+from src.schemas.project import (
+    ProjectCreate,
+    ProjectDetailResponse,
+    ProjectFilter,
+    ProjectListResponse,
+    ProjectResponse,
+    ProjectStats,
+    ProjectUpdate,
+)
+from src.services.project_service import ProjectService
 from src.utils.metrics import metrics
-from src.utils.log import get_logger
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ async def create_project(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="POST /api/v1/projects"
         )
@@ -77,15 +78,11 @@ async def create_project(
 async def list_projects(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     project_service: Annotated[ProjectService, Depends(get_project_service)],
-    project_id: Optional[str] = Query(None, description="Filter by project ID"),
-    project_key: Optional[str] = Query(None, description="Filter by project key"),
-    is_active: Optional[bool] = Query(None, description="Filter by active status"),
-    date_from: Optional[datetime] = Query(
-        None, description="Filter projects created after this date"
-    ),
-    date_to: Optional[datetime] = Query(
-        None, description="Filter projects created before this date"
-    ),
+    project_id: str | None = Query(None, description="Filter by project ID"),
+    project_key: str | None = Query(None, description="Filter by project key"),
+    is_active: bool | None = Query(None, description="Filter by active status"),
+    date_from: datetime | None = Query(None, description="Filter projects created after this date"),
+    date_to: datetime | None = Query(None, description="Filter projects created before this date"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> ProjectListResponse:
@@ -121,7 +118,7 @@ async def list_projects(
             page=page,
             page_size=page_size,
         )
-        
+
         logger.info(f"Retrieved {len(projects)} projects from database")
 
         return ProjectListResponse(
@@ -132,6 +129,7 @@ async def list_projects(
         )
     except Exception as e:
         import traceback
+
         error_traceback = traceback.format_exc()
         logger.error(f"Failed to list projects: {str(e)}\n{error_traceback}")
         metrics.increment_error(error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/projects")
@@ -145,7 +143,7 @@ async def list_projects(
 async def get_project_statistics(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     project_service: Annotated[ProjectService, Depends(get_project_service)],
-    project_id: Optional[int] = Query(None, gt=0, description="Filter statistics by project ID"),
+    project_id: int | None = Query(None, gt=0, description="Filter statistics by project ID"),
 ) -> ProjectStats:
     """
     Get project statistics
@@ -166,7 +164,7 @@ async def get_project_statistics(
         metrics.set_projects_active(stats.active_projects)
 
         return stats
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/projects/statistics"
         )
@@ -205,7 +203,7 @@ async def get_active_projects(
             page=1,
             page_size=limit,
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/projects/active"
         )
@@ -245,7 +243,7 @@ async def search_projects(
             page=page,
             page_size=page_size,
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/projects/search"
         )
@@ -277,7 +275,7 @@ async def get_projects_with_most_reviews(
     try:
         projects = await project_service.get_projects_with_most_reviews(db, limit, days)
         return projects
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/projects/top/reviews"
         )
@@ -312,7 +310,7 @@ async def get_projects_with_most_active_reviewers(
     try:
         projects = await project_service.get_projects_with_most_active_reviewers(db, limit, days)
         return projects
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/projects/top/reviewers"
         )
@@ -362,7 +360,7 @@ async def get_project(
         return ProjectDetailResponse(**project_dict)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/projects/{project_id}"
         )
@@ -405,7 +403,7 @@ async def get_project_by_project_id(
         return ProjectResponse(**project.to_dict())
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/projects/id/{project_id}"
         )
@@ -451,7 +449,7 @@ async def get_project_by_key(
         return ProjectResponse(**project.to_dict())
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/projects/key/{project_key}"
         )
@@ -497,7 +495,7 @@ async def get_project_by_name(
         return ProjectResponse(**project.to_dict())
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/projects/name/{project_name}"
         )
@@ -538,7 +536,7 @@ async def update_project(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"PUT /api/v1/projects/{project_id}"
         )
@@ -579,7 +577,7 @@ async def activate_project(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR",
             endpoint=f"PATCH /api/v1/projects/{project_id}/activate",
@@ -621,7 +619,7 @@ async def deactivate_project(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR",
             endpoint=f"PATCH /api/v1/projects/{project_id}/deactivate",
@@ -665,7 +663,7 @@ async def delete_project(
         metrics.decrement_project_count()
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"DELETE /api/v1/projects/{project_id}"
         )
@@ -698,7 +696,7 @@ async def get_project_repository_count(
     try:
         count = await project_service.get_project_repository_count(project_id, db)
         return {"project_id": project_id, "repository_count": count}
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR",
             endpoint=f"GET /api/v1/projects/{project_id}/repositories/count",
@@ -732,7 +730,7 @@ async def get_project_review_count(
     try:
         count = await project_service.get_project_review_count(project_id, db)
         return {"project_id": project_id, "review_count": count}
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR",
             endpoint=f"GET /api/v1/projects/{project_id}/reviews/count",
@@ -766,7 +764,7 @@ async def get_project_active_reviewer_count(
     try:
         count = await project_service.get_project_active_reviewer_count(project_id, db)
         return {"project_id": project_id, "active_reviewer_count": count}
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR",
             endpoint=f"GET /api/v1/projects/{project_id}/reviewers/count",

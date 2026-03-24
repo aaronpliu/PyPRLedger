@@ -1,5 +1,5 @@
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -8,14 +8,15 @@ from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from src import __version__
+from src.api.v1.api import api_router
 from src.core.config import settings
+from src.core.database import close_db, init_db
 from src.core.exceptions import AppException, ErrorCode
 from src.core.middleware import LoggingMiddleware, RateLimitMiddleware
-from src.api.v1.api import api_router
-from src.core.database import init_db, close_db
-from src.utils.redis import init_redis, close_redis
+from src.utils.log import get_logger, setup_logging
 from src.utils.metrics import MetricsCollector
-from src.utils.log import setup_logging, get_logger
+from src.utils.redis import close_redis, init_redis
+
 
 # 配置日志系统
 setup_logging()
@@ -60,7 +61,7 @@ app = FastAPI(
 # 配置 CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS_LIST,
+    allow_origins=settings.backend_cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -94,8 +95,8 @@ async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     """请求验证异常处理"""
-    logger.error(f"Validation error", extra={"request": str(request)})
-    
+    logger.error("Validation error", extra={"request": str(request)})
+
     # Convert validation errors to simple strings to ensure JSON serialization
     detail = "Validation failed"
     try:
@@ -104,7 +105,7 @@ async def validation_exception_handler(
         detail = str(error_list)
     except Exception as e:
         detail = f"Error: {str(e)}"
-    
+
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
@@ -119,17 +120,20 @@ async def validation_exception_handler(
 async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """通用异常处理"""
     import traceback
+
     error_traceback = traceback.format_exc()
-    logger.error(f"Unexpected error: {str(exc)}\n{error_traceback}", extra={"request": str(request)})
-    
+    logger.error(
+        f"Unexpected error: {str(exc)}\n{error_traceback}", extra={"request": str(request)}
+    )
+
     # Safely convert exception to string for JSON serialization
     detail = None
     if settings.DEBUG:
         try:
             detail = str(exc)
-        except Exception as e:
+        except Exception:
             detail = f"Error converting exception to string: {type(exc).__name__}"
-    
+
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={

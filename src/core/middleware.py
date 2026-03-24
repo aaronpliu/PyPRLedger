@@ -1,11 +1,11 @@
 import logging
 import time
 import uuid
-from typing import Callable, Optional
+from collections.abc import Callable
+
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-from starlette.background import BackgroundTask
 
 from src.core.config import settings
 from src.core.exceptions import RateLimitException

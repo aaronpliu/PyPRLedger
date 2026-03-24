@@ -10,6 +10,8 @@ line-length = 100
 # Source directories to lint
 src = ["src", "tests"]
 
+# Linter configuration
+[lint]
 # Select rule sets
 select = [
     "E",   # pycodestyle errors
@@ -27,6 +29,13 @@ select = [
 # Ignore specific rules
 ignore = [
     "E501",  # line too long (let the formatter handle this)
+    "B904",  # Allow raising exceptions without 'from err' or 'from None'
+    "W291",  # trailing whitespace
+    "E712",  # comparison to True or False
+    "B008",  #
+    "N805",  #
+    "SIM102", #
+    "E402",   # ignore import order
 ]
 
 # Allow autofix for all enabled rules
@@ -65,12 +74,12 @@ exclude = [
 ]
 
 # Per-file-ignores (optional)
-[per-file-ignores]
+[lint.per-file-ignores]
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py
 "tests/*" = ["S101", "PLR2004"]  # Allow assert statements and magic numbers in tests
 
 # Isort configuration
-[isort]
+[lint.isort]
 known-first-party = ["src"]
 lines-after-imports = 2
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]

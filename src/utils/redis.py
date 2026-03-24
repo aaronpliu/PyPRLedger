@@ -1,16 +1,17 @@
-import logging
-from typing import Optional, Any, Dict, List
 import json
-import redis.asyncio as redis
+import logging
+from typing import Any
+
 from redis.asyncio import ConnectionPool, Redis
 
 from src.core.config import settings
 
+
 logger = logging.getLogger(__name__)
 
 # Global Redis client instance
-_redis_client: Optional[Redis] = None
-_connection_pool: Optional[ConnectionPool] = None
+_redis_client: Redis | None = None
+_connection_pool: ConnectionPool | None = None
 
 
 async def init_redis() -> None:
@@ -22,7 +23,7 @@ async def init_redis() -> None:
 
         # Create connection pool
         _connection_pool = ConnectionPool.from_url(
-            settings.REDIS_URL,
+            settings.redis_url,
             max_connections=settings.REDIS_MAX_CONNECTIONS,
             decode_responses=True,
             encoding="utf-8",
@@ -109,7 +110,7 @@ class RedisCache:
         """Set Redis client"""
         self._client = value
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         """
         Get a value from Redis cache
 
@@ -125,7 +126,7 @@ class RedisCache:
             logger.warning(f"Redis GET failed for key {key}: {str(e)}")
             return None
 
-    async def get_json(self, key: str) -> Optional[Dict[str, Any]]:
+    async def get_json(self, key: str) -> dict[str, Any] | None:
         """
         Get a JSON value from Redis cache
 
@@ -143,7 +144,7 @@ class RedisCache:
                 logger.warning(f"Failed to parse JSON for key {key}")
         return None
 
-    async def set(self, key: str, value: str, expire: Optional[int] = None) -> bool:
+    async def set(self, key: str, value: str, expire: int | None = None) -> bool:
         """
         Set a value in Redis cache
 
@@ -164,7 +165,7 @@ class RedisCache:
             logger.warning(f"Redis SET failed for key {key}: {str(e)}")
             return False
 
-    async def set_json(self, key: str, value: Dict[str, Any], expire: Optional[int] = None) -> bool:
+    async def set_json(self, key: str, value: dict[str, Any], expire: int | None = None) -> bool:
         """
         Set a JSON value in Redis cache
 
@@ -281,7 +282,7 @@ class RedisCache:
             logger.warning(f"Redis DECR failed for key {key}: {str(e)}")
             return 0
 
-    async def keys(self, pattern: str) -> List[str]:
+    async def keys(self, pattern: str) -> list[str]:
         """
         Find all keys matching the given pattern
 
@@ -297,7 +298,7 @@ class RedisCache:
             logger.warning(f"Redis KEYS failed for pattern {pattern}: {str(e)}")
             return []
 
-    async def hget(self, name: str, key: str) -> Optional[str]:
+    async def hget(self, name: str, key: str) -> str | None:
         """
         Get the value of a hash field
 
@@ -332,7 +333,7 @@ class RedisCache:
             logger.warning(f"Redis HSET failed for {name}.{key}: {str(e)}")
             return False
 
-    async def hgetall(self, name: str) -> Dict[str, str]:
+    async def hgetall(self, name: str) -> dict[str, str]:
         """
         Get all fields and values in a hash
 
@@ -399,7 +400,7 @@ class RedisCache:
             logger.warning(f"Redis RPUSH failed for {name}: {str(e)}")
             return 0
 
-    async def lpop(self, name: str) -> Optional[str]:
+    async def lpop(self, name: str) -> str | None:
         """
         Pop a value from the left of a list
 
@@ -415,7 +416,7 @@ class RedisCache:
             logger.warning(f"Redis LPOP failed for {name}: {str(e)}")
             return None
 
-    async def rpop(self, name: str) -> Optional[str]:
+    async def rpop(self, name: str) -> str | None:
         """
         Pop a value from the right of a list
 
@@ -447,7 +448,7 @@ class RedisCache:
             logger.warning(f"Redis LLEN failed for {name}: {str(e)}")
             return 0
 
-    async def lrange(self, name: str, start: int = 0, end: int = -1) -> List[str]:
+    async def lrange(self, name: str, start: int = 0, end: int = -1) -> list[str]:
         """
         Get a range of elements from a list
 
@@ -465,7 +466,7 @@ class RedisCache:
             logger.warning(f"Redis LRANGE failed for {name}: {str(e)}")
             return []
 
-    async def zadd(self, name: str, mapping: Dict[str, float]) -> int:
+    async def zadd(self, name: str, mapping: dict[str, float]) -> int:
         """
         Add members to a sorted set
 
@@ -501,7 +502,7 @@ class RedisCache:
 
     async def zrange(
         self, name: str, start: int = 0, end: int = -1, desc: bool = False, withscores: bool = False
-    ) -> List[Any]:
+    ) -> list[Any]:
         """
         Get a range of members from a sorted set
 
@@ -521,7 +522,7 @@ class RedisCache:
             logger.warning(f"Redis ZRANGE failed for {name}: {str(e)}")
             return []
 
-    async def zrank(self, name: str, value: str) -> Optional[int]:
+    async def zrank(self, name: str, value: str) -> int | None:
         """
         Get the rank of a member in a sorted set
 
@@ -538,7 +539,7 @@ class RedisCache:
             logger.warning(f"Redis ZRANK failed for {name}: {str(e)}")
             return None
 
-    async def zscore(self, name: str, value: str) -> Optional[float]:
+    async def zscore(self, name: str, value: str) -> float | None:
         """
         Get the score of a member in a sorted set
 

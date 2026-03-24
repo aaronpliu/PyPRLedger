@@ -1,10 +1,16 @@
+from __future__ import annotations
+
 from datetime import datetime
-from typing import List, Optional
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String
-from sqlalchemy.ext.asyncio import AsyncAttrs
+from typing import TYPE_CHECKING
+
+from sqlalchemy import Boolean, DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+
+
+if TYPE_CHECKING:
+    from src.models.pull_request import PullRequestReview
 
 
 class User(Base):
@@ -40,11 +46,11 @@ class User(Base):
     )
 
     # Relationships
-    authored_reviews: Mapped[List["PullRequestReview"]] = relationship(
+    authored_reviews: Mapped[list[PullRequestReview]] = relationship(
         foreign_keys="PullRequestReview.pull_request_user", back_populates="pull_request_user_rel"
     )
 
-    reviewed_reviews: Mapped[List["PullRequestReview"]] = relationship(
+    reviewed_reviews: Mapped[list[PullRequestReview]] = relationship(
         foreign_keys="PullRequestReview.reviewer", back_populates="reviewer_rel"
     )
 
@@ -75,7 +81,7 @@ class User(Base):
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "User":
+    def from_dict(cls, data: dict) -> User:
         """Create user instance from dictionary"""
         return cls(
             username=data.get("username"),

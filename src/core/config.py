@@ -1,6 +1,5 @@
-import os
 from functools import lru_cache
-from typing import List, Optional
+
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -34,19 +33,19 @@ class Settings(BaseSettings):
     DATABASE_POOL_RECYCLE: int = Field(default=3600)
 
     @property
-    def DATABASE_URL(self) -> str:
+    def database_url(self) -> str:
         """获取数据库连接 URL"""
         return f"mysql+aiomysql://{self.DATABASE_USER}:{self.DATABASE_PASSWORD}@{self.DATABASE_HOST}:{self.DATABASE_PORT}/{self.DATABASE_NAME}"
 
     # Redis 配置
     REDIS_HOST: str = Field(default="localhost")
     REDIS_PORT: int = Field(default=6379)
-    REDIS_PASSWORD: Optional[str] = Field(default=None)
+    REDIS_PASSWORD: str | None = Field(default=None)
     REDIS_DB: int = Field(default=0)
     REDIS_MAX_CONNECTIONS: int = Field(default=50)
 
     @property
-    def REDIS_URL(self) -> str:
+    def redis_url(self) -> str:
         """获取 Redis 连接 URL"""
         password_part = f":{self.REDIS_PASSWORD}@" if self.REDIS_PASSWORD else ""
         return f"redis://{password_part}{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
@@ -67,7 +66,7 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
-    def BACKEND_CORS_ORIGINS_LIST(self) -> List[str]:
+    def backend_cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string to list"""
         if isinstance(self.BACKEND_CORS_ORIGINS, str):
             return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",")]
@@ -99,11 +98,22 @@ class Settings(BaseSettings):
     REVIEW_MAX_SCORE: int = Field(default=10)
 
     # Bitbucket API 配置
-    BITBUCKET_CLOUD: bool = Field(default=False, description="Whether to use Bitbucket Cloud (True) or Server/Data Center (False)")
-    BITBUCKET_SERVER_URL: str = Field(default="http://localhost:7990", description="Bitbucket Server/Data Center base URL")
-    BITBUCKET_USER: Optional[str] = Field(default=None, description="Bitbucket username for authentication")
-    BITBUCKET_PASSWORD: Optional[str] = Field(default=None, description="Bitbucket password or app password for authentication")
-    BITBUCKET_DEFAULT_WORKSPACE: str = Field(default="default", description="Default workspace/project key for Bitbucket repositories")
+    BITBUCKET_CLOUD: bool = Field(
+        default=False,
+        description="Whether to use Bitbucket Cloud (True) or Server/Data Center (False)",
+    )
+    BITBUCKET_SERVER_URL: str = Field(
+        default="http://localhost:7990", description="Bitbucket Server/Data Center base URL"
+    )
+    BITBUCKET_USER: str | None = Field(
+        default=None, description="Bitbucket username for authentication"
+    )
+    BITBUCKET_PASSWORD: str | None = Field(
+        default=None, description="Bitbucket password or app password for authentication"
+    )
+    BITBUCKET_DEFAULT_WORKSPACE: str = Field(
+        default="default", description="Default workspace/project key for Bitbucket repositories"
+    )
 
     # 审查状态
     REVIEW_STATUS_OPEN: str = "open"
@@ -112,7 +122,7 @@ class Settings(BaseSettings):
     REVIEW_STATUS_DRAFT: str = "draft"
 
     @property
-    def REVIEW_STATUSES(self) -> List[str]:
+    def review_statuses(self) -> list[str]:
         """所有有效的审查状态"""
         return [
             self.REVIEW_STATUS_OPEN,
@@ -126,7 +136,7 @@ class Settings(BaseSettings):
     MAX_RETRIES: int = Field(default=3)
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """获取单例配置实例"""
     return Settings()

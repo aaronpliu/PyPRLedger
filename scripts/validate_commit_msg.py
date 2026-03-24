@@ -11,6 +11,7 @@ Enforces:
 
 import re
 import sys
+from pathlib import Path
 
 
 def main():
@@ -19,7 +20,7 @@ def main():
         sys.exit(1)
 
     commit_msg_file = sys.argv[1]
-    with open(commit_msg_file, encoding="utf-8") as f:
+    with Path(commit_msg_file).open(encoding="utf-8") as f:
         lines = f.readlines()
 
     # Get first non-comment, non-empty line

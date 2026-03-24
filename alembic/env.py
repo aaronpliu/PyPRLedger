@@ -1,31 +1,29 @@
 """Alembic Environment Configuration - Async Support"""
 
+import asyncio
+import os
+import sys
 from logging.config import fileConfig
-from dotenv import load_dotenv
+from pathlib import Path
 
+from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config, AsyncEngine
-from alembic import context
-import asyncio
-import sys
-import os
+from sqlalchemy.ext.asyncio import AsyncEngine, async_engine_from_config
+
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Add the project root to Python path
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+sys.path.append(Path.parent(Path.parent(__file__)))
 
 # Import your models here
-from src.core.database import Base
-from src.models.user import User
-from src.models.project import Project
-from src.models.repository import Repository
-from src.models.pull_request import PullRequestReview
-
 # Import Alembic Config object
-from alembic.config import Config
+
+from src.core.database import Base
+
 
 # this is the Alembic Config object
 config = context.config

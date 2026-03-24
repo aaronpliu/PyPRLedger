@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
@@ -24,9 +24,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for creating a new user"""
 
-    password: Optional[str] = Field(
-        None, min_length=8, max_length=128, description="User's password"
-    )
+    password: str | None = Field(None, min_length=8, max_length=128, description="User's password")
     is_reviewer: bool = Field(default=False, description="Whether the user is a reviewer")
 
     @field_validator("password")
@@ -40,10 +38,10 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     """Schema for updating an existing user"""
 
-    display_name: Optional[str] = Field(None, min_length=1, max_length=128)
-    email_address: Optional[EmailStr] = None
-    active: Optional[bool] = None
-    is_reviewer: Optional[bool] = None
+    display_name: str | None = Field(None, min_length=1, max_length=128)
+    email_address: EmailStr | None = None
+    active: bool | None = None
+    is_reviewer: bool | None = None
 
 
 class UserResponse(UserBase):

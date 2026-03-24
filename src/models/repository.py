@@ -1,9 +1,17 @@
+from __future__ import annotations
+
 from datetime import datetime
-from typing import List
+from typing import TYPE_CHECKING
+
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+
+
+if TYPE_CHECKING:
+    from src.models.project import Project
+    from src.models.pull_request import PullRequestReview
 
 
 class Repository(Base):
@@ -35,10 +43,10 @@ class Repository(Base):
     repository_url: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Relationship to project
-    project: Mapped["Project"] = relationship("Project", back_populates="repositories")
+    project: Mapped[Project] = relationship("Project", back_populates="repositories")
 
     # Relationship to pull request reviews
-    pull_request_reviews: Mapped[List["PullRequestReview"]] = relationship(
+    pull_request_reviews: Mapped[list[PullRequestReview]] = relationship(
         "PullRequestReview", back_populates="repository"
     )
 
@@ -78,7 +86,7 @@ class Repository(Base):
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Repository":
+    def from_dict(cls, data: dict) -> Repository:
         """Create repository instance from dictionary"""
         return cls(
             project_id=data.get("project_id"),

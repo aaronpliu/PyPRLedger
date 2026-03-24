@@ -1,28 +1,27 @@
-from datetime import datetime
-from typing import List, Optional, Dict, Any
-from sqlalchemy import select, and_, func, desc, or_
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+import hashlib
+import json
+import logging
+from typing import Any
 
+from sqlalchemy import and_, desc, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.core.config import settings
+from src.core.exceptions import (
+    InvalidCredentialsException,
+    UserAlreadyExistsException,
+    UserNotFoundException,
+)
 from src.models.user import User
 from src.schemas.user import (
     UserCreate,
-    UserUpdate,
     UserResponse,
-    UserInDB,
     UserStats,
+    UserUpdate,
 )
-from src.core.exceptions import (
-    UserNotFoundException,
-    UserAlreadyExistsException,
-    InvalidCredentialsException,
-)
-from src.core.config import settings
-from src.utils.redis import get_redis_client
 from src.utils.metrics import MetricsCollector
-import json
-import logging
-import hashlib
+from src.utils.redis import get_redis_client
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ logger = logging.getLogger(__name__)
 class UserService:
     """Service for managing users"""
 
-    def __init__(self, metrics_collector: Optional[MetricsCollector] = None):
+    def __init__(self, metrics_collector: MetricsCollector | None = None):
         """Initialize the user service"""
         self.redis_client = get_redis_client()
         self.metrics = metrics_collector or MetricsCollector()
@@ -55,12 +54,12 @@ class UserService:
         """Generate cache key for an email"""
         return f"user:email:{email}"
 
-    def _get_list_cache_key(self, filters: Dict[str, Any], page: int, page_size: int) -> str:
+    def _get_list_cache_key(self, filters: dict[str, Any], page: int, page_size: int) -> str:
         """Generate cache key for user list"""
         filter_str = ":".join(f"{k}={v}" for k, v in sorted(filters.items()) if v is not None)
         return f"users:list:{filter_str}:{page}:{page_size}"
 
-    async def _get_user_from_cache(self, user_id: int) -> Optional[Dict[str, Any]]:
+    async def _get_user_from_cache(self, user_id: int) -> dict[str, Any] | None:
         """Try to get user from cache"""
         try:
             cached = await self.redis_client.get(self._get_cache_key(user_id))
@@ -70,7 +69,7 @@ class UserService:
             logger.warning(f"Failed to get user from cache: {str(e)}")
         return None
 
-    async def _set_user_in_cache(self, user_id: int, user_data: Dict[str, Any]) -> None:
+    async def _set_user_in_cache(self, user_id: int, user_data: dict[str, Any]) -> None:
         """Store user in cache"""
         try:
             await self.redis_client.setex(
@@ -126,7 +125,7 @@ class UserService:
             raise UserAlreadyExistsException(email=user_data.email_address)
 
         # Create new user
-        hashed_password = self.hash_password(user_data.password)
+        # hashed_password = self.hash_password(user_data.password)
         new_user = User(
             username=user_data.username,
             display_name=user_data.display_name,
@@ -156,7 +155,7 @@ class UserService:
 
     async def get_user_by_id(
         self, user_id: int, db: AsyncSession, use_cache: bool = True
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Get a user by ID
 
@@ -187,7 +186,7 @@ class UserService:
 
     async def get_user_by_username(
         self, username: str, db: AsyncSession, use_cache: bool = True
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Get a user by username
 
@@ -228,7 +227,7 @@ class UserService:
 
     async def get_user_by_email(
         self, email: str, db: AsyncSession, use_cache: bool = True
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Get a user by email
 
@@ -270,13 +269,13 @@ class UserService:
     async def list_users(
         self,
         db: AsyncSession,
-        active: Optional[bool] = None,
-        is_reviewer: Optional[bool] = None,
-        username: Optional[str] = None,
+        active: bool | None = None,
+        is_reviewer: bool | None = None,
+        username: str | None = None,
         page: int = 1,
         page_size: int = 20,
         use_cache: bool = True,
-    ) -> tuple[List[User], int]:
+    ) -> tuple[list[User], int]:
         """
         List users with filtering and pagination
 
@@ -305,7 +304,7 @@ class UserService:
                     data = json.loads(cached)
                     # Deserialize cached users
                     users = [User.from_dict(u) for u in data["users"]]
-                    logger.debug(f"Retrieved user list from cache")
+                    logger.debug("Retrieved user list from cache")
                     return users, data["total"]
             except Exception as e:
                 logger.warning(f"Failed to get user list from cache: {str(e)}")
@@ -432,7 +431,7 @@ class UserService:
 
     async def validate_credentials(
         self, username: str, password: str, db: AsyncSession
-    ) -> Optional[User]:
+    ) -> User | None:
         """
         Validate user credentials (simplified - checks if user exists and is active)
 
@@ -525,7 +524,7 @@ class UserService:
 
         return stats
 
-    async def get_active_reviewers(self, db: AsyncSession, limit: int = 100) -> List[User]:
+    async def get_active_reviewers(self, db: AsyncSession, limit: int = 100) -> list[User]:
         """
         Get active reviewers
 

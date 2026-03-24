@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
@@ -12,7 +12,7 @@ class RepositoryBase(BaseModel):
     repository_url: HttpUrl = Field(..., description="Repository URL")
 
     @field_validator("repository_slug")
-    def repository_slug_format(cls, v):
+    def repository_slug_format(self, v):
         """Validate repository slug format"""
         if not all(c.isalnum() or c in "-_" for c in v):
             raise ValueError(
@@ -25,9 +25,9 @@ class RepositoryCreate(RepositoryBase):
     """Schema for creating a new repository"""
 
     project_id: int = Field(..., gt=0, description="Project business ID the repository belongs to")
-    description: Optional[str] = Field(None, max_length=500, description="Repository description")
+    description: str | None = Field(None, max_length=500, description="Repository description")
     is_public: bool = Field(default=False, description="Whether the repository is public")
-    default_branch: Optional[str] = Field(
+    default_branch: str | None = Field(
         None, max_length=64, description="Default branch name (e.g., 'main', 'master')"
     )
 
@@ -35,15 +35,15 @@ class RepositoryCreate(RepositoryBase):
 class RepositoryUpdate(BaseModel):
     """Schema for updating an existing repository"""
 
-    repository_name: Optional[str] = Field(None, min_length=1, max_length=128)
-    repository_slug: Optional[str] = Field(None, min_length=1, max_length=128)
-    repository_url: Optional[HttpUrl] = None
-    description: Optional[str] = Field(None, max_length=500)
-    is_public: Optional[bool] = None
-    default_branch: Optional[str] = Field(None, max_length=64)
+    repository_name: str | None = Field(None, min_length=1, max_length=128)
+    repository_slug: str | None = Field(None, min_length=1, max_length=128)
+    repository_url: HttpUrl | None = None
+    description: str | None = Field(None, max_length=500)
+    is_public: bool | None = None
+    default_branch: str | None = Field(None, max_length=64)
 
     @field_validator("repository_slug")
-    def repository_slug_format(cls, v):
+    def repository_slug_format(self, v):
         """Validate repository slug format if provided"""
         if v is not None:
             if not all(c.isalnum() or c in "-_" for c in v):
@@ -83,13 +83,13 @@ class RepositoryResponse(RepositoryBase):
 class RepositoryDetailResponse(RepositoryResponse):
     """Schema for detailed repository response with additional information"""
 
-    description: Optional[str] = Field(None, description="Repository description")
+    description: str | None = Field(None, description="Repository description")
     is_public: bool = Field(..., description="Whether the repository is public")
-    default_branch: Optional[str] = Field(None, description="Default branch name")
+    default_branch: str | None = Field(None, description="Default branch name")
     review_count: int = Field(
         default=0, description="Number of pull request reviews in this repository"
     )
-    last_review_date: Optional[datetime] = Field(
+    last_review_date: datetime | None = Field(
         None, description="Date of the last review in this repository"
     )
 
@@ -102,7 +102,7 @@ class RepositoryDetailResponse(RepositoryResponse):
 class RepositoryListResponse(BaseModel):
     """Schema for paginated repository list response"""
 
-    items: List[RepositoryResponse] = Field(
+    items: list[RepositoryResponse] = Field(
         default_factory=list, description="List of repositories"
     )
     total: int = Field(..., description="Total number of repositories")
@@ -165,14 +165,14 @@ class RepositoryStats(BaseModel):
 class RepositoryFilter(BaseModel):
     """Schema for repository filtering parameters"""
 
-    project_id: Optional[int] = Field(None, description="Filter by project ID")
-    repository_id: Optional[str] = Field(None, description="Filter by repository ID")
-    repository_slug: Optional[str] = Field(None, description="Filter by repository slug")
-    is_public: Optional[bool] = Field(None, description="Filter by public status")
-    date_from: Optional[datetime] = Field(
+    project_id: int | None = Field(None, description="Filter by project ID")
+    repository_id: str | None = Field(None, description="Filter by repository ID")
+    repository_slug: str | None = Field(None, description="Filter by repository slug")
+    is_public: bool | None = Field(None, description="Filter by public status")
+    date_from: datetime | None = Field(
         None, description="Filter repositories created after this date"
     )
-    date_to: Optional[datetime] = Field(
+    date_to: datetime | None = Field(
         None, description="Filter repositories created before this date"
     )
 
@@ -229,6 +229,5 @@ class RepositoryWithProject(RepositoryResponse):
                 "updated_date": "2023-01-01T00:00:00",
                 "project_name": "Code Review System",
                 "project_key": "CRS",
-                "project_id": "PROJ-001",
             }
         }

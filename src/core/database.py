@@ -1,18 +1,19 @@
 import logging
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
-    AsyncSession,
     AsyncEngine,
-    create_async_engine,
+    AsyncSession,
     async_sessionmaker,
+    create_async_engine,
 )
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.pool import NullPool, QueuePool
-from sqlalchemy import text
+from sqlalchemy.pool import NullPool
 
 from src.core.config import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +21,8 @@ logger = logging.getLogger(__name__)
 Base = declarative_base()
 
 # 全局数据库引擎
-_engine: Optional[AsyncEngine] = None
-_async_session_maker: Optional[async_sessionmaker] = None
+_engine: AsyncEngine | None = None
+_async_session_maker: async_sessionmaker | None = None
 
 
 def get_engine() -> AsyncEngine:
@@ -62,7 +63,7 @@ def create_engine() -> AsyncEngine:
         # 使用 NullPool 模式
         engine_kwargs["poolclass"] = NullPool
 
-    engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
+    engine = create_async_engine(settings.database_url, **engine_kwargs)
     return engine
 
 
@@ -167,8 +168,8 @@ class DatabaseManager:
     """数据库管理器类"""
 
     def __init__(self):
-        self.engine: Optional[AsyncEngine] = None
-        self.session_maker: Optional[async_sessionmaker] = None
+        self.engine: AsyncEngine | None = None
+        self.session_maker: async_sessionmaker | None = None
 
     async def initialize(self) -> None:
         """初始化数据库"""

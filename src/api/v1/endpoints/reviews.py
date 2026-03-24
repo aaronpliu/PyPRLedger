@@ -1,21 +1,29 @@
-from datetime import datetime
-from typing import Annotated, Optional
 import logging
-from fastapi import APIRouter, Depends, Query, status, HTTPException
+from datetime import datetime
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
-from src.schemas.pull_request import ReviewCreate, ReviewResponse, ReviewUpdate
-from src.schemas.pull_request import ReviewListResponse, ReviewFilter, ReviewStats
-from src.services.review_service import ReviewService
 from src.core.exceptions import (
     ProjectNotFoundException,
     ReviewNotFoundException,
     ReviewStatusException,
     UserNotFoundException,
 )
+from src.schemas.pull_request import (
+    ReviewCreate,
+    ReviewFilter,
+    ReviewListResponse,
+    ReviewResponse,
+    ReviewStats,
+    ReviewUpdate,
+)
+from src.services.review_service import ReviewService
 from src.utils.metrics import OperationTimer, metrics
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,19 +71,17 @@ async def upsert_review(
             )
             status_code = status.HTTP_201_CREATED if is_created else status.HTTP_200_OK
             # Handle both ORM object and Pydantic model
-            if hasattr(review, 'to_dict'):
+            if hasattr(review, "to_dict"):
                 # ORM object (PullRequestReview) - to_dict already converts datetime to ISO format
                 review_data_dict = review.to_dict()
-            elif hasattr(review, 'model_dump'):
+            elif hasattr(review, "model_dump"):
                 # Pydantic model (ReviewResponse) - use mode='json' for proper datetime serialization
-                review_data_dict = review.model_dump(mode='json')
+                review_data_dict = review.model_dump(mode="json")
             else:
                 # Fallback to dict() method
                 review_data_dict = dict(review)
-            
-            return JSONResponse(
-                status_code=status_code, content=review_data_dict
-            )
+
+            return JSONResponse(status_code=status_code, content=review_data_dict)
         except (ProjectNotFoundException, UserNotFoundException) as e:
             metrics.increment_error(error_type=e.code, endpoint="POST /api/v1/reviews")
             raise HTTPException(
@@ -84,6 +90,7 @@ async def upsert_review(
             )
         except Exception as e:
             import traceback
+
             error_traceback = traceback.format_exc()
             logger.error(f"Failed to upsert review: {str(e)}\n{error_traceback}")
             metrics.increment_error(
@@ -99,30 +106,34 @@ async def upsert_review(
 async def list_reviews(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
-    pull_request_id: Optional[str] = Query(None, description="Filter by pull request ID"),
-    project_key: Optional[str] = Query(None, min_length=1, max_length=32, description="Filter by project key"),
-    repository_slug: Optional[str] = Query(None, min_length=1, max_length=128, description="Filter by repository slug"),
-    pull_request_user: Optional[str] = Query(None, min_length=1, max_length=64, description="Filter by pull request user username"),
-    reviewer: Optional[str] = Query(None, min_length=1, max_length=64, description="Filter by reviewer username"),
-    source_branch: Optional[str] = Query(None, description="Filter by source branch"),
-    target_branch: Optional[str] = Query(None, description="Filter by target branch"),
-    pull_request_status: Optional[str] = Query(
+    pull_request_id: str | None = Query(None, description="Filter by pull request ID"),
+    project_key: str | None = Query(
+        None, min_length=1, max_length=32, description="Filter by project key"
+    ),
+    repository_slug: str | None = Query(
+        None, min_length=1, max_length=128, description="Filter by repository slug"
+    ),
+    pull_request_user: str | None = Query(
+        None, min_length=1, max_length=64, description="Filter by pull request user username"
+    ),
+    reviewer: str | None = Query(
+        None, min_length=1, max_length=64, description="Filter by reviewer username"
+    ),
+    source_branch: str | None = Query(None, description="Filter by source branch"),
+    target_branch: str | None = Query(None, description="Filter by target branch"),
+    pull_request_status: str | None = Query(
         None, description="Filter by pull request status (open, merged, closed, draft)"
     ),
-    score_min: Optional[int] = Query(None, ge=0, le=10, description="Filter by minimum score"),
-    score_max: Optional[int] = Query(None, ge=0, le=10, description="Filter by maximum score"),
-    date_from: Optional[datetime] = Query(
-        None, description="Filter reviews created after this date"
-    ),
-    date_to: Optional[datetime] = Query(
-        None, description="Filter reviews created before this date"
-    ),
+    score_min: int | None = Query(None, ge=0, le=10, description="Filter by minimum score"),
+    score_max: int | None = Query(None, ge=0, le=10, description="Filter by maximum score"),
+    date_from: datetime | None = Query(None, description="Filter reviews created after this date"),
+    date_to: datetime | None = Query(None, description="Filter reviews created before this date"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> ReviewListResponse:
     """
     List pull request reviews with filtering and pagination
-    
+
     Response includes full entity information for project, repository, and users.
 
     Args:
@@ -166,7 +177,7 @@ async def list_reviews(
         enriched_reviews, total = await review_service.list_reviews_with_entities(
             filters, db, page, page_size
         )
-        
+
         return ReviewListResponse(
             items=enriched_reviews,
             total=total,
@@ -186,7 +197,9 @@ async def list_reviews(
 async def get_review_statistics(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
-    project_key: Optional[str] = Query(None, min_length=1, max_length=32, description="Filter statistics by project key"),
+    project_key: str | None = Query(
+        None, min_length=1, max_length=32, description="Filter statistics by project key"
+    ),
 ) -> ReviewStats:
     """
     Get pull request review statistics
@@ -202,7 +215,7 @@ async def get_review_statistics(
     try:
         stats = await review_service.get_review_statistics(project_key, db)
         return stats
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/reviews/statistics"
         )
@@ -245,7 +258,7 @@ async def get_review(
         return ReviewResponse(**review.to_dict())
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/reviews/{review_id}"
         )
@@ -287,7 +300,7 @@ async def update_review(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"PUT /api/v1/reviews/{review_id}"
         )
@@ -332,7 +345,7 @@ async def update_review_status(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"PATCH /api/v1/reviews/{review_id}/status"
         )
@@ -374,7 +387,7 @@ async def delete_review(
             )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"DELETE /api/v1/reviews/{review_id}"
         )
@@ -416,7 +429,7 @@ async def get_reviews_by_project(
             page=page,
             page_size=page_size,
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/reviews/project/{project_id}"
         )
@@ -461,7 +474,7 @@ async def get_reviews_by_reviewer(
             page=page,
             page_size=page_size,
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR",
             endpoint=f"GET /api/v1/reviews/reviewer/{reviewer_id}",
@@ -480,7 +493,7 @@ async def get_reviews_by_status(
     status: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
-    project_id: Optional[int] = Query(None, gt=0, description="Filter by project ID"),
+    project_id: int | None = Query(None, gt=0, description="Filter by project ID"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> ReviewListResponse:
@@ -526,7 +539,7 @@ async def get_reviews_by_status(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/reviews/status/{status}"
         )

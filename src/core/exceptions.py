@@ -1,4 +1,5 @@
-from typing import Any, Dict, Optional
+from typing import Any
+
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
@@ -62,7 +63,7 @@ class AppException(HTTPException):
         code: str,
         message: str,
         status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail: Optional[Any] = None,
+        detail: Any | None = None,
     ):
         self.code = code
         self.message = message
@@ -73,7 +74,7 @@ class AppException(HTTPException):
 class BadRequestException(AppException):
     """400 Bad Request"""
 
-    def __init__(self, message: str = "Bad request", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Bad request", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.BAD_REQUEST,
             message=message,
@@ -85,7 +86,7 @@ class BadRequestException(AppException):
 class ValidationException(AppException):
     """422 Validation Error"""
 
-    def __init__(self, message: str = "Validation failed", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Validation failed", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.VALIDATION_ERROR,
             message=message,
@@ -97,7 +98,7 @@ class ValidationException(AppException):
 class UnauthorizedException(AppException):
     """401 Unauthorized"""
 
-    def __init__(self, message: str = "Unauthorized", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Unauthorized", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.UNAUTHORIZED,
             message=message,
@@ -109,7 +110,7 @@ class UnauthorizedException(AppException):
 class ForbiddenException(AppException):
     """403 Forbidden"""
 
-    def __init__(self, message: str = "Access forbidden", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Access forbidden", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.FORBIDDEN,
             message=message,
@@ -121,7 +122,7 @@ class ForbiddenException(AppException):
 class NotFoundException(AppException):
     """404 Not Found"""
 
-    def __init__(self, message: str = "Resource not found", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Resource not found", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.NOT_FOUND,
             message=message,
@@ -133,7 +134,7 @@ class NotFoundException(AppException):
 class ResourceAlreadyExistsException(AppException):
     """409 Conflict - Resource Already Exists"""
 
-    def __init__(self, message: str = "Resource already exists", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Resource already exists", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.RESOURCE_ALREADY_EXISTS,
             message=message,
@@ -145,7 +146,7 @@ class ResourceAlreadyExistsException(AppException):
 class InternalServerException(AppException):
     """500 Internal Server Error"""
 
-    def __init__(self, message: str = "Internal server error", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Internal server error", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.INTERNAL_SERVER_ERROR,
             message=message,
@@ -157,7 +158,7 @@ class InternalServerException(AppException):
 class DatabaseException(AppException):
     """Database related errors"""
 
-    def __init__(self, message: str = "Database error", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Database error", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.DATABASE_ERROR,
             message=message,
@@ -169,7 +170,7 @@ class DatabaseException(AppException):
 class DatabaseConnectionException(AppException):
     """Database connection error"""
 
-    def __init__(self, message: str = "Database connection error", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Database connection error", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.DATABASE_CONNECTION_ERROR,
             message=message,
@@ -181,7 +182,7 @@ class DatabaseConnectionException(AppException):
 class CacheException(AppException):
     """Cache related errors"""
 
-    def __init__(self, message: str = "Cache error", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Cache error", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.CACHE_ERROR,
             message=message,
@@ -193,7 +194,7 @@ class CacheException(AppException):
 class RateLimitException(AppException):
     """Rate limit exceeded"""
 
-    def __init__(self, message: str = "Rate limit exceeded", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Rate limit exceeded", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.RATE_LIMIT_EXCEEDED,
             message=message,
@@ -223,14 +224,14 @@ class ReviewAlreadyExistsException(ResourceAlreadyExistsException):
 class InvalidReviewDataException(BadRequestException):
     """Invalid review data"""
 
-    def __init__(self, message: str = "Invalid review data", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Invalid review data", detail: Any | None = None):
         super().__init__(message=message, detail=detail)
 
 
 class ReviewStatusException(BadRequestException):
     """Invalid review status"""
 
-    def __init__(self, current_status: str, target_status: str, message: Optional[str] = None):
+    def __init__(self, current_status: str, target_status: str, message: str | None = None):
         detail = {"current_status": current_status, "target_status": target_status}
         message = message or f"Cannot transition review from {current_status} to {target_status}"
         super().__init__(message=message, detail=detail)
@@ -239,7 +240,7 @@ class ReviewStatusException(BadRequestException):
 class UserNotFoundException(NotFoundException):
     """User not found"""
 
-    def __init__(self, user_id: Optional[int] = None, username: Optional[str] = None):
+    def __init__(self, user_id: int | None = None, username: str | None = None):
         if user_id:
             message = f"User with ID {user_id} not found"
             detail = {"user_id": user_id}
@@ -255,7 +256,7 @@ class UserNotFoundException(NotFoundException):
 class UserAlreadyExistsException(ResourceAlreadyExistsException):
     """User already exists"""
 
-    def __init__(self, username: Optional[str] = None, email: Optional[str] = None):
+    def __init__(self, username: str | None = None, email: str | None = None):
         if username:
             message = f"User with username '{username}' already exists"
             detail = {"username": username}
@@ -271,7 +272,7 @@ class UserAlreadyExistsException(ResourceAlreadyExistsException):
 class ProjectNotFoundException(NotFoundException):
     """Project not found"""
 
-    def __init__(self, project_id: Optional[int] = None, project_key: Optional[str] = None):
+    def __init__(self, project_id: int | None = None, project_key: str | None = None):
         if project_id:
             message = f"Project with ID {project_id} not found"
             detail = {"project_id": project_id}
@@ -287,7 +288,7 @@ class ProjectNotFoundException(NotFoundException):
 class RepositoryNotFoundException(NotFoundException):
     """Repository not found"""
 
-    def __init__(self, repository_id: Optional[str] = None, repository_slug: Optional[str] = None):
+    def __init__(self, repository_id: str | None = None, repository_slug: str | None = None):
         if repository_id:
             message = f"Repository with ID {repository_id} not found"
             detail = {"repository_id": repository_id}
@@ -334,26 +335,17 @@ class InvalidTokenException(UnauthorizedException):
 class OperationNotAllowedException(BadRequestException):
     """Operation not allowed"""
 
-    def __init__(self, operation: str, reason: Optional[str] = None):
+    def __init__(self, operation: str, reason: str | None = None):
         message = f"Operation '{operation}' is not allowed"
         if reason:
             message += f": {reason}"
         super().__init__(code=ErrorCode.OPERATION_NOT_ALLOWED, message=message)
 
 
-class RepositoryNotFoundException(Exception):
-    """Raised when a repository is not found"""
-
-    def __init__(self, repository_id: str, message: str = None):
-        self.repository_id = repository_id
-        self.message = message or f"Repository not found: {repository_id}"
-        super().__init__(self.message)
-
-
 class GitServiceException(AppException):
     """Git service error"""
 
-    def __init__(self, message: str = "Git service error", detail: Optional[Any] = None):
+    def __init__(self, message: str = "Git service error", detail: Any | None = None):
         super().__init__(
             code=ErrorCode.GIT_SERVICE_ERROR,
             message=message,
@@ -367,4 +359,4 @@ class ErrorResponse(BaseModel):
 
     error: str
     message: str
-    detail: Optional[Any] = None
+    detail: Any | None = None

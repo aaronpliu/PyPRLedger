@@ -1,15 +1,32 @@
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text, JSON, Boolean, UniqueConstraint
-from sqlalchemy.ext.asyncio import AsyncAttrs
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
 
 
+if TYPE_CHECKING:
+    from src.models.project import Project
+    from src.models.repository import Repository
+    from src.models.user import User
+
+
 class PullRequestReview(Base):
     """Pull request review model representing the pull_request_review table in the database
-    
+
     Supports:
     1. Multiple reviewers per pull request
     2. Multiple files per pull request (each file reviewed separately)
@@ -24,11 +41,17 @@ class PullRequestReview(Base):
 
     # New columns for direct relationships (business keys instead of database IDs)
     project_key: Mapped[str] = mapped_column(
-        String(32), ForeignKey("project.project_key", ondelete="CASCADE"), nullable=False, index=True
+        String(32),
+        ForeignKey("project.project_key", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
 
     repository_slug: Mapped[str] = mapped_column(
-        String(128), ForeignKey("repository.repository_slug", ondelete="CASCADE"), nullable=False, index=True
+        String(128),
+        ForeignKey("repository.repository_slug", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
 
     reviewer: Mapped[str] = mapped_column(
@@ -44,7 +67,7 @@ class PullRequestReview(Base):
 
     # Commit ID - unique identifier for this specific commit state
     # Combined with project_key, repository_slug, source_filename, and reviewer, uniquely identifies a review
-    pull_request_commit_id: Mapped[Optional[str]] = mapped_column(
+    pull_request_commit_id: Mapped[str | None] = mapped_column(
         String(64), nullable=True, index=True
     )
 
@@ -53,24 +76,24 @@ class PullRequestReview(Base):
     target_branch: Mapped[str] = mapped_column(String(64), nullable=False)
 
     # Code review details
-    git_code_diff: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    git_code_diff: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # File being reviewed - can be null for overall PR review
-    source_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    source_filename: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
 
     # AI and review content
-    ai_suggestions: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    ai_suggestions: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
-    reviewer_comments: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewer_comments: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Review metrics
-    score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Status
     pull_request_status: Mapped[str] = mapped_column(String(32), nullable=False)
 
     # Metadata (renamed from 'metadata' to avoid SQLAlchemy reserved name conflict)
-    review_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+    review_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         JSON,
         nullable=True,
         name="metadata",  # Database column name remains 'metadata'
@@ -78,41 +101,42 @@ class PullRequestReview(Base):
 
     # Review tracking fields
     reviewed_date: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True
+        DateTime, nullable=False, default=lambda: datetime.now(UTC), index=True
     )
-    
+
     is_latest_review: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, index=True
     )
-    
-    review_iteration: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=1
-    )
+
+    review_iteration: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     # Relationships
-    project: Mapped["Project"] = relationship(
+    project: Mapped[Project] = relationship(
         foreign_keys=[project_key], back_populates="pull_request_reviews"
     )
 
-    repository: Mapped["Repository"] = relationship(
+    repository: Mapped[Repository] = relationship(
         foreign_keys=[repository_slug], back_populates="pull_request_reviews"
     )
 
-    pull_request_user_rel: Mapped["User"] = relationship(
+    pull_request_user_rel: Mapped[User] = relationship(
         foreign_keys=[pull_request_user], back_populates="authored_reviews"
     )
 
-    reviewer_rel: Mapped["User"] = relationship(
+    reviewer_rel: Mapped[User] = relationship(
         foreign_keys=[reviewer], back_populates="reviewed_reviews"
     )
 
     # Timestamps
     created_date: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
 
     updated_date: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
     # Indexes - optimized for multi-reviewer and multi-file queries
@@ -124,31 +148,18 @@ class PullRequestReview(Base):
             "project_key",
             "repository_slug",
             "source_filename",
-            "reviewer"
+            "reviewer",
         ),
         # Index for querying reviews by commit
         Index(
-            "idx_pr_commit_project_repo",
-            "pull_request_commit_id",
-            "project_key",
-            "repository_slug"
+            "idx_pr_commit_project_repo", "pull_request_commit_id", "project_key", "repository_slug"
         ),
         # Index for querying reviews by reviewer and file
-        Index(
-            "idx_reviewer_file",
-            "reviewer",
-            "source_filename"
-        ),
+        Index("idx_reviewer_file", "reviewer", "source_filename"),
         # Index for filtering latest reviews only
-        Index(
-            "idx_is_latest_review",
-            "is_latest_review"
-        ),
+        Index("idx_is_latest_review", "is_latest_review"),
         # Index for sorting by review date
-        Index(
-            "idx_reviewed_date",
-            "reviewed_date"
-        ),
+        Index("idx_reviewed_date", "reviewed_date"),
     )
 
     def __repr__(self) -> str:
@@ -160,7 +171,7 @@ class PullRequestReview(Base):
             f"is_latest={self.is_latest_review})>"
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert pull request review model to dictionary"""
         return {
             "id": self.id,
@@ -187,7 +198,7 @@ class PullRequestReview(Base):
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PullRequestReview":
+    def from_dict(cls, data: dict[str, Any]) -> PullRequestReview:
         """Create pull request review instance from dictionary"""
         return cls(
             pull_request_id=data.get("pull_request_id"),
@@ -210,7 +221,7 @@ class PullRequestReview(Base):
             review_iteration=data.get("review_iteration", 1),
         )
 
-    def update(self, data: Dict[str, Any]) -> None:
+    def update(self, data: dict[str, Any]) -> None:
         """Update pull request review attributes from dictionary"""
         updatable_fields = [
             "git_code_diff",

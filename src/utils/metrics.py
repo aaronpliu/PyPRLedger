@@ -1,16 +1,17 @@
 import logging
-from typing import Dict, List, Optional
+import time
+
+from fastapi import Response
 from prometheus_client import (
-    Counter,
-    Histogram,
-    Gauge,
-    CollectorRegistry,
-    generate_latest,
     CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
 )
 from prometheus_client.openmetrics.exposition import generate_latest as generate_latest_openmetrics
-from fastapi import Response
-import time
+
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 class MetricsCollector:
     """Prometheus metrics collector for code review system"""
 
-    def __init__(self, registry: Optional[CollectorRegistry] = None):
+    def __init__(self, registry: CollectorRegistry | None = None):
         """
         Initialize metrics collector
 
@@ -663,7 +664,7 @@ class MetricsCollector:
 class OperationTimer:
     """Context manager for timing operations"""
 
-    def __init__(self, metrics: MetricsCollector, operation_type: str, labels: Dict[str, str]):
+    def __init__(self, metrics: MetricsCollector, operation_type: str, labels: dict[str, str]):
         """
         Initialize operation timer
 
@@ -711,7 +712,7 @@ class OperationTimer:
                 )
 
 
-def measure_operation(metrics: MetricsCollector, operation_type: str, labels: Dict[str, str]):
+def measure_operation(metrics: MetricsCollector, operation_type: str, labels: dict[str, str]):
     """
     Decorator for measuring operation duration
 

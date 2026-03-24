@@ -1,34 +1,30 @@
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-from sqlalchemy import select, and_, or_, func, desc, update
+import json
+import logging
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import and_, desc, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.models.pull_request import PullRequestReview
-from src.models.project import Project
-from src.models.repository import Repository
-from src.models.user import User
-from src.schemas.pull_request import (
-    ReviewCreate,
-    ReviewUpdate,
-    ReviewResponse,
-    ReviewFilter,
-    ReviewStats,
-)
+from src.core.config import settings
 from src.core.exceptions import (
-    ReviewNotFoundException,
     ReviewAlreadyExistsException,
-    InvalidReviewDataException,
-    ProjectNotFoundException,
-    UserNotFoundException,
+    ReviewNotFoundException,
     ReviewStatusException,
 )
-from src.core.config import settings
-from src.utils.redis import get_redis_client
-from src.utils.metrics import MetricsCollector
+from src.models.pull_request import PullRequestReview
+from src.schemas.pull_request import (
+    ReviewCreate,
+    ReviewFilter,
+    ReviewResponse,
+    ReviewStats,
+    ReviewUpdate,
+)
 from src.services.entity_sync_service import EntitySyncService
-import json
-import logging
+from src.utils.metrics import MetricsCollector
+from src.utils.redis import get_redis_client
+
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +32,7 @@ logger = logging.getLogger(__name__)
 class ReviewService:
     """Service for managing pull request reviews"""
 
-    def __init__(self, metrics_collector: Optional[MetricsCollector] = None):
+    def __init__(self, metrics_collector: MetricsCollector | None = None):
         """Initialize the review service"""
         self.redis_client = get_redis_client()
         self.metrics = metrics_collector or MetricsCollector()
@@ -45,12 +41,12 @@ class ReviewService:
         """Generate cache key for a review"""
         return f"review:{review_id}"
 
-    def _get_list_cache_key(self, filters: Dict[str, Any], page: int, page_size: int) -> str:
+    def _get_list_cache_key(self, filters: dict[str, Any], page: int, page_size: int) -> str:
         """Generate cache key for review list"""
         filter_str = ":".join(f"{k}={v}" for k, v in sorted(filters.items()) if v is not None)
         return f"reviews:list:{filter_str}:{page}:{page_size}"
 
-    async def _get_review_from_cache(self, review_id: str) -> Optional[Dict[str, Any]]:
+    async def _get_review_from_cache(self, review_id: str) -> dict[str, Any] | None:
         """Try to get review from cache"""
         try:
             cached = await self.redis_client.get(self._get_cache_key(review_id))
@@ -60,7 +56,7 @@ class ReviewService:
             logger.warning(f"Failed to get review from cache: {str(e)}")
         return None
 
-    async def _set_review_in_cache(self, review_id: str, review_data: Dict[str, Any]) -> None:
+    async def _set_review_in_cache(self, review_id: str, review_data: dict[str, Any]) -> None:
         """Store review in cache"""
         try:
             await self.redis_client.setex(
@@ -102,24 +98,21 @@ class ReviewService:
         """
         # Initialize entity sync service
         entity_sync_service = EntitySyncService(db)
-        
+
         # Sync all related entities using business keys only
         # This will query DB first, then fetch from Bitbucket API if not exists
         project = await entity_sync_service.sync_project(review_data.project_key)
-        
+
         repository = await entity_sync_service.sync_repository(
-            repository_slug=review_data.repository_slug,
-            project=project
+            repository_slug=review_data.repository_slug, project=project
         )
-        
+
         pr_user = await entity_sync_service.sync_user(
-            username=review_data.pull_request_user,
-            is_reviewer=False
+            username=review_data.pull_request_user, is_reviewer=False
         )
-        
+
         reviewer = await entity_sync_service.sync_user(
-            username=review_data.reviewer,
-            is_reviewer=True
+            username=review_data.reviewer, is_reviewer=True
         )
 
         # Check if review already exists for the same reviewer and file
@@ -131,7 +124,7 @@ class ReviewService:
                 PullRequestReview.repository_slug == repository.repository_slug,
                 PullRequestReview.source_filename == review_data.source_filename,
                 PullRequestReview.reviewer == reviewer.username,
-                PullRequestReview.is_latest_review == True
+                PullRequestReview.is_latest_review == True,
             )
         )
         existing_review = existing_review_result.scalar_one_or_none()
@@ -144,12 +137,12 @@ class ReviewService:
             PullRequestReview.project_key == project.project_key,
             PullRequestReview.repository_slug == repository.repository_slug,
             PullRequestReview.source_filename == review_data.source_filename,
-            PullRequestReview.reviewer == reviewer.username
+            PullRequestReview.reviewer == reviewer.username,
         )
         iteration_result = await db.execute(iteration_query)
         max_iteration = iteration_result.scalar() or 0
         new_iteration = max_iteration + 1
-        
+
         # Mark previous latest reviews as not latest
         if max_iteration > 0:
             await db.execute(
@@ -160,14 +153,14 @@ class ReviewService:
                     PullRequestReview.repository_slug == repository.repository_slug,
                     PullRequestReview.source_filename == review_data.source_filename,
                     PullRequestReview.reviewer == reviewer.username,
-                    PullRequestReview.is_latest_review == True
+                    PullRequestReview.is_latest_review == True,
                 )
                 .values(is_latest_review=False)
             )
-        
+
         # Set reviewed_date (use provided value or current time)
-        reviewed_date = review_data.reviewed_date or datetime.now(timezone.utc)
-        
+        reviewed_date = review_data.reviewed_date or datetime.now(UTC)
+
         # Create new review
         new_review = PullRequestReview(
             pull_request_id=review_data.pull_request_id,
@@ -209,10 +202,7 @@ class ReviewService:
         await self._set_review_in_cache(new_review.pull_request_id, review_dict)
 
         # Update metrics (use project_key and username directly)
-        self.metrics.increment_review(
-            project=project.project_key, 
-            reviewer=reviewer.username
-        )
+        self.metrics.increment_review(project=project.project_key, reviewer=reviewer.username)
 
         # Invalidate list cache
         await self._invalidate_list_cache()
@@ -229,7 +219,7 @@ class ReviewService:
         For existing reviews, instead of updating the record, we:
         1. Mark the existing latest review as not latest
         2. Create a new review record with incremented iteration number
-        
+
         This preserves the history of all review iterations.
 
         Args:
@@ -242,23 +232,20 @@ class ReviewService:
         """
         # Initialize entity sync service
         entity_sync_service = EntitySyncService(db)
-        
+
         # Sync all related entities using business keys only
         project = await entity_sync_service.sync_project(review_data.project_key)
-        
+
         repository = await entity_sync_service.sync_repository(
-            repository_slug=review_data.repository_slug,
-            project=project
+            repository_slug=review_data.repository_slug, project=project
         )
-        
+
         pr_user = await entity_sync_service.sync_user(
-            username=review_data.pull_request_user,
-            is_reviewer=False
+            username=review_data.pull_request_user, is_reviewer=False
         )
-        
+
         reviewer = await entity_sync_service.sync_user(
-            username=review_data.reviewer,
-            is_reviewer=True
+            username=review_data.reviewer, is_reviewer=True
         )
 
         # Check if review already exists for the same reviewer and file
@@ -271,7 +258,7 @@ class ReviewService:
                 PullRequestReview.repository_slug == repository.repository_slug,
                 PullRequestReview.source_filename == review_data.source_filename,
                 PullRequestReview.reviewer == reviewer.username,
-                PullRequestReview.is_latest_review == True
+                PullRequestReview.is_latest_review == True,
             )
         )
         existing_review = existing_review_result.scalar_one_or_none()
@@ -279,9 +266,9 @@ class ReviewService:
         if existing_review:
             # Mark the existing latest review as not latest
             existing_review.is_latest_review = False
-            existing_review.updated_date = datetime.now(timezone.utc)
+            existing_review.updated_date = datetime.now(UTC)
             await db.flush()
-            
+
             # Create a new review record for this iteration
             # First, get the next iteration number
             iteration_query = select(func.max(PullRequestReview.review_iteration)).where(
@@ -289,12 +276,12 @@ class ReviewService:
                 PullRequestReview.project_key == project.project_key,
                 PullRequestReview.repository_slug == repository.repository_slug,
                 PullRequestReview.source_filename == review_data.source_filename,
-                PullRequestReview.reviewer == reviewer.username
+                PullRequestReview.reviewer == reviewer.username,
             )
             iteration_result = await db.execute(iteration_query)
             max_iteration = iteration_result.scalar() or 0
             new_iteration = max_iteration + 1
-            
+
             # Create new review with incremented iteration
             new_review = PullRequestReview(
                 pull_request_id=review_data.pull_request_id,
@@ -312,11 +299,11 @@ class ReviewService:
                 score=review_data.score,
                 pull_request_status=review_data.pull_request_status,
                 metadata=review_data.metadata,
-                reviewed_date=datetime.now(timezone.utc),
+                reviewed_date=datetime.now(UTC),
                 is_latest_review=True,
-                review_iteration=new_iteration
+                review_iteration=new_iteration,
             )
-            
+
             db.add(new_review)
             await db.flush()
             await db.refresh(new_review)
@@ -337,26 +324,27 @@ class ReviewService:
             await self._set_review_in_cache(new_review.pull_request_id, review_dict)
 
             # Update metrics
-            self.metrics.increment_review(
-                project=project.project_key, 
-                reviewer=reviewer.username
-            )
+            self.metrics.increment_review(project=project.project_key, reviewer=reviewer.username)
 
             # Invalidate cache
             await self._invalidate_review_cache(new_review.pull_request_id)
             await self._invalidate_list_cache()
 
-            logger.info(f"Created new review iteration: {new_review.pull_request_id}, iteration: {new_review.review_iteration}")
+            logger.info(
+                f"Created new review iteration: {new_review.pull_request_id}, iteration: {new_review.review_iteration}"
+            )
             return new_review, True
         else:
             # Create new review (first iteration)
             new_review_response = await self.create_review(review_data, db, include_details)
-            logger.info(f"Created new review: {new_review_response.pull_request_id}, iteration: {new_review_response.review_iteration}")
+            logger.info(
+                f"Created new review: {new_review_response.pull_request_id}, iteration: {new_review_response.review_iteration}"
+            )
             return new_review_response, True
 
     async def get_review(
         self, review_id: str, db: AsyncSession, use_cache: bool = True
-    ) -> Optional[PullRequestReview]:
+    ) -> PullRequestReview | None:
         """
         Get a pull request review by ID
 
@@ -400,7 +388,7 @@ class ReviewService:
         page: int = 1,
         page_size: int = 20,
         use_cache: bool = True,
-    ) -> tuple[List[PullRequestReview], int]:
+    ) -> tuple[list[PullRequestReview], int]:
         """
         List pull request reviews with filtering and pagination
 
@@ -451,7 +439,7 @@ class ReviewService:
                     data = json.loads(cached)
                     # Deserialize cached reviews
                     reviews = [PullRequestReview.from_dict(r) for r in data["reviews"]]
-                    logger.debug(f"Retrieved review list from cache")
+                    logger.debug("Retrieved review list from cache")
                     return reviews, data["total"]
             except Exception as e:
                 logger.warning(f"Failed to get review list from cache: {str(e)}")
@@ -564,7 +552,7 @@ class ReviewService:
 
     async def get_review_statistics(
         self,
-        project_key: Optional[str] = None,
+        project_key: str | None = None,
         db: AsyncSession = None,
         use_cache: bool = True,
     ) -> ReviewStats:
@@ -619,7 +607,7 @@ class ReviewService:
         avg_score = avg_score_result.scalar() or 0.0
 
         # Get reviews by date
-        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         week_ago = today.replace(day=today.day - 7) if today.day > 7 else today.replace(day=1)
         month_ago = (
             today.replace(month=today.month - 1)
@@ -670,7 +658,7 @@ class ReviewService:
 
     async def get_reviews_by_reviewer(
         self, reviewer_id: int, db: AsyncSession, page: int = 1, page_size: int = 20
-    ) -> tuple[List[PullRequestReview], int]:
+    ) -> tuple[list[PullRequestReview], int]:
         """
         Get reviews by reviewer
 
@@ -688,7 +676,7 @@ class ReviewService:
 
     async def get_reviews_by_project(
         self, project_id: int, db: AsyncSession, page: int = 1, page_size: int = 20
-    ) -> tuple[List[PullRequestReview], int]:
+    ) -> tuple[list[PullRequestReview], int]:
         """
         Get reviews by project
 
@@ -708,10 +696,10 @@ class ReviewService:
         self,
         status: str,
         db: AsyncSession,
-        project_id: Optional[int] = None,
+        project_id: int | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> tuple[List[PullRequestReview], int]:
+    ) -> tuple[list[PullRequestReview], int]:
         """
         Get reviews by status
 
@@ -751,28 +739,28 @@ class ReviewService:
 
     async def _enrich_review_with_entities(
         self, review: PullRequestReview, db: AsyncSession
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Enrich a review with full entity information
-        
+
         Args:
             review: The review to enrich
             db: Database session
-            
+
         Returns:
             Dict containing review data with embedded entity information
         """
         from sqlalchemy import text
-        
+
         # Convert review to dict first
         review_dict = review.to_dict()
-        
+
         # Query related entities using business keys
         project = None
         repository = None
         pr_user = None
         reviewer_user = None
-        
+
         try:
             # Get project info using raw SQL for debugging
             logger.info(f"Querying project with key: {review.project_key}")
@@ -785,47 +773,51 @@ class ReviewService:
             )
             project_row = project_result.fetchone()
             logger.info(f"Project query result: {project_row is not None}")
-            
+
             if project_row:
                 project = {
-                    'id': project_row[0],
-                    'project_id': project_row[1],
-                    'project_name': project_row[2],
-                    'project_key': project_row[3],
-                    'project_url': project_row[4],
-                    'created_date': project_row[5],
-                    'updated_date': project_row[6]
+                    "id": project_row[0],
+                    "project_id": project_row[1],
+                    "project_name": project_row[2],
+                    "project_key": project_row[3],
+                    "project_url": project_row[4],
+                    "created_date": project_row[5],
+                    "updated_date": project_row[6],
                 }
-                
-                logger.info(f"Looking for repository: slug={review.repository_slug}, project_id={project['project_id']}")
+
+                logger.info(
+                    f"Looking for repository: slug={review.repository_slug}, project_id={project['project_id']}"
+                )
                 # Get repository info using raw SQL
                 repo_result = await db.execute(
                     text(f"""
                         SELECT id, repository_id, repository_name, repository_slug, repository_url, created_date, updated_date 
                         FROM repository 
                         WHERE repository_slug = '{review.repository_slug}' 
-                        AND project_id = {project['project_id']}
+                        AND project_id = {project["project_id"]}
                     """)
                 )
                 repo_row = repo_result.fetchone()
                 logger.info(f"Repository query result: {repo_row is not None}")
-                
+
                 if repo_row:
                     repository = {
-                        'id': repo_row[0],
-                        'repository_id': repo_row[1],
-                        'repository_name': repo_row[2],
-                        'repository_slug': repo_row[3],
-                        'repository_url': repo_row[4],
-                        'created_date': repo_row[5],
-                        'updated_date': repo_row[6]
+                        "id": repo_row[0],
+                        "repository_id": repo_row[1],
+                        "repository_name": repo_row[2],
+                        "repository_slug": repo_row[3],
+                        "repository_url": repo_row[4],
+                        "created_date": repo_row[5],
+                        "updated_date": repo_row[6],
                     }
                 else:
                     # Debug: check what repositories exist
-                    debug_result = await db.execute(text("SELECT repository_slug, project_id FROM repository"))
+                    debug_result = await db.execute(
+                        text("SELECT repository_slug, project_id FROM repository")
+                    )
                     all_repos = debug_result.fetchall()
                     logger.warning(f"All repositories in DB: {[(r[0], r[1]) for r in all_repos]}")
-            
+
             # Get PR author info
             pr_user_result = await db.execute(
                 text(f"""
@@ -835,20 +827,20 @@ class ReviewService:
                 """)
             )
             pr_user_row = pr_user_result.fetchone()
-            
+
             if pr_user_row:
                 pr_user = {
-                    'id': pr_user_row[0],
-                    'user_id': pr_user_row[1],
-                    'username': pr_user_row[2],
-                    'display_name': pr_user_row[3],
-                    'email_address': pr_user_row[4],
-                    'active': pr_user_row[5],
-                    'is_reviewer': pr_user_row[6],
-                    'created_date': pr_user_row[7],
-                    'updated_date': pr_user_row[8]
+                    "id": pr_user_row[0],
+                    "user_id": pr_user_row[1],
+                    "username": pr_user_row[2],
+                    "display_name": pr_user_row[3],
+                    "email_address": pr_user_row[4],
+                    "active": pr_user_row[5],
+                    "is_reviewer": pr_user_row[6],
+                    "created_date": pr_user_row[7],
+                    "updated_date": pr_user_row[8],
                 }
-            
+
             # Get reviewer info
             reviewer_result = await db.execute(
                 text(f"""
@@ -858,26 +850,26 @@ class ReviewService:
                 """)
             )
             reviewer_row = reviewer_result.fetchone()
-            
+
             if reviewer_row:
                 reviewer_user = {
-                    'id': reviewer_row[0],
-                    'user_id': reviewer_row[1],
-                    'username': reviewer_row[2],
-                    'display_name': reviewer_row[3],
-                    'email_address': reviewer_row[4],
-                    'active': reviewer_row[5],
-                    'is_reviewer': reviewer_row[6],
-                    'created_date': reviewer_row[7],
-                    'updated_date': reviewer_row[8]
+                    "id": reviewer_row[0],
+                    "user_id": reviewer_row[1],
+                    "username": reviewer_row[2],
+                    "display_name": reviewer_row[3],
+                    "email_address": reviewer_row[4],
+                    "active": reviewer_row[5],
+                    "is_reviewer": reviewer_row[6],
+                    "created_date": reviewer_row[7],
+                    "updated_date": reviewer_row[8],
                 }
-            
+
         except Exception as e:
             logger.warning(f"Failed to load entity information for review: {str(e)}")
-        
+
         # Build enriched response
         enriched_review = review_dict.copy()
-        
+
         # Add project information
         if project:
             enriched_review["project"] = {
@@ -886,12 +878,16 @@ class ReviewService:
                 "project_name": project["project_name"],
                 "project_key": project["project_key"],
                 "project_url": str(project["project_url"]),
-                "created_date": project["created_date"].isoformat() if project["created_date"] else None,
-                "updated_date": project["updated_date"].isoformat() if project["updated_date"] else None,
+                "created_date": project["created_date"].isoformat()
+                if project["created_date"]
+                else None,
+                "updated_date": project["updated_date"].isoformat()
+                if project["updated_date"]
+                else None,
             }
         else:
             enriched_review["project"] = None
-            
+
         # Add repository information
         if repository:
             enriched_review["repository"] = {
@@ -900,12 +896,16 @@ class ReviewService:
                 "repository_name": repository["repository_name"],
                 "repository_slug": repository["repository_slug"],
                 "repository_url": str(repository["repository_url"]),
-                "created_date": repository["created_date"].isoformat() if repository["created_date"] else None,
-                "updated_date": repository["updated_date"].isoformat() if repository["updated_date"] else None,
+                "created_date": repository["created_date"].isoformat()
+                if repository["created_date"]
+                else None,
+                "updated_date": repository["updated_date"].isoformat()
+                if repository["updated_date"]
+                else None,
             }
         else:
             enriched_review["repository"] = None
-            
+
         # Add PR author information
         if pr_user:
             enriched_review["pull_request_user_info"] = {
@@ -916,12 +916,16 @@ class ReviewService:
                 "email_address": pr_user["email_address"],
                 "active": pr_user["active"],
                 "is_reviewer": pr_user["is_reviewer"],
-                "created_date": pr_user["created_date"].isoformat() if pr_user["created_date"] else None,
-                "updated_date": pr_user["updated_date"].isoformat() if pr_user["updated_date"] else None,
+                "created_date": pr_user["created_date"].isoformat()
+                if pr_user["created_date"]
+                else None,
+                "updated_date": pr_user["updated_date"].isoformat()
+                if pr_user["updated_date"]
+                else None,
             }
         else:
             enriched_review["pull_request_user_info"] = None
-            
+
         # Add reviewer information
         if reviewer_user:
             enriched_review["reviewer_info"] = {
@@ -932,14 +936,18 @@ class ReviewService:
                 "email_address": reviewer_user["email_address"],
                 "active": reviewer_user["active"],
                 "is_reviewer": reviewer_user["is_reviewer"],
-                "created_date": reviewer_user["created_date"].isoformat() if reviewer_user["created_date"] else None,
-                "updated_date": reviewer_user["updated_date"].isoformat() if reviewer_user["updated_date"] else None,
+                "created_date": reviewer_user["created_date"].isoformat()
+                if reviewer_user["created_date"]
+                else None,
+                "updated_date": reviewer_user["updated_date"].isoformat()
+                if reviewer_user["updated_date"]
+                else None,
             }
         else:
             enriched_review["reviewer_info"] = None
-        
+
         return enriched_review
-    
+
     async def list_reviews_with_entities(
         self,
         filters: ReviewFilter,
@@ -947,27 +955,27 @@ class ReviewService:
         page: int = 1,
         page_size: int = 20,
         use_cache: bool = False,  # Disable cache for enriched queries
-    ) -> tuple[List[Dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """
         List pull request reviews with full entity information
-        
+
         Args:
             filters: Filter criteria using business keys
             page: Page number (1-indexed)
             page_size: Number of items per page
             db: Database session
             use_cache: Whether to use cache (disabled for enriched queries)
-            
+
         Returns:
             Tuple[List[Dict], int]: List of enriched reviews and total count
         """
         # Get basic reviews from database
         reviews, total = await self.list_reviews(filters, db, page, page_size, use_cache=False)
-        
+
         # Enrich each review with entity information
         enriched_reviews = []
         for review in reviews:
             enriched = await self._enrich_review_with_entities(review, db)
             enriched_reviews.append(enriched)
-        
+
         return enriched_reviews, total

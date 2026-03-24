@@ -1,12 +1,11 @@
 import logging
 import logging.config
-import yaml
-import os
 from pathlib import Path
-from typing import Optional
+
+import yaml
 
 
-def setup_logging(config_path: Optional[str] = None, env_file: Optional[str] = None) -> None:
+def setup_logging(config_path: str | None = None, env_file: str | None = None) -> None:
     """
     Setup logging configuration from YAML file.
 
@@ -55,7 +54,7 @@ def setup_logging(config_path: Optional[str] = None, env_file: Optional[str] = N
     log_dir.mkdir(exist_ok=True)
 
     # Load logging configuration
-    with open(config_path, "r") as f:
+    with Path.open(config_path) as f:
         config = yaml.safe_load(f)
 
     # Apply configuration

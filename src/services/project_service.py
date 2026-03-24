@@ -1,28 +1,29 @@
-from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any, Tuple
-from sqlalchemy import select, and_, func, desc, or_
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+import json
+import logging
+from datetime import UTC, datetime
+from typing import Any
 
-from src.models.project import Project
-from src.models.repository import Repository
-from src.models.pull_request import PullRequestReview
-from src.schemas.project import (
-    ProjectCreate,
-    ProjectUpdate,
-    ProjectResponse,
-    ProjectFilter,
-    ProjectStats,
-)
+from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.core.config import settings
 from src.core.exceptions import (
     ProjectNotFoundException,
     ResourceAlreadyExistsException,
 )
-from src.core.config import settings
-from src.utils.redis import get_redis_client
+from src.models.project import Project
+from src.models.pull_request import PullRequestReview
+from src.models.repository import Repository
+from src.schemas.project import (
+    ProjectCreate,
+    ProjectFilter,
+    ProjectResponse,
+    ProjectStats,
+    ProjectUpdate,
+)
 from src.utils.metrics import MetricsCollector
-import json
-import logging
+from src.utils.redis import get_redis_client
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ logger = logging.getLogger(__name__)
 class ProjectService:
     """Service for managing projects"""
 
-    def __init__(self, metrics_collector: Optional[MetricsCollector] = None):
+    def __init__(self, metrics_collector: MetricsCollector | None = None):
         """Initialize the project service"""
         self.redis_client = get_redis_client()
         self.metrics = metrics_collector or MetricsCollector()
@@ -43,12 +44,12 @@ class ProjectService:
         """Generate cache key for a project key"""
         return f"project:key:{project_key}"
 
-    def _get_list_cache_key(self, filters: Dict[str, Any], page: int, page_size: int) -> str:
+    def _get_list_cache_key(self, filters: dict[str, Any], page: int, page_size: int) -> str:
         """Generate cache key for project list"""
         filter_str = ":".join(f"{k}={v}" for k, v in sorted(filters.items()) if v is not None)
         return f"projects:list:{filter_str}:{page}:{page_size}"
 
-    async def _get_project_from_cache(self, project_id: int) -> Optional[Dict[str, Any]]:
+    async def _get_project_from_cache(self, project_id: int) -> dict[str, Any] | None:
         """Try to get project from cache"""
         try:
             cached = await self.redis_client.get(self._get_cache_key(project_id))
@@ -58,7 +59,7 @@ class ProjectService:
             logger.warning(f"Failed to get project from cache: {str(e)}")
         return None
 
-    async def _set_project_in_cache(self, project_id: int, project_data: Dict[str, Any]) -> None:
+    async def _set_project_in_cache(self, project_id: int, project_data: dict[str, Any]) -> None:
         """Store project in cache"""
         try:
             await self.redis_client.setex(
@@ -151,7 +152,7 @@ class ProjectService:
 
     async def upsert_project(
         self, project_data: ProjectCreate, db: AsyncSession
-    ) -> Tuple[Project, bool]:
+    ) -> tuple[Project, bool]:
         """
         Upsert a project - create if not exists, update if exists
 
@@ -195,7 +196,7 @@ class ProjectService:
 
     async def get_project_by_id(
         self, project_id: int, db: AsyncSession, use_cache: bool = True
-    ) -> Optional[Project]:
+    ) -> Project | None:
         """
         Get a project by ID
 
@@ -226,7 +227,7 @@ class ProjectService:
 
     async def get_project_by_project_id(
         self, project_id: str, db: AsyncSession, use_cache: bool = True
-    ) -> Optional[Project]:
+    ) -> Project | None:
         """
         Get a project by project identifier
 
@@ -250,7 +251,7 @@ class ProjectService:
 
     async def get_project_by_key(
         self, project_key: str, db: AsyncSession, use_cache: bool = True
-    ) -> Optional[Project]:
+    ) -> Project | None:
         """
         Get a project by project key
 
@@ -294,11 +295,11 @@ class ProjectService:
     async def list_projects(
         self,
         db: AsyncSession,
-        filters: Optional[ProjectFilter] = None,
+        filters: ProjectFilter | None = None,
         page: int = 1,
         page_size: int = 20,
         use_cache: bool = True,
-    ) -> Tuple[List[Project], int]:
+    ) -> tuple[list[Project], int]:
         """
         List projects with filtering and pagination
 
@@ -326,7 +327,7 @@ class ProjectService:
                     data = json.loads(cached)
                     # Deserialize cached projects
                     projects = [Project.from_dict(p) for p in data["projects"]]
-                    logger.debug(f"Retrieved project list from cache")
+                    logger.debug("Retrieved project list from cache")
                     return projects, data["total"]
             except Exception as e:
                 logger.warning(f"Failed to get project list from cache: {str(e)}")
@@ -440,7 +441,7 @@ class ProjectService:
         return True
 
     async def get_project_statistics(
-        self, db: AsyncSession, project_id: Optional[int] = None, use_cache: bool = True
+        self, db: AsyncSession, project_id: int | None = None, use_cache: bool = True
     ) -> ProjectStats:
         """
         Get project statistics
@@ -513,7 +514,7 @@ class ProjectService:
 
         return stats
 
-    async def get_active_projects(self, db: AsyncSession, limit: int = 100) -> List[Project]:
+    async def get_active_projects(self, db: AsyncSession, limit: int = 100) -> list[Project]:
         """
         Get active projects
 
@@ -532,7 +533,7 @@ class ProjectService:
         )
         return list(result.scalars().all())
 
-    async def get_project_with_stats(self, project_id: int, db: AsyncSession) -> Dict[str, Any]:
+    async def get_project_with_stats(self, project_id: int, db: AsyncSession) -> dict[str, Any]:
         """
         Get a project with its statistics
 
@@ -650,7 +651,7 @@ class ProjectService:
 
         return project
 
-    async def get_project_by_name(self, project_name: str, db: AsyncSession) -> Optional[Project]:
+    async def get_project_by_name(self, project_name: str, db: AsyncSession) -> Project | None:
         """
         Get a project by name (partial match)
 
@@ -672,7 +673,7 @@ class ProjectService:
         search_term: str,
         page: int = 1,
         page_size: int = 20,
-    ) -> Tuple[List[Project], int]:
+    ) -> tuple[list[Project], int]:
         """
         Search projects by name, ID, or key
 
@@ -839,7 +840,7 @@ class ProjectService:
 
     async def get_projects_with_most_reviews(
         self, db: AsyncSession, limit: int = 10, days: int = 30
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get projects with the most reviews in a given time period
 
@@ -852,7 +853,7 @@ class ProjectService:
             List[Dict[str, Any]]: List of projects with review counts
         """
         # Calculate date threshold
-        date_threshold = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        date_threshold = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         date_threshold = (
             date_threshold.replace(day=date_threshold.day - days)
             if date_threshold.day > days
@@ -890,7 +891,7 @@ class ProjectService:
 
     async def get_projects_with_most_active_reviewers(
         self, db: AsyncSession, limit: int = 10, days: int = 30
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get projects with the most active reviewers in a given time period
 
@@ -903,7 +904,7 @@ class ProjectService:
             List[Dict[str, Any]]: List of projects with active reviewer counts
         """
         # Calculate date threshold
-        date_threshold = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        date_threshold = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         date_threshold = (
             date_threshold.replace(day=date_threshold.day - days)
             if date_threshold.day > days
@@ -942,7 +943,7 @@ class ProjectService:
         return projects
 
     async def invalidate_project_cache(
-        self, project_id: int, project_key: Optional[str] = None
+        self, project_id: int, project_key: str | None = None
     ) -> None:
         """
         Invalidate cache for a specific project

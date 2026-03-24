@@ -1,10 +1,17 @@
+from __future__ import annotations
+
 from datetime import datetime
-from typing import List, Optional
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String
-from sqlalchemy.ext.asyncio import AsyncAttrs
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from typing import TYPE_CHECKING
+
+from sqlalchemy import Boolean, DateTime, Index, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+from src.models.repository import Repository
+
+
+if TYPE_CHECKING:
+    from src.models.pull_request import PullRequestReview
 
 
 class Project(Base):
@@ -37,11 +44,11 @@ class Project(Base):
     )
 
     # Relationships
-    repositories: Mapped[List["Repository"]] = relationship(
+    repositories: Mapped[list[Repository]] = relationship(
         "Repository", back_populates="project", cascade="all, delete-orphan"
     )
 
-    pull_request_reviews: Mapped[List["PullRequestReview"]] = relationship(
+    pull_request_reviews: Mapped[list[PullRequestReview]] = relationship(
         "PullRequestReview", back_populates="project", cascade="all, delete-orphan"
     )
 
@@ -68,7 +75,7 @@ class Project(Base):
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Project":
+    def from_dict(cls, data: dict) -> Project:
         """Create project instance from dictionary"""
         return cls(
             project_id=data.get("project_id"),

@@ -1,25 +1,25 @@
-from datetime import datetime
-from typing import Annotated, List, Optional
-from fastapi import APIRouter, Depends, Query, status, HTTPException
-from fastapi.responses import JSONResponse
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
+from src.core.exceptions import (
+    InvalidCredentialsException,
+    UserAlreadyExistsException,
+    UserNotFoundException,
+)
 from src.schemas.user import (
     UserCreate,
-    UserResponse,
-    UserUpdate,
     UserListResponse,
-    UserStats,
     UserLogin,
+    UserResponse,
+    UserStats,
+    UserUpdate,
 )
 from src.services.user_service import UserService
-from src.core.exceptions import (
-    UserNotFoundException,
-    UserAlreadyExistsException,
-    InvalidCredentialsException,
-)
-from src.utils.metrics import MetricsCollector, OperationTimer, metrics
+from src.utils.metrics import metrics
+
 
 router = APIRouter()
 
@@ -60,7 +60,7 @@ async def create_user(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(error_type="INTERNAL_SERVER_ERROR", endpoint="POST /api/v1/users")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -72,9 +72,9 @@ async def create_user(
 async def list_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
-    active: Optional[bool] = Query(None, description="Filter by active status"),
-    is_reviewer: Optional[bool] = Query(None, description="Filter by reviewer status"),
-    username: Optional[str] = Query(None, description="Filter by username (partial match)"),
+    active: bool | None = Query(None, description="Filter by active status"),
+    is_reviewer: bool | None = Query(None, description="Filter by reviewer status"),
+    username: str | None = Query(None, description="Filter by username (partial match)"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> UserListResponse:
@@ -109,7 +109,7 @@ async def list_users(
             page=page,
             page_size=page_size,
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/users")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -142,7 +142,7 @@ async def get_user_statistics(
         metrics.set_reviewers_active(stats.active_reviewers)
 
         return stats
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/users/statistics"
         )
@@ -178,7 +178,7 @@ async def get_active_users(
             page=1,
             page_size=limit,
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/users/active"
         )
@@ -214,7 +214,7 @@ async def get_reviewers(
             page=1,
             page_size=limit,
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/users/reviewers"
         )
@@ -261,7 +261,7 @@ async def login(
         raise HTTPException(
             status_code=e.status_code, detail={"error": e.code, "message": e.message}
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="POST /api/v1/users/login"
         )
@@ -302,7 +302,7 @@ async def get_user(
         return UserResponse(**user.to_dict())
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/users/{user_id}"
         )
@@ -348,7 +348,7 @@ async def get_user_by_username(
         return UserResponse(**user.to_dict())
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/users/username/{username}"
         )
@@ -395,7 +395,7 @@ async def update_user(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"PUT /api/v1/users/{user_id}"
         )
@@ -436,7 +436,7 @@ async def toggle_reviewer_status(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR",
             endpoint=f"PATCH /api/v1/users/{user_id}/toggle-reviewer",
@@ -481,7 +481,7 @@ async def activate_user(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"PATCH /api/v1/users/{user_id}/activate"
         )
@@ -522,7 +522,7 @@ async def deactivate_user(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"PATCH /api/v1/users/{user_id}/deactivate"
         )
@@ -564,7 +564,7 @@ async def delete_user(
             )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"DELETE /api/v1/users/{user_id}"
         )

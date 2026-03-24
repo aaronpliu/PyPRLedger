@@ -1,5 +1,6 @@
 import importlib.metadata
 
+
 # Single source of truth: version is managed in pyproject.toml
 try:
     __version__ = importlib.metadata.version("pyledger")
@@ -19,7 +20,7 @@ def __getattr__(name):
 
         return app
     elif name in ("settings", "get_settings"):
-        from src.core.config import settings, get_settings
+        from src.core.config import get_settings, settings
 
         return locals()[name]
     elif name == "Base":
@@ -46,17 +47,17 @@ def __getattr__(name):
     ):
         from src.core.exceptions import (
             AppException,
-            ErrorCode,
             BadRequestException,
-            ValidationException,
-            UnauthorizedException,
-            ForbiddenException,
-            NotFoundException,
-            ResourceAlreadyExistsException,
-            InternalServerException,
-            DatabaseException,
             CacheException,
+            DatabaseException,
+            ErrorCode,
+            ForbiddenException,
+            InternalServerException,
+            NotFoundException,
             RateLimitException,
+            ResourceAlreadyExistsException,
+            UnauthorizedException,
+            ValidationException,
         )
 
         return locals()[name]
