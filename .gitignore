@@ -127,3 +127,7 @@ grafana-data/
 nginx/ssl/
 *.db
 *.sql
+
+# Ignore all files in logs/ directory but keep the directory
+logs/*
+!logs/.gitkeep
