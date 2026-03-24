@@ -37,38 +37,40 @@ class ReviewService:
         self.redis_client = get_redis_client()
         self.metrics = metrics_collector or MetricsCollector()
 
-    def _get_cache_key(self, review_id: str) -> str:
-        """Generate cache key for a review"""
-        return f"review:{review_id}"
+    def _get_cache_key(self, pull_request_id: str) -> str:
+        """Generate cache key for review"""
+        return f"review:{pull_request_id}"
 
     def _get_list_cache_key(self, filters: dict[str, Any], page: int, page_size: int) -> str:
         """Generate cache key for review list"""
         filter_str = ":".join(f"{k}={v}" for k, v in sorted(filters.items()) if v is not None)
         return f"reviews:list:{filter_str}:{page}:{page_size}"
 
-    async def _get_review_from_cache(self, review_id: str) -> dict[str, Any] | None:
+    async def _get_review_from_cache(self, pull_request_id: str) -> dict[str, Any] | None:
         """Try to get review from cache"""
         try:
-            cached = await self.redis_client.get(self._get_cache_key(review_id))
+            cached = await self.redis_client.get(self._get_cache_key(pull_request_id))
             if cached:
                 return json.loads(cached)
         except Exception as e:
             logger.warning(f"Failed to get review from cache: {str(e)}")
         return None
 
-    async def _set_review_in_cache(self, review_id: str, review_data: dict[str, Any]) -> None:
+    async def _set_review_in_cache(self, pull_request_id: str, review_data: dict[str, Any]) -> None:
         """Store review in cache"""
         try:
             await self.redis_client.setex(
-                self._get_cache_key(review_id), settings.CACHE_TTL_REVIEWS, json.dumps(review_data)
+                self._get_cache_key(pull_request_id),
+                settings.CACHE_TTL_REVIEWS,
+                json.dumps(review_data),
             )
         except Exception as e:
             logger.warning(f"Failed to set review in cache: {str(e)}")
 
-    async def _invalidate_review_cache(self, review_id: str) -> None:
+    async def _invalidate_review_cache(self, pull_request_id: str) -> None:
         """Invalidate review cache"""
         try:
-            await self.redis_client.delete(self._get_cache_key(review_id))
+            await self.redis_client.delete(self._get_cache_key(pull_request_id))
         except Exception as e:
             logger.warning(f"Failed to invalidate review cache: {str(e)}")
 
@@ -129,7 +131,7 @@ class ReviewService:
         )
         existing_review = existing_review_result.scalar_one_or_none()
         if existing_review:
-            raise ReviewAlreadyExistsException(review_id=review_data.pull_request_id)
+            raise ReviewAlreadyExistsException(pull_request_id=review_data.pull_request_id)
 
         # Determine review iteration number by checking previous reviews for same file by same reviewer
         iteration_query = select(func.max(PullRequestReview.review_iteration)).where(
@@ -343,13 +345,13 @@ class ReviewService:
             return new_review_response, True
 
     async def get_review(
-        self, review_id: str, db: AsyncSession, use_cache: bool = True
+        self, pull_request_id: str, db: AsyncSession, use_cache: bool = True
     ) -> PullRequestReview | None:
         """
         Get a pull request review by ID
 
         Args:
-            review_id: The pull request ID
+            pull_request_id: The pull request ID
             db: Database session
             use_cache: Whether to use cache
 
@@ -361,9 +363,9 @@ class ReviewService:
         # Try cache first
         if use_cache:
             try:
-                cached = await self._get_review_from_cache(review_id)
+                cached = await self._get_review_from_cache(pull_request_id)
                 if cached:
-                    logger.debug(f"Retrieved review from cache: {review_id}")
+                    logger.debug(f"Retrieved review from cache: {pull_request_id}")
                     # Return the cached dict directly, don't convert to ORM model
                     # This preserves all fields including id, created_date, updated_date
                     return cached
@@ -372,28 +374,28 @@ class ReviewService:
 
         # Query database - get the latest review for this pull_request_id
         try:
-            logger.info(f"Querying database for review: {review_id}")
+            logger.info(f"Querying database for review: {pull_request_id}")
 
             # Simple query without eager loading to avoid JOIN issues
             result = await db.execute(
                 select(PullRequestReview).where(
-                    PullRequestReview.pull_request_id == review_id,
+                    PullRequestReview.pull_request_id == pull_request_id,
                     PullRequestReview.is_latest_review == True,
                 )
             )
             review = result.scalar_one_or_none()
 
             if review:
-                logger.info(f"Found review: {review_id}, iteration={review.review_iteration}")
+                logger.info(f"Found review: {pull_request_id}, iteration={review.review_iteration}")
                 # Cache the result
-                await self._set_review_in_cache(review_id, review.to_dict())
+                await self._set_review_in_cache(pull_request_id, review.to_dict())
                 return review
 
             # Fallback: if no latest review found, check for any reviews
-            logger.warning(f"No latest review found for {review_id}, checking fallback...")
+            logger.warning(f"No latest review found for {pull_request_id}, checking fallback...")
             fallback_result = await db.execute(
                 select(PullRequestReview)
-                .where(PullRequestReview.pull_request_id == review_id)
+                .where(PullRequestReview.pull_request_id == pull_request_id)
                 .order_by(PullRequestReview.review_iteration.desc())
                 .limit(1)
             )
@@ -401,14 +403,16 @@ class ReviewService:
 
             if review:
                 logger.info(
-                    f"Fallback: found older review: {review_id}, iteration={review.review_iteration}"
+                    f"Fallback: found older review: {pull_request_id}, iteration={review.review_iteration}"
                 )
 
             return review
 
         except Exception as e:
             error_traceback = traceback.format_exc()
-            logger.error(f"Database query failed for {review_id}: {str(e)}\n{error_traceback}")
+            logger.error(
+                f"Database query failed for {pull_request_id}: {str(e)}\n{error_traceback}"
+            )
             raise
 
     async def list_reviews(
@@ -514,13 +518,13 @@ class ReviewService:
         return list(reviews), total
 
     async def update_review(
-        self, review_id: str, update_data: ReviewUpdate, db: AsyncSession
+        self, pull_request_id: str, update_data: ReviewUpdate, db: AsyncSession
     ) -> PullRequestReview:
         """
         Update a pull request review
 
         Args:
-            review_id: The pull request ID
+            pull_request_id: The pull request ID
             update_data: The update data
             db: Database session
 
@@ -531,9 +535,9 @@ class ReviewService:
             ReviewNotFoundException: If the review doesn't exist
             ReviewStatusException: If the status transition is invalid
         """
-        review = await self.get_review(review_id, db, use_cache=False)
+        review = await self.get_review(pull_request_id, db, use_cache=False)
         if not review:
-            raise ReviewNotFoundException(review_id=review_id)
+            raise ReviewNotFoundException(pull_request_id=pull_request_id)
 
         # Check status transition if status is being updated
         if (
@@ -550,34 +554,34 @@ class ReviewService:
         review.update(update_data.model_dump(exclude_unset=True))
 
         # Invalidate cache
-        await self._invalidate_review_cache(review_id)
+        await self._invalidate_review_cache(pull_request_id)
         await self._invalidate_list_cache()
 
-        logger.info(f"Updated review: {review_id}")
+        logger.info(f"Updated review: {pull_request_id}")
         return review
 
-    async def delete_review(self, review_id: str, db: AsyncSession) -> bool:
+    async def delete_review(self, pull_request_id: str, db: AsyncSession) -> bool:
         """
         Delete a pull request review
 
         Args:
-            review_id: The pull request ID
+            pull_request_id: The pull request ID
             db: Database session
 
         Returns:
             bool: True if deleted, False if not found
         """
-        review = await self.get_review(review_id, db, use_cache=False)
+        review = await self.get_review(pull_request_id, db, use_cache=False)
         if not review:
             return False
 
         await db.delete(review)
 
         # Invalidate cache
-        await self._invalidate_review_cache(review_id)
+        await self._invalidate_review_cache(pull_request_id)
         await self._invalidate_list_cache()
 
-        logger.info(f"Deleted review: {review_id}")
+        logger.info(f"Deleted review: {pull_request_id}")
         return True
 
     async def get_review_statistics(
@@ -747,13 +751,13 @@ class ReviewService:
         return await self.list_reviews(filters, db, page, page_size)
 
     async def update_review_status(
-        self, review_id: str, new_status: str, db: AsyncSession
+        self, pull_request_id: str, new_status: str, db: AsyncSession
     ) -> PullRequestReview:
         """
         Update the status of a pull request review
 
         Args:
-            review_id: The pull request ID
+            pull_request_id: The pull request ID
             new_status: The new status (open, merged, closed, draft)
             db: Database session
 
@@ -764,8 +768,25 @@ class ReviewService:
             ReviewNotFoundException: If the review doesn't exist
             ReviewStatusException: If the status transition is invalid
         """
-        update_data = ReviewUpdate(pull_request_status=new_status)
-        return await self.update_review(review_id, update_data, db)
+        review = await self.get_review(pull_request_id, db, use_cache=False)
+        if not review:
+            raise ReviewNotFoundException(pull_request_id=pull_request_id)
+
+        # Check status transition
+        if not review.can_transition_to(new_status):
+            raise ReviewStatusException(
+                current_status=review.pull_request_status,
+                target_status=new_status,
+            )
+
+        # Update status
+        review.pull_request_status = new_status
+
+        # Invalidate cache
+        await self._invalidate_review_cache(pull_request_id)
+        await self._invalidate_list_cache()
+
+        return review
 
     async def _enrich_review_with_entities(
         self, review: PullRequestReview, db: AsyncSession

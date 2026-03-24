@@ -225,9 +225,9 @@ async def get_review_statistics(
         )
 
 
-@router.get("/{review_id}", response_model=ReviewResponse)
+@router.get("/{pull_request_id}", response_model=ReviewResponse)
 async def get_review(
-    review_id: str,
+    pull_request_id: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
 ) -> ReviewResponse:
@@ -235,7 +235,7 @@ async def get_review(
     Get a pull request review by ID
 
     Args:
-        review_id: The pull request ID
+        pull_request_id: The pull request ID
         db: Database session
         review_service: Review service instance
 
@@ -246,14 +246,17 @@ async def get_review(
         ReviewNotFoundException: If the review doesn't exist
     """
     try:
-        review = await review_service.get_review(review_id, db)
+        review = await review_service.get_review(pull_request_id, db)
         if not review:
             metrics.increment_error(
-                error_type="NOT_FOUND", endpoint=f"GET /api/v1/reviews/{review_id}"
+                error_type="NOT_FOUND", endpoint=f"GET /api/v1/reviews/{pull_request_id}"
             )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail={"error": "NOT_FOUND", "message": f"Review with ID {review_id} not found"},
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": f"Review with ID {pull_request_id} not found",
+                },
             )
         # Handle both ORM object and dict from cache
         if hasattr(review, "to_dict"):
@@ -273,9 +276,9 @@ async def get_review(
         import traceback
 
         error_traceback = traceback.format_exc()
-        logger.error(f"Failed to get review {review_id}: {str(e)}\n{error_traceback}")
+        logger.error(f"Failed to get review {pull_request_id}: {str(e)}\n{error_traceback}")
         metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/reviews/{review_id}"
+            error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/reviews/{pull_request_id}"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -283,9 +286,9 @@ async def get_review(
         )
 
 
-@router.put("/{review_id}", response_model=ReviewResponse)
+@router.put("/{pull_request_id}", response_model=ReviewResponse)
 async def update_review(
-    review_id: str,
+    pull_request_id: str,
     review_update: ReviewUpdate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
@@ -294,7 +297,7 @@ async def update_review(
     Update a pull request review
 
     Args:
-        review_id: The pull request ID
+        pull_request_id: The pull request ID
         review_update: The update data
         db: Database session
         review_service: Review service instance
@@ -307,17 +310,19 @@ async def update_review(
         ReviewStatusException: If the status transition is invalid
     """
     try:
-        review = await review_service.update_review(review_id, review_update, db)
+        review = await review_service.update_review(pull_request_id, review_update, db)
         return ReviewResponse(**review.to_dict())
     except (ReviewNotFoundException, ReviewStatusException) as e:
-        metrics.increment_error(error_type=e.code, endpoint=f"PUT /api/v1/reviews/{review_id}")
+        metrics.increment_error(
+            error_type=e.code, endpoint=f"PUT /api/v1/reviews/{pull_request_id}"
+        )
         raise HTTPException(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
     except Exception:
         metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint=f"PUT /api/v1/reviews/{review_id}"
+            error_type="INTERNAL_SERVER_ERROR", endpoint=f"PUT /api/v1/reviews/{pull_request_id}"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -325,9 +330,9 @@ async def update_review(
         )
 
 
-@router.patch("/{review_id}/status", response_model=ReviewResponse)
+@router.patch("/{pull_request_id}/status", response_model=ReviewResponse)
 async def update_review_status(
-    review_id: str,
+    pull_request_id: str,
     new_status: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
@@ -336,7 +341,7 @@ async def update_review_status(
     Update the status of a pull request review
 
     Args:
-        review_id: The pull request ID
+        pull_request_id: The pull request ID
         new_status: The new status (open, merged, closed, draft)
         db: Database session
         review_service: Review service instance
@@ -349,12 +354,12 @@ async def update_review_status(
         ReviewStatusException: If the status transition is invalid
     """
     try:
-        review = await review_service.update_review_status(review_id, new_status, db)
-        metrics.increment_pull_request(project=review.project_id, status=new_status)
+        review = await review_service.update_review_status(pull_request_id, new_status, db)
+        metrics.increment_pull_request(project=review.project_key, status=new_status)
         return ReviewResponse(**review.to_dict())
     except (ReviewNotFoundException, ReviewStatusException) as e:
         metrics.increment_error(
-            error_type=e.code, endpoint=f"PATCH /api/v1/reviews/{review_id}/status"
+            error_type=e.code, endpoint=f"PATCH /api/v1/reviews/{pull_request_id}/status"
         )
         raise HTTPException(
             status_code=e.status_code,
@@ -362,7 +367,8 @@ async def update_review_status(
         )
     except Exception:
         metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint=f"PATCH /api/v1/reviews/{review_id}/status"
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint=f"PATCH /api/v1/reviews/{pull_request_id}/status",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -370,9 +376,9 @@ async def update_review_status(
         )
 
 
-@router.delete("/{review_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{pull_request_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_review(
-    review_id: str,
+    pull_request_id: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
 ) -> None:
@@ -380,7 +386,7 @@ async def delete_review(
     Delete a pull request review
 
     Args:
-        review_id: The pull request ID
+        pull_request_id: The pull request ID
         db: Database session
         review_service: Review service instance
 
@@ -391,20 +397,23 @@ async def delete_review(
         ReviewNotFoundException: If the review doesn't exist
     """
     try:
-        deleted = await review_service.delete_review(review_id, db)
+        deleted = await review_service.delete_review(pull_request_id, db)
         if not deleted:
             metrics.increment_error(
-                error_type="NOT_FOUND", endpoint=f"DELETE /api/v1/reviews/{review_id}"
+                error_type="NOT_FOUND", endpoint=f"DELETE /api/v1/reviews/{pull_request_id}"
             )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail={"error": "NOT_FOUND", "message": f"Review with ID {review_id} not found"},
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": f"Review with ID {pull_request_id} not found",
+                },
             )
     except HTTPException:
         raise
     except Exception:
         metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint=f"DELETE /api/v1/reviews/{review_id}"
+            error_type="INTERNAL_SERVER_ERROR", endpoint=f"DELETE /api/v1/reviews/{pull_request_id}"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

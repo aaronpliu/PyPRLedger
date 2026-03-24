@@ -206,18 +206,20 @@ class RateLimitException(AppException):
 class ReviewNotFoundException(NotFoundException):
     """Review not found"""
 
-    def __init__(self, review_id: str):
+    def __init__(self, pull_request_id: str):
         super().__init__(
-            message=f"Review with ID {review_id} not found", detail={"review_id": review_id}
+            message=f"Review with ID {pull_request_id} not found",
+            detail={"pull_request_id": pull_request_id},
         )
 
 
 class ReviewAlreadyExistsException(ResourceAlreadyExistsException):
     """Review already exists"""
 
-    def __init__(self, review_id: str):
+    def __init__(self, pull_request_id: str):
         super().__init__(
-            message=f"Review with ID {review_id} already exists", detail={"review_id": review_id}
+            message=f"Review with ID {pull_request_id} already exists",
+            detail={"pull_request_id": pull_request_id},
         )
 
 
