@@ -1,13 +1,21 @@
-import importlib.metadata
+import tomllib
+from pathlib import Path
 
 
 # Single source of truth: version is managed in pyproject.toml
-try:
-    __version__ = importlib.metadata.version("pyledger")
-except importlib.metadata.PackageNotFoundError:
-    # Fallback for development environments
-    __version__ = "0.1.0-dev"
+def _get_version():
+    """Get version from pyproject.toml file"""
+    try:
+        pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+        with Path.open(pyproject_path, "rb") as f:
+            pyproject_data = tomllib.load(f)
+            return pyproject_data.get("project", {}).get("version", "1.0.0-dev")
+    except Exception:
+        # Fallback for any unexpected errors
+        return "1.0.0-dev"
 
+
+__version__ = _get_version()
 __author__ = "Aaron P LIU"
 __description__ = "FastAPI-based Pull Request Code Review Result Storage System with MySQL, Redis, and Prometheus integration"
 
