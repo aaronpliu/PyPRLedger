@@ -691,13 +691,13 @@ class ReviewService:
         return stats
 
     async def get_reviews_by_reviewer(
-        self, reviewer_id: int, db: AsyncSession, page: int = 1, page_size: int = 20
+        self, reviewer_username: str, db: AsyncSession, page: int = 1, page_size: int = 20
     ) -> tuple[list[PullRequestReview], int]:
         """
         Get reviews by reviewer
 
         Args:
-            reviewer_id: The reviewer ID
+            reviewer_username: The reviewer username
             page: Page number (1-indexed)
             page_size: Number of items per page
             db: Database session
@@ -705,17 +705,17 @@ class ReviewService:
         Returns:
             tuple[List[PullRequestReview], int]: List of reviews and total count
         """
-        filters = ReviewFilter(reviewer_id=reviewer_id)
+        filters = ReviewFilter(reviewer=reviewer_username)
         return await self.list_reviews(filters, db, page, page_size)
 
     async def get_reviews_by_project(
-        self, project_id: int, db: AsyncSession, page: int = 1, page_size: int = 20
+        self, project_key: str, db: AsyncSession, page: int = 1, page_size: int = 20
     ) -> tuple[list[PullRequestReview], int]:
         """
         Get reviews by project
 
         Args:
-            project_id: The project ID
+            project_key: The project key
             page: Page number (1-indexed)
             page_size: Number of items per page
             db: Database session
@@ -723,7 +723,7 @@ class ReviewService:
         Returns:
             tuple[List[PullRequestReview], int]: List of reviews and total count
         """
-        filters = ReviewFilter(project_id=project_id)
+        filters = ReviewFilter(project_key=project_key)
         return await self.list_reviews(filters, db, page, page_size)
 
     async def get_reviews_by_status(

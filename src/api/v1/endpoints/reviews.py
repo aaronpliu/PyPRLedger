@@ -1,4 +1,5 @@
 import logging
+import traceback
 from datetime import datetime
 from typing import Annotated
 
@@ -421,9 +422,9 @@ async def delete_review(
         )
 
 
-@router.get("/project/{project_id}", response_model=ReviewListResponse)
+@router.get("/project/{project_key}", response_model=ReviewListResponse)
 async def get_reviews_by_project(
-    project_id: int,
+    project_key: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
@@ -433,7 +434,7 @@ async def get_reviews_by_project(
     Get pull request reviews by project
 
     Args:
-        project_id: The project ID
+        project_key: The project key
         page: Page number (1-indexed)
         page_size: Number of items per page
         db: Database session
@@ -442,20 +443,36 @@ async def get_reviews_by_project(
     Returns:
         ReviewListResponse: List of reviews with pagination info
     """
+    import traceback
+
     try:
         reviews, total = await review_service.get_reviews_by_project(
-            project_id, page, page_size, db
+            project_key, db, page, page_size
         )
 
+        # Handle both ORM objects and dicts
+        items = []
+        for r in reviews:
+            if hasattr(r, "to_dict"):
+                review_data = r.to_dict()
+            elif isinstance(r, dict):
+                review_data = r
+            else:
+                review_data = dict(r)
+            items.append(ReviewResponse(**review_data))
+
         return ReviewListResponse(
-            items=[ReviewResponse(**r.to_dict()) for r in reviews],
+            items=items,
             total=total,
             page=page,
             page_size=page_size,
         )
-    except Exception:
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to get reviews by project {project_key}: {str(e)}\n{error_traceback}")
         metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/reviews/project/{project_id}"
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint=f"GET /api/v1/reviews/project/{project_key}",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -466,9 +483,9 @@ async def get_reviews_by_project(
         )
 
 
-@router.get("/reviewer/{reviewer_id}", response_model=ReviewListResponse)
+@router.get("/reviewer/{reviewer_username}", response_model=ReviewListResponse)
 async def get_reviews_by_reviewer(
-    reviewer_id: int,
+    reviewer_username: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
@@ -478,7 +495,7 @@ async def get_reviews_by_reviewer(
     Get pull request reviews by reviewer
 
     Args:
-        reviewer_id: The reviewer ID
+        reviewer_username: The reviewer username
         page: Page number (1-indexed)
         page_size: Number of items per page
         db: Database session
@@ -489,19 +506,34 @@ async def get_reviews_by_reviewer(
     """
     try:
         reviews, total = await review_service.get_reviews_by_reviewer(
-            reviewer_id, page, page_size, db
+            reviewer_username, db, page, page_size
         )
 
+        # Handle both ORM objects and dicts
+        items = []
+        for r in reviews:
+            if hasattr(r, "to_dict"):
+                review_data = r.to_dict()
+            elif isinstance(r, dict):
+                review_data = r
+            else:
+                review_data = dict(r)
+            items.append(ReviewResponse(**review_data))
+
         return ReviewListResponse(
-            items=[ReviewResponse(**r.to_dict()) for r in reviews],
+            items=items,
             total=total,
             page=page,
             page_size=page_size,
         )
-    except Exception:
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(
+            f"Failed to get reviews by reviewer {reviewer_username}: {str(e)}\n{error_traceback}"
+        )
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR",
-            endpoint=f"GET /api/v1/reviews/reviewer/{reviewer_id}",
+            endpoint=f"GET /api/v1/reviews/reviewer/{reviewer_username}",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
