@@ -5,6 +5,54 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-25
+
+### Added
+- **Enhanced Review Score Update Endpoint** - New composite key-based score update functionality
+  - New `PUT /api/v1/reviews/score` endpoint for precise review score updates
+  - Uses complete business key combination for record identification:
+    - `project_key` - Project identifier
+    - `repository_slug` - Repository slug  
+    - `pull_request_id` - Pull request ID
+    - `source_filename` - Source filename being reviewed (mandatory)
+    - `reviewer` - Reviewer username
+  - In-place score update without creating new iterations
+  - Prevents cross-project and cross-repository data collisions
+  - All parameters mandatory to ensure precise record targeting
+
+- **Version Management Improvements**
+  - Direct version reading from `pyproject.toml` using Python's built-in `tomllib`
+  - No longer requires package installation (`pip install -e .`) for version detection
+  - Works seamlessly in pure development mode with `uvicorn src.main:app --reload`
+  - Single source of truth maintained in `pyproject.toml`
+  - Automatic fallback to `1.0.0-dev` if file read fails
+
+### Changed
+- **SQLAlchemy Boolean Query Syntax** - Updated all boolean column comparisons
+  - Changed from `column == True` to `column.is_(True)` across all service methods
+  - Ensures proper SQL generation for boolean identity checks
+  - Improves compatibility with nullable boolean columns
+  - Applied to all `is_latest_review` queries in review service
+  - Fixed "Review not found" errors caused by incorrect boolean comparison
+
+- **API Route Ordering** - Reorganized review endpoints for correct route matching
+  - Moved `/score` endpoint before parameterized routes like `/{pull_request_id}`
+  - Prevents FastAPI from treating "score" as a path parameter value
+  - Ensures deterministic route resolution
+
+- **Review Service Method Signature** - Made `source_filename` mandatory
+  - Changed from `source_filename: str | None` to `source_filename: str`
+  - Enforces complete composite key lookup for all score updates
+  - Aligns with database unique constraint requirements
+
+### Technical Details
+- **Composite Key Pattern**: Full business key ensures data integrity across multi-tenant deployments
+- **Performance**: Single UPDATE query, no INSERT operations or iteration increments
+- **Type Safety**: Proper SQLAlchemy `.is_()` usage for boolean comparisons
+- **Development Workflow**: Simplified version management without package installation overhead
+
+---
+
 ## [Unreleased]
 
 ### Changed
@@ -82,6 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
+| 1.1.0 | 2026-03-25 | Enhanced score update endpoint, version management improvements, SQLAlchemy boolean query fixes |
 | Unreleased | 2026-03-21 | Logging system, critical bug fixes, Pydantic v2 migration |
 | 1.0.1 | 2026-03-21 | Logging system, critical bug fixes, Pydantic v2 migration |
 | 1.0.0 | 2026-03-21 | Initial release with core functionality |
