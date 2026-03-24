@@ -126,7 +126,7 @@ class ReviewService:
                 PullRequestReview.repository_slug == repository.repository_slug,
                 PullRequestReview.source_filename == review_data.source_filename,
                 PullRequestReview.reviewer == reviewer.username,
-                PullRequestReview.is_latest_review == True,
+                PullRequestReview.is_latest_review.is_(True),
             )
         )
         existing_review = existing_review_result.scalar_one_or_none()
@@ -155,7 +155,7 @@ class ReviewService:
                     PullRequestReview.repository_slug == repository.repository_slug,
                     PullRequestReview.source_filename == review_data.source_filename,
                     PullRequestReview.reviewer == reviewer.username,
-                    PullRequestReview.is_latest_review == True,
+                    PullRequestReview.is_latest_review.is_(True),
                 )
                 .values(is_latest_review=False)
             )
@@ -260,7 +260,7 @@ class ReviewService:
                 PullRequestReview.repository_slug == repository.repository_slug,
                 PullRequestReview.source_filename == review_data.source_filename,
                 PullRequestReview.reviewer == reviewer.username,
-                PullRequestReview.is_latest_review == True,
+                PullRequestReview.is_latest_review.is_(True),
             )
         )
         existing_review = existing_review_result.scalar_one_or_none()
@@ -380,7 +380,7 @@ class ReviewService:
             result = await db.execute(
                 select(PullRequestReview).where(
                     PullRequestReview.pull_request_id == pull_request_id,
-                    PullRequestReview.is_latest_review == True,
+                    PullRequestReview.is_latest_review.is_(True),
                 )
             )
             review = result.scalar_one_or_none()
@@ -781,6 +781,61 @@ class ReviewService:
 
         # Update status
         review.pull_request_status = new_status
+
+        # Invalidate cache
+        await self._invalidate_review_cache(pull_request_id)
+        await self._invalidate_list_cache()
+
+        return review
+
+    async def update_review_score(
+        self,
+        project_key: str,
+        repository_slug: str,
+        pull_request_id: str,
+        source_filename: str,
+        reviewer: str,
+        score: int,
+        db: AsyncSession,
+    ) -> PullRequestReview:
+        """
+        Update the score of an existing review using composite key lookup
+
+        Args:
+            project_key: The project key
+            repository_slug: The repository slug
+            pull_request_id: The pull request ID
+            source_filename: The source filename being reviewed
+            reviewer: The reviewer username
+            score: The new score (0-10)
+            db: Database session
+
+        Returns:
+            PullRequestReview: The updated review
+
+        Raises:
+            ReviewNotFoundException: If the review doesn't exist
+        """
+        from sqlalchemy import select
+
+        # Get the latest review using full composite key
+        result = await db.execute(
+            select(PullRequestReview).where(
+                PullRequestReview.pull_request_id == pull_request_id,
+                PullRequestReview.project_key == project_key,
+                PullRequestReview.repository_slug == repository_slug,
+                PullRequestReview.source_filename == source_filename,
+                PullRequestReview.reviewer == reviewer,
+                PullRequestReview.is_latest_review.is_(True),
+            )
+        )
+        review = result.scalar_one_or_none()
+
+        if not review:
+            raise ReviewNotFoundException(pull_request_id=pull_request_id)
+
+        # Update only the score field
+        review.score = score
 
         # Invalidate cache
         await self._invalidate_review_cache(pull_request_id)

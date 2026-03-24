@@ -129,6 +129,12 @@ class ReviewUpdate(BaseModel):
         return v
 
 
+class ReviewScoreUpdate(BaseModel):
+    """Schema for updating only the score of a pull request review"""
+
+    score: int = Field(..., ge=0, le=10, description="Review score (0-10)")
+
+
 class ReviewResponse(BaseModel):
     """Schema for pull request review response with full entity information"""
 

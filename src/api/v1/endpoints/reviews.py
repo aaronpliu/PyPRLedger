@@ -226,6 +226,77 @@ async def get_review_statistics(
         )
 
 
+@router.put(
+    "/score",
+    response_model=ReviewResponse,
+    dependencies=[Depends(get_db_session), Depends(get_review_service)],
+)
+async def update_review_score(
+    project_key: Annotated[str, Query(description="Project key (e.g., 'ECOM')")],
+    repository_slug: Annotated[str, Query(description="Repository slug (e.g., 'frontend-store')")],
+    pull_request_id: Annotated[str, Query(description="Pull request ID")],
+    reviewer: Annotated[str, Query(description="Reviewer username")],
+    source_filename: Annotated[
+        str, Query(description="Source filename being reviewed (e.g., 'src/services/cart.py')")
+    ],
+    score: Annotated[int, Query(ge=0, le=10, description="Score (0-10)")],
+    db: AsyncSession = Depends(get_db_session),
+    review_service: ReviewService = Depends(get_review_service),
+) -> ReviewResponse:
+    """
+    Update the score of a specific review record
+
+    This endpoint updates the score for a specific review identified by the composite key:
+    (project_key, repository_slug, pull_request_id, source_filename, reviewer)
+
+    Args:
+        project_key: The project key
+        repository_slug: The repository slug
+        pull_request_id: The pull request ID
+        source_filename: The source filename being reviewed
+        reviewer: The reviewer username
+        score: The new score (0-10)
+        db: Database session
+        review_service: Review service instance
+
+    Returns:
+        ReviewResponse: The updated review
+
+    Raises:
+        ReviewNotFoundException: If the review doesn't exist
+    """
+    import traceback
+
+    try:
+        updated_review = await review_service.update_review_score(
+            project_key=project_key,
+            repository_slug=repository_slug,
+            pull_request_id=pull_request_id,
+            source_filename=source_filename,
+            reviewer=reviewer,
+            score=score,
+            db=db,
+        )
+        return ReviewResponse(**updated_review.to_dict())
+    except ReviewNotFoundException as e:
+        metrics.increment_error(error_type=e.code, endpoint="PUT /api/v1/reviews/score")
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"error": e.code, "message": e.message, "detail": e.detail},
+        )
+    except Exception as ex:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to update review score: {str(ex)}\n{error_traceback}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint="PUT /api/v1/reviews/score",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to update review score"},
+        )
+
+
 @router.get("/{pull_request_id}", response_model=ReviewResponse)
 async def get_review(
     pull_request_id: str,
