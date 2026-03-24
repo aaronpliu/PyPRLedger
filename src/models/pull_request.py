@@ -173,6 +173,8 @@ class PullRequestReview(Base):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert pull request review model to dictionary"""
+        from datetime import datetime
+
         return {
             "id": self.id,
             "pull_request_id": self.pull_request_id,
@@ -190,11 +192,29 @@ class PullRequestReview(Base):
             "score": self.score,
             "pull_request_status": self.pull_request_status,
             "metadata": self.review_metadata,
-            "reviewed_date": self.reviewed_date.isoformat() if self.reviewed_date else None,
+            "reviewed_date": (
+                self.reviewed_date.isoformat()
+                if isinstance(self.reviewed_date, datetime)
+                else self.reviewed_date
+            )
+            if self.reviewed_date
+            else None,
             "is_latest_review": self.is_latest_review,
             "review_iteration": self.review_iteration,
-            "created_date": self.created_date.isoformat() if self.created_date else None,
-            "updated_date": self.updated_date.isoformat() if self.updated_date else None,
+            "created_date": (
+                self.created_date.isoformat()
+                if isinstance(self.created_date, datetime)
+                else self.created_date
+            )
+            if self.created_date
+            else None,
+            "updated_date": (
+                self.updated_date.isoformat()
+                if isinstance(self.updated_date, datetime)
+                else self.updated_date
+            )
+            if self.updated_date
+            else None,
         }
 
     @classmethod

@@ -255,10 +255,25 @@ async def get_review(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"error": "NOT_FOUND", "message": f"Review with ID {review_id} not found"},
             )
-        return ReviewResponse(**review.to_dict())
+        # Handle both ORM object and dict from cache
+        if hasattr(review, "to_dict"):
+            # ORM object
+            review_data = review.to_dict()
+        elif isinstance(review, dict):
+            # Already a dict from cache
+            review_data = review
+        else:
+            # Fallback to dict() method
+            review_data = dict(review)
+
+        return ReviewResponse(**review_data)
     except HTTPException:
         raise
-    except Exception:
+    except Exception as e:
+        import traceback
+
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to get review {review_id}: {str(e)}\n{error_traceback}")
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/reviews/{review_id}"
         )

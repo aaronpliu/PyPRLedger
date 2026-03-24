@@ -356,30 +356,60 @@ class ReviewService:
         Returns:
             PullRequestReview: The review, or None if not found
         """
+        import traceback
+
         # Try cache first
         if use_cache:
-            cached = await self._get_review_from_cache(review_id)
-            if cached:
-                logger.debug(f"Retrieved review from cache: {review_id}")
-                return PullRequestReview.from_dict(cached)
+            try:
+                cached = await self._get_review_from_cache(review_id)
+                if cached:
+                    logger.debug(f"Retrieved review from cache: {review_id}")
+                    # Return the cached dict directly, don't convert to ORM model
+                    # This preserves all fields including id, created_date, updated_date
+                    return cached
+            except Exception as e:
+                logger.warning(f"Cache retrieval failed: {str(e)}")
 
-        # Query database
-        result = await db.execute(
-            select(PullRequestReview)
-            .options(
-                selectinload(PullRequestReview.project),
-                selectinload(PullRequestReview.pull_request_user),
-                selectinload(PullRequestReview.reviewer),
+        # Query database - get the latest review for this pull_request_id
+        try:
+            logger.info(f"Querying database for review: {review_id}")
+
+            # Simple query without eager loading to avoid JOIN issues
+            result = await db.execute(
+                select(PullRequestReview).where(
+                    PullRequestReview.pull_request_id == review_id,
+                    PullRequestReview.is_latest_review == True,
+                )
             )
-            .where(PullRequestReview.pull_request_id == review_id)
-        )
-        review = result.scalar_one_or_none()
+            review = result.scalar_one_or_none()
 
-        if review:
-            # Cache the result
-            await self._set_review_in_cache(review_id, review.to_dict())
+            if review:
+                logger.info(f"Found review: {review_id}, iteration={review.review_iteration}")
+                # Cache the result
+                await self._set_review_in_cache(review_id, review.to_dict())
+                return review
 
-        return review
+            # Fallback: if no latest review found, check for any reviews
+            logger.warning(f"No latest review found for {review_id}, checking fallback...")
+            fallback_result = await db.execute(
+                select(PullRequestReview)
+                .where(PullRequestReview.pull_request_id == review_id)
+                .order_by(PullRequestReview.review_iteration.desc())
+                .limit(1)
+            )
+            review = fallback_result.scalar_one_or_none()
+
+            if review:
+                logger.info(
+                    f"Fallback: found older review: {review_id}, iteration={review.review_iteration}"
+                )
+
+            return review
+
+        except Exception as e:
+            error_traceback = traceback.format_exc()
+            logger.error(f"Database query failed for {review_id}: {str(e)}\n{error_traceback}")
+            raise
 
     async def list_reviews(
         self,
