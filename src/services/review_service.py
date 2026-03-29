@@ -37,40 +37,92 @@ class ReviewService:
         self.redis_client = get_redis_client()
         self.metrics = metrics_collector or MetricsCollector()
 
-    def _get_cache_key(self, pull_request_id: str) -> str:
-        """Generate cache key for review"""
-        return f"review:{pull_request_id}"
+    def _get_cache_key(self, project_key: str, repository_slug: str, pull_request_id: str) -> str:
+        """
+        Generate unique cache key for review using composite business key.
+
+        Using composite key prevents collisions when different projects/repositories
+        have PRs with the same ID.
+
+        Args:
+            project_key: The project key (e.g., 'ECOM')
+            repository_slug: The repository slug (e.g., 'frontend-store')
+            pull_request_id: The pull request ID
+
+        Returns:
+            Unique cache key string
+        """
+        return f"review:{project_key}:{repository_slug}:{pull_request_id}"
 
     def _get_list_cache_key(self, filters: dict[str, Any], page: int, page_size: int) -> str:
         """Generate cache key for review list"""
         filter_str = ":".join(f"{k}={v}" for k, v in sorted(filters.items()) if v is not None)
         return f"reviews:list:{filter_str}:{page}:{page_size}"
 
-    async def _get_review_from_cache(self, pull_request_id: str) -> dict[str, Any] | None:
-        """Try to get review from cache"""
+    async def _get_review_from_cache(
+        self, project_key: str, repository_slug: str, pull_request_id: str
+    ) -> dict[str, Any] | None:
+        """
+        Try to get review from cache using composite key.
+
+        Args:
+            project_key: The project key
+            repository_slug: The repository slug
+            pull_request_id: The pull request ID
+
+        Returns:
+            Cached review data or None
+        """
         try:
-            cached = await self.redis_client.get(self._get_cache_key(pull_request_id))
+            cached = await self.redis_client.get(
+                self._get_cache_key(project_key, repository_slug, pull_request_id)
+            )
             if cached:
                 return json.loads(cached)
         except Exception as e:
             logger.warning(f"Failed to get review from cache: {str(e)}")
         return None
 
-    async def _set_review_in_cache(self, pull_request_id: str, review_data: dict[str, Any]) -> None:
-        """Store review in cache"""
+    async def _set_review_in_cache(
+        self,
+        project_key: str,
+        repository_slug: str,
+        pull_request_id: str,
+        review_data: dict[str, Any],
+    ) -> None:
+        """
+        Store review in cache using composite key.
+
+        Args:
+            project_key: The project key
+            repository_slug: The repository slug
+            pull_request_id: The pull request ID
+            review_data: The review data to cache
+        """
         try:
             await self.redis_client.setex(
-                self._get_cache_key(pull_request_id),
+                self._get_cache_key(project_key, repository_slug, pull_request_id),
                 settings.CACHE_TTL_REVIEWS,
                 json.dumps(review_data),
             )
         except Exception as e:
             logger.warning(f"Failed to set review in cache: {str(e)}")
 
-    async def _invalidate_review_cache(self, pull_request_id: str) -> None:
-        """Invalidate review cache"""
+    async def _invalidate_review_cache(
+        self, project_key: str, repository_slug: str, pull_request_id: str
+    ) -> None:
+        """
+        Invalidate review cache using composite key.
+
+        Args:
+            project_key: The project key
+            repository_slug: The repository slug
+            pull_request_id: The pull request ID
+        """
         try:
-            await self.redis_client.delete(self._get_cache_key(pull_request_id))
+            await self.redis_client.delete(
+                self._get_cache_key(project_key, repository_slug, pull_request_id)
+            )
         except Exception as e:
             logger.warning(f"Failed to invalidate review cache: {str(e)}")
 
@@ -188,7 +240,7 @@ class ReviewService:
         await db.flush()
         await db.refresh(new_review)
 
-        # Cache the new review
+        # Cache the new review using composite key
         review_dict = new_review.to_dict()
         if include_details:
             # Add project and user details
@@ -201,12 +253,22 @@ class ReviewService:
                 "username": reviewer.username,
                 "display_name": reviewer.display_name,
             }
-        await self._set_review_in_cache(new_review.pull_request_id, review_dict)
+        await self._set_review_in_cache(
+            project_key=project.project_key,
+            repository_slug=repository.repository_slug,
+            pull_request_id=new_review.pull_request_id,
+            review_data=review_dict,
+        )
 
-        # Update metrics (use project_key and username directly)
+        # Update metrics
         self.metrics.increment_review(project=project.project_key, reviewer=reviewer.username)
 
-        # Invalidate list cache
+        # Invalidate cache
+        await self._invalidate_review_cache(
+            project_key=project.project_key,
+            repository_slug=repository.repository_slug,
+            pull_request_id=new_review.pull_request_id,
+        )
         await self._invalidate_list_cache()
 
         logger.info(f"Created new review: {new_review.pull_request_id}, iteration: {new_iteration}")
@@ -345,65 +407,99 @@ class ReviewService:
             return new_review_response, True
 
     async def get_review(
-        self, pull_request_id: str, db: AsyncSession, use_cache: bool = True
-    ) -> PullRequestReview | None:
+        self,
+        project_key: str | None = None,
+        repository_slug: str | None = None,
+        pull_request_id: str | None = None,
+        db: AsyncSession = None,
+        use_cache: bool = True,
+    ) -> PullRequestReview | dict[str, Any] | None:
         """
-        Get a pull request review by ID
+        Get a pull request review by ID or composite business key
 
         Args:
-            pull_request_id: The pull request ID
+            project_key: The project key (optional if pull_request_id provided)
+            repository_slug: The repository slug (optional if pull_request_id provided)
+            pull_request_id: The pull request ID (required)
             db: Database session
             use_cache: Whether to use cache
 
         Returns:
-            PullRequestReview: The review, or None if not found
+            PullRequestReview or dict: The review, or None if not found.
+            May return dict from cache or ORM object from database.
         """
         import traceback
 
-        # Try cache first
-        if use_cache:
+        # Validate parameters
+        if not pull_request_id:
+            raise ValueError("pull_request_id is required")
+
+        # If project_key and repository_slug are provided, try cache first
+        if project_key and repository_slug and use_cache:
             try:
-                cached = await self._get_review_from_cache(pull_request_id)
+                cached = await self._get_review_from_cache(
+                    project_key, repository_slug, pull_request_id
+                )
                 if cached:
                     logger.debug(f"Retrieved review from cache: {pull_request_id}")
-                    # Return the cached dict directly, don't convert to ORM model
-                    # This preserves all fields including id, created_date, updated_date
                     return cached
             except Exception as e:
                 logger.warning(f"Cache retrieval failed: {str(e)}")
 
-        # Query database - get the latest review for this pull_request_id
+        # Query database to find the review
+        # First try with full composite key if available
         try:
             logger.info(f"Querying database for review: {pull_request_id}")
 
-            # Simple query without eager loading to avoid JOIN issues
-            result = await db.execute(
-                select(PullRequestReview).where(
-                    PullRequestReview.pull_request_id == pull_request_id,
-                    PullRequestReview.is_latest_review.is_(True),
-                )
+            query = select(PullRequestReview).where(
+                PullRequestReview.pull_request_id == pull_request_id,
+                PullRequestReview.is_latest_review.is_(True),
             )
+
+            # Add project_key and repository_slug filters if provided
+            if project_key:
+                query = query.where(PullRequestReview.project_key == project_key)
+            if repository_slug:
+                query = query.where(PullRequestReview.repository_slug == repository_slug)
+
+            result = await db.execute(query)
             review = result.scalar_one_or_none()
 
             if review:
                 logger.info(f"Found review: {pull_request_id}, iteration={review.review_iteration}")
-                # Cache the result
-                await self._set_review_in_cache(pull_request_id, review.to_dict())
+                # Cache the result using composite key
+                await self._set_review_in_cache(
+                    review.project_key, review.repository_slug, pull_request_id, review.to_dict()
+                )
                 return review
 
             # Fallback: if no latest review found, check for any reviews
             logger.warning(f"No latest review found for {pull_request_id}, checking fallback...")
-            fallback_result = await db.execute(
+            fallback_query = (
                 select(PullRequestReview)
                 .where(PullRequestReview.pull_request_id == pull_request_id)
                 .order_by(PullRequestReview.review_iteration.desc())
                 .limit(1)
             )
+
+            # Add project_key and repository_slug filters if provided
+            if project_key:
+                fallback_query = fallback_query.where(PullRequestReview.project_key == project_key)
+            if repository_slug:
+                fallback_query = fallback_query.where(
+                    PullRequestReview.repository_slug == repository_slug
+                )
+
+            fallback_result = await db.execute(fallback_query)
             review = fallback_result.scalar_one_or_none()
 
             if review:
                 logger.info(
                     f"Fallback: found older review: {pull_request_id}, iteration={review.review_iteration}"
+                )
+                # Cache using composite key
+                await self._set_review_in_cache(
+                    review.project_key, review.repository_slug, pull_request_id, review.to_dict()
                 )
 
             return review
@@ -518,7 +614,12 @@ class ReviewService:
         return list(reviews), total
 
     async def update_review(
-        self, pull_request_id: str, update_data: ReviewUpdate, db: AsyncSession
+        self,
+        pull_request_id: str,
+        update_data: ReviewUpdate,
+        db: AsyncSession,
+        project_key: str | None = None,
+        repository_slug: str | None = None,
     ) -> PullRequestReview:
         """
         Update a pull request review
@@ -527,6 +628,8 @@ class ReviewService:
             pull_request_id: The pull request ID
             update_data: The update data
             db: Database session
+            project_key: Optional project key (will be auto-detected if not provided)
+            repository_slug: Optional repository slug (will be auto-detected if not provided)
 
         Returns:
             PullRequestReview: The updated review
@@ -535,7 +638,14 @@ class ReviewService:
             ReviewNotFoundException: If the review doesn't exist
             ReviewStatusException: If the status transition is invalid
         """
-        review = await self.get_review(pull_request_id, db, use_cache=False)
+        # Get review - will auto-detect project_key and repository_slug if not provided
+        review = await self.get_review(
+            project_key=project_key,
+            repository_slug=repository_slug,
+            pull_request_id=pull_request_id,
+            db=db,
+            use_cache=False,
+        )
         if not review:
             raise ReviewNotFoundException(pull_request_id=pull_request_id)
 
@@ -553,32 +663,51 @@ class ReviewService:
         # Update review
         review.update(update_data.model_dump(exclude_unset=True))
 
-        # Invalidate cache
-        await self._invalidate_review_cache(pull_request_id)
+        # Invalidate cache using composite key from the review itself
+        await self._invalidate_review_cache(
+            review.project_key, review.repository_slug, pull_request_id
+        )
         await self._invalidate_list_cache()
 
         logger.info(f"Updated review: {pull_request_id}")
         return review
 
-    async def delete_review(self, pull_request_id: str, db: AsyncSession) -> bool:
+    async def delete_review(
+        self,
+        pull_request_id: str,
+        db: AsyncSession,
+        project_key: str | None = None,
+        repository_slug: str | None = None,
+    ) -> bool:
         """
         Delete a pull request review
 
         Args:
             pull_request_id: The pull request ID
             db: Database session
+            project_key: Optional project key (will be auto-detected if not provided)
+            repository_slug: Optional repository slug (will be auto-detected if not provided)
 
         Returns:
             bool: True if deleted, False if not found
         """
-        review = await self.get_review(pull_request_id, db, use_cache=False)
+        # Get review - will auto-detect project_key and repository_slug if not provided
+        review = await self.get_review(
+            project_key=project_key,
+            repository_slug=repository_slug,
+            pull_request_id=pull_request_id,
+            db=db,
+            use_cache=False,
+        )
         if not review:
             return False
 
         await db.delete(review)
 
-        # Invalidate cache
-        await self._invalidate_review_cache(pull_request_id)
+        # Invalidate cache using composite key from the review itself
+        await self._invalidate_review_cache(
+            review.project_key, review.repository_slug, pull_request_id
+        )
         await self._invalidate_list_cache()
 
         logger.info(f"Deleted review: {pull_request_id}")
@@ -751,7 +880,12 @@ class ReviewService:
         return await self.list_reviews(filters, db, page, page_size)
 
     async def update_review_status(
-        self, pull_request_id: str, new_status: str, db: AsyncSession
+        self,
+        pull_request_id: str,
+        new_status: str,
+        db: AsyncSession,
+        project_key: str | None = None,
+        repository_slug: str | None = None,
     ) -> PullRequestReview:
         """
         Update the status of a pull request review
@@ -760,6 +894,8 @@ class ReviewService:
             pull_request_id: The pull request ID
             new_status: The new status (open, merged, closed, draft)
             db: Database session
+            project_key: Optional project key (will be auto-detected if not provided)
+            repository_slug: Optional repository slug (will be auto-detected if not provided)
 
         Returns:
             PullRequestReview: The updated review
@@ -768,7 +904,14 @@ class ReviewService:
             ReviewNotFoundException: If the review doesn't exist
             ReviewStatusException: If the status transition is invalid
         """
-        review = await self.get_review(pull_request_id, db, use_cache=False)
+        # Get review - will auto-detect project_key and repository_slug if not provided
+        review = await self.get_review(
+            project_key=project_key,
+            repository_slug=repository_slug,
+            pull_request_id=pull_request_id,
+            db=db,
+            use_cache=False,
+        )
         if not review:
             raise ReviewNotFoundException(pull_request_id=pull_request_id)
 
@@ -782,8 +925,10 @@ class ReviewService:
         # Update status
         review.pull_request_status = new_status
 
-        # Invalidate cache
-        await self._invalidate_review_cache(pull_request_id)
+        # Invalidate cache using composite key from the review itself
+        await self._invalidate_review_cache(
+            review.project_key, review.repository_slug, pull_request_id
+        )
         await self._invalidate_list_cache()
 
         return review
@@ -837,8 +982,8 @@ class ReviewService:
         # Update only the score field
         review.score = score
 
-        # Invalidate cache
-        await self._invalidate_review_cache(pull_request_id)
+        # Invalidate cache using composite key
+        await self._invalidate_review_cache(project_key, repository_slug, pull_request_id)
         await self._invalidate_list_cache()
 
         return review

@@ -318,7 +318,7 @@ async def get_review(
         ReviewNotFoundException: If the review doesn't exist
     """
     try:
-        review = await review_service.get_review(pull_request_id, db)
+        review = await review_service.get_review(pull_request_id=pull_request_id, db=db)
         if not review:
             metrics.increment_error(
                 error_type="NOT_FOUND", endpoint=f"GET /api/v1/reviews/{pull_request_id}"
