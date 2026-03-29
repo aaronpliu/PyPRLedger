@@ -263,7 +263,7 @@ class ReviewService:
         # Update metrics
         self.metrics.increment_review(project=project.project_key, reviewer=reviewer.username)
 
-        # Invalidate cache
+        # Invalidate cache using composite key
         await self._invalidate_review_cache(
             project_key=project.project_key,
             repository_slug=repository.repository_slug,
@@ -446,14 +446,24 @@ class ReviewService:
             except Exception as e:
                 logger.warning(f"Cache retrieval failed: {str(e)}")
 
-        # Query database to find the review
+        # Query database to find the review with eager loading of relationships
         # First try with full composite key if available
         try:
             logger.info(f"Querying database for review: {pull_request_id}")
 
-            query = select(PullRequestReview).where(
-                PullRequestReview.pull_request_id == pull_request_id,
-                PullRequestReview.is_latest_review.is_(True),
+            # Build query with eager loading of all relationships
+            query = (
+                select(PullRequestReview)
+                .options(
+                    selectinload(PullRequestReview.project),
+                    selectinload(PullRequestReview.repository),
+                    selectinload(PullRequestReview.pull_request_user_rel),
+                    selectinload(PullRequestReview.reviewer_rel),
+                )
+                .where(
+                    PullRequestReview.pull_request_id == pull_request_id,
+                    PullRequestReview.is_latest_review.is_(True),
+                )
             )
 
             # Add project_key and repository_slug filters if provided
@@ -477,6 +487,12 @@ class ReviewService:
             logger.warning(f"No latest review found for {pull_request_id}, checking fallback...")
             fallback_query = (
                 select(PullRequestReview)
+                .options(
+                    selectinload(PullRequestReview.project),
+                    selectinload(PullRequestReview.repository),
+                    selectinload(PullRequestReview.pull_request_user_rel),
+                    selectinload(PullRequestReview.reviewer_rel),
+                )
                 .where(PullRequestReview.pull_request_id == pull_request_id)
                 .order_by(PullRequestReview.review_iteration.desc())
                 .limit(1)
@@ -989,41 +1005,155 @@ class ReviewService:
         return review
 
     async def _enrich_review_with_entities(
-        self, review: PullRequestReview, db: AsyncSession
+        self, review: PullRequestReview | dict[str, Any], db: AsyncSession
     ) -> dict[str, Any]:
         """
-        Enrich a review with full entity information
+        Enrich a review with full entity information using relationships or direct queries
 
         Args:
-            review: The review to enrich
+            review: The review to enrich (ORM object or dict from cache)
             db: Database session
 
         Returns:
             Dict containing review data with embedded entity information
         """
-        from sqlalchemy import text
 
-        # Convert review to dict first
-        review_dict = review.to_dict()
+        # Convert review to dict if it's an ORM object
+        if hasattr(review, "to_dict"):
+            review_dict = review.to_dict()
+            # Try to use loaded relationships first (if ORM object)
+            return await self._enrich_from_relationships(review, review_dict)
+        else:
+            # It's already a dict (from cache), query entities directly
+            review_dict = review
+            return await self._enrich_from_queries(review_dict, db)
 
-        # Query related entities using business keys
+    async def _enrich_from_relationships(
+        self, review: PullRequestReview, review_dict: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Enrich review using pre-loaded SQLAlchemy relationships
+
+        Args:
+            review: ORM review object with relationships loaded
+            review_dict: Dictionary representation of review
+
+        Returns:
+            Enriched review dict
+        """
         project = None
         repository = None
         pr_user = None
         reviewer_user = None
 
         try:
-            # Get project info using raw SQL for debugging
-            logger.info(f"Querying project with key: {review.project_key}")
+            # Extract project from relationship
+            if hasattr(review, "project") and review.project:
+                project = {
+                    "id": review.project.id,
+                    "project_id": review.project.project_id,
+                    "project_name": review.project.project_name,
+                    "project_key": review.project.project_key,
+                    "project_url": review.project.project_url,
+                    "created_date": review.project.created_date.isoformat()
+                    if review.project.created_date
+                    else None,
+                    "updated_date": review.project.updated_date.isoformat()
+                    if review.project.updated_date
+                    else None,
+                }
+
+            # Extract repository from relationship
+            if hasattr(review, "repository") and review.repository:
+                repository = {
+                    "id": review.repository.id,
+                    "repository_id": review.repository.repository_id,
+                    "repository_name": review.repository.repository_name,
+                    "repository_slug": review.repository.repository_slug,
+                    "repository_url": review.repository.repository_url,
+                    "created_date": review.repository.created_date.isoformat()
+                    if review.repository.created_date
+                    else None,
+                    "updated_date": review.repository.updated_date.isoformat()
+                    if review.repository.updated_date
+                    else None,
+                }
+
+            # Extract PR author from relationship
+            if hasattr(review, "pull_request_user_rel") and review.pull_request_user_rel:
+                pr_user = {
+                    "id": review.pull_request_user_rel.id,
+                    "user_id": review.pull_request_user_rel.user_id,
+                    "username": review.pull_request_user_rel.username,
+                    "display_name": review.pull_request_user_rel.display_name,
+                    "email_address": review.pull_request_user_rel.email_address,
+                    "active": review.pull_request_user_rel.active,
+                    "is_reviewer": review.pull_request_user_rel.is_reviewer,
+                    "created_date": review.pull_request_user_rel.created_date.isoformat()
+                    if review.pull_request_user_rel.created_date
+                    else None,
+                    "updated_date": review.pull_request_user_rel.updated_date.isoformat()
+                    if review.pull_request_user_rel.updated_date
+                    else None,
+                }
+
+            # Extract reviewer from relationship
+            if hasattr(review, "reviewer_rel") and review.reviewer_rel:
+                reviewer_user = {
+                    "id": review.reviewer_rel.id,
+                    "user_id": review.reviewer_rel.user_id,
+                    "username": review.reviewer_rel.username,
+                    "display_name": review.reviewer_rel.display_name,
+                    "email_address": review.reviewer_rel.email_address,
+                    "active": review.reviewer_rel.active,
+                    "is_reviewer": review.reviewer_rel.is_reviewer,
+                    "created_date": review.reviewer_rel.created_date.isoformat()
+                    if review.reviewer_rel.created_date
+                    else None,
+                    "updated_date": review.reviewer_rel.updated_date.isoformat()
+                    if review.reviewer_rel.updated_date
+                    else None,
+                }
+
+        except Exception as e:
+            logger.warning(f"Failed to extract entity information from relationships: {str(e)}")
+
+        return self._build_enriched_response(
+            review_dict, project, repository, pr_user, reviewer_user
+        )
+
+    async def _enrich_from_queries(
+        self, review_dict: dict[str, Any], db: AsyncSession
+    ) -> dict[str, Any]:
+        """
+        Enrich review by directly querying entities using business keys
+        Used when review is from cache (dict) without loaded relationships
+
+        Args:
+            review_dict: Review data from cache
+            db: Database session
+
+        Returns:
+            Enriched review dict
+        """
+        from sqlalchemy import text
+
+        project = None
+        repository = None
+        pr_user = None
+        reviewer_user = None
+
+        try:
+            # Get project info
             project_result = await db.execute(
-                text(f"""
+                text("""
                     SELECT id, project_id, project_name, project_key, project_url, created_date, updated_date 
                     FROM project 
-                    WHERE project_key = '{review.project_key}'
-                """)
+                    WHERE project_key = :project_key
+                """),
+                {"project_key": review_dict.get("project_key")},
             )
             project_row = project_result.fetchone()
-            logger.info(f"Project query result: {project_row is not None}")
 
             if project_row:
                 project = {
@@ -1032,24 +1162,24 @@ class ReviewService:
                     "project_name": project_row[2],
                     "project_key": project_row[3],
                     "project_url": project_row[4],
-                    "created_date": project_row[5],
-                    "updated_date": project_row[6],
+                    "created_date": project_row[5].isoformat() if project_row[5] else None,
+                    "updated_date": project_row[6].isoformat() if project_row[6] else None,
                 }
 
-                logger.info(
-                    f"Looking for repository: slug={review.repository_slug}, project_id={project['project_id']}"
-                )
-                # Get repository info using raw SQL
+                # Get repository info
                 repo_result = await db.execute(
-                    text(f"""
+                    text("""
                         SELECT id, repository_id, repository_name, repository_slug, repository_url, created_date, updated_date 
                         FROM repository 
-                        WHERE repository_slug = '{review.repository_slug}' 
-                        AND project_id = {project["project_id"]}
-                    """)
+                        WHERE repository_slug = :repository_slug 
+                        AND project_id = :project_id
+                    """),
+                    {
+                        "repository_slug": review_dict.get("repository_slug"),
+                        "project_id": project["project_id"],
+                    },
                 )
                 repo_row = repo_result.fetchone()
-                logger.info(f"Repository query result: {repo_row is not None}")
 
                 if repo_row:
                     repository = {
@@ -1058,24 +1188,18 @@ class ReviewService:
                         "repository_name": repo_row[2],
                         "repository_slug": repo_row[3],
                         "repository_url": repo_row[4],
-                        "created_date": repo_row[5],
-                        "updated_date": repo_row[6],
+                        "created_date": repo_row[5].isoformat() if repo_row[5] else None,
+                        "updated_date": repo_row[6].isoformat() if repo_row[6] else None,
                     }
-                else:
-                    # Debug: check what repositories exist
-                    debug_result = await db.execute(
-                        text("SELECT repository_slug, project_id FROM repository")
-                    )
-                    all_repos = debug_result.fetchall()
-                    logger.warning(f"All repositories in DB: {[(r[0], r[1]) for r in all_repos]}")
 
             # Get PR author info
             pr_user_result = await db.execute(
-                text(f"""
+                text("""
                     SELECT id, user_id, username, display_name, email_address, active, is_reviewer, created_date, updated_date 
                     FROM user 
-                    WHERE username = '{review.pull_request_user}'
-                """)
+                    WHERE username = :username
+                """),
+                {"username": review_dict.get("pull_request_user")},
             )
             pr_user_row = pr_user_result.fetchone()
 
@@ -1088,17 +1212,18 @@ class ReviewService:
                     "email_address": pr_user_row[4],
                     "active": pr_user_row[5],
                     "is_reviewer": pr_user_row[6],
-                    "created_date": pr_user_row[7],
-                    "updated_date": pr_user_row[8],
+                    "created_date": pr_user_row[7].isoformat() if pr_user_row[7] else None,
+                    "updated_date": pr_user_row[8].isoformat() if pr_user_row[8] else None,
                 }
 
             # Get reviewer info
             reviewer_result = await db.execute(
-                text(f"""
+                text("""
                     SELECT id, user_id, username, display_name, email_address, active, is_reviewer, created_date, updated_date 
                     FROM user 
-                    WHERE username = '{review.reviewer}'
-                """)
+                    WHERE username = :username
+                """),
+                {"username": review_dict.get("reviewer")},
             )
             reviewer_row = reviewer_result.fetchone()
 
@@ -1111,22 +1236,43 @@ class ReviewService:
                     "email_address": reviewer_row[4],
                     "active": reviewer_row[5],
                     "is_reviewer": reviewer_row[6],
-                    "created_date": reviewer_row[7],
-                    "updated_date": reviewer_row[8],
+                    "created_date": reviewer_row[7].isoformat() if reviewer_row[7] else None,
+                    "updated_date": reviewer_row[8].isoformat() if reviewer_row[8] else None,
                 }
 
         except Exception as e:
-            logger.warning(f"Failed to load entity information for review: {str(e)}")
+            logger.warning(f"Failed to load entity information from queries: {str(e)}")
 
-        # Build enriched response - exclude duplicate fields that are available in nested objects
+        return self._build_enriched_response(
+            review_dict, project, repository, pr_user, reviewer_user
+        )
+
+    def _build_enriched_response(
+        self,
+        review_dict: dict[str, Any],
+        project: dict | None,
+        repository: dict | None,
+        pr_user: dict | None,
+        reviewer_user: dict | None,
+    ) -> dict[str, Any]:
+        """
+        Build the final enriched response dictionary
+
+        Args:
+            review_dict: Base review data
+            project: Project entity data
+            repository: Repository entity data
+            pr_user: PR author user data
+            reviewer_user: Reviewer user data
+
+        Returns:
+            Enriched review dict with nested entity objects
+        """
         enriched_review = {
             "id": review_dict["id"],
             "pull_request_id": review_dict["pull_request_id"],
             "pull_request_commit_id": review_dict["pull_request_commit_id"],
-            # Excluded project_key (available in project.project_key)
             "repository_slug": review_dict["repository_slug"],
-            # Excluded pull_request_user (available in pull_request_user_info.username)
-            # Excluded reviewer (available in reviewer_info.username)
             "source_branch": review_dict["source_branch"],
             "target_branch": review_dict["target_branch"],
             "git_code_diff": review_dict["git_code_diff"],
@@ -1143,81 +1289,11 @@ class ReviewService:
             "updated_date": review_dict["updated_date"],
         }
 
-        # Add project information
-        if project:
-            enriched_review["project"] = {
-                "id": project["id"],
-                "project_id": project["project_id"],
-                "project_name": project["project_name"],
-                "project_key": project["project_key"],
-                "project_url": str(project["project_url"]),
-                "created_date": project["created_date"].isoformat()
-                if project["created_date"]
-                else None,
-                "updated_date": project["updated_date"].isoformat()
-                if project["updated_date"]
-                else None,
-            }
-        else:
-            enriched_review["project"] = None
-
-        # Add repository information
-        if repository:
-            enriched_review["repository"] = {
-                "id": repository["id"],
-                "repository_id": repository["repository_id"],
-                "repository_name": repository["repository_name"],
-                "repository_slug": repository["repository_slug"],
-                "repository_url": str(repository["repository_url"]),
-                "created_date": repository["created_date"].isoformat()
-                if repository["created_date"]
-                else None,
-                "updated_date": repository["updated_date"].isoformat()
-                if repository["updated_date"]
-                else None,
-            }
-        else:
-            enriched_review["repository"] = None
-
-        # Add PR author information
-        if pr_user:
-            enriched_review["pull_request_user_info"] = {
-                "id": pr_user["id"],
-                "user_id": pr_user["user_id"],
-                "username": pr_user["username"],
-                "display_name": pr_user["display_name"],
-                "email_address": pr_user["email_address"],
-                "active": pr_user["active"],
-                "is_reviewer": pr_user["is_reviewer"],
-                "created_date": pr_user["created_date"].isoformat()
-                if pr_user["created_date"]
-                else None,
-                "updated_date": pr_user["updated_date"].isoformat()
-                if pr_user["updated_date"]
-                else None,
-            }
-        else:
-            enriched_review["pull_request_user_info"] = None
-
-        # Add reviewer information
-        if reviewer_user:
-            enriched_review["reviewer_info"] = {
-                "id": reviewer_user["id"],
-                "user_id": reviewer_user["user_id"],
-                "username": reviewer_user["username"],
-                "display_name": reviewer_user["display_name"],
-                "email_address": reviewer_user["email_address"],
-                "active": reviewer_user["active"],
-                "is_reviewer": reviewer_user["is_reviewer"],
-                "created_date": reviewer_user["created_date"].isoformat()
-                if reviewer_user["created_date"]
-                else None,
-                "updated_date": reviewer_user["updated_date"].isoformat()
-                if reviewer_user["updated_date"]
-                else None,
-            }
-        else:
-            enriched_review["reviewer_info"] = None
+        # Add entity information
+        enriched_review["project"] = project
+        enriched_review["repository"] = repository
+        enriched_review["pull_request_user_info"] = pr_user
+        enriched_review["reviewer_info"] = reviewer_user
 
         return enriched_review
 
