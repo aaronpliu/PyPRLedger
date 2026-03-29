@@ -603,6 +603,7 @@ class ReviewService:
             select(PullRequestReview)
             .options(
                 selectinload(PullRequestReview.project),
+                selectinload(PullRequestReview.repository),
                 selectinload(PullRequestReview.pull_request_user_rel),
                 selectinload(PullRequestReview.reviewer_rel),
             )
