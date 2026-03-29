@@ -14,6 +14,11 @@ A production-ready FastAPI-based PR Code Review Result Storage System with MySQL
 - **Error Handling**: Comprehensive error handling and validation
 - **Docker Support**: Complete Docker Compose setup for easy deployment
 - **Security**: Rate limiting, CORS, and security headers
+- **Multi-Project Management** (NEW v1.3.0): Virtual app_name architecture for organizing projects into logical applications
+  - Project registry system maps (project_key, repository_slug) pairs to application names
+  - Query-time resolution without schema proliferation
+  - Support for filtering reviews by multiple apps simultaneously
+  - Admin APIs for registry management
 
 ## Project Structure
 
@@ -39,6 +44,7 @@ PyPRLedger/
 │   │       ├── endpoints/        # Endpoint handlers
 │   │       │   ├── __init__.py
 │   │       │   ├── projects.py   # Project endpoints
+│   │       │   ├── project_registry.py  # Project registry endpoints (NEW)
 │   │       │   ├── reviews.py    # Review endpoints
 │   │       │   └── users.py      # User endpoints
 │   │       ├── __init__.py
@@ -53,6 +59,7 @@ PyPRLedger/
 │   │   └── middleware.py         # Custom middleware
 │   ├── models/                   # SQLAlchemy models
 │   │   ├── project.py            # Project model
+│   │   ├── project_registry.py   # Project registry model (NEW)
 │   │   ├── pull_request.py       # Pull request model
 │   │   ├── repository.py         # Repository model
 │   │   └── user.py               # User model
@@ -63,6 +70,7 @@ PyPRLedger/
 │   │   └── user.py               # User schemas
 │   ├── services/                 # Business logic
 │   │   ├── project_service.py    # Project service
+│   │   ├── project_registry_service.py  # Project registry service (NEW)
 │   │   ├── review_service.py     # Review service
 │   │   └── user_service.py       # User service
 │   ├── utils/                    # Utilities
@@ -147,12 +155,25 @@ uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ### Reviews (`/api/v1/reviews`)
 
 - `POST /api/v1/reviews` - Create or update a review (upsert operation)
-- `GET /api/v1/reviews` - List reviews with filters
+- `GET /api/v1/reviews` - List reviews with filters (supports `app_names` parameter for multi-app queries)
 - `GET /api/v1/reviews/{review_id}` - Get a specific review
 - `PUT /api/v1/reviews/{review_id}` - Update a review
 - `PATCH /api/v1/reviews/{review_id}/status` - Update review status
 - `DELETE /api/v1/reviews/{review_id}` - Delete a review
 - `GET /api/v1/reviews/statistics` - Get review statistics
+- `PUT /api/v1/reviews/score` - Update review score by composite key
+
+### Project Registry (`/api/v1/`)
+
+**Public Endpoints:**
+- `GET /api/v1/apps` - List all registered applications with project counts
+- `GET /api/v1/apps/{app_name}/projects` - List projects in specific application
+- `GET /api/v1/projects/{project_key}/{repository_slug}/app-name` - Get app name for project
+
+**Admin Endpoints (Authentication TODO):**
+- `POST /api/v1/admin/registry/register` - Register project-repo pair to application
+- `PUT /api/v1/admin/registry/update` - Move project to different application
+- `DELETE /api/v1/admin/registry/unregister` - Remove project from registry
 
 ### Users (`/api/v1/users`)
 
@@ -192,12 +213,25 @@ The system uses MySQL with the following tables:
 - `project`: Projects
 - `repository`: Code repositories
 - `pull_request_review`: Pull request reviews
+- `project_registry`: Project-to-application mappings (NEW in v1.3.0)
 
 ### Running Migrations
 
 ```bash
 alembic upgrade head
 ```
+
+### Database Schema (v1.3.0+)
+
+**project_registry** table:
+- `id` (INT, PK): Auto-increment primary key
+- `app_name` (VARCHAR(64)): Application name (indexed)
+- `project_key` (VARCHAR(32)): Foreign key to project.project_key
+- `repository_slug` (VARCHAR(128)): Repository slug
+- `description` (VARCHAR(255)): Optional description
+- `created_date`, `updated_date` (DATETIME): Timestamps
+- **Unique Constraint**: (project_key, repository_slug) - Each repo pair maps to ONE app
+- **Composite Index**: (app_name, project_key, repository_slug) - Fast app-based queries
 
 ### Creating a New Migration
 

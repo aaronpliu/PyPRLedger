@@ -36,14 +36,35 @@
 
 ##### 📁 api/v1/endpoints/ - API Endpoint Handlers
 
+- **`projects.py`** - Project management endpoints
+  - POST `/api/v1/projects` - Create project
+  - GET `/api/v1/projects` - List projects
+  - GET `/api/v1/projects/{project_id}` - Get specific project
+  - PUT `/api/v1/projects/{project_id}` - Update project
+  - DELETE `/api/v1/projects/{project_id}` - Delete project
+  - GET `/api/v1/projects/statistics` - Get project statistics
+  - GET `/api/v1/projects/top/reviews` - Top projects by reviews
+  - GET `/api/v1/projects/top/reviewers` - Top projects by reviewers
+
+- **`project_registry.py`** - Project registry endpoints (NEW in v1.3.0)
+  - Public Endpoints:
+    - GET `/api/v1/apps` - List all registered applications with project counts
+    - GET `/api/v1/apps/{app_name}/projects` - List projects in specific application
+    - GET `/api/v1/projects/{project_key}/{repository_slug}/app-name` - Get app name for project
+  - Admin Endpoints (authentication TODO):
+    - POST `/api/v1/admin/registry/register` - Register project-repo pair to application
+    - PUT `/api/v1/admin/registry/update` - Move project to different application
+    - DELETE `/api/v1/admin/registry/unregister` - Remove project from registry
+
 - **`reviews.py`** - Pull request review endpoints
   - POST `/api/v1/reviews` - Create or update review (upsert)
-  - GET `/api/v1/reviews` - List reviews with filters
+  - GET `/api/v1/reviews` - List reviews with filters (supports `app_names` parameter, NEW in v1.3.0)
   - GET `/api/v1/reviews/{review_id}` - Get specific review
   - PUT `/api/v1/reviews/{review_id}` - Update review
   - PATCH `/api/v1/reviews/{review_id}/status` - Update review status
   - DELETE `/api/v1/reviews/{review_id}` - Delete review
   - GET `/api/v1/reviews/statistics` - Get review statistics
+  - PUT `/api/v1/reviews/score` - Update review score by composite key
 
 - **`users.py`** - User management endpoints
   - POST `/api/v1/users` - Create user
@@ -54,16 +75,6 @@
   - PATCH `/api/v1/users/{user_id}/toggle-reviewer` - Toggle reviewer status
   - PATCH `/api/v1/users/{user_id}/activate` - Activate user
   - PATCH `/api/v1/users/{user_id}/deactivate` - Deactivate user
-
-- **`projects.py`** - Project management endpoints
-  - POST `/api/v1/projects` - Create project
-  - GET `/api/v1/projects` - List projects
-  - GET `/api/v1/projects/{project_id}` - Get specific project
-  - PUT `/api/v1/projects/{project_id}` - Update project
-  - DELETE `/api/v1/projects/{project_id}` - Delete project
-  - GET `/api/v1/projects/statistics` - Get project statistics
-  - GET `/api/v1/projects/top/reviews` - Top projects by reviews
-  - GET `/api/v1/projects/top/reviewers` - Top projects by reviewers
 
 - **`api.py`** - API router composition
   - Includes all endpoint routers
@@ -103,7 +114,7 @@
 
 - **`project.py`** - Project model
   - Project table definition
-  - Relationships to repositories and reviews
+  - Relationships to repositories and registry entries
   - Project attributes and methods
 
 - **`repository.py`** - Repository model
@@ -113,8 +124,14 @@
 
 - **`pull_request.py`** - Pull request review model
   - Review table definition
-  - Relationships to users and projects
+  - Relationships to users, projects, and repositories
   - Review attributes and status management
+
+- **`project_registry.py`** - Project registry model (NEW in v1.3.0)
+  - Registry table definition mapping (project_key, repository_slug) to app_name
+  - Virtual app_name architecture implementation
+  - Relationships to projects
+  - Auto-registration mechanism support
 
 ### 📁 schemas/ - Pydantic Schemas
 
@@ -157,6 +174,15 @@
   - Upsert operations
   - Review statistics
   - Cache management
+  - Multi-app query support (NEW in v1.3.0)
+  - Virtual app_name resolution and injection
+
+- **`project_registry_service.py`** - Project registry service (NEW in v1.3.0)
+  - Registry CRUD operations
+  - App name resolution (single and batch)
+  - Project-to-application mapping management
+  - Auto-registration with default "Unknown" app
+  - List all apps with project counts
 
 ### 📁 utils/ - Utilities
 

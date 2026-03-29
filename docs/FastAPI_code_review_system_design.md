@@ -191,6 +191,226 @@ CREATE TABLE pull_request_review (
    - Cache invalidation on write operations
    - TTL-based expiration for time-sensitive data
 
+## 2.5 Project Registry System (v1.3.0)
+
+The Project Registry System introduces a revolutionary approach to managing multiple projects and applications without schema proliferation.
+
+### Architecture Overview
+
+**Core Principle**: Virtual `app_name` column resolved at query time, not stored in the `pull_request_review` table.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   Application Layer                      │
+│                                                           │
+│  API Request: GET /reviews?app_names=member,tv          │
+│                          ↓                                │
+│  Service Layer: Batch resolve app_names                 │
+│                          ↓                                │
+│  Query Builder: Filter by (project_key, repo_slug)      │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│                  Database Layer                          │
+│                                                           │
+│  ┌──────────────────┐    ┌──────────────────────┐      │
+│  │ project_registry │    │ pull_request_review  │      │
+│  ├──────────────────┤    ├──────────────────────┤      │
+│  │ app_name         │    │ id                   │      │
+│  │ project_key (FK) │───▶│ project_key          │      │
+│  │ repository_slug  │    │ repository_slug      │      │
+│  │ description      │    │ score                │      │
+│  └──────────────────┘    │ ...                  │      │
+│                          └──────────────────────┘      │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Database Schema
+
+```sql
+-- Project Registry Table (NEW in v1.3.0)
+CREATE TABLE project_registry (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    app_name VARCHAR(64) NOT NULL,
+    project_key VARCHAR(32) NOT NULL,
+    repository_slug VARCHAR(128) NOT NULL,
+    description VARCHAR(255),
+    created_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    -- Unique constraint: each (project_key, repository_slug) maps to ONE app
+    UNIQUE KEY uk_project_repo (project_key, repository_slug),
+    
+    -- Composite index for efficient app-based queries
+    INDEX idx_app_project_repo (app_name, project_key, repository_slug),
+    
+    -- Foreign key to project table
+    FOREIGN KEY (project_key) REFERENCES project(project_key) ON DELETE CASCADE
+);
+
+-- Pull Request Review table remains UNCHANGED
+-- No app_name column added (virtual resolution)
+CREATE TABLE pull_request_review (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    project_key VARCHAR(32) NOT NULL,
+    repository_slug VARCHAR(128) NOT NULL,
+    pull_request_id VARCHAR(64) NOT NULL,
+    -- ... other fields ...
+    INDEX idx_project_repo (project_key, repository_slug),
+    -- ... other indexes ...
+);
+```
+
+### Key Design Decisions
+
+1. **Single Physical Table**: All reviews stored in one `pull_request_review` table
+   - ✅ No schema proliferation
+   - ✅ Easy cross-app analytics
+   - ✅ Simplified maintenance
+
+2. **Virtual Column Pattern**: `app_name` computed at query time
+   - ✅ Configurable via registry table
+   - ✅ No data redundancy
+   - ✅ Flexible reassignment
+
+3. **Default Behavior**: Unregistered projects → `"Unknown"` app
+   - ✅ Auto-registration on first access
+   - ✅ Backward compatible
+   - ✅ Zero configuration required
+
+4. **Multi-App Queries**: Support comma-separated `app_names` parameter
+   - ✅ Single query loads multiple apps
+   - ✅ Batch resolution prevents N+1
+   - ✅ Optimized with composite indexes
+
+### Query Flow Example
+
+**Request**: `GET /api/v1/reviews?app_names=member,tv`
+
+```python
+# Step 1: Parse app_names parameter
+app_names_list = ["member", "tv"]
+
+# Step 2: Query registry for matching (project_key, repository_slug) pairs
+SELECT project_key, repository_slug
+FROM project_registry
+WHERE app_name IN ('member', 'tv');
+-- Returns: [('ECOM', 'frontend-store'), ('MEDIA', 'tv-app')]
+
+# Step 3: Build review query with OR conditions
+SELECT * FROM pull_request_review
+WHERE (project_key='ECOM' AND repository_slug='frontend-store')
+   OR (project_key='MEDIA' AND repository_slug='tv-app');
+
+# Step 4: Batch resolve app_names for all results
+# (Cache this mapping to avoid repeated lookups)
+app_name_mapping = {
+    ('ECOM', 'frontend-store'): 'member',
+    ('MEDIA', 'tv-app'): 'tv'
+}
+
+# Step 5: Inject app_name into each response item
+{
+    "id": 37,
+    "app_name": "member",  # ← Injected at runtime
+    "project_key": "ECOM",
+    "repository_slug": "frontend-store",
+    "score": 8,
+    ...
+}
+```
+
+### Performance Optimizations
+
+1. **Batch Resolution**: Single query resolves all app_names
+   ```python
+   # Efficient batch lookup
+   SELECT app_name, project_key, repository_slug
+   FROM project_registry
+   WHERE (project_key, repository_slug) IN (
+       ('ECOM', 'frontend-store'),
+       ('MEDIA', 'tv-app'),
+       ...
+   );
+   ```
+
+2. **Composite Indexes**: Fast app-based filtering
+   ```sql
+   INDEX idx_app_project_repo (app_name, project_key, repository_slug)
+   ```
+
+3. **Eager Loading**: Prevent N+1 queries
+   ```python
+   select(PullRequestReview).options(
+       selectinload(PullRequestReview.project),
+       selectinload(PullRequestReview.repository),
+   )
+   ```
+
+4. **Strategic Caching**: Disabled only for app-filtered queries
+   - Ensures fresh registry data
+   - Basic queries still use cache
+
+### Admin APIs
+
+Complete CRUD operations for registry management:
+
+```python
+# List all apps
+GET /api/v1/apps
+→ [{"app_name": "member", "project_count": 5}, ...]
+
+# Register project to app
+POST /api/v1/admin/registry/register?app_name=member&project_key=ECOM&repository_slug=frontend-store
+
+# Move project to different app
+PUT /api/v1/admin/registry/update?project_key=ECOM&repository_slug=frontend-store&new_app_name=tv
+
+# Unregister project
+DELETE /api/v1/admin/registry/unregister?project_key=ECOM&repository_slug=frontend-store
+```
+
+### Use Cases
+
+1. **Microservices Organization**:
+   ```bash
+   # Group services by business domain
+   POST /admin/registry/register?app_name=checkout&project_key=ECOM&repository_slug=cart
+   POST /admin/registry/register?app_name=checkout&project_key=ECOM&repository_slug=payment
+   POST /admin/registry/register?app_name=search&project_key=ECOM&repository_slug=search-engine
+   
+   # Query all checkout reviews
+   GET /reviews?app_names=checkout
+   ```
+
+2. **Multi-Tenant SaaS**:
+   ```bash
+   # Customer-specific apps
+   POST /admin/registry/register?app_name=customer-a&project_key=CUSTA&repository_slug=frontend
+   POST /admin/registry/register?app_name=customer-b&project_key=CUSTB&repository_slug=frontend
+   
+   # Cross-customer analytics
+   GET /reviews?app_names=customer-a,customer-b
+   ```
+
+3. **Environment Separation**:
+   ```bash
+   # Dev vs Prod
+   POST /admin/registry/register?app_name=dev&project_key=ECOM&repository_slug=frontend-dev
+   POST /admin/registry/register?app_name=prod&project_key=ECOM&repository_slug=frontend-prod
+   ```
+
+### Benefits Summary
+
+✅ **No Schema Proliferation** - Single table for all reviews  
+✅ **Logical Grouping** - Configure via database, not code  
+✅ **Flexible Mapping** - Multiple projects per app  
+✅ **Query Performance** - Optimized indexes and batch resolution  
+✅ **Backward Compatible** - Existing APIs work unchanged  
+✅ **Easy Maintenance** - No need to create tables per app  
+
+---
+
 ## 3. Redis Caching Strategies
 
 Redis will be used for caching frequently accessed data and improving system performance. The following caching strategies are recommended:
@@ -661,7 +881,7 @@ async def create_review(
 
 ### Required Packages
 
-```txt
+``txt
 # requirements/base.txt
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
@@ -677,7 +897,7 @@ alembic>=1.13.0
 
 ### Development Packages
 
-```txt
+``txt
 # requirements/dev.txt
 -r base.txt
 pytest>=7.4.0
@@ -692,7 +912,7 @@ mypy>=1.7.0
 
 ### Production Packages
 
-```txt
+``txt
 # requirements/prod.txt
 -r base.txt
 gunicorn>=21.2.0
