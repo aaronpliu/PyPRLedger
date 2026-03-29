@@ -4,7 +4,7 @@ __version__ = "1.0.0"
 __api_prefix__ = "/api/v1"
 
 from src.api.v1.api import api_router
-from src.api.v1.endpoints import projects, reviews, users
+from src.api.v1.endpoints import project_registry, projects, reviews, users
 
 
 __all__ = [
@@ -12,4 +12,5 @@ __all__ = [
     "reviews",
     "users",
     "projects",
+    "project_registry",
 ]

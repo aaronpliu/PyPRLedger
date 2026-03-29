@@ -11,6 +11,7 @@ from src.models.repository import Repository
 
 
 if TYPE_CHECKING:
+    from src.models.project_registry import ProjectRegistry
     from src.models.pull_request import PullRequestReview
 
 
@@ -50,6 +51,11 @@ class Project(Base):
 
     pull_request_reviews: Mapped[list[PullRequestReview]] = relationship(
         "PullRequestReview", back_populates="project", cascade="all, delete-orphan"
+    )
+
+    # Registry entries linking this project to applications
+    registry_entries: Mapped[list[ProjectRegistry]] = relationship(
+        "ProjectRegistry", back_populates="project", cascade="all, delete-orphan"
     )
 
     # Indexes

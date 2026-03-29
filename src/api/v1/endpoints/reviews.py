@@ -129,13 +129,18 @@ async def list_reviews(
     score_max: int | None = Query(None, ge=0, le=10, description="Filter by maximum score"),
     date_from: datetime | None = Query(None, description="Filter reviews created after this date"),
     date_to: datetime | None = Query(None, description="Filter reviews created before this date"),
+    app_names: str | None = Query(
+        None,
+        description="Filter by application names (comma-separated for multiple apps, e.g., 'member,tv,football')",
+    ),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> ReviewListResponse:
     """
     List pull request reviews with filtering and pagination
 
-    Response includes full entity information for project, repository, and users.
+    Response includes full entity information for project, repository, and users,
+    plus the virtual app_name field resolved from project registry.
 
     Args:
         pull_request_id: Filter by pull request ID
@@ -150,13 +155,14 @@ async def list_reviews(
         score_max: Filter by maximum score
         date_from: Filter reviews created after this date
         date_to: Filter reviews created before this date
+        app_names: Filter by application names (comma-separated for multiple apps)
         page: Page number (1-indexed)
         page_size: Number of items per page
         db: Database session
         review_service: Review service instance
 
     Returns:
-        ReviewListResponse: List of reviews with full entity information and pagination info
+        ReviewListResponse: List of reviews with full entity information, app_name, and pagination info
     """
     try:
         filters = ReviewFilter(
@@ -174,9 +180,14 @@ async def list_reviews(
             date_to=date_to,
         )
 
-        # Get enriched reviews with full entity information
+        # Parse app_names from comma-separated string
+        app_names_list = None
+        if app_names:
+            app_names_list = [name.strip() for name in app_names.split(",") if name.strip()]
+
+        # Get enriched reviews with full entity information and app_name resolution
         enriched_reviews, total = await review_service.list_reviews_with_entities(
-            filters, db, page, page_size
+            filters, db, page, page_size, app_names=app_names_list
         )
 
         return ReviewListResponse(

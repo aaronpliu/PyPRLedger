@@ -170,6 +170,10 @@ class ReviewResponse(BaseModel):
     updated_date: datetime = Field(..., description="Record last update timestamp")
 
     # Embedded entity information - always included in response
+    app_name: str = Field(
+        default="Unknown",
+        description="Application name this review belongs to (resolved from project registry)",
+    )
     project: dict[str, Any] | None = Field(None, description="Full project information")
     repository: dict[str, Any] | None = Field(None, description="Full repository information")
     pull_request_user_info: dict[str, Any] | None = Field(
@@ -189,6 +193,7 @@ class ReviewResponse(BaseModel):
                 "pull_request_id": "pr-123",
                 "pull_request_commit_id": "abc123def456",
                 "repository_slug": "code-review",
+                "app_name": "member",  # NEW: Virtual field from registry
                 "source_branch": "feature/new-feature",
                 "target_branch": "main",
                 "git_code_diff": "diff --git a/file.py b/file.py\n...",

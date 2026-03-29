@@ -3,7 +3,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import and_, desc, func, select, update
+from sqlalchemy import and_, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,6 +13,7 @@ from src.core.exceptions import (
     ReviewNotFoundException,
     ReviewStatusException,
 )
+from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import PullRequestReview
 from src.schemas.pull_request import (
     ReviewCreate,
@@ -22,6 +23,7 @@ from src.schemas.pull_request import (
     ReviewUpdate,
 )
 from src.services.entity_sync_service import EntitySyncService
+from src.services.project_registry_service import ProjectRegistryService
 from src.utils.metrics import MetricsCollector
 from src.utils.redis import get_redis_client
 
@@ -534,6 +536,7 @@ class ReviewService:
         page: int = 1,
         page_size: int = 20,
         use_cache: bool = True,
+        app_names: list[str] | None = None,
     ) -> tuple[list[PullRequestReview], int]:
         """
         List pull request reviews with filtering and pagination
@@ -544,12 +547,39 @@ class ReviewService:
             page_size: Number of items per page
             db: Database session
             use_cache: Whether to use cache
+            app_names: Optional list of app names to filter by (supports multiple apps)
 
         Returns:
             Tuple[List[PullRequestReview], int]: List of reviews and total count
         """
         # Build query conditions using business keys
         conditions = []
+
+        # Handle app_name filtering via registry lookup
+        if app_names:
+            # Get all (project_key, repository_slug) pairs for requested apps
+            registry_query = select(
+                ProjectRegistry.project_key,
+                ProjectRegistry.repository_slug,
+            ).where(ProjectRegistry.app_name.in_(app_names))
+            registry_result = await db.execute(registry_query)
+            project_repo_pairs = registry_result.all()
+
+            if project_repo_pairs:
+                # Build OR condition for all matching pairs
+                app_conditions = [
+                    and_(
+                        PullRequestReview.project_key == pk,
+                        PullRequestReview.repository_slug == rs,
+                    )
+                    for pk, rs in project_repo_pairs
+                ]
+                conditions.append(or_(*app_conditions))
+            else:
+                # No projects registered to these apps, return empty result
+                return [], 0
+
+        # Add other filter conditions
         if filters.pull_request_id:
             conditions.append(PullRequestReview.pull_request_id == filters.pull_request_id)
         if filters.project_key:
@@ -575,10 +605,10 @@ class ReviewService:
         if filters.date_to:
             conditions.append(PullRequestReview.created_date <= filters.date_to)
 
-        # Try cache first for list results
-        filter_dict = filters.model_dump(exclude_unset=True)
-        if use_cache:
+        # Try cache first for list results (only if no app_name filter)
+        if not app_names and use_cache:
             try:
+                filter_dict = filters.model_dump(exclude_unset=True)
                 cache_key = self._get_list_cache_key(filter_dict, page, page_size)
                 cached = await self.redis_client.get(cache_key)
                 if cached:
@@ -598,7 +628,7 @@ class ReviewService:
         count_result = await db.execute(count_query)
         total = count_result.scalar()
 
-        # Get reviews with eager loading of relationships
+        # Get reviews with eager loading of ALL relationships
         query = (
             select(PullRequestReview)
             .options(
@@ -617,9 +647,10 @@ class ReviewService:
         result = await db.execute(query)
         reviews = result.scalars().all()
 
-        # Cache the result
-        if use_cache and reviews:
+        # Cache the result (only if no app_name filter)
+        if not app_names and use_cache and reviews:
             try:
+                filter_dict = filters.model_dump(exclude_unset=True)
                 cache_key = self._get_list_cache_key(filter_dict, page, page_size)
                 cache_data = {"reviews": [r.to_dict() for r in reviews], "total": total}
                 await self.redis_client.setex(
@@ -1304,7 +1335,8 @@ class ReviewService:
         db: AsyncSession,
         page: int = 1,
         page_size: int = 20,
-        use_cache: bool = False,  # Disable cache for enriched queries
+        use_cache: bool = False,
+        app_names: list[str] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """
         List pull request reviews with full entity information
@@ -1315,17 +1347,30 @@ class ReviewService:
             page_size: Number of items per page
             db: Database session
             use_cache: Whether to use cache (disabled for enriched queries)
+            app_names: Optional list of app names to filter by
 
         Returns:
             Tuple[List[Dict], int]: List of enriched reviews and total count
         """
-        # Get basic reviews from database
-        reviews, total = await self.list_reviews(filters, db, page, page_size, use_cache=False)
+        # Get basic reviews from database with app_name filtering
+        reviews, total = await self.list_reviews(
+            filters, db, page, page_size, use_cache=False, app_names=app_names
+        )
 
-        # Enrich each review with entity information
+        # Collect unique project-repo pairs for batch app_name resolution
+        project_repo_pairs = [(review.project_key, review.repository_slug) for review in reviews]
+
+        # Batch resolve app_names
+        registry_service = ProjectRegistryService()
+        app_name_mapping = await registry_service.get_app_names_batch(project_repo_pairs, db)
+
+        # Enrich each review with entity information AND app_name
         enriched_reviews = []
         for review in reviews:
             enriched = await self._enrich_review_with_entities(review, db)
+            # Inject app_name from registry
+            pair_key = (review.project_key, review.repository_slug)
+            enriched["app_name"] = app_name_mapping.get(pair_key, "Unknown")
             enriched_reviews.append(enriched)
 
         return enriched_reviews, total

@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_engine_from_config
 load_dotenv()
 
 # Add the project root to Python path
-sys.path.append(Path.parent(Path.parent(__file__)))
+sys.path.append(str(Path(__file__).parent.parent))
 
 # Import your models here
 # Import Alembic Config object
