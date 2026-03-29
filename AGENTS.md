@@ -4,7 +4,7 @@ This document provides guidelines for AI agents operating in this repository.
 
 ## Project Overview
 
-PyPRLedger is a FastAPI-based Pull Request Code Review System with MySQL, Redis, and Prometheus integration. It uses Python 3.12+ with async/await patterns throughout.
+PyPRLedger is a FastAPI-based Pull Request Code Review Result Storage System with MySQL, Redis, and Prometheus integration. It uses Python 3.12+ with async/await patterns throughout.
 
 ## Build/Lint/Test Commands
 

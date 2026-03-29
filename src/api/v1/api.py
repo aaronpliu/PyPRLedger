@@ -18,9 +18,9 @@ api_router.include_router(projects.router, prefix="/projects", tags=["projects"]
 async def api_info():
     """获取API信息"""
     return {
-        "name": "Pull Request Code Review System API",
+        "name": "Pull Request Code Review Result Storage System API",
         "version": "1.0.0",
-        "description": "FastAPI-based Pull Request Code Review System",
+        "description": "FastAPI-based Pull Request Code Review Result Storage System",
         "endpoints": {
             "reviews": "/api/v1/reviews",
             "users": "/api/v1/users",

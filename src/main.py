@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 # 创建 FastAPI 应用
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    description="Pull Request Code Review System API",
+    description="Pull Request Code Review Result Storage System API",
     version=__version__,
     docs_url="/api/docs",
     redoc_url="/api/redoc",

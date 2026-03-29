@@ -114,7 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Initial release of PRLedger
-- Complete RESTful API for pull request code review management
+- Complete RESTful API for pull request code review result storage management
 - User, project, repository, and review management endpoints
 - Async database operations with SQLAlchemy 2.0
 - Redis caching integration

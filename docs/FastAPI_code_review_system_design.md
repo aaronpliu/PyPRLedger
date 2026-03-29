@@ -726,7 +726,7 @@ CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ## Conclusion
 
-This comprehensive system design document provides a robust architecture for a FastAPI-based pull request code review system. The key takeaways include:
+This comprehensive system design document provides a robust architecture for a FastAPI-based pull request code review result storage system. The key takeaways include:
 
 1. **Scalable Project Structure**: Organized codebase with clear separation of concerns
 2. **Optimized Database Design**: Efficient schema with proper indexing for MySQL

@@ -1,4 +1,4 @@
-# API endpoints module for Pull Request Code Review System
+# API endpoints module for Pull Request Code Review Result Storage System
 
 __version__ = "1.0.0"
 
