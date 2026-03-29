@@ -973,8 +973,30 @@ class ReviewService:
         except Exception as e:
             logger.warning(f"Failed to load entity information for review: {str(e)}")
 
-        # Build enriched response
-        enriched_review = review_dict.copy()
+        # Build enriched response - exclude duplicate fields that are available in nested objects
+        enriched_review = {
+            "id": review_dict["id"],
+            "pull_request_id": review_dict["pull_request_id"],
+            "pull_request_commit_id": review_dict["pull_request_commit_id"],
+            # Excluded project_key (available in project.project_key)
+            "repository_slug": review_dict["repository_slug"],
+            # Excluded pull_request_user (available in pull_request_user_info.username)
+            # Excluded reviewer (available in reviewer_info.username)
+            "source_branch": review_dict["source_branch"],
+            "target_branch": review_dict["target_branch"],
+            "git_code_diff": review_dict["git_code_diff"],
+            "source_filename": review_dict["source_filename"],
+            "ai_suggestions": review_dict["ai_suggestions"],
+            "reviewer_comments": review_dict["reviewer_comments"],
+            "score": review_dict["score"],
+            "pull_request_status": review_dict["pull_request_status"],
+            "metadata": review_dict["metadata"],
+            "reviewed_date": review_dict["reviewed_date"],
+            "is_latest_review": review_dict["is_latest_review"],
+            "review_iteration": review_dict["review_iteration"],
+            "created_date": review_dict["created_date"],
+            "updated_date": review_dict["updated_date"],
+        }
 
         # Add project information
         if project:

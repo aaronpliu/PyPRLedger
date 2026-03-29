@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ReviewBase(BaseModel):
@@ -135,6 +135,9 @@ class ReviewScoreUpdate(BaseModel):
     score: int = Field(..., ge=0, le=10, description="Review score (0-10)")
 
 
+from pydantic import BaseModel, Field, field_validator, model_serializer
+
+
 class ReviewResponse(BaseModel):
     """Schema for pull request review response with full entity information"""
 
@@ -143,10 +146,7 @@ class ReviewResponse(BaseModel):
     pull_request_commit_id: str | None = Field(
         None, description="Commit ID for this specific review"
     )
-    project_key: str = Field(..., description="Project key")
     repository_slug: str = Field(..., description="Repository slug")
-    pull_request_user: str = Field(..., description="Username of PR author")
-    reviewer: str = Field(..., description="Reviewer username")
     source_branch: str = Field(..., description="Source branch name")
     target_branch: str = Field(..., description="Target branch name")
     git_code_diff: str | None = Field(None, description="Git code diff content")
@@ -188,10 +188,7 @@ class ReviewResponse(BaseModel):
                 "id": 1,
                 "pull_request_id": "pr-123",
                 "pull_request_commit_id": "abc123def456",
-                "project_key": "PROJ",
                 "repository_slug": "code-review",
-                "pull_request_user": "jane_smith",
-                "reviewer": "john_doe",
                 "source_branch": "feature/new-feature",
                 "target_branch": "main",
                 "git_code_diff": "diff --git a/file.py b/file.py\n...",
@@ -251,6 +248,56 @@ class ReviewResponse(BaseModel):
                 },
             }
         }
+
+    @model_validator(mode="before")
+    @classmethod
+    def remove_duplicate_fields(cls, values: dict[str, Any]) -> dict[str, Any]:
+        """
+        Remove duplicate fields from ORM/dict input to avoid redundancy.
+
+        The following fields are removed because they're duplicated in nested objects:
+        - project_key (available in project.project_key)
+        - reviewer (available in reviewer_info.username)
+        - pull_request_user (available in pull_request_user_info.username)
+
+        Args:
+            values: Input values from ORM or dict
+
+        Returns:
+            Filtered values without duplicate fields
+        """
+        # Create a copy to avoid modifying the original
+        filtered_values = values.copy()
+
+        # Remove duplicate fields - they're available in nested objects
+        filtered_values.pop("project_key", None)
+        filtered_values.pop("reviewer", None)
+        filtered_values.pop("pull_request_user", None)
+
+        return filtered_values
+
+    @model_serializer(mode="wrap")
+    def serialize_with_exclusions(self, handler):
+        """
+        Customize serialization to exclude duplicate fields.
+
+        This ensures that even if duplicate fields somehow make it into the model,
+        they won't appear in the serialized output.
+
+        Args:
+            handler: The default serializer handler
+
+        Returns:
+            Serialized dict without duplicate fields
+        """
+        data = handler(self)
+
+        # Explicitly remove any duplicate fields from output
+        data.pop("project_key", None)
+        data.pop("reviewer", None)
+        data.pop("pull_request_user", None)
+
+        return data
 
 
 class ReviewListResponse(BaseModel):
