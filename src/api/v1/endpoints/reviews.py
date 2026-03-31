@@ -243,32 +243,64 @@ async def get_review_statistics(
     response_model=ReviewResponse,
     dependencies=[Depends(get_db_session), Depends(get_review_service)],
 )
-async def update_review_score(
+async def upsert_review_score(
     score_update: ReviewScoreUpdate,
     db: AsyncSession = Depends(get_db_session),
     review_service: ReviewService = Depends(get_review_service),
 ) -> ReviewResponse:
     """
-    Update the score of a specific review record
+    Create or update a review score for a specific reviewer
 
-    This endpoint updates the score for a specific review identified by the composite key:
-    (project_key, repository_slug, pull_request_id, source_filename, reviewer)
+    This endpoint implements an UPSERT operation:
+    - **If the reviewer already has a review record**: Updates their score
+    - **If the reviewer doesn't have a record**: Creates a new review record for them
+
+    ## Multi-Reviewer Support
+
+    Each reviewer can independently submit and update their own score for the same
+    PR/file combination. Reviews are tracked separately per reviewer, so:
+
+    - Reviewer A can score file "src/main.py" with 8.5
+    - Reviewer B can score the same file "src/main.py" with 9.0
+    - Both reviews coexist independently in the system
+    - Creating/updating one reviewer's score does not affect other reviewers' scores
+
+    ## Workflow
+
+    1. AI submits initial review results via POST /reviews (creates base data)
+    2. Any reviewer can then score that file via this endpoint
+    3. Multiple reviewers can score the same file independently
+    4. Each reviewer's score history is tracked via iteration numbers
 
     Args:
-        score_update: The score update payload containing composite key and new score
+        score_update: The score upsert payload containing:
+            - project_key: Project identifier
+            - repository_slug: Repository identifier
+            - pull_request_id: PR identifier
+            - source_filename: File being reviewed
+            - reviewer: Username of the reviewer submitting/updating score
+            - score: Score value (0.0-10.0)
         db: Database session
         review_service: Review service instance
 
     Returns:
-        ReviewResponse: The updated review with enriched entity information
+        ReviewResponse: The created/updated review with enriched entity information including:
+            - app_name: Resolved from project registry
+            - project: Full project details
+            - repository: Full repository details
+            - pull_request_user_info: PR author information
+            - reviewer_info: Reviewer information
+            - review_iteration: Which iteration this is for this reviewer
 
     Raises:
-        ReviewNotFoundException: If the review doesn't exist
+        ReviewNotFoundException: If no review data exists for this file at all.
+            AI review results must be submitted first via POST /reviews before scoring.
+        ValueError: If required parameters are missing or invalid.
     """
     import traceback
 
     try:
-        enriched_review = await review_service.update_review_score(
+        enriched_review = await review_service.upsert_review_score(
             project_key=score_update.project_key,
             repository_slug=score_update.repository_slug,
             pull_request_id=score_update.pull_request_id,

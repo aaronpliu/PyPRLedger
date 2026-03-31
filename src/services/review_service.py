@@ -993,7 +993,7 @@ class ReviewService:
 
         return review
 
-    async def update_review_score(
+    async def upsert_review_score(
         self,
         project_key: str,
         repository_slug: str,
@@ -1004,26 +1004,34 @@ class ReviewService:
         db: AsyncSession,
     ) -> dict[str, Any]:
         """
-        Update the score of an existing review using composite key lookup
+        Create or update a review score using composite key lookup
+
+        This method supports multiple reviewers scoring the same PR/file combination.
+        - If the reviewer already has a review record, it updates their score
+        - If the reviewer doesn't have a record, it creates a new one for them
 
         Args:
             project_key: The project key
             repository_slug: The repository slug
             pull_request_id: The pull request ID
             source_filename: The source filename being reviewed
-            reviewer: The reviewer username
-            score: The new score (0.0-10.0)
+            reviewer: The reviewer username (who is submitting/updating the score)
+            score: The score value (0.0-10.0)
             db: Database session
 
         Returns:
             dict: Enriched review data with entity information
 
         Raises:
-            ReviewNotFoundException: If the review doesn't exist
+            ValueError: If required parameters are missing
         """
         from sqlalchemy import select
 
-        # Get the latest review using full composite key with eager loading
+        # Validate required parameters
+        if not all([project_key, repository_slug, pull_request_id, source_filename, reviewer]):
+            raise ValueError("All composite key fields and reviewer are required")
+
+        # Try to find existing latest review by THIS specific reviewer
         result = await db.execute(
             select(PullRequestReview)
             .options(
@@ -1041,23 +1049,128 @@ class ReviewService:
                 PullRequestReview.is_latest_review.is_(True),
             )
         )
-        review = result.scalar_one_or_none()
+        existing_review = result.scalar_one_or_none()
 
-        if not review:
-            raise ReviewNotFoundException(pull_request_id=pull_request_id)
+        if existing_review:
+            # Case 1: Review exists for this reviewer - UPDATE their score
+            logger.info(
+                f"Updating score for reviewer '{reviewer}' on file '{source_filename}' "
+                f"in PR {pull_request_id}: {existing_review.score} -> {score}"
+            )
 
-        # Update only the score field
-        review.score = score
+            existing_review.score = score
+            existing_review.updated_date = datetime.now(UTC)
 
-        # Commit the change
+            # Mark as not latest (will create new iteration below)
+            existing_review.is_latest_review = False
+
+            await db.flush()
+
+            # Get next iteration number for this reviewer
+            iteration_query = select(func.max(PullRequestReview.review_iteration)).where(
+                PullRequestReview.pull_request_commit_id == existing_review.pull_request_commit_id,
+                PullRequestReview.project_key == existing_review.project_key,
+                PullRequestReview.repository_slug == existing_review.repository_slug,
+                PullRequestReview.source_filename == existing_review.source_filename,
+                PullRequestReview.reviewer == reviewer,
+            )
+            iteration_result = await db.execute(iteration_query)
+            max_iteration = iteration_result.scalar() or 0
+            new_iteration = max_iteration + 1
+
+            # Create new review record with updated score
+            new_review = PullRequestReview(
+                pull_request_id=existing_review.pull_request_id,
+                pull_request_commit_id=existing_review.pull_request_commit_id,
+                project_key=existing_review.project_key,
+                repository_slug=existing_review.repository_slug,
+                pull_request_user=existing_review.pull_request_user,
+                reviewer=reviewer,
+                source_branch=existing_review.source_branch,
+                target_branch=existing_review.target_branch,
+                git_code_diff=existing_review.git_code_diff,
+                source_filename=existing_review.source_filename,
+                ai_suggestions=existing_review.ai_suggestions,
+                reviewer_comments=existing_review.reviewer_comments,
+                score=score,
+                pull_request_status=existing_review.pull_request_status,
+                metadata=existing_review.metadata,
+                reviewed_date=datetime.now(UTC),
+                is_latest_review=True,
+                review_iteration=new_iteration,
+            )
+
+            db.add(new_review)
+            await db.flush()
+            await db.refresh(new_review)
+
+            review_to_enrich = new_review
+        else:
+            # Case 2: No review exists for this reviewer - need to CREATE new record
+            # First, check if ANY review exists for this PR/file (to get base data)
+            any_review_result = await db.execute(
+                select(PullRequestReview)
+                .where(
+                    PullRequestReview.pull_request_id == pull_request_id,
+                    PullRequestReview.project_key == project_key,
+                    PullRequestReview.repository_slug == repository_slug,
+                    PullRequestReview.source_filename == source_filename,
+                )
+                .order_by(PullRequestReview.review_iteration.desc())
+                .limit(1)
+            )
+            base_review = any_review_result.scalar_one_or_none()
+
+            if not base_review:
+                # No reviews exist at all for this file - cannot score without base data
+                logger.warning(
+                    f"No review data found for file '{source_filename}' in PR {pull_request_id}. "
+                    f"AI review results must be submitted first via POST /reviews."
+                )
+                raise ReviewNotFoundException(pull_request_id=pull_request_id)
+
+            logger.info(
+                f"Creating new score for reviewer '{reviewer}' on file '{source_filename}' "
+                f"in PR {pull_request_id}: {score}"
+            )
+
+            # Create new review record for this reviewer
+            new_review = PullRequestReview(
+                pull_request_id=base_review.pull_request_id,
+                pull_request_commit_id=base_review.pull_request_commit_id,
+                project_key=base_review.project_key,
+                repository_slug=base_review.repository_slug,
+                pull_request_user=base_review.pull_request_user,
+                reviewer=reviewer,
+                source_branch=base_review.source_branch,
+                target_branch=base_review.target_branch,
+                git_code_diff=base_review.git_code_diff,
+                source_filename=base_review.source_filename,
+                ai_suggestions=base_review.ai_suggestions,
+                reviewer_comments=None,  # Initial score may not have comments
+                score=score,
+                pull_request_status=base_review.pull_request_status,
+                metadata=base_review.metadata,
+                reviewed_date=datetime.now(UTC),
+                is_latest_review=True,
+                review_iteration=1,  # First iteration for this reviewer
+            )
+
+            db.add(new_review)
+            await db.flush()
+            await db.refresh(new_review)
+
+            review_to_enrich = new_review
+
+        # Commit all changes
         await db.commit()
 
         # Invalidate cache using composite key
         await self._invalidate_review_cache(project_key, repository_slug, pull_request_id)
         await self._invalidate_list_cache()
 
-        # Enrich the review with entity information
-        enriched_review = await self._enrich_review_with_entities(review, db)
+        # Enrich the review with entity information including app_name
+        enriched_review = await self._enrich_review_with_entities(review_to_enrich, db)
 
         return enriched_review
 
