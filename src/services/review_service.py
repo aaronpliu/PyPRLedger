@@ -1000,9 +1000,9 @@ class ReviewService:
         pull_request_id: str,
         source_filename: str,
         reviewer: str,
-        score: int,
+        score: float,
         db: AsyncSession,
-    ) -> PullRequestReview:
+    ) -> dict[str, Any]:
         """
         Update the score of an existing review using composite key lookup
 
@@ -1012,20 +1012,27 @@ class ReviewService:
             pull_request_id: The pull request ID
             source_filename: The source filename being reviewed
             reviewer: The reviewer username
-            score: The new score (0-10)
+            score: The new score (0.0-10.0)
             db: Database session
 
         Returns:
-            PullRequestReview: The updated review
+            dict: Enriched review data with entity information
 
         Raises:
             ReviewNotFoundException: If the review doesn't exist
         """
         from sqlalchemy import select
 
-        # Get the latest review using full composite key
+        # Get the latest review using full composite key with eager loading
         result = await db.execute(
-            select(PullRequestReview).where(
+            select(PullRequestReview)
+            .options(
+                selectinload(PullRequestReview.project),
+                selectinload(PullRequestReview.repository),
+                selectinload(PullRequestReview.pull_request_user_rel),
+                selectinload(PullRequestReview.reviewer_rel),
+            )
+            .where(
                 PullRequestReview.pull_request_id == pull_request_id,
                 PullRequestReview.project_key == project_key,
                 PullRequestReview.repository_slug == repository_slug,
@@ -1042,11 +1049,17 @@ class ReviewService:
         # Update only the score field
         review.score = score
 
+        # Commit the change
+        await db.commit()
+
         # Invalidate cache using composite key
         await self._invalidate_review_cache(project_key, repository_slug, pull_request_id)
         await self._invalidate_list_cache()
 
-        return review
+        # Enrich the review with entity information
+        enriched_review = await self._enrich_review_with_entities(review, db)
+
+        return enriched_review
 
     async def _enrich_review_with_entities(
         self, review: PullRequestReview | dict[str, Any], db: AsyncSession

@@ -125,8 +125,8 @@ async def list_reviews(
     pull_request_status: str | None = Query(
         None, description="Filter by pull request status (open, merged, closed, draft)"
     ),
-    score_min: int | None = Query(None, ge=0, le=10, description="Filter by minimum score"),
-    score_max: int | None = Query(None, ge=0, le=10, description="Filter by maximum score"),
+    score_min: float | None = Query(None, ge=0.0, le=10.0, description="Filter by minimum score"),
+    score_max: float | None = Query(None, ge=0.0, le=10.0, description="Filter by maximum score"),
     date_from: datetime | None = Query(None, description="Filter reviews created after this date"),
     date_to: datetime | None = Query(None, description="Filter reviews created before this date"),
     app_names: str | None = Query(
@@ -250,7 +250,7 @@ async def update_review_score(
     source_filename: Annotated[
         str, Query(description="Source filename being reviewed (e.g., 'src/services/cart.py')")
     ],
-    score: Annotated[int, Query(ge=0, le=10, description="Score (0-10)")],
+    score: Annotated[float, Query(ge=0.0, le=10.0, description="Score (0.0-10.0)")],
     db: AsyncSession = Depends(get_db_session),
     review_service: ReviewService = Depends(get_review_service),
 ) -> ReviewResponse:
@@ -279,7 +279,7 @@ async def update_review_score(
     import traceback
 
     try:
-        updated_review = await review_service.update_review_score(
+        enriched_review = await review_service.update_review_score(
             project_key=project_key,
             repository_slug=repository_slug,
             pull_request_id=pull_request_id,
@@ -288,7 +288,7 @@ async def update_review_score(
             score=score,
             db=db,
         )
-        return ReviewResponse(**updated_review.to_dict())
+        return ReviewResponse(**enriched_review)
     except ReviewNotFoundException as e:
         metrics.increment_error(error_type=e.code, endpoint="PUT /api/v1/reviews/score")
         raise HTTPException(
