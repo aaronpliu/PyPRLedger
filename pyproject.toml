@@ -55,6 +55,7 @@ dependencies = [
     "sqlalchemy>=2.0.48",
     "sqlmodel>=0.0.37",
     "uvicorn[standard]>=0.42.0",
+    "fastapi-offline>=1.7.6",
 ]
 
 [project.optional-dependencies]

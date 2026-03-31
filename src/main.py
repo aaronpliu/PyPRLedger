@@ -1,10 +1,11 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi_offline import FastAPIOffline
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from src import __version__
@@ -28,7 +29,7 @@ metrics_collector = MetricsCollector()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator:
+async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
     """Application lifecycle management"""
     # Startup operations
     logger.info("Starting application...")
@@ -48,7 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
 
 # Create FastAPI application
-app = FastAPI(
+app = FastAPIOffline(
     title=settings.PROJECT_NAME,
     description="Pull Request Code Review Result Storage System API",
     version=__version__,
