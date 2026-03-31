@@ -65,7 +65,7 @@ class ReviewCreate(ReviewBase):
         None, description="AI-generated suggestions in JSON format"
     )
     reviewer_comments: str | None = Field(None, max_length=10000, description="Reviewer's comments")
-    score: int | None = Field(None, ge=0, le=10, description="Review score between 0 and 10")
+    score: float | None = Field(None, ge=0.0, le=10.0, description="Review score (0.0-10.0)")
     pull_request_status: str = Field(
         default="open", description="Pull request status (open, merged, closed, draft)"
     )
@@ -108,7 +108,7 @@ class ReviewUpdate(BaseModel):
     source_filename: str | None = Field(None, max_length=255)
     ai_suggestions: dict[str, Any] | None = Field(None)
     reviewer_comments: str | None = Field(None, max_length=10000)
-    score: int | None = Field(None, ge=0, le=10)
+    score: float | None = Field(None, ge=0.0, le=10.0)
     pull_request_status: str | None = Field(None)
     metadata: dict[str, Any] | None = Field(None)
 
@@ -132,7 +132,7 @@ class ReviewUpdate(BaseModel):
 class ReviewScoreUpdate(BaseModel):
     """Schema for updating only the score of a pull request review"""
 
-    score: int = Field(..., ge=0, le=10, description="Review score (0-10)")
+    score: float = Field(..., ge=0.0, le=10.0, description="Review score (0.0-10.0)")
 
 
 from pydantic import BaseModel, Field, field_validator, model_serializer
@@ -155,7 +155,7 @@ class ReviewResponse(BaseModel):
     )
     ai_suggestions: dict[str, Any] | None = Field(None, description="AI-generated suggestions")
     reviewer_comments: str | None = Field(None, description="Reviewer's comments")
-    score: int | None = Field(None, description="Review score (0-10)")
+    score: float | None = Field(None, ge=0.0, le=10.0, description="Review score (0.0-10.0)")
     pull_request_status: str = Field(..., description="Pull request status")
     metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
 
@@ -203,7 +203,7 @@ class ReviewResponse(BaseModel):
                     "suggestion_2": "Add type hints for better code clarity",
                 },
                 "reviewer_comments": "Overall good code, but consider the suggestions from AI",
-                "score": 8,
+                "score": 8.5,
                 "pull_request_status": "open",
                 "metadata": {"labels": ["bugfix", "enhancement"], "priority": "high"},
                 "reviewed_date": "2023-01-01T12:00:00Z",
@@ -443,8 +443,8 @@ class ReviewFilter(BaseModel):
     pull_request_status: str | None = Field(
         None, description="Filter by pull request status (open, merged, closed, draft)"
     )
-    score_min: int | None = Field(None, ge=0, le=10, description="Filter by minimum score")
-    score_max: int | None = Field(None, ge=0, le=10, description="Filter by maximum score")
+    score_min: float | None = Field(None, ge=0.0, le=10.0, description="Filter by minimum score")
+    score_max: float | None = Field(None, ge=0.0, le=10.0, description="Filter by maximum score")
     date_from: datetime | None = Field(None, description="Filter reviews created after this date")
     date_to: datetime | None = Field(None, description="Filter reviews created before this date")
 

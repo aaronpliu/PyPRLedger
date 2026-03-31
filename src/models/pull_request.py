@@ -7,6 +7,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -87,7 +88,7 @@ class PullRequestReview(Base):
     reviewer_comments: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Review metrics
-    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Status
     pull_request_status: Mapped[str] = mapped_column(String(32), nullable=False)

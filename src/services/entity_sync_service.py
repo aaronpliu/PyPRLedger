@@ -69,7 +69,6 @@ class EntitySyncService:
         self,
         repository_slug: str,
         project: Project,
-        workspace: str = "default",  # Default workspace, can be configured
     ) -> Repository:
         """
         Sync repository entity - query first, then fetch from API if not exists
@@ -77,28 +76,30 @@ class EntitySyncService:
         Args:
             repository_slug: The repository slug to sync
             project: Parent project instance
-            workspace: Bitbucket workspace name
 
         Returns:
             Repository instance (either existing or newly created)
         """
-        # Try to find existing repository
+        # Try to find existing repository - must query by both project_id and repository_slug
         repo_result = await self.db.execute(
-            select(Repository).where(Repository.repository_slug == repository_slug)
+            select(Repository).where(
+                Repository.project_id == project.project_id,
+                Repository.repository_slug == repository_slug,
+            )
         )
         repository = repo_result.scalar_one_or_none()
 
         if repository:
-            logger.debug(f"Repository already exists: {repository_slug}")
-            # Ensure it's linked to the correct project
-            if repository.project_id != project.project_id:
-                repository.project_id = project.project_id
-                await self.db.flush()
+            logger.debug(
+                f"Repository already exists: {repository_slug} under project {project.project_key}"
+            )
             return repository
 
-        # Fetch from Bitbucket API
-        logger.info(f"Repository not found, fetching from Bitbucket: {workspace}/{repository_slug}")
-        repo_info = await self.bitbucket.get_repository_info(workspace, repository_slug)
+        # Fetch from Bitbucket API using project_key as workspace
+        logger.info(
+            f"Repository not found, fetching from Bitbucket: {project.project_key}/{repository_slug}"
+        )
+        repo_info = await self.bitbucket.get_repository_info(project.project_key, repository_slug)
 
         if not repo_info:
             raise ValueError(f"Failed to fetch repository info for {repository_slug}")
@@ -149,6 +150,7 @@ class EntitySyncService:
 
         # Create new user
         user = User(
+            user_id=user_info["user_id"],
             username=username,
             display_name=user_info["display_name"],
             email_address=user_info["email_address"],
@@ -167,7 +169,6 @@ class EntitySyncService:
         repository_slug: str,
         reviewer: str,
         pull_request_user: str,
-        workspace: str = "default",
     ) -> tuple[Project, Repository, User, User]:
         """
         Sync all related entities at once
@@ -177,14 +178,13 @@ class EntitySyncService:
             repository_slug: Repository slug
             reviewer: Reviewer username
             pull_request_user: PR author username
-            workspace: Bitbucket workspace name
 
         Returns:
             Tuple of (Project, Repository, User, User) in order
         """
         # Sync in order: Project -> Repository -> Users
         project = await self.sync_project(project_key)
-        repository = await self.sync_repository(repository_slug, project, workspace)
+        repository = await self.sync_repository(repository_slug, project)
         pr_user = await self.sync_user(pull_request_user, is_reviewer=False)
         reviewer_user = await self.sync_user(reviewer, is_reviewer=True)
 

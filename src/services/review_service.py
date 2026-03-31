@@ -278,7 +278,7 @@ class ReviewService:
 
     async def upsert_review(
         self, review_data: ReviewCreate, db: AsyncSession, include_details: bool = False
-    ) -> tuple[PullRequestReview, bool]:
+    ) -> tuple[ReviewResponse, bool]:
         """
         Upsert a pull request review - create if not exists, or create new iteration if exists
 
@@ -294,7 +294,7 @@ class ReviewService:
             include_details: Whether to include detailed information
 
         Returns:
-            tuple[PullRequestReview, bool]: The new review and True (always created a new record)
+            tuple[ReviewResponse, bool]: The created review response and True (always created a new record)
         """
         # Initialize entity sync service
         entity_sync_service = EntitySyncService(db)
@@ -374,6 +374,9 @@ class ReviewService:
             await db.flush()
             await db.refresh(new_review)
 
+            # Convert to ReviewResponse (same as create_review does)
+            review_response = ReviewResponse(**new_review.to_dict())
+
             # Cache the new review
             review_dict = new_review.to_dict()
             if include_details:
@@ -387,21 +390,30 @@ class ReviewService:
                     "username": reviewer.username,
                     "display_name": reviewer.display_name,
                 }
-            await self._set_review_in_cache(new_review.pull_request_id, review_dict)
+            await self._set_review_in_cache(
+                project_key=project.project_key,
+                repository_slug=repository.repository_slug,
+                pull_request_id=new_review.pull_request_id,
+                review_data=review_dict,
+            )
 
             # Update metrics
             self.metrics.increment_review(project=project.project_key, reviewer=reviewer.username)
 
             # Invalidate cache
-            await self._invalidate_review_cache(new_review.pull_request_id)
+            await self._invalidate_review_cache(
+                project_key=project.project_key,
+                repository_slug=repository.repository_slug,
+                pull_request_id=new_review.pull_request_id,
+            )
             await self._invalidate_list_cache()
 
             logger.info(
                 f"Created new review iteration: {new_review.pull_request_id}, iteration: {new_review.review_iteration}"
             )
-            return new_review, True
+            return review_response, True
         else:
-            # Create new review (first iteration)
+            # Create new review (first iteration) - delegate to create_review
             new_review_response = await self.create_review(review_data, db, include_details)
             logger.info(
                 f"Created new review: {new_review_response.pull_request_id}, iteration: {new_review_response.review_iteration}"

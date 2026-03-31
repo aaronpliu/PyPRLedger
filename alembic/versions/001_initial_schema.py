@@ -182,7 +182,7 @@ def upgrade() -> None:
         sa.Column("ai_suggestions", sa.JSON(), nullable=True),
         sa.Column("reviewer_comments", sa.Text(), nullable=True),
         # Review metrics
-        sa.Column("score", sa.Integer(), nullable=True),
+        sa.Column("score", sa.Float(), nullable=True),
         # Status
         sa.Column("pull_request_status", sa.String(length=32), nullable=False),
         # Metadata
