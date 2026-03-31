@@ -18,19 +18,19 @@ from src.utils.metrics import MetricsCollector
 from src.utils.redis import close_redis, init_redis
 
 
-# 配置日志系统
+# Configure logging system
 setup_logging()
 logger = get_logger(__name__)
 
 
-# 初始化指标收集器
+# Initialize metrics collector
 metrics_collector = MetricsCollector()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
-    """应用程序生命周期管理"""
-    # 启动时执行
+    """Application lifecycle management"""
+    # Startup operations
     logger.info("Starting application...")
     await init_db()
     await init_redis()
@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     yield
 
-    # 关闭时执行
+    # Shutdown operations
     logger.info("Shutting down application...")
     await close_db()
     await close_redis()
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info("Application shutdown complete")
 
 
-# 创建 FastAPI 应用
+# Create FastAPI application
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Pull Request Code Review Result Storage System API",
@@ -58,7 +58,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# 配置 CORS
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.backend_cors_origins_list,
@@ -67,20 +67,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 添加自定义中间件
+# Add custom middleware
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware, max_requests=settings.RATE_LIMIT_MAX_REQUESTS)
 
-# 集成Prometheus metrics
+# Integrate Prometheus metrics
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
-# 注册API路由
+# Register API routes
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
-    """自定义应用异常处理"""
+    """Custom application exception handler"""
     logger.error(
         f"Application error occurred: {exc.code} - {exc.message}", extra={"request": str(request)}
     )
@@ -94,7 +94,7 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    """请求验证异常处理"""
+    """Request validation exception handler"""
     logger.error("Validation error", extra={"request": str(request)})
 
     # Convert validation errors to simple strings to ensure JSON serialization
@@ -118,7 +118,7 @@ async def validation_exception_handler(
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """通用异常处理"""
+    """General exception handler"""
     import traceback
 
     error_traceback = traceback.format_exc()
@@ -146,13 +146,13 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 @app.get("/health")
 async def health_check() -> dict:
-    """健康检查端点"""
+    """Health check endpoint"""
     return {"status": "healthy", "version": __version__}
 
 
 @app.get("/")
 async def root() -> dict:
-    """根路径"""
+    """Root path"""
     return {
         "message": "Pull Request Code Review Result Storage System API",
         "version": __version__,
