@@ -1,134 +1,243 @@
-# Release Preparation Guide - v1.1.0
+# Release Preparation Guide - v1.3.1
 
 ## Release Checklist
 
 ### ✅ Pre-Release Tasks
 
 #### 1. Version Bump
-- [x] Run version bump script: `python scripts/bump_version.py set 1.1.0`
-- [x] Verify version updated in `pyproject.toml`: **1.1.0** ✓
-- [x] Confirm application reads correct version: **1.1.0** ✓
+- [x] Run version bump script: `python scripts/bump_version.py set 1.3.1`
+- [x] Verify version updated in `pyproject.toml`: **1.3.1** ✓
+- [x] Confirm application reads correct version at runtime
 - [x] Update CHANGELOG.md with release notes ✓
 
 #### 2. Documentation Updates
-- [x] Updated CHANGELOG.md with v1.1.0 changes ✓
-- [x] Documented new features and fixes ✓
-- [x] Updated version history summary table ✓
+- [x] Updated CHANGELOG.md with v1.3.1 changes ✓
+- [x] Documented multi-reviewer score support enhancements ✓
+- [x] Updated API documentation with UPSERT behavior ✓
 
 #### 3. Code Changes Summary
 
 ##### New Features
-- **Enhanced Review Score Update Endpoint** (`PUT /api/v1/reviews/score`)
-  - Complete composite key-based record identification
-  - Mandatory parameters: `project_key`, `repository_slug`, `pull_request_id`, `reviewer`, `source_filename`, `score`
-  - In-place score update without creating new iterations
-  - Prevents cross-project/cross-repository data collisions
+- **Multi-Reviewer Score Support** - Complete independent scoring workflow
+  - UPSERT pattern: Creates new record if reviewer hasn't scored, updates existing if present
+  - Each reviewer maintains independent score history with separate iteration tracking
+  - Per-reviewer `is_latest_review` flag ensures correct latest score identification
+  - Supports unlimited reviewers per PR/file without conflicts
+  
+- **Enhanced Score Update Logic** - Intelligent create-or-update behavior
+  - New `upsert_review_score()` method replaces update-only approach
+  - Automatic base data reuse: New reviewers inherit AI review data (diff, suggestions)
+  - Proper error handling: Distinguishes "no AI review yet" vs "new reviewer needs record"
+  - Clear guidance messages direct users to submit AI review first if missing
 
-- **Improved Version Management**
-  - Direct reading from `pyproject.toml` using Python's `tomllib`
-  - No package installation required for development
-  - Single source of truth maintained
-  - Automatic fallback to `1.0.0-dev` on errors
+##### Improvements
+- **Service Method Refactoring** - Better naming and clearer semantics
+  - Renamed `update_review_score()` → `upsert_review_score()` 
+  - Enhanced logging shows which reviewer is updating/creating
+  - Improved error messages with actionable guidance
+  
+- **API Response Enrichment** - Consistent entity information
+  - `app_name` resolution integrated into upsert flow
+  - Full nested objects: `project`, `repository`, `pull_request_user_info`, `reviewer_info`
+  - Updated timestamp on both create and update operations
 
 ##### Bug Fixes
-- **SQLAlchemy Boolean Query Syntax**
-  - Fixed all `column == True` comparisons to `column.is_(True)`
-  - Resolves "Review not found" errors in boolean filtering
-  - Applied to all `is_latest_review` queries across review service
-
-- **API Route Ordering**
-  - Reorganized endpoints to prevent route matching conflicts
-  - Moved `/score` before parameterized routes like `/{pull_request_id}`
+- **None in this release** - Focus on feature enhancements
 
 ##### Breaking Changes
-- **Review Score Update API**
-  - `source_filename` parameter is now **mandatory** (was optional)
-  - All 5 composite key fields must be provided for score updates
-  - Ensures precise record targeting and data integrity
+- **None** - Fully backward compatible with existing workflows
 
 #### 4. Testing Verification
 - [ ] Run full test suite: `pytest tests/`
-- [ ] Verify API endpoints manually or with Postman
-- [ ] Test score update endpoint with all required parameters
-- [ ] Confirm boolean query fixes resolve previous errors
-- [ ] Validate version display in `/api/docs` and `/health`
+- [ ] Verify multi-reviewer scenarios:
+  - Multiple reviewers scoring same PR/file independently
+  - Reviewer updating their own score multiple times
+  - New reviewer creating first score on existing PR
+  - Error handling when AI review doesn't exist yet
+- [ ] Validate API documentation clarity
+- [ ] Confirm version display in `/api/docs` and `/health`
 
 #### 5. Database Considerations
 - [ ] No schema changes in this release
 - [ ] No migration scripts required
 - [ ] Existing data fully compatible
+- [ ] Composite indexes already support multi-reviewer queries
 
 ---
 
 ## Release Notes Template
 
-### Version 1.1.0 - March 25, 2026
+### Version 1.3.1 - March 31, 2026
 
 #### 🎉 New Features
 
-**Enhanced Review Score Update Endpoint**
-- Introduced dedicated `PUT /api/v1/reviews/score` endpoint for precise score updates
-- Uses complete business key combination for record identification:
-  - `project_key` - Project identifier (e.g., "ECOM")
-  - `repository_slug` - Repository slug (e.g., "frontend-store")
-  - `pull_request_id` - Pull request ID (e.g., "pr-123")
-  - `source_filename` - Source filename being reviewed (mandatory)
-  - `reviewer` - Reviewer username (e.g., "john_doe")
-  - `score` - New score value (0-10)
-- Performs in-place score updates without creating new iterations
-- Prevents data collisions across projects and repositories
-- All parameters mandatory to ensure precise record targeting
+**Multi-Reviewer Score Support**
+- Revolutionary enhancement enabling team-based code review scoring
+- UPSERT pattern intelligently handles both create and update scenarios:
+  - **UPDATE path**: If reviewer already has a record, updates their score and increments iteration
+  - **CREATE path**: If reviewer has no record, creates new review using existing AI data as base
+- Each reviewer maintains completely independent review history:
+  - Separate iteration tracking per reviewer (Alice: iterations 1,2,3...; Bob: iterations 1,2...)
+  - Per-reviewer `is_latest_review` flag ensures correct latest score retrieval
+  - No cross-reviewer interference or conflicts
+- Supports unlimited reviewers per PR/file combination
+- Enables future analytics: score averaging, consensus analysis, reviewer trends
 
-**Improved Version Management**
-- Direct version reading from `pyproject.toml` using Python's built-in `tomllib`
-- No longer requires package installation (`pip install -e .`) for version detection
-- Works seamlessly in pure development mode with `uvicorn src.main:app --reload`
-- Single source of truth maintained in `pyproject.toml`
-- Automatic fallback to `1.0.0-dev` if file read fails
+**Example Workflow:**
+```python
+# AI submits initial review (creates base data)
+POST /api/v1/reviews
+{
+  "pull_request_id": "PR-123",
+  "source_filename": "src/main.py",
+  "ai_suggestions": {...},
+  "score": None
+}
+
+# Reviewer A scores the file (creates Record A)
+PUT /api/v1/reviews/score
+{
+  "pull_request_id": "PR-123",
+  "source_filename": "src/main.py",
+  "reviewer": "alice",
+  "score": 8.5
+}
+
+# Reviewer B scores SAME file (creates Record B, independent from Alice's)
+PUT /api/v1/reviews/score
+{
+  "pull_request_id": "PR-123",
+  "source_filename": "src/main.py",
+  "reviewer": "bob",
+  "score": 9.0
+}
+
+# Alice updates HER score (updates Record A, doesn't affect Bob's score)
+PUT /api/v1/reviews/score
+{
+  "pull_request_id": "PR-123",
+  "source_filename": "src/main.py",
+  "reviewer": "alice",
+  "score": 7.5
+}
+
+# Query all reviews for PR-123/src/main.py returns:
+# [
+#   {"reviewer": "system", "score": null, "iteration": 1},
+#   {"reviewer": "alice", "score": 7.5, "iteration": 2},
+#   {"reviewer": "bob", "score": 9.0, "iteration": 1}
+# ]
+```
+
+**Enhanced Score Update Logic**
+- Smart base data reuse mechanism:
+  - When new reviewer scores a file, system finds ANY existing review for that PR/file
+  - Copies foundational data: `pull_request_commit_id`, `git_code_diff`, `ai_suggestions`, metadata
+  - Reviewer-specific fields initialized: `score`, `reviewer_comments`, `reviewer`
+  - Ensures consistency across all reviews of same PR/file
+- Comprehensive error handling:
+  - `ReviewNotFoundException`: Clearly distinguishes scenarios
+    - "No review data exists for this file. AI review results must be submitted first."
+    - "No review found for reviewer 'X'. Each reviewer must submit independently."
+  - `ValueError`: Missing required parameters with explicit field list
+  - Warning logs provide operational visibility
+
+#### 🔧 Improvements
+
+**Service Method Refactoring**
+- Method renamed to reflect true behavior: `update_review_score()` → `upsert_review_score()`
+- Enhanced logging provides better debugging:
+  ```python
+  logger.info(f"Updating score for reviewer 'alice': 8.5 -> 7.5")
+  logger.info(f"Creating new score for reviewer 'bob': 9.0")
+  ```
+- Improved error messages guide users through correct workflow
+- Clear separation of UPDATE vs CREATE logic paths
+
+**API Response Enrichment**
+- All score operations now return fully enriched responses:
+  - Virtual `app_name` field resolved from project registry
+  - Complete `project` object with full details
+  - Complete `repository` object with full details
+  - `pull_request_user_info` with PR author information
+  - `reviewer_info` with reviewer information
+- Consistent data structure across all endpoints
+- Updated timestamp (`updated_date`) set on both create and update operations
 
 #### 🐛 Bug Fixes
 
-**SQLAlchemy Boolean Query Syntax**
-- Updated all boolean column comparisons from `column == True` to `column.is_(True)`
-- Ensures proper SQL generation for boolean identity checks
-- Improves compatibility with nullable boolean columns
-- Applied to all `is_latest_review` queries in review service
-- Resolves "Review not found" errors caused by incorrect boolean comparison
-
-**API Route Ordering**
-- Reorganized review endpoints for correct route matching
-- Moved `/score` endpoint before parameterized routes like `/{pull_request_id}`
-- Prevents FastAPI from treating "score" as a path parameter value
-- Ensures deterministic route resolution
+*None in this release - focus was on feature enhancements*
 
 #### ⚠️ Breaking Changes
 
-**Review Score Update API**
-- `source_filename` parameter is now **mandatory** (previously optional)
-- All 5 composite key fields must be provided for score updates
-- This ensures precise record targeting and maintains data integrity
-- Aligns with database unique constraint requirements
-
-**Example API Call:**
-```bash
-curl -X PUT "http://localhost:8000/api/v1/reviews/score" \
-  -G \
-  --data-urlencode "project_key=ECOM" \
-  --data-urlencode "repository_slug=frontend-store" \
-  --data-urlencode "pull_request_id=pr-123" \
-  --data-urlencode "reviewer=john_doe" \
-  --data-urlencode "source_filename=src/services/cart.py" \
-  --data-urlencode "score=9" \
-  -H "Content-Type: application/json" \
-  -d '{}'
-```
+**None** - This release is fully backward compatible:
+- Existing single-reviewer workflows continue to work unchanged
+- API signatures remain the same (request/response format unchanged)
+- Database schema unchanged
+- No migration required
 
 #### 📦 Technical Details
 
-- **Composite Key Pattern**: Full business key ensures data integrity across multi-tenant deployments
-- **Performance**: Single UPDATE query, no INSERT operations or iteration increments
-- **Type Safety**: Proper SQLAlchemy `.is_()` usage for boolean comparisons
-- **Development Workflow**: Simplified version management without package installation overhead
+**UPSERT Implementation Strategy:**
+```python
+async def upsert_review_score(self, ..., reviewer: str, score: float, db: AsyncSession):
+    # Try to find existing review for THIS reviewer
+    existing_review = await db.execute(
+        select(PullRequestReview).where(
+            PullRequestReview.reviewer == reviewer,
+            PullRequestReview.is_latest_review.is_(True),
+            # ... other composite key fields
+        )
+    ).scalar_one_or_none()
+    
+    if existing_review:
+        # UPDATE path: Mark old as not-latest, create new iteration
+        existing_review.is_latest_review = False
+        new_iteration = get_max_iteration(reviewer) + 1
+        new_review = PullRequestReview(
+            reviewer=reviewer,
+            score=score,
+            review_iteration=new_iteration,
+            is_latest_review=True
+        )
+    else:
+        # CREATE path: Find any base review, copy data for new reviewer
+        base_review = await get_any_review(pull_request_id, source_filename)
+        if not base_review:
+            raise ReviewNotFoundException("AI review must exist first")
+        
+        new_review = PullRequestReview(
+            reviewer=reviewer,
+            score=score,
+            review_iteration=1,  # First iteration for this reviewer
+            is_latest_review=True,
+            # Copy base data from existing review
+            pull_request_commit_id=base_review.pull_request_commit_id,
+            git_code_diff=base_review.git_code_diff,
+            ai_suggestions=base_review.ai_suggestions,
+            # ... etc
+        )
+    
+    await db.commit()
+    return enrich_review_with_entities(new_review)
+```
+
+**Key Architectural Decisions:**
+- **Composite Key Pattern**: `(project_key, repository_slug, pull_request_id, source_filename, reviewer)` ensures uniqueness per reviewer
+- **Iteration Scoping**: `MAX(review_iteration) WHERE reviewer = :reviewer` calculates per-reviewer iteration
+- **Cache Strategy**: Single cache key per PR shared across all reviewers, invalidated on any score change
+- **Enrichment Flow**: `_enrich_review_with_entities()` resolves `app_name` from project registry for all responses
+
+**Database State Example:**
+After multiple reviewers score same PR/file:
+| ID | reviewer | score | iteration | is_latest_review |
+|----|----------|-------|-----------|------------------|
+| 1  | system   | NULL  | 1         | True             |
+| 2  | alice    | 8.5   | 1         | False            |
+| 3  | bob      | 9.0   | 1         | True             |
+| 4  | alice    | 7.5   | 2         | True             |
+
+Each reviewer's latest score independently queryable! ✅
 
 ---
 
@@ -152,7 +261,7 @@ curl -X PUT "http://localhost:8000/api/v1/reviews/score" \
    ```bash
    docker-compose logs api
    curl http://localhost:8000/health
-   # Expected: {"status": "healthy", "version": "1.1.0"}
+   # Expected: {"status": "healthy", "version": "1.3.1"}
    ```
 
 ### Local Development
@@ -197,21 +306,22 @@ If issues are encountered after deployment:
 
 - [ ] Monitor application logs for errors
 - [ ] Check Prometheus metrics for anomalies
-- [ ] Verify API endpoints responding correctly
+- [ ] Verify multi-reviewer scenarios working correctly
 - [ ] Update any external documentation or wikis
 - [ ] Notify team/stakeholders of release
 - [ ] Create GitHub release with changelog notes
-- [ ] Tag commit with version: `git tag v1.1.0 && git push origin v1.1.0`
+- [ ] Tag commit with version: `git tag v1.3.1 && git push origin v1.3.1`
 
 ---
 
 ## Contributors
 
 - Core development and maintenance
-- Bug fixes and feature enhancements
+- Multi-reviewer architecture design and implementation
+- Enhanced score upsert logic and error handling
 
 ---
 
-**Release Date:** March 25, 2026  
-**Version:** 1.1.0  
+**Release Date:** March 31, 2026  
+**Version:** 1.3.1  
 **Status:** Ready for Release ✅

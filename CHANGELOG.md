@@ -5,6 +5,72 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-03-31
+
+### Added
+- **Multi-Reviewer Score Support** - Complete independent scoring workflow for multiple reviewers
+  - UPSERT pattern for review scores: creates new record if reviewer hasn't scored, updates if exists
+  - Each reviewer maintains independent score history with separate iteration tracking
+  - Per-reviewer `is_latest_review` flag ensures correct latest score identification
+  - Supports unlimited reviewers per PR/file combination without conflicts
+  
+- **Enhanced Score Update Logic** - Intelligent create-or-update behavior
+  - New `upsert_review_score()` method replaces update-only approach
+  - Automatic base data reuse: New reviewers inherit AI review data (diff, suggestions, metadata)
+  - Proper error handling: Distinguishes between "no AI review yet" vs "new reviewer needs record"
+  - Clear guidance messages direct users to submit AI review first if missing
+  
+- **Score Iteration Management** - Per-reviewer version tracking
+  - Each reviewer's iterations tracked independently (reviewer A iteration 1, 2, 3...; reviewer B iteration 1, 2...)
+  - Iteration calculation scoped to specific reviewer, not global across all reviewers
+  - Maintains complete audit trail of score changes per reviewer
+  
+- **Comprehensive API Documentation** - Multi-reviewer workflow clearly explained
+  - Endpoint docstrings detail UPSERT behavior and prerequisites
+  - Example workflows show how multiple reviewers interact with same PR/file
+  - Error scenarios documented with resolution steps
+
+### Changed
+- **Service Method Signature** - Renamed and refactored score update method
+  - `update_review_score()` → `upsert_review_score()` to reflect create-or-update behavior
+  - Enhanced logging shows which reviewer is updating/creating score
+  - Improved error messages specify when reviewer hasn't submitted review yet
+  
+- **Database Query Strategy** - Optimized for multi-reviewer lookups
+  - Queries filter by complete composite key including `reviewer` field
+  - Separate query paths for UPDATE (find existing reviewer record) vs CREATE (find any base review)
+  - Eager loading of relationships (`project`, `repository`, `user` rels) for enrichment
+  
+- **API Response Enrichment** - Consistent entity information across all score operations
+  - `app_name` resolution integrated into upsert flow
+  - Full nested objects returned: `project`, `repository`, `pull_request_user_info`, `reviewer_info`
+  - Updated timestamp set on both create and update operations
+
+### Improved
+- **Multi-Reviewer Architecture** - Production-ready team review support
+  - No breaking changes to existing single-reviewer workflows
+  - Backward compatible: Existing callers continue to work unchanged
+  - Forward looking: Enables future features like score averaging, consensus analysis
+  
+- **Error Handling & Validation** - Precise failure messages and recovery guidance
+  - `ReviewNotFoundException` includes context about missing AI review vs missing reviewer record
+  - `ValueError` for missing required parameters with clear field list
+  - Warning logs when operations fail due to missing prerequisite data
+  
+- **Data Model Clarity** - Clear separation of concerns in review records
+  - Base review data (AI suggestions, diff) separated from reviewer-specific data (score, comments)
+  - Multiple reviewers can share same base data while maintaining independent scores
+  - Composite unique constraint enforces one score per reviewer per file
+
+### Technical Details
+- **UPSERT Implementation**: Two-path logic - UPDATE existing reviewer record or CREATE new one
+- **Base Data Reuse**: New reviewers copy `pull_request_commit_id`, `git_code_diff`, `ai_suggestions` from existing reviews
+- **Iteration Calculation**: `SELECT MAX(review_iteration) WHERE reviewer = :reviewer` per reviewer
+- **Cache Invalidation**: Uses composite key `(project_key, repository_slug, pull_request_id)` shared across all reviewers
+- **Enrichment Flow**: Calls `_enrich_review_with_entities()` which resolves `app_name` from project registry
+
+---
+
 ## [1.3.0] - 2026-03-29
 
 ### Added
