@@ -1072,18 +1072,32 @@ class ReviewService:
             db: Database session
 
         Returns:
-            Dict containing review data with embedded entity information
+            Dict containing review data with embedded entity information and app_name
         """
 
         # Convert review to dict if it's an ORM object
         if hasattr(review, "to_dict"):
             review_dict = review.to_dict()
             # Try to use loaded relationships first (if ORM object)
-            return await self._enrich_from_relationships(review, review_dict)
+            enriched = await self._enrich_from_relationships(review, review_dict)
         else:
             # It's already a dict (from cache), query entities directly
             review_dict = review
-            return await self._enrich_from_queries(review_dict, db)
+            enriched = await self._enrich_from_queries(review_dict, db)
+
+        # Resolve app_name from project registry
+        try:
+            registry_service = ProjectRegistryService()
+            project_repo_pair = (review_dict.get("project_key"), review_dict.get("repository_slug"))
+            app_name_mapping = await registry_service.get_app_names_batch([project_repo_pair], db)
+            enriched["app_name"] = app_name_mapping.get(project_repo_pair, "Unknown")
+        except Exception as e:
+            logger.warning(
+                f"Failed to resolve app_name for project {review_dict.get('project_key')}: {str(e)}"
+            )
+            enriched["app_name"] = "Unknown"
+
+        return enriched
 
     async def _enrich_from_relationships(
         self, review: PullRequestReview, review_dict: dict[str, Any]

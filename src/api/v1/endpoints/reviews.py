@@ -19,6 +19,7 @@ from src.schemas.pull_request import (
     ReviewFilter,
     ReviewListResponse,
     ReviewResponse,
+    ReviewScoreUpdate,
     ReviewStats,
     ReviewUpdate,
 )
@@ -243,14 +244,7 @@ async def get_review_statistics(
     dependencies=[Depends(get_db_session), Depends(get_review_service)],
 )
 async def update_review_score(
-    project_key: Annotated[str, Query(description="Project key (e.g., 'ECOM')")],
-    repository_slug: Annotated[str, Query(description="Repository slug (e.g., 'frontend-store')")],
-    pull_request_id: Annotated[str, Query(description="Pull request ID")],
-    reviewer: Annotated[str, Query(description="Reviewer username")],
-    source_filename: Annotated[
-        str, Query(description="Source filename being reviewed (e.g., 'src/services/cart.py')")
-    ],
-    score: Annotated[float, Query(ge=0.0, le=10.0, description="Score (0.0-10.0)")],
+    score_update: ReviewScoreUpdate,
     db: AsyncSession = Depends(get_db_session),
     review_service: ReviewService = Depends(get_review_service),
 ) -> ReviewResponse:
@@ -261,17 +255,12 @@ async def update_review_score(
     (project_key, repository_slug, pull_request_id, source_filename, reviewer)
 
     Args:
-        project_key: The project key
-        repository_slug: The repository slug
-        pull_request_id: The pull request ID
-        source_filename: The source filename being reviewed
-        reviewer: The reviewer username
-        score: The new score (0-10)
+        score_update: The score update payload containing composite key and new score
         db: Database session
         review_service: Review service instance
 
     Returns:
-        ReviewResponse: The updated review
+        ReviewResponse: The updated review with enriched entity information
 
     Raises:
         ReviewNotFoundException: If the review doesn't exist
@@ -280,12 +269,12 @@ async def update_review_score(
 
     try:
         enriched_review = await review_service.update_review_score(
-            project_key=project_key,
-            repository_slug=repository_slug,
-            pull_request_id=pull_request_id,
-            source_filename=source_filename,
-            reviewer=reviewer,
-            score=score,
+            project_key=score_update.project_key,
+            repository_slug=score_update.repository_slug,
+            pull_request_id=score_update.pull_request_id,
+            source_filename=score_update.source_filename,
+            reviewer=score_update.reviewer,
+            score=score_update.score,
             db=db,
         )
         return ReviewResponse(**enriched_review)

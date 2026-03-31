@@ -132,6 +132,20 @@ class ReviewUpdate(BaseModel):
 class ReviewScoreUpdate(BaseModel):
     """Schema for updating only the score of a pull request review"""
 
+    project_key: str = Field(
+        ..., min_length=1, max_length=64, description="Project key (e.g., 'ECOM')"
+    )
+    repository_slug: str = Field(
+        ..., min_length=1, max_length=128, description="Repository slug (e.g., 'frontend-store')"
+    )
+    pull_request_id: str = Field(..., min_length=1, max_length=64, description="Pull request ID")
+    source_filename: str = Field(
+        ...,
+        min_length=1,
+        max_length=512,
+        description="Source filename being reviewed (e.g., 'src/services/cart.py')",
+    )
+    reviewer: str = Field(..., min_length=1, max_length=128, description="Reviewer username")
     score: float = Field(..., ge=0.0, le=10.0, description="Review score (0.0-10.0)")
 
 
