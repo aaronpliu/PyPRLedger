@@ -186,10 +186,7 @@ class ReviewService:
         if existing_review:
             raise ReviewAlreadyExistsException(pull_request_id=review_data.pull_request_id)
 
-        # Set reviewed_date (use provided value or current time)
-        reviewed_date = review_data.reviewed_date or datetime.now(UTC)
-
-        # Create new review
+        # Create new review (score is now stored separately in PullRequestScore table)
         new_review = PullRequestReview(
             pull_request_id=review_data.pull_request_id,
             pull_request_commit_id=review_data.pull_request_commit_id,
@@ -203,10 +200,8 @@ class ReviewService:
             source_filename=review_data.source_filename,
             ai_suggestions=review_data.ai_suggestions,
             reviewer_comments=review_data.reviewer_comments,
-            score=review_data.score,
             pull_request_status=review_data.pull_request_status,
             metadata=review_data.metadata,
-            reviewed_date=reviewed_date,
         )
         db.add(new_review)
         await db.flush()
@@ -1190,16 +1185,19 @@ class ReviewService:
             "repository_slug": review_dict["repository_slug"],
             "source_branch": review_dict["source_branch"],
             "target_branch": review_dict["target_branch"],
-            "git_code_diff": review_dict["git_code_diff"],
-            "source_filename": review_dict["source_filename"],
-            "ai_suggestions": review_dict["ai_suggestions"],
-            "reviewer_comments": review_dict["reviewer_comments"],
-            "score": review_dict["score"],
+            "git_code_diff": review_dict.get("git_code_diff"),
+            "source_filename": review_dict.get("source_filename"),
+            "ai_suggestions": review_dict.get("ai_suggestions"),
+            "reviewer_comments": review_dict.get("reviewer_comments"),
+            # Score is now in separate PullRequestScore table - will be loaded separately if needed
+            # For list views, we don't include score by default to avoid N+1 queries
+            "score": None,
             "pull_request_status": review_dict["pull_request_status"],
-            "metadata": review_dict["metadata"],
-            "reviewed_date": review_dict["reviewed_date"],
-            "is_latest_review": review_dict["is_latest_review"],
-            "review_iteration": review_dict["review_iteration"],
+            "metadata": review_dict.get("metadata"),
+            # These fields were removed during score refactor - use .get() for backward compatibility
+            "reviewed_date": review_dict.get("reviewed_date"),
+            "is_latest_review": review_dict.get("is_latest_review", True),
+            "review_iteration": review_dict.get("review_iteration"),
             "created_date": review_dict["created_date"],
             "updated_date": review_dict["updated_date"],
         }
