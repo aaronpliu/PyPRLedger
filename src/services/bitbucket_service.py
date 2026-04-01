@@ -49,7 +49,7 @@ class BitbucketService:
     async def _make_request(self, url: str) -> dict[str, Any] | None:
         """Make HTTP request to Bitbucket API"""
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(verify=False) as client:
                 response = await client.get(url, headers=self.headers, timeout=10.0)
                 response.raise_for_status()
                 return response.json()

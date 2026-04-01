@@ -1,0 +1,109 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE and Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python cache and artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+tests/
+
+# Documentation
+docs/
+*.md
+!README.md
+CHANGELOG.md
+RELEASE_PREPARATION.md
+AGENTS.md
+LOGGING_GUIDE.md
+
+# Development scripts and configs
+scripts/
+ruff.toml
+pytest.ini
+pre-commit-config.yaml
+.bumpversion.cfg
+.editorconfig
+
+# Logs and temporary files
+logs/
+*.log
+tmp/
+temp/
+*.tmp
+
+# Docker related (not needed in build context)
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Kubernetes and deployment (if any)
+*.yaml
+!docker-compose.yml
+k8s/
+helm/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment and configuration
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+
+# Grafana and monitoring (not needed in app image)
+grafana/
+prometheus.yml
+
+# Seed data and mock data (production image doesn't need these)
+seed_*.py
+mock_data/
+fake_reviews/

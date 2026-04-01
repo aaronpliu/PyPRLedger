@@ -127,6 +127,7 @@ grafana-data/
 nginx/ssl/
 *.db
 *.sql
+!init.sql
 
 # Ignore all files in logs/ directory but keep the directory
 logs/*
