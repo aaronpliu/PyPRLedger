@@ -11,7 +11,7 @@ from src.core.database import Base
 
 if TYPE_CHECKING:
     from src.models.project import Project
-    from src.models.pull_request import PullRequestReview
+    from src.models.pull_request import PullRequestReview, PullRequestScore
 
 
 class Repository(Base):
@@ -50,6 +50,11 @@ class Repository(Base):
         "PullRequestReview", back_populates="repository"
     )
 
+    # Score records
+    scores: Mapped[list[PullRequestScore]] = relationship(
+        "PullRequestScore", back_populates="repository"
+    )
+
     # Timestamps
     created_date: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
@@ -63,6 +68,7 @@ class Repository(Base):
     __table_args__ = (
         Index("idx_repository_id", "repository_id"),
         Index("idx_project_id", "project_id"),
+        Index("idx_repository_slug", "repository_slug"),  # Required for FK constraint
     )
 
     def __repr__(self) -> str:

@@ -12,7 +12,7 @@ from src.models.repository import Repository
 
 if TYPE_CHECKING:
     from src.models.project_registry import ProjectRegistry
-    from src.models.pull_request import PullRequestReview
+    from src.models.pull_request import PullRequestReview, PullRequestScore
 
 
 class Project(Base):
@@ -56,6 +56,11 @@ class Project(Base):
     # Registry entries linking this project to applications
     registry_entries: Mapped[list[ProjectRegistry]] = relationship(
         "ProjectRegistry", back_populates="project", cascade="all, delete-orphan"
+    )
+
+    # Score records
+    scores: Mapped[list[PullRequestScore]] = relationship(
+        "PullRequestScore", back_populates="project", cascade="all, delete-orphan"
     )
 
     # Indexes

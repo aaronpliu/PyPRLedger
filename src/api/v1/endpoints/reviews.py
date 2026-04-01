@@ -19,10 +19,13 @@ from src.schemas.pull_request import (
     ReviewFilter,
     ReviewListResponse,
     ReviewResponse,
-    ReviewScoreUpdate,
+    ReviewScoreCreate,
+    ReviewScoreResponse,
+    ReviewScoreSummary,
     ReviewStats,
     ReviewUpdate,
 )
+from src.services.review_score_service import ReviewScoreService
 from src.services.review_service import ReviewService
 from src.utils.metrics import OperationTimer, metrics
 
@@ -36,6 +39,12 @@ router = APIRouter()
 def get_review_service() -> ReviewService:
     """Get a review service instance"""
     return ReviewService(metrics_collector=metrics)
+
+
+# Get a score service instance with metrics
+def get_score_service() -> ReviewScoreService:
+    """Get a review score service instance"""
+    return ReviewScoreService(metrics_collector=metrics)
 
 
 @router.post("", response_model=ReviewResponse)
@@ -126,8 +135,6 @@ async def list_reviews(
     pull_request_status: str | None = Query(
         None, description="Filter by pull request status (open, merged, closed, draft)"
     ),
-    score_min: float | None = Query(None, ge=0.0, le=10.0, description="Filter by minimum score"),
-    score_max: float | None = Query(None, ge=0.0, le=10.0, description="Filter by maximum score"),
     date_from: datetime | None = Query(None, description="Filter reviews created after this date"),
     date_to: datetime | None = Query(None, description="Filter reviews created before this date"),
     app_names: str | None = Query(
@@ -152,8 +159,6 @@ async def list_reviews(
         source_branch: Filter by source branch
         target_branch: Filter by target branch
         pull_request_status: Filter by pull request status
-        score_min: Filter by minimum score
-        score_max: Filter by maximum score
         date_from: Filter reviews created after this date
         date_to: Filter reviews created before this date
         app_names: Filter by application names (comma-separated for multiple apps)
@@ -175,8 +180,8 @@ async def list_reviews(
             source_branch=source_branch,
             target_branch=target_branch,
             pull_request_status=pull_request_status,
-            score_min=score_min,
-            score_max=score_max,
+            score_min=None,  # Removed - scores now in separate table
+            score_max=None,  # Removed - scores now in separate table
             date_from=date_from,
             date_to=date_to,
         )
@@ -235,97 +240,6 @@ async def get_review_statistics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get review statistics"},
-        )
-
-
-@router.put(
-    "/score",
-    response_model=ReviewResponse,
-    dependencies=[Depends(get_db_session), Depends(get_review_service)],
-)
-async def upsert_review_score(
-    score_update: ReviewScoreUpdate,
-    db: AsyncSession = Depends(get_db_session),
-    review_service: ReviewService = Depends(get_review_service),
-) -> ReviewResponse:
-    """
-    Create or update a review score for a specific reviewer
-
-    This endpoint implements an UPSERT operation:
-    - **If the reviewer already has a review record**: Updates their score
-    - **If the reviewer doesn't have a record**: Creates a new review record for them
-
-    ## Multi-Reviewer Support
-
-    Each reviewer can independently submit and update their own score for the same
-    PR/file combination. Reviews are tracked separately per reviewer, so:
-
-    - Reviewer A can score file "src/main.py" with 8.5
-    - Reviewer B can score the same file "src/main.py" with 9.0
-    - Both reviews coexist independently in the system
-    - Creating/updating one reviewer's score does not affect other reviewers' scores
-
-    ## Workflow
-
-    1. AI submits initial review results via POST /reviews (creates base data)
-    2. Any reviewer can then score that file via this endpoint
-    3. Multiple reviewers can score the same file independently
-    4. Each reviewer's score history is tracked via iteration numbers
-
-    Args:
-        score_update: The score upsert payload containing:
-            - project_key: Project identifier
-            - repository_slug: Repository identifier
-            - pull_request_id: PR identifier
-            - source_filename: File being reviewed
-            - reviewer: Username of the reviewer submitting/updating score
-            - score: Score value (0.0-10.0)
-        db: Database session
-        review_service: Review service instance
-
-    Returns:
-        ReviewResponse: The created/updated review with enriched entity information including:
-            - app_name: Resolved from project registry
-            - project: Full project details
-            - repository: Full repository details
-            - pull_request_user_info: PR author information
-            - reviewer_info: Reviewer information
-            - review_iteration: Which iteration this is for this reviewer
-
-    Raises:
-        ReviewNotFoundException: If no review data exists for this file at all.
-            AI review results must be submitted first via POST /reviews before scoring.
-        ValueError: If required parameters are missing or invalid.
-    """
-    import traceback
-
-    try:
-        enriched_review = await review_service.upsert_review_score(
-            project_key=score_update.project_key,
-            repository_slug=score_update.repository_slug,
-            pull_request_id=score_update.pull_request_id,
-            source_filename=score_update.source_filename,
-            reviewer=score_update.reviewer,
-            score=score_update.score,
-            db=db,
-        )
-        return ReviewResponse(**enriched_review)
-    except ReviewNotFoundException as e:
-        metrics.increment_error(error_type=e.code, endpoint="PUT /api/v1/reviews/score")
-        raise HTTPException(
-            status_code=e.status_code,
-            detail={"error": e.code, "message": e.message, "detail": e.detail},
-        )
-    except Exception as ex:
-        error_traceback = traceback.format_exc()
-        logger.error(f"Failed to update review score: {str(ex)}\n{error_traceback}")
-        metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR",
-            endpoint="PUT /api/v1/reviews/score",
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to update review score"},
         )
 
 
@@ -782,4 +696,339 @@ async def get_reviews_by_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get reviews by status"},
+        )
+
+
+# ============================================================================
+# Score Management Endpoints
+# ============================================================================
+
+
+@router.put("/score", response_model=ReviewScoreResponse)
+async def upsert_score(
+    score_data: ReviewScoreCreate,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    score_service: Annotated[ReviewScoreService, Depends(get_score_service)],
+) -> ReviewScoreResponse:
+    """
+    Create or update a pull request review score
+
+    This endpoint implements an UPSERT operation:
+    - **If the reviewer already has a score for this target**: Updates their score
+    - **If the reviewer doesn't have a score**: Creates a new score record
+
+    ## Multi-Reviewer Support
+
+    Each reviewer can independently submit and update their own score for the same
+    PR/file combination. Scores are tracked separately per reviewer, so:
+
+    - Reviewer A can score file "src/main.py" with 8.5
+    - Reviewer B can score the same file "src/main.py" with 9.0
+    - Both scores coexist independently in the system
+    - Updating one reviewer's score does not affect other reviewers' scores
+
+    ## Scoring Modes
+
+    - **File-level scoring**: Provide `source_filename` to score a specific file
+    - **PR-level scoring**: Omit `source_filename` or set to null to score entire PR
+
+    ## Score Description
+
+    If `score_description` is not provided, it will be auto-filled based on the score value:
+    - 0.0: "Meaningless suggestion"
+    - 1.0-2.0: "Bad suggestion"
+    - 3.0-5.0: "No need to handle"
+    - 6.0-8.0: "Can apply but not required"
+    - 9.0: "Good suggestion"
+    - 10.0: "Must apply change"
+
+    Args:
+        score_data: The score upsert payload containing:
+            - pull_request_id: PR identifier
+            - pull_request_commit_id: Commit identifier
+            - project_key: Project identifier
+            - repository_slug: Repository identifier
+            - source_filename: Optional filename (null for PR-level score)
+            - reviewer: Username of the reviewer submitting score
+            - score: Score value (0.0-10.0)
+            - score_description: Optional description (auto-filled if not provided)
+            - reviewer_comments: Optional detailed feedback
+        db: Database session
+        score_service: Review score service instance
+
+    Returns:
+        ReviewScoreResponse: The created/updated score with enriched information including:
+            - id: Score database ID
+            - reviewer_info: Reviewer information
+            - created_date: When the score was first created
+            - updated_date: When the score was last updated
+
+    Raises:
+        HTTPException: 201 Created if new score, 200 OK if updated
+    """
+    try:
+        score = await score_service.upsert_score(score_data, db, include_details=True)
+
+        # Determine if this was a create or update by checking updated_date vs created_date
+        is_created = score.created_date == score.updated_date
+        status_code = status.HTTP_201_CREATED if is_created else status.HTTP_200_OK
+
+        return JSONResponse(
+            status_code=status_code,
+            content=score.model_dump(mode="json"),
+        )
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to upsert score: {str(e)}\n{error_traceback}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint="PUT /api/v1/reviews/score",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to upsert score"},
+        )
+
+
+@router.get("/scores", response_model=list[ReviewScoreResponse])
+async def get_scores(
+    pull_request_id: str = Query(..., description="Pull request ID"),
+    project_key: str = Query(..., min_length=1, max_length=32, description="Project key"),
+    repository_slug: str = Query(..., min_length=1, max_length=128, description="Repository slug"),
+    source_filename: str | None = Query(
+        None,
+        description="Optional filename (omit or null for PR-level scores)",
+    ),
+    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
+    score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
+) -> list[ReviewScoreResponse]:
+    """
+    Get all scores for a specific review target
+
+    ## Usage
+
+    - **File-level scores**: Provide `source_filename` parameter
+    - **PR-level scores**: Omit `source_filename` or set to null
+
+    Args:
+        pull_request_id: Pull request ID
+        project_key: Project key
+        repository_slug: Repository slug
+        source_filename: Optional filename to filter (file-level vs PR-level)
+        db: Database session
+        score_service: Review score service instance
+
+    Returns:
+        list[ReviewScoreResponse]: List of all reviewer scores for this target
+
+    Raises:
+        HTTPException: If an error occurs while fetching scores
+    """
+    try:
+        scores = await score_service.get_scores_by_review_target(
+            pull_request_id=pull_request_id,
+            project_key=project_key,
+            repository_slug=repository_slug,
+            source_filename=source_filename,
+            db=db,
+        )
+        return scores
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to get scores: {str(e)}\n{error_traceback}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint="GET /api/v1/reviews/scores",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get scores"},
+        )
+
+
+@router.get("/scores/summary", response_model=ReviewScoreSummary)
+async def get_score_summary(
+    pull_request_id: str = Query(..., description="Pull request ID"),
+    project_key: str = Query(..., min_length=1, max_length=32, description="Project key"),
+    repository_slug: str = Query(..., min_length=1, max_length=128, description="Repository slug"),
+    source_filename: str | None = Query(
+        None,
+        description="Optional filename (omit or null for PR-level summary)",
+    ),
+    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
+    score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
+) -> ReviewScoreSummary:
+    """
+    Get summary statistics for all scores on a review target
+
+    ## Usage
+
+    Returns aggregated statistics including:
+    - total_scores: Number of reviewer scores
+    - average_score: Average of all scores
+    - scores: List of individual scores
+
+    Args:
+        pull_request_id: Pull request ID
+        project_key: Project key
+        repository_slug: Repository slug
+        source_filename: Optional filename (omit or null for PR-level)
+        db: Database session
+        score_service: Review score service instance
+
+    Returns:
+        ReviewScoreSummary: Aggregated score statistics
+
+    Raises:
+        HTTPException: If an error occurs while fetching summary
+    """
+    try:
+        summary = await score_service.get_score_summary(
+            pull_request_id=pull_request_id,
+            project_key=project_key,
+            repository_slug=repository_slug,
+            source_filename=source_filename,
+            db=db,
+        )
+        return summary
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to get score summary: {str(e)}\n{error_traceback}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint="GET /api/v1/reviews/scores/summary",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get score summary"},
+        )
+
+
+@router.get("/score/{reviewer}", response_model=ReviewScoreResponse)
+async def get_score_by_reviewer(
+    reviewer: Annotated[str, Path(min_length=1, max_length=64, description="Reviewer username")],
+    pull_request_id: str = Query(..., description="Pull request ID"),
+    project_key: str = Query(..., min_length=1, max_length=32, description="Project key"),
+    repository_slug: str = Query(..., min_length=1, max_length=128, description="Repository slug"),
+    source_filename: str | None = Query(
+        None,
+        description="Optional filename (omit or null for PR-level score)",
+    ),
+    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
+    score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
+) -> ReviewScoreResponse:
+    """
+    Get a specific reviewer's score for a review target
+
+    Args:
+        reviewer: Reviewer username
+        pull_request_id: Pull request ID
+        project_key: Project key
+        repository_slug: Repository slug
+        source_filename: Optional filename (omit or null for PR-level)
+        db: Database session
+        score_service: Review score service instance
+
+    Returns:
+        ReviewScoreResponse: The reviewer's score
+
+    Raises:
+        HTTPException: 404 if score not found
+    """
+    try:
+        score = await score_service.get_score_by_reviewer(
+            pull_request_id=pull_request_id,
+            project_key=project_key,
+            repository_slug=repository_slug,
+            source_filename=source_filename,
+            reviewer=reviewer,
+            db=db,
+        )
+
+        if not score:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": f"Score not found for reviewer '{reviewer}'",
+                },
+            )
+
+        return score
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to get score by reviewer: {str(e)}\n{error_traceback}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint=f"GET /api/v1/reviews/score/{reviewer}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get score by reviewer"},
+        )
+
+
+@router.delete("/score/{reviewer}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_score(
+    reviewer: Annotated[str, Path(min_length=1, max_length=64, description="Reviewer username")],
+    pull_request_id: str = Query(..., description="Pull request ID"),
+    project_key: str = Query(..., min_length=1, max_length=32, description="Project key"),
+    repository_slug: str = Query(..., min_length=1, max_length=128, description="Repository slug"),
+    source_filename: str | None = Query(
+        None,
+        description="Optional filename (omit or null for PR-level score)",
+    ),
+    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
+    score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
+) -> None:
+    """
+    Delete a reviewer's score for a review target
+
+    Args:
+        reviewer: Reviewer username
+        pull_request_id: Pull request ID
+        project_key: Project key
+        repository_slug: Repository slug
+        source_filename: Optional filename (omit or null for PR-level)
+        db: Database session
+        score_service: Review score service instance
+
+    Returns:
+        None: Successful deletion returns 204 No Content
+
+    Raises:
+        HTTPException: 404 if score not found
+    """
+    try:
+        deleted = await score_service.delete_score(
+            pull_request_id=pull_request_id,
+            project_key=project_key,
+            repository_slug=repository_slug,
+            source_filename=source_filename,
+            reviewer=reviewer,
+            db=db,
+        )
+
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": f"Score not found for reviewer '{reviewer}'",
+                },
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to delete score: {str(e)}\n{error_traceback}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint=f"DELETE /api/v1/reviews/score/{reviewer}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to delete score"},
         )

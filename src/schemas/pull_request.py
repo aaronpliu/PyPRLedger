@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -65,16 +65,10 @@ class ReviewCreate(ReviewBase):
         None, description="AI-generated suggestions in JSON format"
     )
     reviewer_comments: str | None = Field(None, max_length=10000, description="Reviewer's comments")
-    score: float | None = Field(None, ge=0.0, le=10.0, description="Review score (0.0-10.0)")
     pull_request_status: str = Field(
         default="open", description="Pull request status (open, merged, closed, draft)"
     )
     metadata: dict[str, Any] | None = Field(None, description="Additional metadata in JSON format")
-
-    # Optional field to specify when the review was completed (defaults to now)
-    reviewed_date: datetime | None = Field(
-        None, description="When the review was completed (defaults to current time)"
-    )
 
     @field_validator("pull_request_status")
     def validate_status(cls, v):
@@ -91,15 +85,6 @@ class ReviewCreate(ReviewBase):
             raise ValueError("This field must be a valid JSON object")
         return v
 
-    @field_validator("reviewed_date")
-    def validate_reviewed_date(cls, v):
-        """Validate reviewed_date is timezone-aware or convert to UTC"""
-        if v is not None:
-            # If naive datetime, make it timezone-aware (assume UTC)
-            if v.tzinfo is None:
-                v = v.replace(tzinfo=UTC)
-        return v
-
 
 class ReviewUpdate(BaseModel):
     """Schema for updating an existing pull request review"""
@@ -108,7 +93,6 @@ class ReviewUpdate(BaseModel):
     source_filename: str | None = Field(None, max_length=255)
     ai_suggestions: dict[str, Any] | None = Field(None)
     reviewer_comments: str | None = Field(None, max_length=10000)
-    score: float | None = Field(None, ge=0.0, le=10.0)
     pull_request_status: str | None = Field(None)
     metadata: dict[str, Any] | None = Field(None)
 
@@ -149,6 +133,76 @@ class ReviewScoreUpdate(BaseModel):
     score: float = Field(..., ge=0.0, le=10.0, description="Review score (0.0-10.0)")
 
 
+# === Score Schemas ===
+
+
+class ReviewScoreBase(BaseModel):
+    """Base schema for review score"""
+
+    score: float = Field(..., ge=0.0, le=10.0, description="Score value (0.0-10.0)")
+    score_description: str | None = Field(
+        None, max_length=1000, description="Auto-filled or manual description"
+    )
+    reviewer_comments: str | None = Field(None, description="Optional detailed feedback")
+
+
+class ReviewScoreCreate(ReviewScoreBase):
+    """Schema for creating/updating a score"""
+
+    pull_request_id: str
+    pull_request_commit_id: str
+    project_key: str
+    repository_slug: str
+    source_filename: str | None = Field(
+        None, description="Optional filename (None for PR-level score)"
+    )
+    reviewer: str
+
+    @field_validator("score_description")
+    @classmethod
+    def auto_fill_description(cls, v: str | None) -> str | None:
+        """Auto-fill score_description if not provided"""
+        # Will be filled in service layer
+        return v
+
+    @field_validator("source_filename")
+    @classmethod
+    def normalize_filename(cls, v: str | None) -> str | None:
+        """Normalize source filename"""
+        from src.utils.score_utils import normalize_source_filename
+
+        return normalize_source_filename(v)
+
+
+class ReviewScoreResponse(ReviewScoreBase):
+    """Schema for score response with full details"""
+
+    id: int
+    pull_request_id: str
+    pull_request_commit_id: str
+    project_key: str
+    repository_slug: str
+    source_filename: str | None  # Can be null for PR-level scores
+    reviewer: str
+    reviewer_info: dict[str, Any] | None = None  # Enriched user details
+    created_date: datetime
+    updated_date: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ReviewScoreSummary(BaseModel):
+    """Summary of scores for a review target"""
+
+    pull_request_id: str
+    project_key: str
+    repository_slug: str
+    source_filename: str | None  # Null means PR-level summary
+    total_scores: int
+    average_score: float
+    scores: list[ReviewScoreResponse]
+
+
 from pydantic import BaseModel, Field, field_validator, model_serializer
 
 
@@ -169,16 +223,8 @@ class ReviewResponse(BaseModel):
     )
     ai_suggestions: dict[str, Any] | None = Field(None, description="AI-generated suggestions")
     reviewer_comments: str | None = Field(None, description="Reviewer's comments")
-    score: float | None = Field(None, ge=0.0, le=10.0, description="Review score (0.0-10.0)")
     pull_request_status: str = Field(..., description="Pull request status")
     metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
-
-    # Review tracking fields
-    reviewed_date: datetime = Field(..., description="When the review was completed")
-    is_latest_review: bool = Field(
-        True, description="Whether this is the latest review for this file"
-    )
-    review_iteration: int = Field(1, description="Review iteration number (1st, 2nd, etc.)")
 
     created_date: datetime = Field(..., description="Record creation timestamp")
     updated_date: datetime = Field(..., description="Record last update timestamp")
@@ -197,6 +243,14 @@ class ReviewResponse(BaseModel):
         None, description="Full information about reviewer"
     )
 
+    # Score information - list of all reviewer scores for this review
+    scores: list[ReviewScoreResponse] = Field(
+        default_factory=list, description="All reviewer scores for this review"
+    )
+    score_summary: ReviewScoreSummary | None = Field(
+        None, description="Aggregated score statistics"
+    )
+
     class Config:
         """Pydantic configuration"""
 
@@ -207,7 +261,7 @@ class ReviewResponse(BaseModel):
                 "pull_request_id": "pr-123",
                 "pull_request_commit_id": "abc123def456",
                 "repository_slug": "code-review",
-                "app_name": "member",  # NEW: Virtual field from registry
+                "app_name": "member",
                 "source_branch": "feature/new-feature",
                 "target_branch": "main",
                 "git_code_diff": "diff --git a/file.py b/file.py\n...",
@@ -217,12 +271,8 @@ class ReviewResponse(BaseModel):
                     "suggestion_2": "Add type hints for better code clarity",
                 },
                 "reviewer_comments": "Overall good code, but consider the suggestions from AI",
-                "score": 8.5,
                 "pull_request_status": "open",
                 "metadata": {"labels": ["bugfix", "enhancement"], "priority": "high"},
-                "reviewed_date": "2023-01-01T12:00:00Z",
-                "is_latest_review": True,
-                "review_iteration": 1,
                 "created_date": "2023-01-01T10:00:00",
                 "updated_date": "2023-01-01T12:00:00",
                 "project": {
@@ -264,6 +314,36 @@ class ReviewResponse(BaseModel):
                     "is_reviewer": True,
                     "created_date": "2023-01-01T00:00:00",
                     "updated_date": "2023-01-01T00:00:00",
+                },
+                "scores": [
+                    {
+                        "id": 1,
+                        "pull_request_id": "pr-123",
+                        "pull_request_commit_id": "abc123def456",
+                        "project_key": "PROJ",
+                        "repository_slug": "code-review",
+                        "source_filename": "src/file.py",
+                        "reviewer": "john_doe",
+                        "score": 8.5,
+                        "score_description": "Can apply but not required",
+                        "reviewer_comments": "Good refactoring",
+                        "reviewer_info": {
+                            "username": "john_doe",
+                            "display_name": "John Doe",
+                            "email_address": "john@example.com",
+                        },
+                        "created_date": "2023-01-01T11:00:00",
+                        "updated_date": "2023-01-01T12:00:00",
+                    }
+                ],
+                "score_summary": {
+                    "pull_request_id": "pr-123",
+                    "project_key": "PROJ",
+                    "repository_slug": "code-review",
+                    "source_filename": "src/file.py",
+                    "total_scores": 1,
+                    "average_score": 8.5,
+                    "scores": [],
                 },
             }
         }
