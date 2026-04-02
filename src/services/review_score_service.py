@@ -194,7 +194,11 @@ class ReviewScoreService:
         )
 
         # Handle source_filename filtering
-        if source_filename is not None:
+        if source_filename is None:
+            # When source_filename is not specified, don't filter by it
+            # This returns both PR-level and file-level scores for the reviewer
+            logger.debug("source_filename not specified - returning all scores for reviewer")
+        else:
             # File-level scores only for specific filename
             query = query.where(PullRequestScore.source_filename == source_filename)
 
@@ -345,6 +349,11 @@ class ReviewScoreService:
         """Get score by composite key and reviewer"""
         from sqlalchemy.orm import selectinload
 
+        logger.debug(
+            f"Querying score for reviewer='{reviewer}', PR={pull_request_id}, "
+            f"project={project_key}, repo={repository_slug}, file={source_filename}"
+        )
+
         query = (
             select(PullRequestScore)
             .options(selectinload(PullRequestScore.reviewer_rel))
@@ -363,7 +372,25 @@ class ReviewScoreService:
             query = query.where(PullRequestScore.source_filename == source_filename)
 
         result = await db.execute(query)
-        return result.scalar_one_or_none()
+        score = result.scalar_one_or_none()
+
+        if score:
+            logger.debug(f"Found score: id={score.id}")
+        else:
+            # Provide more helpful diagnostic information
+            if source_filename is None:
+                logger.warning(
+                    f"No PR-level score found for reviewer='{reviewer}' on PR={pull_request_id}. "
+                    f"Reviewer may only have file-level scores. "
+                    f"Try providing 'source_filename' parameter or use GET /api/v1/reviews/scores to see all scores."
+                )
+            else:
+                logger.warning(
+                    f"No score found for reviewer='{reviewer}' on PR={pull_request_id}, file={source_filename}. "
+                    f"Note: Check case sensitivity - database may have different PR ID case."
+                )
+
+        return score
 
     async def _enrich_score_response(
         self,
