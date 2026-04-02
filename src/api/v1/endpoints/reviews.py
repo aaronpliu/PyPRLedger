@@ -609,11 +609,31 @@ async def get_reviews_by_reviewer(
         items = []
         for r in reviews:
             if hasattr(r, "to_dict"):
+                # ORM object - use to_dict() which includes all fields
                 review_data = r.to_dict()
             elif isinstance(r, dict):
-                review_data = r
+                # Already a dict from cache - ensure all required fields are present
+                review_data = r.copy()
+                # Add missing required fields with defaults if needed
+                if "id" not in review_data or review_data["id"] is None:
+                    logger.warning(
+                        f"Review from cache missing 'id' field: {review_data.get('pull_request_id')}"
+                    )
+                    continue  # Skip invalid cache entries
+                if "created_date" not in review_data or review_data["created_date"] is None:
+                    logger.warning(
+                        f"Review from cache missing 'created_date': {review_data.get('pull_request_id')}"
+                    )
+                    continue  # Skip invalid cache entries
+                if "updated_date" not in review_data or review_data["updated_date"] is None:
+                    logger.warning(
+                        f"Review from cache missing 'updated_date': {review_data.get('pull_request_id')}"
+                    )
+                    continue  # Skip invalid cache entries
             else:
+                # Fallback - convert to dict
                 review_data = dict(r)
+
             items.append(ReviewResponse(**review_data))
 
         return ReviewListResponse(
@@ -640,12 +660,15 @@ async def get_reviews_by_reviewer(
         )
 
 
-@router.get("/status/{status}", response_model=ReviewListResponse)
+@router.get("/status/{review_status}", response_model=ReviewListResponse)
 async def get_reviews_by_status(
-    status: str,
+    review_status: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
-    project_id: int | None = Query(None, gt=0, description="Filter by project ID"),
+    project_key: str | None = Query(None, max_length=32, description="Filter by project key"),
+    repository_slug: str | None = Query(
+        None, max_length=128, description="Filter by repository slug"
+    ),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> ReviewListResponse:
@@ -653,8 +676,9 @@ async def get_reviews_by_status(
     Get pull request reviews by status
 
     Args:
-        status: The status to filter by (open, merged, closed, draft)
-        project_id: Optional project ID to further filter
+        review_status: The status to filter by (open, merged, closed, draft)
+        project_key: Optional project key to further filter
+        repository_slug: Optional repository slug to further filter
         page: Page number (1-indexed)
         page_size: Number of items per page
         db: Database session
@@ -667,9 +691,10 @@ async def get_reviews_by_status(
         InvalidReviewDataException: If the status is invalid
     """
     try:
-        if status not in ["open", "merged", "closed", "draft"]:
+        if review_status not in ["open", "merged", "closed", "draft"]:
             metrics.increment_error(
-                error_type="VALIDATION_ERROR", endpoint=f"GET /api/v1/reviews/status/{status}"
+                error_type="VALIDATION_ERROR",
+                endpoint=f"GET /api/v1/reviews/status/{review_status}",
             )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -680,7 +705,12 @@ async def get_reviews_by_status(
             )
 
         reviews, total = await review_service.get_reviews_by_status(
-            status, project_id, page, page_size, db
+            review_status=review_status,
+            project_key=project_key,
+            repository_slug=repository_slug,
+            page=page,
+            page_size=page_size,
+            db=db,
         )
 
         return ReviewListResponse(
@@ -693,7 +723,8 @@ async def get_reviews_by_status(
         raise
     except Exception:
         metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/reviews/status/{status}"
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint=f"GET /api/v1/reviews/status/{review_status}",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -799,7 +830,7 @@ async def get_scores(
     repository_slug: str = Query(..., min_length=1, max_length=128, description="Repository slug"),
     source_filename: str | None = Query(
         None,
-        description="Optional filename (omit or null for PR-level scores)",
+        description="Optional filename to filter (when omitted, returns all scores)",
     ),
     db: Annotated[AsyncSession, Depends(get_db_session)] = None,
     score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
@@ -809,19 +840,19 @@ async def get_scores(
 
     ## Usage
 
-    - **File-level scores**: Provide `source_filename` parameter
-    - **PR-level scores**: Omit `source_filename` or set to null
+    - **All scores (PR-level + all file-level)**: Omit `source_filename` parameter (default behavior)
+    - **Specific file-level scores**: Provide `source_filename` parameter to filter by filename
 
     Args:
         pull_request_id: Pull request ID
         project_key: Project key
         repository_slug: Repository slug
-        source_filename: Optional filename to filter (file-level vs PR-level)
+        source_filename: Optional filename to filter (when omitted, returns all scores)
         db: Database session
         score_service: Review score service instance
 
     Returns:
-        list[ReviewScoreResponse]: List of all reviewer scores for this target
+        list[ReviewScoreResponse]: List of reviewer scores for the specified target
 
     Raises:
         HTTPException: If an error occurs while fetching scores

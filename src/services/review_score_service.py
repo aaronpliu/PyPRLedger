@@ -131,7 +131,7 @@ class ReviewScoreService:
         )
 
         # Update metrics
-        self.metrics.increment_score(project=project.project_key, reviewer=reviewer.username)
+        self.metrics.observe_review_score(project=project.project_key, score=score_data.score)
 
         # Return enriched response
         return await self._enrich_score_response(score_obj, db, include_details)
@@ -149,7 +149,12 @@ class ReviewScoreService:
         Get all scores for a specific review target
 
         Args:
-            source_filename: If None, get PR-level scores; if provided, get file-level scores
+            pull_request_id: Pull request ID
+            project_key: Project key
+            repository_slug: Repository slug
+            source_filename: If None, get all scores; if provided, get file-level scores for that file
+            db: Database session
+            use_cache: Whether to use cache
         """
         from src.utils.score_utils import normalize_source_filename
 
@@ -168,7 +173,10 @@ class ReviewScoreService:
             cached = await self.redis_client.get(cache_key)
             if cached:
                 data = json.loads(cached)
+                logger.info(f"Retrieved {len(data)} score(s) from cache")
                 return [ReviewScoreResponse(**item) for item in data]
+            else:
+                logger.debug("Cache miss for scores")
 
         # Query database with composite key conditions
         query = (
@@ -185,14 +193,18 @@ class ReviewScoreService:
             )
         )
 
-        # Handle NULL source_filename correctly
-        if source_filename is None:
-            query = query.where(PullRequestScore.source_filename.is_(None))
-        else:
+        # Handle source_filename filtering
+        if source_filename is not None:
+            # File-level scores only for specific filename
             query = query.where(PullRequestScore.source_filename == source_filename)
 
         result = await db.execute(query)
         scores = result.scalars().all()
+
+        logger.info(
+            f"Found {len(scores)} score(s) for PR={pull_request_id}, "
+            f"project={project_key}, repo={repository_slug}, file={'ALL' if source_filename is None else source_filename}"
+        )
 
         # Enrich responses
         enriched_scores = []
@@ -331,11 +343,17 @@ class ReviewScoreService:
         reviewer: str,
     ) -> PullRequestScore | None:
         """Get score by composite key and reviewer"""
-        query = select(PullRequestScore).where(
-            PullRequestScore.pull_request_id == pull_request_id,
-            PullRequestScore.project_key == project_key,
-            PullRequestScore.repository_slug == repository_slug,
-            PullRequestScore.reviewer == reviewer,
+        from sqlalchemy.orm import selectinload
+
+        query = (
+            select(PullRequestScore)
+            .options(selectinload(PullRequestScore.reviewer_rel))
+            .where(
+                PullRequestScore.pull_request_id == pull_request_id,
+                PullRequestScore.project_key == project_key,
+                PullRequestScore.repository_slug == repository_slug,
+                PullRequestScore.reviewer == reviewer,
+            )
         )
 
         # Handle NULL source_filename correctly
@@ -385,7 +403,7 @@ class ReviewScoreService:
         from src.utils.score_utils import normalize_source_filename
 
         source_filename = normalize_source_filename(source_filename)
-        file_part = source_filename or "pr_level"
+        file_part = source_filename or "all_files"
         return f"scores:{project_key}:{repository_slug}:{pull_request_id}:{file_part}"
 
     async def _invalidate_score_cache(

@@ -497,10 +497,9 @@ class ReviewService:
                 cached = await self.redis_client.get(cache_key)
                 if cached:
                     data = json.loads(cached)
-                    # Deserialize cached reviews
-                    reviews = [PullRequestReview.from_dict(r) for r in data["reviews"]]
+                    # Return reviews as dicts from cache (not ORM objects)
                     logger.debug("Retrieved review list from cache")
-                    return reviews, data["total"]
+                    return data["reviews"], data["total"]
             except Exception as e:
                 logger.warning(f"Failed to get review list from cache: {str(e)}")
 
@@ -792,9 +791,10 @@ class ReviewService:
 
     async def get_reviews_by_status(
         self,
-        status: str,
+        review_status: str,
         db: AsyncSession,
-        project_id: int | None = None,
+        project_key: str | None = None,
+        repository_slug: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[PullRequestReview], int]:
@@ -802,8 +802,9 @@ class ReviewService:
         Get reviews by status
 
         Args:
-            status: The status to filter by (open, merged, closed, draft)
-            project_id: Optional project ID to further filter
+            review_status: The status to filter by (open, merged, closed, draft)
+            project_key: Optional project key to further filter
+            repository_slug: Optional repository slug to further filter
             page: Page number (1-indexed)
             page_size: Number of items per page
             db: Database session
@@ -811,7 +812,11 @@ class ReviewService:
         Returns:
             tuple[List[PullRequestReview], int]: List of reviews and total count
         """
-        filters = ReviewFilter(status=status, project_id=project_id)
+        filters = ReviewFilter(
+            pull_request_status=review_status,
+            project_key=project_key,
+            repository_slug=repository_slug,
+        )
         return await self.list_reviews(filters, db, page, page_size)
 
     async def update_review_status(
