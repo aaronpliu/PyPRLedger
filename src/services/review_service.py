@@ -14,7 +14,7 @@ from src.core.exceptions import (
     ReviewStatusException,
 )
 from src.models.project_registry import ProjectRegistry
-from src.models.pull_request import PullRequestReview
+from src.models.pull_request import PullRequestReview, PullRequestScore
 from src.schemas.pull_request import (
     ReviewCreate,
     ReviewFilter,
@@ -708,7 +708,7 @@ class ReviewService:
             except Exception as e:
                 logger.warning(f"Failed to get review stats from cache: {str(e)}")
 
-        # Build base query
+        # Build base query for reviews
         base_query = select(PullRequestReview)
         if project_key:
             base_query = base_query.where(PullRequestReview.project_key == project_key)
@@ -730,10 +730,13 @@ class ReviewService:
         merged_reviews = status_counts.get("merged", 0)
         closed_reviews = status_counts.get("closed", 0)
 
-        # Get average score
-        avg_score_query = select(func.avg(PullRequestReview.score)).select_from(
-            base_query.subquery()
-        )
+        # Get average score from PullRequestScore table
+        avg_score_query = select(func.avg(PullRequestScore.score))
+
+        # Apply same project_key filter if provided
+        if project_key:
+            avg_score_query = avg_score_query.where(PullRequestScore.project_key == project_key)
+
         avg_score_result = await db.execute(avg_score_query)
         avg_score = avg_score_result.scalar() or 0.0
 
@@ -780,7 +783,7 @@ class ReviewService:
         if use_cache:
             try:
                 await self.redis_client.setex(
-                    cache_key, settings.CACHE_TTL_STATS, json.dumps(stats.model_dump())
+                    cache_key, settings.CACHE_TTL_STATS, json.dumps(stats.model_dump(mode="json"))
                 )
             except Exception as e:
                 logger.warning(f"Failed to cache review stats: {str(e)}")
