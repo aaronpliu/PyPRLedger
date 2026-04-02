@@ -17,16 +17,16 @@ from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# 创建基类
+# Create base class
 Base = declarative_base()
 
-# 全局数据库引擎
+# Global database engine
 _engine: AsyncEngine | None = None
 _async_session_maker: async_sessionmaker | None = None
 
 
 def get_engine() -> AsyncEngine:
-    """获取数据库引擎"""
+    """Get database engine"""
     global _engine
     if _engine is None:
         raise RuntimeError("Database engine not initialized. Call init_db() first.")
@@ -34,8 +34,8 @@ def get_engine() -> AsyncEngine:
 
 
 def create_engine() -> AsyncEngine:
-    """创建数据库引擎"""
-    # 准备连接池相关参数（仅在使用非 NullPool 时需要）
+    """Create database engine"""
+    # Prepare connection pool related parameters (only needed when not using NullPool)
     engine_kwargs = {
         "echo": settings.DEBUG,
         "pool_pre_ping": True,
@@ -46,11 +46,11 @@ def create_engine() -> AsyncEngine:
         "future": True,
     }
 
-    # 根据是否使用 NullPool 来决定是否添加连接池参数
-    # NullPool 不支持 pool_size, max_overflow, pool_timeout 等参数
+    # Decide whether to add connection pool parameters based on whether NullPool is used
+    # NullPool does not support pool_size, max_overflow, pool_timeout and other parameters
     if settings.DATABASE_POOL_SIZE > 0:
-        # 如果不使用 NullPool，可以添加连接池参数
-        # 但异步引擎默认会使用 AsyncAdaptedQueuePool，所以这里不指定 poolclass
+        # If not using NullPool, can add connection pool parameters
+        # But async engine will use AsyncAdaptedQueuePool by default, so we don't specify poolclass here
         engine_kwargs.update(
             {
                 "pool_size": settings.DATABASE_POOL_SIZE,
@@ -60,7 +60,7 @@ def create_engine() -> AsyncEngine:
             }
         )
     else:
-        # 使用 NullPool 模式
+        # Use NullPool mode
         engine_kwargs["poolclass"] = NullPool
 
     engine = create_async_engine(settings.database_url, **engine_kwargs)
@@ -68,16 +68,16 @@ def create_engine() -> AsyncEngine:
 
 
 async def init_db() -> None:
-    """初始化数据库连接"""
+    """Initialize database connection"""
     global _engine, _async_session_maker
 
     try:
         logger.info("Initializing database connection...")
 
-        # 创建数据库引擎
+        # Create database engine
         _engine = create_engine()
 
-        # 创建会话工厂
+        # Create session factory
         _async_session_maker = async_sessionmaker(
             _engine,
             class_=AsyncSession,
@@ -86,7 +86,7 @@ async def init_db() -> None:
             autoflush=False,
         )
 
-        # 测试数据库连接
+        # Test database connection
         async with _engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
 
@@ -98,7 +98,7 @@ async def init_db() -> None:
 
 
 async def close_db() -> None:
-    """关闭数据库连接"""
+    """Close database connection"""
     global _engine, _async_session_maker
 
     try:
@@ -107,10 +107,10 @@ async def close_db() -> None:
 
         logger.info("Closing database connection...")
 
-        # 关闭数据库引擎
+        # Close database engine
         await _engine.dispose()
 
-        # 重置全局变量
+        # Reset global variables
         _engine = None
         _async_session_maker = None
 
@@ -122,7 +122,7 @@ async def close_db() -> None:
 
 
 def get_session_maker() -> async_sessionmaker:
-    """获取会话工厂"""
+    """Get session factory"""
     global _async_session_maker
     if _async_session_maker is None:
         raise RuntimeError("Session maker not initialized. Call init_db() first.")
@@ -131,8 +131,8 @@ def get_session_maker() -> async_sessionmaker:
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """
-    获取数据库会话的依赖注入函数
-    用于FastAPI的Depends
+    Get database session dependency injection function
+    Used for FastAPI's Depends
     """
     session_maker = get_session_maker()
     async with session_maker() as session:
@@ -149,8 +149,8 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 @asynccontextmanager
 async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
     """
-    获取数据库会话的上下文管理器
-    用于需要手动管理会话的情况
+    Get database session context manager
+    Used for situations requiring manual session management
     """
     session_maker = get_session_maker()
     async with session_maker() as session:
@@ -165,24 +165,24 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
 
 
 class DatabaseManager:
-    """数据库管理器类"""
+    """Database manager class"""
 
     def __init__(self):
         self.engine: AsyncEngine | None = None
         self.session_maker: async_sessionmaker | None = None
 
     async def initialize(self) -> None:
-        """初始化数据库"""
+        """Initialize database"""
         if self.engine is not None:
             logger.warning("Database already initialized")
             return
 
         logger.info("Initializing database manager...")
 
-        # 创建引擎
+        # Create engine
         self.engine = create_engine()
 
-        # 创建会话工厂
+        # Create session factory
         self.session_maker = async_sessionmaker(
             self.engine,
             class_=AsyncSession,
@@ -194,7 +194,7 @@ class DatabaseManager:
         logger.info("Database manager initialized successfully")
 
     async def close(self) -> None:
-        """关闭数据库连接"""
+        """Close database connection"""
         if self.engine is None:
             return
 
@@ -208,7 +208,7 @@ class DatabaseManager:
         logger.info("Database manager closed successfully")
 
     async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
-        """获取数据库会话"""
+        """Get database session"""
         if self.session_maker is None:
             raise RuntimeError("Database manager not initialized. Call initialize() first.")
 
@@ -224,7 +224,7 @@ class DatabaseManager:
 
     @asynccontextmanager
     async def session_context(self) -> AsyncGenerator[AsyncSession, None]:
-        """获取数据库会话的上下文管理器"""
+        """Get database session context manager"""
         if self.session_maker is None:
             raise RuntimeError("Database manager not initialized. Call initialize() first.")
 
@@ -239,5 +239,5 @@ class DatabaseManager:
                 await session.close()
 
 
-# 全局数据库管理器实例
+# Global database manager instance
 db_manager = DatabaseManager()

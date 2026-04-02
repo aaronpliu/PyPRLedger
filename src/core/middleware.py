@@ -16,21 +16,21 @@ logger = logging.getLogger(__name__)
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    """请求日志中间件"""
+    """Request logging middleware"""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # 生成唯一请求ID
+        # Generate unique request ID
         request_id = str(uuid.uuid4())
         request.state.request_id = request_id
 
-        # 记录请求开始时间
+        # Record request start time
         start_time = time.time()
 
-        # 记录请求信息
+        # Record request information
         client_ip = request.client.host if request.client else "unknown"
         request_headers = dict(request.headers)
 
-        # 过滤敏感头部信息
+        # Filter sensitive headers
         sensitive_headers = ["authorization", "x-api-key", "cookie"]
         for header in sensitive_headers:
             if header.lower() in request_headers:
@@ -49,18 +49,18 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             },
         )
 
-        # 处理请求
+        # Process request
         try:
             response = await call_next(request)
 
-            # 计算处理时间
+            # Calculate processing time
             process_time = time.time() - start_time
 
-            # 添加请求ID到响应头
+            # Add request ID to response headers
             response.headers["X-Request-ID"] = request_id
             response.headers["X-Process-Time"] = f"{process_time:.4f}"
 
-            # 记录响应信息
+            # Record response information
             logger.info(
                 f"Request completed: {request.method} {request.url.path} - Status: {response.status_code}",
                 extra={
@@ -76,10 +76,10 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             return response
 
         except Exception as exc:
-            # 计算处理时间
+            # Calculate processing time
             process_time = time.time() - start_time
 
-            # 记录异常
+            # Record exception
             logger.error(
                 f"Request failed: {request.method} {request.url.path} - Error: {str(exc)}",
                 extra={
@@ -97,7 +97,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """请求限流中间件"""
+    """Rate limiting middleware"""
 
     def __init__(
         self,
@@ -114,30 +114,30 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.redis_client = redis_client
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # 如果未启用限流，直接处理请求
+        # If rate limiting is disabled, process request directly
         if not self.enabled:
             return await call_next(request)
 
-        # 获取客户端标识符 (使用IP地址)
+        # Get client identifier (use IP address)
         client_ip = request.client.host if request.client else "unknown"
 
-        # 获取Redis客户端 (如果未提供，则创建新的连接)
+        # Get Redis client (if not provided, create new connection)
         redis = self.redis_client
         if redis is None:
             redis = get_redis_client()
 
         try:
-            # 构建限流key
+            # Build rate limit key
             rate_limit_key = f"rate_limit:{client_ip}"
 
-            # 获取当前计数
+            # Get current count
             current_count = await redis.incr(rate_limit_key)
 
-            # 如果是第一次请求，设置过期时间
+            # If first request, set expiration time
             if current_count == 1:
                 await redis.expire(rate_limit_key, self.period_seconds)
 
-            # 检查是否超过限制
+            # Check if limit exceeded
             if current_count > self.max_requests:
                 logger.warning(
                     f"Rate limit exceeded for client {client_ip}: {current_count}/{self.max_requests} requests",
@@ -157,7 +157,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     },
                 )
 
-            # 添加限流信息到请求状态
+            # Add rate limit information to request state
             request.state.rate_limit = {
                 "current": current_count,
                 "limit": self.max_requests,
@@ -165,10 +165,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 "reset": await redis.ttl(rate_limit_key),
             }
 
-            # 处理请求
+            # Process request
             response = await call_next(request)
 
-            # 添加限流信息到响应头
+            # Add rate limit information to response headers
             rate_limit = request.state.rate_limit
             response.headers["X-RateLimit-Limit"] = str(rate_limit["limit"])
             response.headers["X-RateLimit-Remaining"] = str(rate_limit["remaining"])
@@ -180,44 +180,44 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             raise
         except Exception as exc:
             logger.error(f"Rate limiting error: {str(exc)}", exc_info=True)
-            # 发生错误时不阻止请求
+            # Don't block request when error occurs
             return await call_next(request)
 
 
 class CacheControlMiddleware(BaseHTTPMiddleware):
-    """缓存控制中间件"""
+    """Cache control middleware"""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # 处理请求
+        # Process request
         response = await call_next(request)
 
-        # 根据请求方法和路径设置缓存策略
+        # Set cache strategy based on request method and path
         if request.method == "GET":
-            # 对GET请求设置适当的缓存策略
+            # Set appropriate cache strategy for GET requests
             if request.url.path.startswith("/api/v1/reviews"):
-                # 审查列表可以短时间缓存
+                # Review list can be cached for short time
                 response.headers["Cache-Control"] = "private, max-age=60"
             elif request.url.path.startswith("/api/v1/projects"):
-                # 项目信息可以较长时间缓存
+                # Project information can be cached for longer time
                 response.headers["Cache-Control"] = "private, max-age=300"
             else:
-                # 其他GET请求默认不缓存
+                # Other GET requests default to no cache
                 response.headers["Cache-Control"] = "no-store"
         else:
-            # 非GET请求禁止缓存
+            # Non-GET requests disable caching
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
 
         return response
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """安全头中间件"""
+    """Security headers middleware"""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # 处理请求
+        # Process request
         response = await call_next(request)
 
-        # 添加安全头
+        # Add security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
@@ -228,38 +228,38 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class TimingMiddleware(BaseHTTPMiddleware):
-    """请求计时中间件"""
+    """Request timing middleware"""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # 记录开始时间
+        # Record start time
         start_time = time.time()
 
-        # 处理请求
+        # Process request
         response = await call_next(request)
 
-        # 计算处理时间
+        # Calculate processing time
         process_time = time.time() - start_time
 
-        # 添加处理时间到响应头
+        # Add processing time to response headers
         response.headers["X-Response-Time"] = f"{process_time:.4f}s"
 
         return response
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
-    """请求ID中间件"""
+    """Request ID middleware"""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # 尝试从请求头获取请求ID
+        # Try to get request ID from headers
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
 
-        # 添加到请求状态
+        # Add to request state
         request.state.request_id = request_id
 
-        # 处理请求
+        # Process request
         response = await call_next(request)
 
-        # 添加请求ID到响应头
+        # Add request ID to response headers
         response.headers["X-Request-ID"] = request_id
 
         return response
