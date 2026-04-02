@@ -61,14 +61,19 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
 
-    # CORS configuration - stored as string, parsed to list via computed_field
-    BACKEND_CORS_ORIGINS: str = Field(default="http://localhost:3000,http://localhost:8000")
+    # CORS configuration
+    BACKEND_CORS_ORIGINS: str = Field(
+        default="*",  # Allow all origins for development - restrict in production
+    )
 
     @computed_field
     @property
     def backend_cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string to list"""
         if isinstance(self.BACKEND_CORS_ORIGINS, str):
+            # Handle wildcard for development
+            if self.BACKEND_CORS_ORIGINS == "*":
+                return ["*"]
             return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",")]
         return self.BACKEND_CORS_ORIGINS
 

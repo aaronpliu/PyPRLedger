@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pull Request Review System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .filters {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 10px 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(17, 153, 142, 0.4);
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .reviews-grid {
+            display: grid;
+            gap: 20px;
+        }
+
+        .review-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            border-left: 4px solid #667eea;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .review-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .review-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .review-meta {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .badge-pr {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-file {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .badge-status {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .review-body {
+            margin-bottom: 15px;
+        }
+
+        .review-title {
+            font-weight: 700;
+            color: #212529;
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+        }
+
+        .review-text {
+            color: #495057;
+            line-height: 1.6;
+        }
+
+        .review-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 15px;
+            border-top: 2px solid #dee2e6;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .review-author {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .author-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .author-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .author-name {
+            font-weight: 600;
+            color: #212529;
+        }
+
+        .author-email {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+
+        .score-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .current-score {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .score-badge {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.3rem;
+            color: white;
+        }
+
+        .score-excellent {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .score-good {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .score-average {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .score-poor {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        }
+
+        .scoring-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .scoring-form input[type="number"] {
+            width: 80px;
+            padding: 8px 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .scoring-form textarea {
+            width: 200px;
+            padding: 8px 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            resize: vertical;
+            min-height: 40px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #667eea;
+            font-size: 1.2rem;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #c33;
+            margin: 20px 0;
+        }
+
+        .success-message {
+            background: #efe;
+            color: #3c3;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3c3;
+            margin: 20px 0;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8rem;
+            }
+
+            .filters {
+                grid-template-columns: 1fr;
+            }
+
+            .review-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .review-footer {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .scoring-form {
+                width: 100%;
+            }
+
+            .scoring-form textarea {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📝 Pull Request Review System</h1>
+            <p>View reviews and score reviewer feedback</p>
+        </div>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label for="pullRequestId">Pull Request ID:</label>
+                <input type="text" id="pullRequestId" value="PR-001" placeholder="e.g., PR-001">
+            </div>
+            <div class="filter-group">
+                <label for="projectKey">Project Key:</label>
+                <input type="text" id="projectKey" value="ECOM" placeholder="e.g., ECOM">
+            </div>
+            <div class="filter-group">
+                <label for="repositorySlug">Repository:</label>
+                <input type="text" id="repositorySlug" value="frontend-store" placeholder="e.g., frontend-store">
+            </div>
+            <div class="filter-group">
+                <label for="sourceFilename">File (optional):</label>
+                <input type="text" id="sourceFilename" placeholder="Leave empty for PR-level">
+            </div>
+            <div class="filter-group" style="justify-content: flex-end;">
+                <button class="btn btn-primary" onclick="loadReviews()">Load Reviews</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div id="successMessage" class="success-message"></div>
+            <div id="loading" class="loading" style="display: none;">Loading reviews...</div>
+            <div id="error" class="error" style="display: none;"></div>
+            <div id="reviewsGrid" class="reviews-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000/api/v1';
+
+        async function loadReviews() {
+            const loadingEl = document.getElementById('loading');
+            const errorEl = document.getElementById('error');
+            const reviewsGrid = document.getElementById('reviewsGrid');
+            const successMsg = document.getElementById('successMessage');
+
+            // Hide previous messages
+            successMsg.style.display = 'none';
+            errorEl.style.display = 'none';
+            loadingEl.style.display = 'block';
+            reviewsGrid.innerHTML = '';
+
+            try {
+                const pullRequestId = document.getElementById('pullRequestId').value;
+                const projectKey = document.getElementById('projectKey').value;
+                const repositorySlug = document.getElementById('repositorySlug').value;
+                const sourceFilename = document.getElementById('sourceFilename').value;
+
+                // Build query parameters
+                const params = new URLSearchParams({
+                    pull_request_id: pullRequestId,
+                    project_key: projectKey,
+                    repository_slug: repositorySlug
+                });
+
+                if (sourceFilename) {
+                    params.append('source_filename', sourceFilename);
+                }
+
+                const response = await fetch(`${API_BASE_URL}/reviews?${params}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to load reviews: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                displayReviews(data.items || []);
+
+            } catch (error) {
+                errorEl.textContent = `Error: ${error.message}`;
+                errorEl.style.display = 'block';
+            } finally {
+                loadingEl.style.display = 'none';
+            }
+        }
+
+        function displayReviews(reviews) {
+            const reviewsGrid = document.getElementById('reviewsGrid');
+
+            // Store reviews globally for access during score submission
+            window.currentReviews = reviews;
+
+            if (reviews.length === 0) {
+                reviewsGrid.innerHTML = '<div class="loading">No reviews found</div>';
+                return;
+            }
+
+            reviewsGrid.innerHTML = reviews.map(review => `
+                <div class="review-card">
+                    <div class="review-header">
+                        <div class="review-meta">
+                            <span class="badge badge-pr">${escapeHtml(review.pull_request_id)}</span>
+                            ${review.source_filename ? 
+                                `<span class="badge badge-file">${escapeHtml(review.source_filename)}</span>` : 
+                                '<span class="badge badge-status">PR-Level</span>'}
+                        </div>
+                        <div class="current-score">
+                            <span>Current Score:</span>
+                            <div class="score-badge ${getScoreClass(review.score)}">${review.score}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="review-body">
+                        <div class="review-title">${escapeHtml(review.title)}</div>
+                        <div class="review-text">${escapeHtml(review.content)}</div>
+                    </div>
+
+                    <div class="review-footer">
+                        <div class="review-author">
+                            <div class="author-avatar">${getInitials(review.reviewer_info?.display_name || review.reviewer)}</div>
+                            <div class="author-info">
+                                <div class="author-name">${escapeHtml(review.reviewer_info?.display_name || review.reviewer)}</div>
+                                <div class="author-email">${escapeHtml(review.reviewer_info?.email_address || '')}</div>
+                            </div>
+                        </div>
+
+                        <div class="score-section">
+                            <div class="scoring-form">
+                                <input type="number" id="score_${review.id}" min="0" max="10" step="0.5" 
+                                       value="${review.score || ''}" placeholder="0-10">
+                                <textarea id="comment_${review.id}" placeholder="Review comment (optional)"></textarea>
+                                <button class="btn btn-success" onclick="submitScore(${review.id})">Submit Score</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function submitScore(reviewId) {
+            const scoreInput = document.getElementById(`score_${reviewId}`);
+            const commentInput = document.getElementById(`comment_${reviewId}`);
+            const successMsg = document.getElementById('successMessage');
+            const errorEl = document.getElementById('error');
+
+            const score = parseFloat(scoreInput.value);
+            const comment = commentInput.value.trim();
+
+            if (isNaN(score) || score < 0 || score > 10) {
+                errorEl.textContent = 'Please enter a valid score between 0 and 10';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            try {
+                const pullRequestId = document.getElementById('pullRequestId').value;
+                const projectKey = document.getElementById('projectKey').value;
+                const repositorySlug = document.getElementById('repositorySlug').value;
+                const sourceFilename = document.getElementById('sourceFilename').value;
+
+                // Get the commit_id from the loaded review data
+                const reviewData = window.currentReviews.find(r => r.id === reviewId);
+                if (!reviewData) {
+                    throw new Error('Review data not found');
+                }
+
+                // Ensure reviewer field exists
+                const reviewer = reviewData.reviewer || reviewData.reviewer_info?.username;
+                if (!reviewer) {
+                    throw new Error('Reviewer information not found in loaded data');
+                }
+
+                const requestBody = {
+                    pull_request_id: pullRequestId,
+                    pull_request_commit_id: reviewData.pull_request_commit_id, // Use commit_id from loaded review
+                    project_key: projectKey,
+                    repository_slug: repositorySlug,
+                    reviewer: reviewer, // Use the original reviewer username
+                    score: score,
+                    score_description: getScoreDescription(score),
+                    reviewer_comments: comment
+                };
+
+                // Debug log to see what we're sending
+                console.log('Submitting score update:', JSON.stringify(requestBody, null, 2));
+
+                if (sourceFilename) {
+                    requestBody.source_filename = sourceFilename;
+                }
+
+                const response = await fetch(`${API_BASE_URL}/reviews/score`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Failed to submit score');
+                }
+
+                const result = await response.json();
+                
+                successMsg.textContent = `✅ Score submitted successfully! Score: ${result.score}`;
+                successMsg.style.display = 'block';
+                errorEl.style.display = 'none';
+
+                // Clear the form
+                scoreInput.value = '';
+                commentInput.value = '';
+
+                // Reload reviews after a short delay
+                setTimeout(() => {
+                    loadReviews();
+                }, 1500);
+
+            } catch (error) {
+                errorEl.textContent = `Error: ${error.message}`;
+                errorEl.style.display = 'block';
+            }
+        }
+
+        function getScoreClass(score) {
+            if (score >= 9) return 'score-excellent';
+            if (score >= 7) return 'score-good';
+            if (score >= 5) return 'score-average';
+            return 'score-poor';
+        }
+
+        function getScoreDescription(score) {
+            if (score >= 9) return 'Excellent';
+            if (score >= 7) return 'Good';
+            if (score >= 5) return 'Average';
+            if (score >= 3) return 'Below Average';
+            return 'Poor';
+        }
+
+        function getInitials(name) {
+            return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Load reviews on page load
+        window.addEventListener('DOMContentLoaded', loadReviews);
+    </script>
+</body>
+</html>
