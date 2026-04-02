@@ -245,12 +245,10 @@ async def get_review_statistics(
 
 @router.get("/{project_key}/{repository_slug}/{pull_request_id}", response_model=ReviewResponse)
 async def get_review(
-    project_key: Annotated[
-        str, Path(min_length=1, max_length=32, description="Project key (e.g., 'ECOM')")
-    ],
+    project_key: Annotated[str, Path(min_length=1, max_length=32, description="Project key")],
     repository_slug: Annotated[
         str,
-        Path(min_length=1, max_length=128, description="Repository slug (e.g., 'frontend-store')"),
+        Path(min_length=1, max_length=128, description="Repository slug"),
     ],
     pull_request_id: Annotated[str, Path(description="Pull request ID")],
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -327,12 +325,10 @@ async def get_review(
 
 @router.put("/{project_key}/{repository_slug}/{pull_request_id}", response_model=ReviewResponse)
 async def update_review(
-    project_key: Annotated[
-        str, Path(min_length=1, max_length=32, description="Project key (e.g., 'ECOM')")
-    ],
+    project_key: Annotated[str, Path(min_length=1, max_length=32, description="Project key")],
     repository_slug: Annotated[
         str,
-        Path(min_length=1, max_length=128, description="Repository slug (e.g., 'frontend-store')"),
+        Path(min_length=1, max_length=128, description="Repository slug"),
     ],
     pull_request_id: Annotated[str, Path(description="Pull request ID")],
     review_update: ReviewUpdate,
@@ -391,12 +387,10 @@ async def update_review(
     "/{project_key}/{repository_slug}/{pull_request_id}/status", response_model=ReviewResponse
 )
 async def update_review_status(
-    project_key: Annotated[
-        str, Path(min_length=1, max_length=32, description="Project key (e.g., 'ECOM')")
-    ],
+    project_key: Annotated[str, Path(min_length=1, max_length=32, description="Project key")],
     repository_slug: Annotated[
         str,
-        Path(min_length=1, max_length=128, description="Repository slug (e.g., 'frontend-store')"),
+        Path(min_length=1, max_length=128, description="Repository slug"),
     ],
     pull_request_id: Annotated[str, Path(description="Pull request ID")],
     new_status: Annotated[str, Query(description="The new status (open, merged, closed, draft)")],
@@ -456,12 +450,10 @@ async def update_review_status(
     "/{project_key}/{repository_slug}/{pull_request_id}", status_code=status.HTTP_204_NO_CONTENT
 )
 async def delete_review(
-    project_key: Annotated[
-        str, Path(min_length=1, max_length=32, description="Project key (e.g., 'ECOM')")
-    ],
+    project_key: Annotated[str, Path(min_length=1, max_length=32, description="Project key")],
     repository_slug: Annotated[
         str,
-        Path(min_length=1, max_length=128, description="Repository slug (e.g., 'frontend-store')"),
+        Path(min_length=1, max_length=128, description="Repository slug"),
     ],
     pull_request_id: Annotated[str, Path(description="Pull request ID")],
     db: Annotated[AsyncSession, Depends(get_db_session)],
