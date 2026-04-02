@@ -116,12 +116,6 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Handle FastAPI built-in HTTP exceptions (4xx errors)"""
-    message = (
-        str(exc.detail)
-        if hasattr(exc, "detail") and exc.detail
-        else f"HTTP {exc.status_code} Error"
-    )
-
     # Log detailed error information
     logger.error(
         f"\n{'=' * 80}\n"
@@ -131,18 +125,17 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         f"  Client IP:   {request.client.host if request.client else 'unknown'}\n"
         f"  Status Code: {exc.status_code}\n"
         f"  Error Code:  HTTP_{exc.status_code}\n"
-        f"  Message:     {message}\n"
+        f"  Message:     {str(exc.detail) if hasattr(exc, 'detail') and exc.detail else f'HTTP {exc.status_code} Error'}\n"
         f"  Details:     {exc.detail if hasattr(exc, 'detail') else None}\n"
         f"  Exception:   HTTPException\n"
         f"{'=' * 80}",
         extra={"request": str(request)},
     )
 
+    # Return standard FastAPI error response format
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "error": f"HTTP_{exc.status_code}",
-            "message": message,
             "detail": exc.detail if hasattr(exc, "detail") else None,
         },
     )

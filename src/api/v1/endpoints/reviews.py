@@ -243,7 +243,7 @@ async def get_review_statistics(
         )
 
 
-@router.get("/{project_key}/{repository_slug}/{pull_request_id}", response_model=ReviewResponse)
+@router.get("/{project_key}/{repository_slug}/{pull_request_id}", response_model=ReviewListResponse)
 async def get_review(
     project_key: Annotated[str, Path(min_length=1, max_length=32, description="Project key")],
     repository_slug: Annotated[
@@ -253,9 +253,10 @@ async def get_review(
     pull_request_id: Annotated[str, Path(description="Pull request ID")],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
-) -> ReviewResponse:
+) -> ReviewListResponse:
     """
-    Get a pull request review by composite business key
+    Get all pull request reviews by composite business key.
+    Returns all reviews for a PR (multiple reviewers may have reviewed the same PR).
 
     Args:
         project_key: The project key
@@ -265,20 +266,21 @@ async def get_review(
         review_service: Review service instance
 
     Returns:
-        ReviewResponse: The requested review
+        ReviewListResponse: List of all matching reviews with entity information
 
     Raises:
-        ReviewNotFoundException: If the review doesn't exist
+        NotFoundException: If no reviews are found
     """
     try:
-        # Use composite key for precise cache operations
-        review = await review_service.get_review(
+        # Get all reviews for this PR (may have multiple reviews from different reviewers)
+        reviews = await review_service.get_review(
             project_key=project_key,
             repository_slug=repository_slug,
             pull_request_id=pull_request_id,
             db=db,
         )
-        if not review:
+
+        if not reviews:
             metrics.increment_error(
                 error_type="NOT_FOUND",
                 endpoint=f"GET /api/v1/reviews/{project_key}/{repository_slug}/{pull_request_id}",
@@ -287,25 +289,33 @@ async def get_review(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={
                     "error": "NOT_FOUND",
-                    "message": f"Review with ID {pull_request_id} not found in project {project_key}/{repository_slug}",
+                    "message": f"No reviews found for PR {pull_request_id} in project {project_key}/{repository_slug}",
                 },
             )
 
-        # Enrich review with full entity information
-        if hasattr(review, "to_dict"):
-            # ORM object - enrich with full entity information using relationships
-            logger.info(f"Enriching ORM review {pull_request_id} with entity information")
-            review_data = await review_service._enrich_review_with_entities(review, db)
-        elif isinstance(review, dict):
-            # Already a dict from cache - enrich by querying entities
-            logger.info(f"Review {pull_request_id} from cache, querying entity information")
-            review_data = await review_service._enrich_review_with_entities(review, db)
-        else:
-            # Fallback to dict() method
-            review_data = dict(review)
+        logger.info(f"Retrieved {len(reviews)} review(s) for PR {pull_request_id}")
 
-        return ReviewResponse(**review_data)
+        # Enrich all reviews with full entity information
+        enriched_reviews = []
+        for review in reviews:
+            if hasattr(review, "to_dict"):
+                # ORM object - enrich with full entity information using relationships
+                review_data = await review_service._enrich_review_with_entities(review, db)
+            elif isinstance(review, dict):
+                # Already a dict from cache - enrich by querying entities
+                review_data = await review_service._enrich_review_with_entities(review, db)
+            else:
+                # Fallback to dict() method
+                review_data = dict(review)
 
+            enriched_reviews.append(ReviewResponse(**review_data))
+
+        return ReviewListResponse(
+            items=enriched_reviews,
+            total=len(reviews),
+            page=1,
+            page_size=len(reviews),
+        )
     except HTTPException:
         raise
     except Exception as e:

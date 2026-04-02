@@ -1,5 +1,6 @@
 import json
 import logging
+import traceback
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from src.core.config import settings
 from src.core.exceptions import (
+    DatabaseException,
     ReviewAlreadyExistsException,
     ReviewNotFoundException,
     ReviewStatusException,
@@ -336,48 +338,28 @@ class ReviewService:
 
     async def get_review(
         self,
-        project_key: str | None = None,
-        repository_slug: str | None = None,
-        pull_request_id: str | None = None,
-        db: AsyncSession = None,
-        use_cache: bool = True,
-    ) -> PullRequestReview | dict[str, Any] | None:
+        project_key: str,
+        repository_slug: str,
+        pull_request_id: str,
+        db: AsyncSession,
+    ) -> list[PullRequestReview]:
         """
-        Get a pull request review by ID or composite business key
+        Get all pull request reviews by composite business key
 
         Args:
-            project_key: The project key (optional if pull_request_id provided)
-            repository_slug: The repository slug (optional if pull_request_id provided)
-            pull_request_id: The pull request ID (required)
+            project_key: The project key
+            repository_slug: The repository slug
+            pull_request_id: The pull request ID
             db: Database session
-            use_cache: Whether to use cache
 
         Returns:
-            PullRequestReview or dict: The review, or None if not found.
-            May return dict from cache or ORM object from database.
+            list[PullRequestReview]: List of all matching reviews for this PR
+
+        Raises:
+            DatabaseException: If database query fails
         """
-        import traceback
-
-        # Validate parameters
-        if not pull_request_id:
-            raise ValueError("pull_request_id is required")
-
-        # If project_key and repository_slug are provided, try cache first
-        if project_key and repository_slug and use_cache:
-            try:
-                cached = await self._get_review_from_cache(
-                    project_key, repository_slug, pull_request_id
-                )
-                if cached:
-                    logger.debug(f"Retrieved review from cache: {pull_request_id}")
-                    return cached
-            except Exception as e:
-                logger.warning(f"Cache retrieval failed: {str(e)}")
-
-        # Query database to find the review with eager loading of relationships
-        # First try with full composite key if available
         try:
-            logger.info(f"Querying database for review: {pull_request_id}")
+            logger.info(f"Querying database for reviews: {pull_request_id}")
 
             # Build query with eager loading of all relationships
             query = (
@@ -388,7 +370,12 @@ class ReviewService:
                     selectinload(PullRequestReview.pull_request_user_rel),
                     selectinload(PullRequestReview.reviewer_rel),
                 )
-                .where(PullRequestReview.pull_request_id == pull_request_id)
+                .where(
+                    PullRequestReview.pull_request_id == pull_request_id,
+                    PullRequestReview.project_key == project_key,
+                    PullRequestReview.repository_slug == repository_slug,
+                )
+                .order_by(desc(PullRequestReview.created_date))
             )
 
             # Add project_key and repository_slug filters if provided
@@ -398,56 +385,33 @@ class ReviewService:
                 query = query.where(PullRequestReview.repository_slug == repository_slug)
 
             result = await db.execute(query)
-            review = result.scalar_one_or_none()
+            reviews = result.scalars().all()
 
-            if review:
-                logger.info(f"Found review: {pull_request_id}")
-                # Cache the result using composite key
-                await self._set_review_in_cache(
-                    review.project_key, review.repository_slug, pull_request_id, review.to_dict()
-                )
-                return review
+            if reviews:
+                logger.info(f"Found {len(reviews)} review(s) for PR: {pull_request_id}")
+                # Cache all results using composite key
+                for review in reviews:
+                    await self._set_review_in_cache(
+                        review.project_key,
+                        review.repository_slug,
+                        pull_request_id,
+                        review.to_dict(),
+                    )
+                return reviews
 
-            # Fallback: just return first review found for this PR
-            logger.warning(f"No review found for {pull_request_id}, checking fallback...")
-            fallback_query = (
-                select(PullRequestReview)
-                .options(
-                    selectinload(PullRequestReview.project),
-                    selectinload(PullRequestReview.repository),
-                    selectinload(PullRequestReview.pull_request_user_rel),
-                    selectinload(PullRequestReview.reviewer_rel),
-                )
-                .where(PullRequestReview.pull_request_id == pull_request_id)
-                .limit(1)
-            )
-
-            # Add project_key and repository_slug filters if provided
-            if project_key:
-                fallback_query = fallback_query.where(PullRequestReview.project_key == project_key)
-            if repository_slug:
-                fallback_query = fallback_query.where(
-                    PullRequestReview.repository_slug == repository_slug
-                )
-
-            fallback_result = await db.execute(fallback_query)
-            review = fallback_result.scalar_one_or_none()
-
-            if review:
-                logger.info(f"Fallback: found review: {pull_request_id}")
-                # Cache using composite key
-                await self._set_review_in_cache(
-                    review.project_key, review.repository_slug, pull_request_id, review.to_dict()
-                )
-
-            return review
+            # No reviews found
+            logger.info(f"No reviews found for PR: {pull_request_id}")
+            return []
 
         except Exception as e:
             error_traceback = traceback.format_exc()
             logger.error(
                 f"Database query failed for {pull_request_id}: {str(e)}\n{error_traceback}"
             )
-            raise
+            raise DatabaseException(
+                message=f"Failed to query reviews for PR {pull_request_id}",
+                detail={"error": str(e)},
+            )
 
     async def list_reviews(
         self,
