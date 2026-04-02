@@ -320,6 +320,181 @@
             display: none;
         }
 
+        /* Table Styles */
+        .reviews-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .reviews-table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .reviews-table th {
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .reviews-table tbody tr {
+            border-bottom: 1px solid #dee2e6;
+            transition: background-color 0.2s;
+        }
+
+        .reviews-table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .reviews-table td {
+            padding: 15px 12px;
+            vertical-align: top;
+        }
+
+        .review-info {
+            max-width: 400px;
+        }
+
+        .review-meta {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+
+        .review-title {
+            font-weight: 700;
+            color: #212529;
+            margin-bottom: 5px;
+            font-size: 1rem;
+        }
+
+        .review-text {
+            color: #495057;
+            line-height: 1.5;
+            font-size: 0.9rem;
+        }
+
+        .author-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-expand {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: #667eea;
+            padding: 5px;
+            transition: transform 0.2s;
+        }
+
+        .btn-expand:hover {
+            transform: scale(1.2);
+        }
+
+        .score-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: flex-start;
+        }
+
+        .current-score-display {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+
+        .details-content {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .details-content h4 {
+            color: #212529;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .scoring-form-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .scoring-form {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .scoring-form label {
+            font-weight: 600;
+            color: #495057;
+            font-size: 0.9rem;
+        }
+
+        .scoring-form input[type="number"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .scoring-form textarea {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            resize: vertical;
+            min-height: 60px;
+            grid-column: 2;
+        }
+
+        .form-actions {
+            grid-column: 2;
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .score-history {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 2px solid #dee2e6;
+        }
+
+        .score-history h5 {
+            color: #212529;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 1.8rem;
@@ -329,22 +504,17 @@
                 grid-template-columns: 1fr;
             }
 
-            .review-header {
-                flex-direction: column;
-                align-items: flex-start;
+            .reviews-table {
+                font-size: 0.85rem;
             }
 
-            .review-footer {
-                flex-direction: column;
-                align-items: flex-start;
+            .reviews-table th,
+            .reviews-table td {
+                padding: 8px 6px;
             }
 
-            .scoring-form {
-                width: 100%;
-            }
-
-            .scoring-form textarea {
-                width: 100%;
+            .review-info {
+                max-width: 200px;
             }
         }
     </style>
@@ -388,6 +558,19 @@
 
     <script>
         const API_BASE_URL = 'http://localhost:8000/api/v1';
+
+        // Helper function to format dates
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
 
         async function loadReviews() {
             const loadingEl = document.getElementById('loading');
@@ -446,46 +629,124 @@
                 return;
             }
 
-            reviewsGrid.innerHTML = reviews.map(review => `
-                <div class="review-card">
-                    <div class="review-header">
-                        <div class="review-meta">
-                            <span class="badge badge-pr">${escapeHtml(review.pull_request_id)}</span>
-                            ${review.source_filename ? 
-                                `<span class="badge badge-file">${escapeHtml(review.source_filename)}</span>` : 
-                                '<span class="badge badge-status">PR-Level</span>'}
-                        </div>
-                        <div class="current-score">
-                            <span>Current Score:</span>
-                            <div class="score-badge ${getScoreClass(review.score)}">${review.score}</div>
-                        </div>
-                    </div>
-                    
-                    <div class="review-body">
-                        <div class="review-title">${escapeHtml(review.title)}</div>
-                        <div class="review-text">${escapeHtml(review.content)}</div>
-                    </div>
+            reviewsGrid.innerHTML = `
+                <table class="reviews-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">Expand</th>
+                            <th>Review Info</th>
+                            <th>Author</th>
+                            <th>Created</th>
+                            <th>Score Section</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${reviews.map(review => `
+                            <tr class="review-row">
+                                <td>
+                                    <button class="btn-expand" onclick="toggleReviewDetails(${review.id})">▶</button>
+                                </td>
+                                <td>
+                                    <div class="review-info">
+                                        <div class="review-meta">
+                                            <span class="badge badge-pr">${escapeHtml(review.pull_request_id)}</span>
+                                            ${review.source_filename ? 
+                                                `<span class="badge badge-file">${escapeHtml(review.source_filename)}</span>` : 
+                                                '<span class="badge badge-status">PR-Level</span>'}
+                                        </div>
+                                        <div class="review-title">${escapeHtml(review.title)}</div>
+                                        <div class="review-text">${escapeHtml(review.content)}</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="author-cell">
+                                        <div class="author-avatar">${getInitials(review.reviewer_info?.display_name || review.reviewer)}</div>
+                                        <div class="author-info">
+                                            <div class="author-name">${escapeHtml(review.reviewer_info?.display_name || review.reviewer)}</div>
+                                            <div class="author-email">${escapeHtml(review.reviewer_info?.email_address || '')}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>${formatDate(review.created_date)}</td>
+                                <td>
+                                    <div class="score-cell">
+                                        <div class="current-score-display">
+                                            <span>Current Score:</span>
+                                            ${review.score !== null && review.score !== undefined ? 
+                                                `<div class="score-badge ${getScoreClass(review.score)}">${review.score}</div>` : 
+                                                '<div style="color: #999; font-style: italic;">Not scored yet</div>'}
+                                        </div>
+                                        <button class="btn btn-success btn-small" onclick="showScoreForm(${review.id})">Update Score</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr class="details-row" id="details_${review.id}" style="display: none;">
+                                <td colspan="5">
+                                    <div class="details-content">
+                                        <h4>Score Details for Review by ${escapeHtml(review.reviewer_info?.display_name || review.reviewer)}</h4>
+                                        
+                                        <div class="scoring-form-container">
+                                            <div class="scoring-form">
+                                                <label for="score_${review.id}">Score (0-10):</label>
+                                                <input type="number" id="score_${review.id}" min="0" max="10" step="0.5" 
+                                                       value="${review.score ?? ''}" placeholder="Enter score">
+                                                
+                                                <label for="comment_${review.id}">Comment:</label>
+                                                <textarea id="comment_${review.id}" placeholder="Review comment (optional)" rows="3"></textarea>
+                                                
+                                                <div class="form-actions">
+                                                    <button class="btn btn-success" onclick="submitScore(${review.id})">Submit Score</button>
+                                                    <button class="btn btn-secondary" onclick="hideScoreForm(${review.id})">Cancel</button>
+                                                </div>
+                                            </div>
+                                        </div>
 
-                    <div class="review-footer">
-                        <div class="review-author">
-                            <div class="author-avatar">${getInitials(review.reviewer_info?.display_name || review.reviewer)}</div>
-                            <div class="author-info">
-                                <div class="author-name">${escapeHtml(review.reviewer_info?.display_name || review.reviewer)}</div>
-                                <div class="author-email">${escapeHtml(review.reviewer_info?.email_address || '')}</div>
-                            </div>
-                        </div>
+                                        <div id="scoreHistory_${review.id}" class="score-history" style="display: none;">
+                                            <h5>Score History</h5>
+                                            <p>Score history will be displayed here when available</p>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
 
-                        <div class="score-section">
-                            <div class="scoring-form">
-                                <input type="number" id="score_${review.id}" min="0" max="10" step="0.5" 
-                                       value="${review.score || ''}" placeholder="0-10">
-                                <textarea id="comment_${review.id}" placeholder="Review comment (optional)"></textarea>
-                                <button class="btn btn-success" onclick="submitScore(${review.id})">Submit Score</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
+        function toggleReviewDetails(reviewId) {
+            const detailsRow = document.getElementById(`details_${reviewId}`);
+            const expandBtn = event.target;
+            
+            if (detailsRow.style.display === 'none') {
+                detailsRow.style.display = 'table-row';
+                expandBtn.textContent = '▼';
+            } else {
+                detailsRow.style.display = 'none';
+                expandBtn.textContent = '▶';
+            }
+        }
+
+        function showScoreForm(reviewId) {
+            const detailsRow = document.getElementById(`details_${reviewId}`);
+            const expandBtn = document.querySelector(`.btn-expand[onclick="toggleReviewDetails(${reviewId})"]`);
+            
+            detailsRow.style.display = 'table-row';
+            expandBtn.textContent = '▼';
+            
+            // Scroll to the form
+            setTimeout(() => {
+                const formContainer = detailsRow.querySelector('.scoring-form-container');
+                formContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
+
+        function hideScoreForm(reviewId) {
+            const detailsRow = document.getElementById(`details_${reviewId}`);
+            const expandBtn = document.querySelector(`.btn-expand[onclick="toggleReviewDetails(${reviewId})"]`);
+            
+            detailsRow.style.display = 'none';
+            expandBtn.textContent = '▶';
         }
 
         async function submitScore(reviewId) {
