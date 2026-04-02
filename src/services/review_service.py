@@ -24,6 +24,7 @@ from src.schemas.pull_request import (
 )
 from src.services.entity_sync_service import EntitySyncService
 from src.services.project_registry_service import ProjectRegistryService
+from src.services.review_score_service import ReviewScoreService
 from src.utils.metrics import MetricsCollector
 from src.utils.redis import get_redis_client
 
@@ -911,7 +912,7 @@ class ReviewService:
             db: Database session
 
         Returns:
-            Dict containing review data with embedded entity information and app_name
+            Dict containing review data with embedded entity information, app_name, and scores
         """
 
         # Convert review to dict if it's an ORM object
@@ -935,6 +936,87 @@ class ReviewService:
                 f"Failed to resolve app_name for project {review_dict.get('project_key')}: {str(e)}"
             )
             enriched["app_name"] = "Unknown"
+
+        # Load scores for this review target
+        try:
+            score_service = ReviewScoreService()
+
+            # Get all scores for this PR/file combination
+            scores = await score_service.get_scores_by_review_target(
+                pull_request_id=review_dict.get("pull_request_id"),
+                project_key=review_dict.get("project_key"),
+                repository_slug=review_dict.get("repository_slug"),
+                source_filename=review_dict.get("source_filename"),
+                db=db,
+                use_cache=True,
+            )
+
+            logger.info(
+                f"Loaded {len(scores)} scores for review {review_dict.get('pull_request_id')}"
+            )
+
+            # Calculate and add score summary with simplified score list
+            if scores:
+                avg_score = sum(s.score for s in scores) / len(scores)
+
+                # Build simplified score list - handle both ORM objects and dicts
+                simplified_scores = []
+                for score in scores:
+                    # Check if it's a dict (from cache) or ORM/Pydantic model
+                    if isinstance(score, dict):
+                        simplified_scores.append(
+                            {
+                                "id": score.get("id"),
+                                "reviewer": score.get("reviewer"),
+                                "reviewer_info": score.get("reviewer_info"),  # Already a dict
+                                "score": score.get("score"),
+                                "score_description": score.get("score_description"),
+                                "created_date": score.get("created_date"),
+                                "updated_date": score.get("updated_date"),
+                            }
+                        )
+                    else:
+                        # It's an ORM object or Pydantic model
+
+                        # Handle reviewer_info - could be dict or model
+                        reviewer_info_data = None
+                        if hasattr(score, "reviewer_info") and score.reviewer_info:
+                            if isinstance(score.reviewer_info, dict):
+                                reviewer_info_data = score.reviewer_info  # Already a dict
+                            else:
+                                reviewer_info_data = score.reviewer_info.model_dump(mode="json")
+
+                        simplified_scores.append(
+                            {
+                                "id": score.id,
+                                "reviewer": score.reviewer,
+                                "reviewer_info": reviewer_info_data,
+                                "score": score.score,
+                                "score_description": score.score_description,
+                                "created_date": score.created_date,
+                                "updated_date": score.updated_date,
+                            }
+                        )
+
+                enriched["score_summary"] = {
+                    "pull_request_id": review_dict.get("pull_request_id"),
+                    "project_key": review_dict.get("project_key"),
+                    "repository_slug": review_dict.get("repository_slug"),
+                    "source_filename": review_dict.get("source_filename"),
+                    "total_scores": len(scores),
+                    "average_score": round(avg_score, 2),
+                    "scores": simplified_scores,
+                }
+            else:
+                enriched["score_summary"] = None
+
+        except Exception as e:
+            logger.error(
+                f"Failed to load scores for review {review_dict.get('pull_request_id')}: {str(e)}",
+                exc_info=True,
+            )
+            # Set default empty values if score loading fails
+            enriched["score_summary"] = None
 
         return enriched
 
@@ -1207,6 +1289,9 @@ class ReviewService:
         enriched_review["repository"] = repository
         enriched_review["pull_request_user_info"] = pr_user
         enriched_review["reviewer_info"] = reviewer_user
+
+        # Initialize score_summary - will be populated by _enrich_review_with_entities if called
+        enriched_review["score_summary"] = None
 
         return enriched_review
 

@@ -200,14 +200,18 @@ class ReviewScoreService:
             enriched = await self._enrich_score_response(score, db, include_details=True)
             enriched_scores.append(enriched)
 
-        # Cache results
+        # Cache results - use mode='json' for proper datetime serialization
         if use_cache and enriched_scores:
-            cache_data = [s.model_dump() for s in enriched_scores]
-            await self.redis_client.setex(
-                cache_key,
-                settings.CACHE_TTL_REVIEWS,
-                json.dumps(cache_data),
-            )
+            try:
+                cache_data = [s.model_dump(mode="json") for s in enriched_scores]
+                await self.redis_client.setex(
+                    cache_key,
+                    settings.CACHE_TTL_REVIEWS,
+                    json.dumps(cache_data),
+                )
+            except Exception as cache_error:
+                logger.warning(f"Failed to cache scores: {cache_error}")
+                # Continue without caching
 
         return enriched_scores
 
@@ -350,6 +354,12 @@ class ReviewScoreService:
         include_details: bool = False,
     ) -> ReviewScoreResponse:
         """Enrich score with entity information"""
+        # Handle both ORM objects and dicts (from cache)
+        if isinstance(score, dict):
+            # Already a dict, create response directly
+            return ReviewScoreResponse(**score)
+
+        # It's an ORM object
         score_dict = {
             **score.to_dict(),
             "reviewer_info": None,

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 
 class ReviewBase(BaseModel):
@@ -175,16 +175,13 @@ class ReviewScoreCreate(ReviewScoreBase):
 
 
 class ReviewScoreResponse(ReviewScoreBase):
-    """Schema for score response with full details"""
+    """Simplified score information - excludes fields already in parent ReviewResponse"""
 
     id: int
-    pull_request_id: str
-    pull_request_commit_id: str
-    project_key: str
-    repository_slug: str
-    source_filename: str | None  # Can be null for PR-level scores
     reviewer: str
     reviewer_info: dict[str, Any] | None = None  # Enriched user details
+    score: float
+    score_description: str | None = None
     created_date: datetime
     updated_date: datetime
 
@@ -201,9 +198,6 @@ class ReviewScoreSummary(BaseModel):
     total_scores: int
     average_score: float
     scores: list[ReviewScoreResponse]
-
-
-from pydantic import BaseModel, Field, field_validator, model_serializer
 
 
 class ReviewResponse(BaseModel):
@@ -243,12 +237,9 @@ class ReviewResponse(BaseModel):
         None, description="Full information about reviewer"
     )
 
-    # Score information - list of all reviewer scores for this review
-    scores: list[ReviewScoreResponse] = Field(
-        default_factory=list, description="All reviewer scores for this review"
-    )
+    # Score summary - includes aggregated stats and individual scores
     score_summary: ReviewScoreSummary | None = Field(
-        None, description="Aggregated score statistics"
+        None, description="Aggregated score statistics including all reviewer scores"
     )
 
     class Config:
@@ -318,11 +309,6 @@ class ReviewResponse(BaseModel):
                 "scores": [
                     {
                         "id": 1,
-                        "pull_request_id": "pr-123",
-                        "pull_request_commit_id": "abc123def456",
-                        "project_key": "PROJ",
-                        "repository_slug": "code-review",
-                        "source_filename": "src/file.py",
                         "reviewer": "john_doe",
                         "score": 8.5,
                         "score_description": "Can apply but not required",
