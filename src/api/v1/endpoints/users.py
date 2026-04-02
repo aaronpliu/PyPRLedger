@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -21,6 +22,7 @@ from src.services.user_service import UserService
 from src.utils.metrics import metrics
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -103,13 +105,31 @@ async def list_users(
             db=db,
         )
 
+        # Handle both ORM objects and dicts from cache
+        items = []
+        for u in users:
+            if hasattr(u, "to_dict"):
+                # ORM object - use to_dict() which includes all fields
+                user_data = u.to_dict()
+            elif isinstance(u, dict):
+                # Already a dict from cache - use directly
+                user_data = u
+            else:
+                # Fallback - convert to dict
+                user_data = dict(u)
+            items.append(UserResponse(**user_data))
+
         return UserListResponse(
-            items=[UserResponse(**u.to_dict()) for u in users],
+            items=items,
             total=total,
             page=page,
             page_size=page_size,
         )
-    except Exception:
+    except Exception as e:
+        import traceback
+
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to list users: {str(e)}\n{error_traceback}")
         metrics.increment_error(error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/users")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

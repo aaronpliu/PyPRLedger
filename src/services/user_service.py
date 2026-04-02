@@ -302,10 +302,9 @@ class UserService:
                 cached = await self.redis_client.get(cache_key)
                 if cached:
                     data = json.loads(cached)
-                    # Deserialize cached users
-                    users = [User.from_dict(u) for u in data["users"]]
+                    # Return users as dicts from cache (not ORM objects)
                     logger.debug("Retrieved user list from cache")
-                    return users, data["total"]
+                    return data["users"], data["total"]
             except Exception as e:
                 logger.warning(f"Failed to get user list from cache: {str(e)}")
 

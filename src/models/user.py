@@ -76,6 +76,7 @@ class User(Base):
         """Convert user model to dictionary"""
         return {
             "id": self.id,
+            "user_id": self.user_id,
             "username": self.username,
             "display_name": self.display_name,
             "email_address": self.email_address,
