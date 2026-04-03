@@ -15,6 +15,7 @@ from src.core.exceptions import (
     ReviewNotFoundException,
     ReviewStatusException,
 )
+from src.models.project import Project
 from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import PullRequestReview, PullRequestScore
 from src.schemas.pull_request import (
@@ -162,7 +163,7 @@ class ReviewService:
 
         # Sync all related entities using business keys only
         # This will query DB first, then fetch from Bitbucket API if not exists
-        project = await entity_sync_service.sync_project(review_data.project_key)
+        project: Project = await entity_sync_service.sync_project(review_data.project_key)
 
         repository = await entity_sync_service.sync_repository(
             repository_slug=review_data.repository_slug, project=project
@@ -226,20 +227,22 @@ class ReviewService:
                 "display_name": reviewer.display_name,
             }
         await self._set_review_in_cache(
-            project_key=project.project_key,
-            repository_slug=repository.repository_slug,
-            pull_request_id=new_review.pull_request_id,
+            project_key=str(project.project_key),
+            repository_slug=str(repository.repository_slug),
+            pull_request_id=str(new_review.pull_request_id),
             review_data=review_dict,
         )
 
         # Update metrics
-        self.metrics.increment_review(project=project.project_key, reviewer=reviewer.username)
+        self.metrics.increment_review(
+            project=str(project.project_key), reviewer=str(reviewer.username)
+        )
 
         # Invalidate cache using composite key
         await self._invalidate_review_cache(
-            project_key=project.project_key,
-            repository_slug=repository.repository_slug,
-            pull_request_id=new_review.pull_request_id,
+            project_key=str(project.project_key),
+            repository_slug=str(repository.repository_slug),
+            pull_request_id=str(new_review.pull_request_id),
         )
         await self._invalidate_list_cache()
 
@@ -264,7 +267,7 @@ class ReviewService:
         entity_sync_service = EntitySyncService(db)
 
         # Sync all related entities using business keys only
-        project = await entity_sync_service.sync_project(review_data.project_key)
+        project: Project = await entity_sync_service.sync_project(review_data.project_key)
 
         repository = await entity_sync_service.sync_repository(
             repository_slug=review_data.repository_slug, project=project
@@ -313,20 +316,22 @@ class ReviewService:
                     "display_name": reviewer.display_name,
                 }
             await self._set_review_in_cache(
-                project_key=project.project_key,
-                repository_slug=repository.repository_slug,
-                pull_request_id=existing_review.pull_request_id,
+                project_key=str(project.project_key),
+                repository_slug=str(repository.repository_slug),
+                pull_request_id=str(existing_review.pull_request_id),
                 review_data=review_dict,
             )
 
             # Update metrics
-            self.metrics.increment_review(project=project.project_key, reviewer=reviewer.username)
+            self.metrics.increment_review(
+                project=str(project.project_key), reviewer=str(reviewer.username)
+            )
 
             # Invalidate cache
             await self._invalidate_review_cache(
-                project_key=project.project_key,
-                repository_slug=repository.repository_slug,
-                pull_request_id=existing_review.pull_request_id,
+                project_key=str(project.project_key),
+                repository_slug=str(repository.repository_slug),
+                pull_request_id=str(existing_review.pull_request_id),
             )
             await self._invalidate_list_cache()
 
@@ -394,8 +399,8 @@ class ReviewService:
                 # Cache all results using composite key
                 for review in reviews:
                     await self._set_review_in_cache(
-                        review.project_key,
-                        review.repository_slug,
+                        str(review.project_key),
+                        str(review.repository_slug),
                         pull_request_id,
                         review.to_dict(),
                     )
@@ -572,15 +577,17 @@ class ReviewService:
             ReviewStatusException: If the status transition is invalid
         """
         # Get review - will auto-detect project_key and repository_slug if not provided
-        review = await self.get_review(
+        reviews = await self.get_review(
             project_key=project_key,
             repository_slug=repository_slug,
             pull_request_id=pull_request_id,
             db=db,
-            use_cache=False,
         )
-        if not review:
+        if not reviews:
             raise ReviewNotFoundException(pull_request_id=pull_request_id)
+
+        # Get the first review (should be only one for this PR)
+        review = reviews[0]
 
         # Check status transition if status is being updated
         if (
@@ -589,7 +596,7 @@ class ReviewService:
         ):
             if not review.can_transition_to(update_data.pull_request_status):
                 raise ReviewStatusException(
-                    current_status=review.pull_request_status,
+                    current_status=str(review.pull_request_status),
                     target_status=update_data.pull_request_status,
                 )
 
@@ -598,7 +605,7 @@ class ReviewService:
 
         # Invalidate cache using composite key from the review itself
         await self._invalidate_review_cache(
-            review.project_key, review.repository_slug, pull_request_id
+            str(review.project_key), str(review.repository_slug), pull_request_id
         )
         await self._invalidate_list_cache()
 
@@ -625,21 +632,23 @@ class ReviewService:
             bool: True if deleted, False if not found
         """
         # Get review - will auto-detect project_key and repository_slug if not provided
-        review = await self.get_review(
+        reviews = await self.get_review(
             project_key=project_key,
             repository_slug=repository_slug,
             pull_request_id=pull_request_id,
             db=db,
-            use_cache=False,
         )
-        if not review:
+        if not reviews:
             return False
+
+        # Get the first review (should be only one for this PR)
+        review = reviews[0]
 
         await db.delete(review)
 
         # Invalidate cache using composite key from the review itself
         await self._invalidate_review_cache(
-            review.project_key, review.repository_slug, pull_request_id
+            str(review.project_key), str(review.repository_slug), pull_request_id
         )
         await self._invalidate_list_cache()
 
@@ -847,20 +856,22 @@ class ReviewService:
             ReviewStatusException: If the status transition is invalid
         """
         # Get review - will auto-detect project_key and repository_slug if not provided
-        review = await self.get_review(
+        reviews = await self.get_review(
             project_key=project_key,
             repository_slug=repository_slug,
             pull_request_id=pull_request_id,
             db=db,
-            use_cache=False,
         )
-        if not review:
+        if not reviews:
             raise ReviewNotFoundException(pull_request_id=pull_request_id)
+
+        # Get the first review (should be only one for this PR)
+        review = reviews[0]
 
         # Check status transition
         if not review.can_transition_to(new_status):
             raise ReviewStatusException(
-                current_status=review.pull_request_status,
+                current_status=str(review.pull_request_status),
                 target_status=new_status,
             )
 
@@ -869,13 +880,13 @@ class ReviewService:
 
         # Invalidate cache using composite key from the review itself
         await self._invalidate_review_cache(
-            review.project_key, review.repository_slug, pull_request_id
+            str(review.project_key), str(review.repository_slug), pull_request_id
         )
         await self._invalidate_list_cache()
 
         return review.to_dict()
 
-    async def _enrich_review_with_entities(
+    async def enrich_review_with_entities(
         self, review: PullRequestReview | dict[str, Any], db: AsyncSession
     ) -> dict[str, Any]:
         """
@@ -1213,8 +1224,8 @@ class ReviewService:
             review_dict, project, repository, pr_user, reviewer_user
         )
 
+    @staticmethod
     def _build_enriched_response(
-        self,
         review_dict: dict[str, Any],
         project: dict | None,
         repository: dict | None,
@@ -1234,7 +1245,7 @@ class ReviewService:
         Returns:
             Enriched review dict with nested entity objects
         """
-        enriched_review = {
+        return {
             "id": review_dict["id"],
             "pull_request_id": review_dict["pull_request_id"],
             "pull_request_commit_id": review_dict["pull_request_commit_id"],
@@ -1252,18 +1263,12 @@ class ReviewService:
             "metadata": review_dict.get("metadata"),
             "created_date": review_dict["created_date"],
             "updated_date": review_dict["updated_date"],
+            "project": project,
+            "repository": repository,
+            "pull_request_user_info": pr_user,
+            "reviewer_info": reviewer_user,
+            "score_summary": None,
         }
-
-        # Add entity information
-        enriched_review["project"] = project
-        enriched_review["repository"] = repository
-        enriched_review["pull_request_user_info"] = pr_user
-        enriched_review["reviewer_info"] = reviewer_user
-
-        # Initialize score_summary - will be populated by _enrich_review_with_entities if called
-        enriched_review["score_summary"] = None
-
-        return enriched_review
 
     async def list_reviews_with_entities(
         self,
@@ -1294,7 +1299,9 @@ class ReviewService:
         )
 
         # Collect unique project-repo pairs for batch app_name resolution
-        project_repo_pairs = [(review.project_key, review.repository_slug) for review in reviews]
+        project_repo_pairs = [
+            (str(review.project_key), str(review.repository_slug)) for review in reviews
+        ]
 
         # Batch resolve app_names
         registry_service = ProjectRegistryService()
@@ -1303,9 +1310,9 @@ class ReviewService:
         # Enrich each review with entity information AND app_name
         enriched_reviews = []
         for review in reviews:
-            enriched = await self._enrich_review_with_entities(review, db)
+            enriched = await self.enrich_review_with_entities(review, db)
             # Inject app_name from registry
-            pair_key = (review.project_key, review.repository_slug)
+            pair_key = (str(review.project_key), str(review.repository_slug))
             enriched["app_name"] = app_name_mapping.get(pair_key, "Unknown")
             enriched_reviews.append(enriched)
 

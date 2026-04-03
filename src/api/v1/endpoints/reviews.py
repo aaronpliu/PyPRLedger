@@ -194,8 +194,11 @@ async def list_reviews(
             filters, db, page, page_size, app_names=app_names_list
         )
 
+        # Convert dict reviews to ReviewResponse objects
+        review_responses = [ReviewResponse(**review) for review in enriched_reviews]
+
         return ReviewListResponse(
-            items=enriched_reviews,
+            items=review_responses,
             total=total,
             page=page,
             page_size=page_size,
@@ -298,13 +301,14 @@ async def get_review(
         for review in reviews:
             if hasattr(review, "to_dict"):
                 # ORM object - enrich with full entity information using relationships
-                review_data = await review_service._enrich_review_with_entities(review, db)
+                review_data = await review_service.enrich_review_with_entities(review, db)
             elif isinstance(review, dict):
                 # Already a dict from cache - enrich by querying entities
-                review_data = await review_service._enrich_review_with_entities(review, db)
+                review_data = await review_service.enrich_review_with_entities(review, db)
             else:
-                # Fallback to dict() method
-                review_data = dict(review)
+                # This should never happen, but handle it just in case
+                logger.warning(f"Unexpected review type: {type(review)}")
+                continue  # Skip invalid entries
 
             enriched_reviews.append(ReviewResponse(**review_data))
 
@@ -548,11 +552,15 @@ async def get_reviews_by_project(
         items = []
         for r in reviews:
             if hasattr(r, "to_dict"):
+                # ORM object - use to_dict() which includes all fields
                 review_data = r.to_dict()
             elif isinstance(r, dict):
+                # Already a dict from cache - use directly
                 review_data = r
             else:
-                review_data = dict(r)
+                # This should never happen, but handle it just in case
+                logger.warning(f"Unexpected review type: {type(r)}")
+                continue  # Skip invalid entries
             items.append(ReviewResponse(**review_data))
 
         return ReviewListResponse(
@@ -629,9 +637,9 @@ async def get_reviews_by_reviewer(
                     )
                     continue  # Skip invalid cache entries
             else:
-                # Fallback - convert to dict
-                review_data = dict(r)
-
+                # This should never happen, but handle it just in case
+                logger.warning(f"Unexpected review type: {type(r)}")
+                continue  # Skip invalid entries
             items.append(ReviewResponse(**review_data))
 
         return ReviewListResponse(
