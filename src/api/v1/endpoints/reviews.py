@@ -180,8 +180,6 @@ async def list_reviews(
             source_branch=source_branch,
             target_branch=target_branch,
             pull_request_status=pull_request_status,
-            score_min=None,  # Removed - scores now in separate table
-            score_max=None,  # Removed - scores now in separate table
             date_from=date_from,
             date_to=date_to,
         )

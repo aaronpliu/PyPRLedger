@@ -1236,22 +1236,18 @@ class ReviewService:
             "id": review_dict["id"],
             "pull_request_id": review_dict["pull_request_id"],
             "pull_request_commit_id": review_dict["pull_request_commit_id"],
+            "project_key": review_dict["project_key"],
             "repository_slug": review_dict["repository_slug"],
+            "reviewer": review_dict["reviewer"],
+            "pull_request_user": review_dict["pull_request_user"],
             "source_branch": review_dict["source_branch"],
             "target_branch": review_dict["target_branch"],
             "git_code_diff": review_dict.get("git_code_diff"),
             "source_filename": review_dict.get("source_filename"),
             "ai_suggestions": review_dict.get("ai_suggestions"),
             "reviewer_comments": review_dict.get("reviewer_comments"),
-            # Score is now in separate PullRequestScore table - will be loaded separately if needed
-            # For list views, we don't include score by default to avoid N+1 queries
-            "score": None,
             "pull_request_status": review_dict["pull_request_status"],
             "metadata": review_dict.get("metadata"),
-            # These fields were removed during score refactor - use .get() for backward compatibility
-            "reviewed_date": review_dict.get("reviewed_date"),
-            "is_latest_review": review_dict.get("is_latest_review", True),
-            "review_iteration": review_dict.get("review_iteration"),
             "created_date": review_dict["created_date"],
             "updated_date": review_dict["updated_date"],
         }

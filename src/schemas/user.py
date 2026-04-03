@@ -53,11 +53,9 @@ class UserResponse(UserBase):
     created_date: datetime = Field(..., description="User creation timestamp")
     updated_date: datetime = Field(..., description="User last update timestamp")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "id": 1,
                 "username": "john_doe",
@@ -68,7 +66,8 @@ class UserResponse(UserBase):
                 "created_date": "2023-01-01T00:00:00",
                 "updated_date": "2023-01-01T00:00:00",
             }
-        }
+        },
+    }
 
 
 class UserInDB(UserResponse):
@@ -76,10 +75,7 @@ class UserInDB(UserResponse):
 
     hashed_password: str = Field(..., description="Hashed password")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class UserLogin(BaseModel):
@@ -97,11 +93,9 @@ class UserListResponse(BaseModel):
     page: int = Field(default=1, ge=1, description="Current page number")
     page_size: int = Field(default=20, ge=1, le=100, description="Number of items per page")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "items": [
                     {
@@ -119,7 +113,8 @@ class UserListResponse(BaseModel):
                 "page": 1,
                 "page_size": 20,
             }
-        }
+        },
+    }
 
 
 class UserStats(BaseModel):
@@ -130,15 +125,14 @@ class UserStats(BaseModel):
     total_reviewers: int = Field(..., description="Number of reviewers")
     active_reviewers: int = Field(..., description="Number of active reviewers")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "total_users": 100,
                 "active_users": 95,
                 "total_reviewers": 30,
                 "active_reviewers": 28,
             }
-        }
+        },
+    }

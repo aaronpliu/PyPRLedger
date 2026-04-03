@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class ReviewBase(BaseModel):
@@ -208,7 +208,15 @@ class ReviewResponse(BaseModel):
     pull_request_commit_id: str | None = Field(
         None, description="Commit ID for this specific review"
     )
-    repository_slug: str = Field(..., description="Repository slug")
+
+    # Business key fields - required top-level identifiers
+    project_key: str = Field(..., min_length=1, max_length=32, description="Project key")
+    repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
+    reviewer: str = Field(..., min_length=1, max_length=64, description="Reviewer username")
+    pull_request_user: str = Field(
+        ..., min_length=1, max_length=64, description="Pull request user username"
+    )
+
     source_branch: str = Field(..., description="Source branch name")
     target_branch: str = Field(..., description="Target branch name")
     git_code_diff: str | None = Field(None, description="Git code diff content")
@@ -242,17 +250,17 @@ class ReviewResponse(BaseModel):
         None, description="Aggregated score statistics including all reviewer scores"
     )
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "id": 1,
                 "pull_request_id": "pr-123",
                 "pull_request_commit_id": "abc123def456",
-                "repository_slug": "code-review",
-                "app_name": "member",
+                "project_key": "PROJ",
+                "repository_slug": "my-repo",
+                "reviewer": "john_doe",
+                "pull_request_user": "jane_smith",
                 "source_branch": "feature/new-feature",
                 "target_branch": "main",
                 "git_code_diff": "diff --git a/file.py b/file.py\n...",
@@ -266,6 +274,7 @@ class ReviewResponse(BaseModel):
                 "metadata": {"labels": ["bugfix", "enhancement"], "priority": "high"},
                 "created_date": "2023-01-01T10:00:00",
                 "updated_date": "2023-01-01T12:00:00",
+                "app_name": "member",
                 "project": {
                     "id": 1,
                     "project_id": 1234,
@@ -279,8 +288,8 @@ class ReviewResponse(BaseModel):
                     "id": 1,
                     "repository_id": 5678,
                     "repository_name": "Code Review API",
-                    "repository_slug": "code-review",
-                    "repository_url": "https://bitbucket.org/company/proj/code-review",
+                    "repository_slug": "my-repo",
+                    "repository_url": "https://bitbucket.org/company/proj/my-repo",
                     "created_date": "2023-01-01T00:00:00",
                     "updated_date": "2023-01-01T00:00:00",
                 },
@@ -306,83 +315,18 @@ class ReviewResponse(BaseModel):
                     "created_date": "2023-01-01T00:00:00",
                     "updated_date": "2023-01-01T00:00:00",
                 },
-                "scores": [
-                    {
-                        "id": 1,
-                        "reviewer": "john_doe",
-                        "score": 8.5,
-                        "score_description": "Can apply but not required",
-                        "reviewer_comments": "Good refactoring",
-                        "reviewer_info": {
-                            "username": "john_doe",
-                            "display_name": "John Doe",
-                            "email_address": "john@example.com",
-                        },
-                        "created_date": "2023-01-01T11:00:00",
-                        "updated_date": "2023-01-01T12:00:00",
-                    }
-                ],
                 "score_summary": {
                     "pull_request_id": "pr-123",
                     "project_key": "PROJ",
-                    "repository_slug": "code-review",
+                    "repository_slug": "my-repo",
                     "source_filename": "src/file.py",
-                    "total_scores": 1,
+                    "total_scores": 2,
                     "average_score": 8.5,
                     "scores": [],
                 },
             }
-        }
-
-    @model_validator(mode="before")
-    @classmethod
-    def remove_duplicate_fields(cls, values: dict[str, Any]) -> dict[str, Any]:
-        """
-        Remove duplicate fields from ORM/dict input to avoid redundancy.
-
-        The following fields are removed because they're duplicated in nested objects:
-        - project_key (available in project.project_key)
-        - reviewer (available in reviewer_info.username)
-        - pull_request_user (available in pull_request_user_info.username)
-
-        Args:
-            values: Input values from ORM or dict
-
-        Returns:
-            Filtered values without duplicate fields
-        """
-        # Create a copy to avoid modifying the original
-        filtered_values = values.copy()
-
-        # Remove duplicate fields - they're available in nested objects
-        filtered_values.pop("project_key", None)
-        filtered_values.pop("reviewer", None)
-        filtered_values.pop("pull_request_user", None)
-
-        return filtered_values
-
-    @model_serializer(mode="wrap")
-    def serialize_with_exclusions(self, handler):
-        """
-        Customize serialization to exclude duplicate fields.
-
-        This ensures that even if duplicate fields somehow make it into the model,
-        they won't appear in the serialized output.
-
-        Args:
-            handler: The default serializer handler
-
-        Returns:
-            Serialized dict without duplicate fields
-        """
-        data = handler(self)
-
-        # Explicitly remove any duplicate fields from output
-        data.pop("project_key", None)
-        data.pop("reviewer", None)
-        data.pop("pull_request_user", None)
-
-        return data
+        },
+    }
 
 
 class ReviewListResponse(BaseModel):
@@ -395,11 +339,9 @@ class ReviewListResponse(BaseModel):
     page: int = Field(default=1, ge=1, description="Current page number")
     page_size: int = Field(default=20, ge=1, le=100, description="Number of items per page")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "items": [
                     {
@@ -418,7 +360,6 @@ class ReviewListResponse(BaseModel):
                             "suggestion_2": "Add type hints for better code clarity",
                         },
                         "reviewer_comments": "Overall good code, but consider the suggestions from AI",
-                        "score": 8,
                         "pull_request_status": "open",
                         "metadata": {"labels": ["bugfix", "enhancement"], "priority": "high"},
                         "created_date": "2023-01-01T00:00:00",
@@ -469,7 +410,8 @@ class ReviewListResponse(BaseModel):
                 "page": 1,
                 "page_size": 20,
             }
-        }
+        },
+    }
 
 
 class ReviewStats(BaseModel):
@@ -484,11 +426,9 @@ class ReviewStats(BaseModel):
     reviews_this_week: int = Field(..., description="Number of reviews created this week")
     reviews_this_month: int = Field(..., description="Number of reviews created this month")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "total_reviews": 1000,
                 "open_reviews": 50,
@@ -499,7 +439,8 @@ class ReviewStats(BaseModel):
                 "reviews_this_week": 100,
                 "reviews_this_month": 400,
             }
-        }
+        },
+    }
 
 
 class ReviewFilter(BaseModel):
@@ -537,10 +478,7 @@ class ReviewFilter(BaseModel):
                 raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
         return v
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ReviewWithProject(ReviewResponse):
@@ -549,11 +487,9 @@ class ReviewWithProject(ReviewResponse):
     project_name: str = Field(..., description="Project name")
     project_key: str = Field(..., description="Project key")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "id": 1,
                 "pull_request_id": "pr-123",
@@ -570,7 +506,6 @@ class ReviewWithProject(ReviewResponse):
                     "suggestion_2": "Add type hints for better code clarity",
                 },
                 "reviewer_comments": "Overall good code, but consider the suggestions from AI",
-                "score": 8,
                 "pull_request_status": "open",
                 "metadata": {"labels": ["bugfix", "enhancement"], "priority": "high"},
                 "created_date": "2023-01-01T00:00:00",
@@ -578,7 +513,8 @@ class ReviewWithProject(ReviewResponse):
                 "project_name": "Code Review System",
                 "project_key": "CRS",
             }
-        }
+        },
+    }
 
 
 class ReviewTransition(BaseModel):
@@ -610,8 +546,7 @@ class ReviewTransition(BaseModel):
                 raise ValueError(f"Invalid transition from {current} to {v}")
         return v
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {"example": {"current_status": "open", "new_status": "merged"}}
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {"example": {"current_status": "open", "new_status": "merged"}},
+    }

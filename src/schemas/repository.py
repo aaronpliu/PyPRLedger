@@ -8,17 +8,21 @@ class RepositoryBase(BaseModel):
 
     repository_id: int = Field(..., gt=0, description="Unique repository identifier")
     repository_name: str = Field(..., min_length=1, max_length=128, description="Repository name")
-    repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
-    repository_url: HttpUrl = Field(..., description="Repository URL")
+    repository_slug: str = Field(..., description="Repository slug")
+    repository_url: str = Field(..., description="Repository URL")
 
-    @field_validator("repository_slug")
-    def repository_slug_format(self, v):
-        """Validate repository slug format"""
-        if not all(c.isalnum() or c in "-_" for c in v):
-            raise ValueError(
-                "Repository slug must contain only alphanumeric characters, hyphens, and underscores"
-            )
-        return v.lower()  # Store lowercase
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
+            "example": {
+                "id": 1,
+                "repository_id": "repo-001",
+                "repository_name": "Code Review API",
+                "repository_slug": "code-review-api",
+                "repository_url": "https://github.com/example/code-review-api",
+            }
+        },
+    }
 
 
 class RepositoryCreate(RepositoryBase):
@@ -62,11 +66,9 @@ class RepositoryResponse(RepositoryBase):
     created_date: datetime = Field(..., description="Repository creation timestamp")
     updated_date: datetime = Field(..., description="Repository last update timestamp")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "id": 1,
                 "project_id": 1,
@@ -77,7 +79,8 @@ class RepositoryResponse(RepositoryBase):
                 "created_date": "2023-01-01T00:00:00",
                 "updated_date": "2023-01-01T00:00:00",
             }
-        }
+        },
+    }
 
 
 class RepositoryDetailResponse(RepositoryResponse):
@@ -93,10 +96,7 @@ class RepositoryDetailResponse(RepositoryResponse):
         None, description="Date of the last review in this repository"
     )
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class RepositoryListResponse(BaseModel):
@@ -109,11 +109,9 @@ class RepositoryListResponse(BaseModel):
     page: int = Field(default=1, ge=1, description="Current page number")
     page_size: int = Field(default=20, ge=1, le=100, description="Number of items per page")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "items": [
                     {
@@ -131,7 +129,8 @@ class RepositoryListResponse(BaseModel):
                 "page": 1,
                 "page_size": 20,
             }
-        }
+        },
+    }
 
 
 class RepositoryStats(BaseModel):
@@ -147,11 +146,9 @@ class RepositoryStats(BaseModel):
         ..., description="Total number of pull request reviews across all repositories"
     )
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "total_repositories": 50,
                 "public_repositories": 30,
@@ -159,7 +156,8 @@ class RepositoryStats(BaseModel):
                 "repositories_with_reviews": 40,
                 "total_reviews": 5000,
             }
-        }
+        },
+    }
 
 
 class RepositoryFilter(BaseModel):
@@ -176,10 +174,7 @@ class RepositoryFilter(BaseModel):
         None, description="Filter repositories created before this date"
     )
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class RepositoryInfo(BaseModel):
@@ -191,11 +186,9 @@ class RepositoryInfo(BaseModel):
     repository_slug: str = Field(..., description="Repository slug")
     repository_url: str = Field(..., description="Repository URL")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "id": 1,
                 "repository_id": "repo-001",
@@ -203,7 +196,8 @@ class RepositoryInfo(BaseModel):
                 "repository_slug": "code-review-api",
                 "repository_url": "https://github.com/example/code-review-api",
             }
-        }
+        },
+    }
 
 
 class RepositoryWithProject(RepositoryResponse):
@@ -213,11 +207,9 @@ class RepositoryWithProject(RepositoryResponse):
     project_key: str = Field(..., description="Project key")
     project_id: str = Field(..., description="Project identifier")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "id": 1,
                 "project_id": 1,
@@ -230,4 +222,5 @@ class RepositoryWithProject(RepositoryResponse):
                 "project_name": "Code Review System",
                 "project_key": "CRS",
             }
-        }
+        },
+    }

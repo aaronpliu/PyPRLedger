@@ -40,11 +40,9 @@ class ProjectResponse(ProjectBase):
     created_date: datetime = Field(..., description="Project creation timestamp")
     updated_date: datetime = Field(..., description="Project last update timestamp")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "id": 1,
                 "project_id": 1234,
@@ -54,7 +52,8 @@ class ProjectResponse(ProjectBase):
                 "created_date": "2026-01-01T00:00:00",
                 "updated_date": "2026-01-01T00:00:00",
             }
-        }
+        },
+    }
 
 
 class ProjectDetailResponse(ProjectResponse):
@@ -66,10 +65,7 @@ class ProjectDetailResponse(ProjectResponse):
     review_count: int = Field(default=0, description="Number of pull request reviews")
     active_reviewer_count: int = Field(default=0, description="Number of active reviewers")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ProjectListResponse(BaseModel):
@@ -80,11 +76,9 @@ class ProjectListResponse(BaseModel):
     page: int = Field(default=1, ge=1, description="Current page number")
     page_size: int = Field(default=20, ge=1, le=100, description="Number of items per page")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "items": [
                     {
@@ -101,7 +95,8 @@ class ProjectListResponse(BaseModel):
                 "page": 1,
                 "page_size": 20,
             }
-        }
+        },
+    }
 
 
 class ProjectStats(BaseModel):
@@ -114,18 +109,17 @@ class ProjectStats(BaseModel):
     )
     total_reviews: int = Field(..., description="Total number of pull request reviews")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
-        json_schema_extra = {
+    model_config = {
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "total_projects": 50,
                 "active_projects": 45,
                 "total_repositories": 120,
                 "total_reviews": 5000,
             }
-        }
+        },
+    }
 
 
 class ProjectFilter(BaseModel):
@@ -137,7 +131,4 @@ class ProjectFilter(BaseModel):
     date_from: datetime | None = Field(None, description="Filter projects created after this date")
     date_to: datetime | None = Field(None, description="Filter projects created before this date")
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
+    model_config = {"from_attributes": True}
