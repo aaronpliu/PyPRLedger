@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pull Request Review System</title>
+    <title>Pull Request Review System - Enhanced</title>
     <style>
         * {
             margin: 0;
@@ -19,7 +19,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background: white;
             border-radius: 12px;
@@ -114,186 +114,6 @@
             padding: 30px;
         }
 
-        .reviews-grid {
-            display: grid;
-            gap: 20px;
-        }
-
-        .review-card {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px;
-            border-left: 4px solid #667eea;
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-
-        .review-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-        }
-
-        .review-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .review-meta {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-
-        .badge {
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-
-        .badge-pr {
-            background: #e3f2fd;
-            color: #1976d2;
-        }
-
-        .badge-file {
-            background: #fff3e0;
-            color: #f57c00;
-        }
-
-        .badge-status {
-            background: #e8f5e9;
-            color: #388e3c;
-        }
-
-        .review-body {
-            margin-bottom: 15px;
-        }
-
-        .review-title {
-            font-weight: 700;
-            color: #212529;
-            margin-bottom: 8px;
-            font-size: 1.1rem;
-        }
-
-        .review-text {
-            color: #495057;
-            line-height: 1.6;
-        }
-
-        .review-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-top: 15px;
-            border-top: 2px solid #dee2e6;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-
-        .review-author {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .author-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 700;
-            font-size: 1.1rem;
-        }
-
-        .author-info {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .author-name {
-            font-weight: 600;
-            color: #212529;
-        }
-
-        .author-email {
-            font-size: 0.85rem;
-            color: #6c757d;
-        }
-
-        .score-section {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .current-score {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .score-badge {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 1.3rem;
-            color: white;
-        }
-
-        .score-excellent {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-        }
-
-        .score-good {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-
-        .score-average {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        }
-
-        .score-poor {
-            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
-        }
-
-        .scoring-form {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .scoring-form input[type="number"] {
-            width: 80px;
-            padding: 8px 12px;
-            border: 2px solid #dee2e6;
-            border-radius: 6px;
-            font-size: 1rem;
-        }
-
-        .scoring-form textarea {
-            width: 200px;
-            padding: 8px 12px;
-            border: 2px solid #dee2e6;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            resize: vertical;
-            min-height: 40px;
-        }
-
         .loading {
             text-align: center;
             padding: 50px;
@@ -320,119 +140,228 @@
             display: none;
         }
 
-        /* Table Styles */
-        .reviews-table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        /* Grouped Reviews */
+        .pr-group {
+            margin-bottom: 30px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            overflow: hidden;
         }
 
-        .reviews-table thead {
+        .pr-group-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            padding: 15px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.3s;
         }
 
-        .reviews-table th {
-            padding: 15px 12px;
-            text-align: left;
+        .pr-group-header:hover {
+            background: linear-gradient(135deg, #5568d3 0%, #6a4190 100%);
+        }
+
+        .pr-group-info {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .pr-badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
             font-weight: 600;
-            font-size: 0.95rem;
         }
 
-        .reviews-table tbody tr {
-            border-bottom: 1px solid #dee2e6;
-            transition: background-color 0.2s;
+        .pr-toggle {
+            font-size: 1.5rem;
+            transition: transform 0.3s;
         }
 
-        .reviews-table tbody tr:hover {
-            background-color: #f8f9fa;
+        .pr-group.expanded .pr-toggle {
+            transform: rotate(180deg);
         }
 
-        .reviews-table td {
-            padding: 15px 12px;
-            vertical-align: top;
+        .pr-group-body {
+            display: none;
+            padding: 20px;
+            background: #f8f9fa;
         }
 
-        .review-info {
-            max-width: 400px;
+        .pr-group.expanded .pr-group-body {
+            display: block;
+        }
+
+        /* Review Cards */
+        .review-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .review-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .review-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .review-meta {
             display: flex;
-            gap: 8px;
-            margin-bottom: 8px;
+            gap: 10px;
             flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .badge-reviewer {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-file {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .badge-pr-level {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .badge-status {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .review-author {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .author-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .review-body {
+            margin-bottom: 15px;
         }
 
         .review-title {
             font-weight: 700;
             color: #212529;
-            margin-bottom: 5px;
-            font-size: 1rem;
+            margin-bottom: 8px;
+            font-size: 1.1rem;
         }
 
         .review-text {
             color: #495057;
-            line-height: 1.5;
-            font-size: 0.9rem;
+            line-height: 1.6;
         }
 
-        .author-cell {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .btn-expand {
-            background: none;
-            border: none;
-            font-size: 1.2rem;
-            cursor: pointer;
-            color: #667eea;
-            padding: 5px;
-            transition: transform 0.2s;
-        }
-
-        .btn-expand:hover {
-            transform: scale(1.2);
-        }
-
-        .score-cell {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            align-items: flex-start;
-        }
-
-        .current-score-display {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .btn-small {
-            padding: 6px 12px;
-            font-size: 0.85rem;
-        }
-
-        .details-content {
-            padding: 20px;
+        /* Scores Section */
+        .scores-section {
             background: #f8f9fa;
-            border-radius: 8px;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
         }
 
-        .details-content h4 {
+        .scores-section h4 {
             color: #212529;
-            margin-bottom: 15px;
-            font-size: 1.1rem;
+            margin-bottom: 10px;
+            font-size: 1rem;
         }
 
+        .score-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 3px solid #667eea;
+        }
+
+        .score-value {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .score-excellent { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .score-good { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .score-average { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .score-poor { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); }
+
+        .score-details {
+            flex-grow: 1;
+        }
+
+        .score-reviewer {
+            font-weight: 600;
+            color: #212529;
+            margin-bottom: 3px;
+        }
+
+        .score-description {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .score-type {
+            font-size: 0.8rem;
+            color: #999;
+            font-style: italic;
+        }
+
+        /* Scoring Form */
         .scoring-form-container {
             background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            border: 2px dashed #667eea;
         }
 
         .scoring-form {
@@ -483,16 +412,32 @@
             background: #5a6268;
         }
 
-        .score-history {
-            margin-top: 20px;
-            padding-top: 15px;
-            border-top: 2px solid #dee2e6;
+        /* AI Suggestions */
+        .ai-suggestions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            border-left: 4px solid #2196f3;
         }
 
-        .score-history h5 {
-            color: #212529;
+        .ai-suggestions h4 {
+            color: #1976d2;
             margin-bottom: 10px;
             font-size: 1rem;
+        }
+
+        .ai-suggestion-item {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .ai-suggestion-text {
+            color: #495057;
+            margin-bottom: 8px;
+            line-height: 1.5;
         }
 
         @media (max-width: 768px) {
@@ -504,17 +449,10 @@
                 grid-template-columns: 1fr;
             }
 
-            .reviews-table {
-                font-size: 0.85rem;
-            }
-
-            .reviews-table th,
-            .reviews-table td {
-                padding: 8px 6px;
-            }
-
-            .review-info {
-                max-width: 200px;
+            .pr-group-info {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
             }
         }
     </style>
@@ -522,37 +460,33 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📝 Pull Request Review System</h1>
-            <p>View reviews and score reviewer feedback</p>
+            <h1>📝 Pull Request Review System - Enhanced</h1>
+            <p>View and score all reviews with AI suggestions</p>
         </div>
 
         <div class="filters">
             <div class="filter-group">
-                <label for="pullRequestId">Pull Request ID:</label>
-                <input type="text" id="pullRequestId" value="PR-001" placeholder="e.g., PR-001">
-            </div>
-            <div class="filter-group">
                 <label for="projectKey">Project Key:</label>
-                <input type="text" id="projectKey" value="ECOM" placeholder="e.g., ECOM">
+                <input type="text" id="projectKey" placeholder="Leave empty for all projects">
             </div>
             <div class="filter-group">
                 <label for="repositorySlug">Repository:</label>
-                <input type="text" id="repositorySlug" value="frontend-store" placeholder="e.g., frontend-store">
+                <input type="text" id="repositorySlug" placeholder="Leave empty for all repositories">
             </div>
             <div class="filter-group">
-                <label for="sourceFilename">File (optional):</label>
-                <input type="text" id="sourceFilename" placeholder="Leave empty for PR-level">
+                <label for="pullRequestId">Pull Request ID:</label>
+                <input type="text" id="pullRequestId" placeholder="Leave empty for all PRs">
             </div>
             <div class="filter-group" style="justify-content: flex-end;">
-                <button class="btn btn-primary" onclick="loadReviews()">Load Reviews</button>
+                <button class="btn btn-primary" onclick="loadAllReviews()">Load All Reviews</button>
             </div>
         </div>
 
         <div class="content">
             <div id="successMessage" class="success-message"></div>
-            <div id="loading" class="loading" style="display: none;">Loading reviews...</div>
+            <div id="loading" class="loading">Loading all reviews...</div>
             <div id="error" class="error" style="display: none;"></div>
-            <div id="reviewsGrid" class="reviews-grid"></div>
+            <div id="reviewsContainer"></div>
         </div>
     </div>
 
@@ -572,34 +506,27 @@
             });
         }
 
-        async function loadReviews() {
+        async function loadAllReviews() {
             const loadingEl = document.getElementById('loading');
             const errorEl = document.getElementById('error');
-            const reviewsGrid = document.getElementById('reviewsGrid');
+            const container = document.getElementById('reviewsContainer');
             const successMsg = document.getElementById('successMessage');
 
-            // Hide previous messages
             successMsg.style.display = 'none';
             errorEl.style.display = 'none';
             loadingEl.style.display = 'block';
-            reviewsGrid.innerHTML = '';
+            container.innerHTML = '';
 
             try {
-                const pullRequestId = document.getElementById('pullRequestId').value;
                 const projectKey = document.getElementById('projectKey').value;
                 const repositorySlug = document.getElementById('repositorySlug').value;
-                const sourceFilename = document.getElementById('sourceFilename').value;
+                const pullRequestId = document.getElementById('pullRequestId').value;
 
                 // Build query parameters
-                const params = new URLSearchParams({
-                    pull_request_id: pullRequestId,
-                    project_key: projectKey,
-                    repository_slug: repositorySlug
-                });
-
-                if (sourceFilename) {
-                    params.append('source_filename', sourceFilename);
-                }
+                const params = new URLSearchParams();
+                if (projectKey) params.append('project_key', projectKey);
+                if (repositorySlug) params.append('repository_slug', repositorySlug);
+                if (pullRequestId) params.append('pull_request_id', pullRequestId);
 
                 const response = await fetch(`${API_BASE_URL}/reviews?${params}`);
                 
@@ -608,7 +535,7 @@
                 }
 
                 const data = await response.json();
-                displayReviews(data.items || []);
+                displayGroupedReviews(data.items || []);
 
             } catch (error) {
                 errorEl.textContent = `Error: ${error.message}`;
@@ -618,135 +545,136 @@
             }
         }
 
-        function displayReviews(reviews) {
-            const reviewsGrid = document.getElementById('reviewsGrid');
-
-            // Store reviews globally for access during score submission
-            window.currentReviews = reviews;
+        function displayGroupedReviews(reviews) {
+            const container = document.getElementById('reviewsContainer');
 
             if (reviews.length === 0) {
-                reviewsGrid.innerHTML = '<div class="loading">No reviews found</div>';
+                container.innerHTML = '<div class="loading">No reviews found</div>';
                 return;
             }
 
-            reviewsGrid.innerHTML = `
-                <table class="reviews-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 50px;">Expand</th>
-                            <th>Review Info</th>
-                            <th>Author</th>
-                            <th>Created</th>
-                            <th>Score Section</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${reviews.map(review => `
-                            <tr class="review-row">
-                                <td>
-                                    <button class="btn-expand" onclick="toggleReviewDetails(${review.id})">▶</button>
-                                </td>
-                                <td>
-                                    <div class="review-info">
-                                        <div class="review-meta">
-                                            <span class="badge badge-pr">${escapeHtml(review.pull_request_id)}</span>
-                                            ${review.source_filename ? 
-                                                `<span class="badge badge-file">${escapeHtml(review.source_filename)}</span>` : 
-                                                '<span class="badge badge-status">PR-Level</span>'}
-                                        </div>
-                                        <div class="review-title">${escapeHtml(review.title)}</div>
-                                        <div class="review-text">${escapeHtml(review.content)}</div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="author-cell">
-                                        <div class="author-avatar">${getInitials(review.reviewer_info?.display_name || review.reviewer)}</div>
-                                        <div class="author-info">
-                                            <div class="author-name">${escapeHtml(review.reviewer_info?.display_name || review.reviewer)}</div>
-                                            <div class="author-email">${escapeHtml(review.reviewer_info?.email_address || '')}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>${formatDate(review.created_date)}</td>
-                                <td>
-                                    <div class="score-cell">
-                                        <div class="current-score-display">
-                                            <span>Current Score:</span>
-                                            ${review.score !== null && review.score !== undefined ? 
-                                                `<div class="score-badge ${getScoreClass(review.score)}">${review.score}</div>` : 
-                                                '<div style="color: #999; font-style: italic;">Not scored yet</div>'}
-                                        </div>
-                                        <button class="btn btn-success btn-small" onclick="showScoreForm(${review.id})">Update Score</button>
-                                    </div>
-                                </td>
-                            </tr>
-                            <tr class="details-row" id="details_${review.id}" style="display: none;">
-                                <td colspan="5">
-                                    <div class="details-content">
-                                        <h4>Score Details for Review by ${escapeHtml(review.reviewer_info?.display_name || review.reviewer)}</h4>
-                                        
-                                        <div class="scoring-form-container">
-                                            <div class="scoring-form">
-                                                <label for="score_${review.id}">Score (0-10):</label>
-                                                <input type="number" id="score_${review.id}" min="0" max="10" step="0.5" 
-                                                       value="${review.score ?? ''}" placeholder="Enter score">
-                                                
-                                                <label for="comment_${review.id}">Comment:</label>
-                                                <textarea id="comment_${review.id}" placeholder="Review comment (optional)" rows="3"></textarea>
-                                                
-                                                <div class="form-actions">
-                                                    <button class="btn btn-success" onclick="submitScore(${review.id})">Submit Score</button>
-                                                    <button class="btn btn-secondary" onclick="hideScoreForm(${review.id})">Cancel</button>
-                                                </div>
-                                            </div>
-                                        </div>
+            // Group reviews by project/repository/pull_request_id
+            const grouped = {};
+            reviews.forEach(review => {
+                const key = `${review.project_key}|${review.repository_slug}|${review.pull_request_id}`;
+                if (!grouped[key]) {
+                    grouped[key] = {
+                        project_key: review.project_key,
+                        repository_slug: review.repository_slug,
+                        pull_request_id: review.pull_request_id,
+                        reviews: []
+                    };
+                }
+                grouped[key].reviews.push(review);
+            });
 
-                                        <div id="scoreHistory_${review.id}" class="score-history" style="display: none;">
-                                            <h5>Score History</h5>
-                                            <p>Score history will be displayed here when available</p>
-                                        </div>
+            // Generate HTML for each group
+            const html = Object.values(grouped).map(group => `
+                <div class="pr-group">
+                    <div class="pr-group-header" onclick="toggleGroup(this)">
+                        <div class="pr-group-info">
+                            <span class="pr-badge">📋 ${escapeHtml(group.project_key)}</span>
+                            <span class="pr-badge">📁 ${escapeHtml(group.repository_slug)}</span>
+                            <span class="pr-badge">🔖 ${escapeHtml(group.pull_request_id)}</span>
+                            <span class="pr-badge">👥 ${group.reviews.length} review(s)</span>
+                        </div>
+                        <span class="pr-toggle">▼</span>
+                    </div>
+                    <div class="pr-group-body">
+                        ${group.reviews.map(review => createReviewCard(review)).join('')}
+                    </div>
+                </div>
+            `).join('');
+
+            container.innerHTML = html;
+        }
+
+        function createReviewCard(review) {
+            const scores = review.score_summary?.scores || [];
+            const hasAiSuggestions = review.ai_suggestions && Object.keys(review.ai_suggestions).length > 0;
+
+            return `
+                <div class="review-card">
+                    <div class="review-header">
+                        <div class="review-meta">
+                            <span class="badge badge-reviewer">👤 ${escapeHtml(review.reviewer_info?.display_name || review.reviewer)}</span>
+                            ${review.source_filename ? 
+                                `<span class="badge badge-file">📄 ${escapeHtml(review.source_filename)}</span>` : 
+                                '<span class="badge badge-pr-level">📋 PR-Level</span>'}
+                            <span class="badge badge-status">✅ ${escapeHtml(review.pull_request_status)}</span>
+                        </div>
+                        <div class="review-author">
+                            <div class="author-avatar">${getInitials(review.reviewer_info?.display_name || review.reviewer)}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="review-body">
+                        <div class="review-title">Review by ${escapeHtml(review.reviewer_info?.display_name || review.reviewer)}</div>
+                        ${review.reviewer_comments ? `<div class="review-text">${escapeHtml(review.reviewer_comments)}</div>` : ''}
+                    </div>
+
+                    ${scores.length > 0 ? `
+                        <div class="scores-section">
+                            <h4>📊 Scores (${scores.length})</h4>
+                            ${scores.map(score => `
+                                <div class="score-item">
+                                    <div class="score-value ${getScoreClass(score.score)}">${score.score}</div>
+                                    <div class="score-details">
+                                        <div class="score-reviewer">${escapeHtml(score.reviewer_info?.display_name || score.reviewer)}</div>
+                                        <div class="score-description">${escapeHtml(score.score_description || 'No description')}</div>
+                                        <div class="score-type">${score.source_filename ? '📄 File: ' + escapeHtml(score.source_filename) : '📋 PR-Level'}</div>
                                     </div>
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+
+                    ${hasAiSuggestions ? `
+                        <div class="ai-suggestions">
+                            <h4>🤖 AI Suggestions</h4>
+                            ${Object.entries(review.ai_suggestions).map(([key, suggestion], index) => `
+                                <div class="ai-suggestion-item">
+                                    <div class="ai-suggestion-text">${escapeHtml(suggestion)}</div>
+                                    <button class="btn btn-success btn-small" onclick="showAiScoringForm(${review.id}, '${escapeHtml(key)}', ${index})">
+                                        Score This Suggestion
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+
+                    <div class="scoring-form-container" id="scoringForm_${review.id}" style="display: none;">
+                        <div class="scoring-form">
+                            <label for="score_${review.id}">Score (0-10):</label>
+                            <input type="number" id="score_${review.id}" min="0" max="10" step="0.5" placeholder="Enter score">
+                            
+                            <label for="comment_${review.id}">Comment:</label>
+                            <textarea id="comment_${review.id}" placeholder="Review comment (optional)" rows="3"></textarea>
+                            
+                            <div class="form-actions">
+                                <button class="btn btn-success" onclick="submitScore(${review.id})">Submit Score</button>
+                                <button class="btn btn-secondary" onclick="hideScoringForm(${review.id})">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             `;
         }
 
-        function toggleReviewDetails(reviewId) {
-            const detailsRow = document.getElementById(`details_${reviewId}`);
-            const expandBtn = event.target;
-            
-            if (detailsRow.style.display === 'none') {
-                detailsRow.style.display = 'table-row';
-                expandBtn.textContent = '▼';
-            } else {
-                detailsRow.style.display = 'none';
-                expandBtn.textContent = '▶';
-            }
+        function toggleGroup(header) {
+            const group = header.parentElement;
+            group.classList.toggle('expanded');
         }
 
-        function showScoreForm(reviewId) {
-            const detailsRow = document.getElementById(`details_${reviewId}`);
-            const expandBtn = document.querySelector(`.btn-expand[onclick="toggleReviewDetails(${reviewId})"]`);
-            
-            detailsRow.style.display = 'table-row';
-            expandBtn.textContent = '▼';
-            
-            // Scroll to the form
-            setTimeout(() => {
-                const formContainer = detailsRow.querySelector('.scoring-form-container');
-                formContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 100);
+        function showScoringForm(reviewId) {
+            const form = document.getElementById(`scoringForm_${reviewId}`);
+            form.style.display = 'block';
+            form.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
-        function hideScoreForm(reviewId) {
-            const detailsRow = document.getElementById(`details_${reviewId}`);
-            const expandBtn = document.querySelector(`.btn-expand[onclick="toggleReviewDetails(${reviewId})"]`);
-            
-            detailsRow.style.display = 'none';
-            expandBtn.textContent = '▶';
+        function hideScoringForm(reviewId) {
+            const form = document.getElementById(`scoringForm_${reviewId}`);
+            form.style.display = 'none';
         }
 
         async function submitScore(reviewId) {
@@ -765,39 +693,29 @@
             }
 
             try {
-                const pullRequestId = document.getElementById('pullRequestId').value;
-                const projectKey = document.getElementById('projectKey').value;
-                const repositorySlug = document.getElementById('repositorySlug').value;
-                const sourceFilename = document.getElementById('sourceFilename').value;
-
-                // Get the commit_id from the loaded review data
-                const reviewData = window.currentReviews.find(r => r.id === reviewId);
+                const reviewData = findReviewById(reviewId);
                 if (!reviewData) {
                     throw new Error('Review data not found');
                 }
 
-                // Ensure reviewer field exists
                 const reviewer = reviewData.reviewer || reviewData.reviewer_info?.username;
                 if (!reviewer) {
-                    throw new Error('Reviewer information not found in loaded data');
+                    throw new Error('Reviewer information not found');
                 }
 
                 const requestBody = {
-                    pull_request_id: pullRequestId,
-                    pull_request_commit_id: reviewData.pull_request_commit_id, // Use commit_id from loaded review
-                    project_key: projectKey,
-                    repository_slug: repositorySlug,
-                    reviewer: reviewer, // Use the original reviewer username
+                    pull_request_id: reviewData.pull_request_id,
+                    pull_request_commit_id: reviewData.pull_request_commit_id,
+                    project_key: reviewData.project_key,
+                    repository_slug: reviewData.repository_slug,
+                    reviewer: reviewer,
                     score: score,
                     score_description: getScoreDescription(score),
                     reviewer_comments: comment
                 };
 
-                // Debug log to see what we're sending
-                console.log('Submitting score update:', JSON.stringify(requestBody, null, 2));
-
-                if (sourceFilename) {
-                    requestBody.source_filename = sourceFilename;
+                if (reviewData.source_filename) {
+                    requestBody.source_filename = reviewData.source_filename;
                 }
 
                 const response = await fetch(`${API_BASE_URL}/reviews/score`, {
@@ -819,19 +737,23 @@
                 successMsg.style.display = 'block';
                 errorEl.style.display = 'none';
 
-                // Clear the form
                 scoreInput.value = '';
                 commentInput.value = '';
+                hideScoringForm(reviewId);
 
-                // Reload reviews after a short delay
                 setTimeout(() => {
-                    loadReviews();
+                    loadAllReviews();
                 }, 1500);
 
             } catch (error) {
                 errorEl.textContent = `Error: ${error.message}`;
                 errorEl.style.display = 'block';
             }
+        }
+
+        function findReviewById(reviewId) {
+            // This is a simplified version - in real implementation you'd need to store the reviews
+            return window.currentReviews?.find(r => r.id === reviewId);
         }
 
         function getScoreClass(score) {
@@ -861,7 +783,7 @@
         }
 
         // Load reviews on page load
-        window.addEventListener('DOMContentLoaded', loadReviews);
+        window.addEventListener('DOMContentLoaded', loadAllReviews);
     </script>
 </body>
 </html>
