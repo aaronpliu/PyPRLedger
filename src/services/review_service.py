@@ -42,7 +42,8 @@ class ReviewService:
         self.redis_client = get_redis_client()
         self.metrics = metrics_collector or MetricsCollector()
 
-    def _get_cache_key(self, project_key: str, repository_slug: str, pull_request_id: str) -> str:
+    @staticmethod
+    def _get_cache_key(project_key: str, repository_slug: str, pull_request_id: str) -> str:
         """
         Generate unique cache key for review using composite business key.
 
@@ -59,7 +60,8 @@ class ReviewService:
         """
         return f"review:{project_key}:{repository_slug}:{pull_request_id}"
 
-    def _get_list_cache_key(self, filters: dict[str, Any], page: int, page_size: int) -> str:
+    @staticmethod
+    def _get_list_cache_key(filters: dict[str, Any], page: int, page_size: int) -> str:
         """Generate cache key for review list"""
         filter_str = ":".join(f"{k}={v}" for k, v in sorted(filters.items()) if v is not None)
         return f"reviews:list:{filter_str}:{page}:{page_size}"

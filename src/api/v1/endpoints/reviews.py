@@ -370,7 +370,7 @@ async def update_review(
             project_key=project_key,
             repository_slug=repository_slug,
         )
-        return ReviewResponse(**review.to_dict())
+        return ReviewResponse(**review)
     except (ReviewNotFoundException, ReviewStatusException) as e:
         metrics.increment_error(
             error_type=e.code,
@@ -432,8 +432,8 @@ async def update_review_status(
             project_key=project_key,
             repository_slug=repository_slug,
         )
-        metrics.increment_pull_request(project=review.project_key, status=new_status)
-        return ReviewResponse(**review.to_dict())
+        metrics.increment_pull_request(project=review["project_key"], status=new_status)
+        return ReviewResponse(**review)
     except (ReviewNotFoundException, ReviewStatusException) as e:
         metrics.increment_error(
             error_type=e.code,
@@ -735,7 +735,7 @@ async def get_reviews_by_status(
 # ============================================================================
 
 
-@router.put("/score", response_model=ReviewScoreResponse)
+@router.put("/score", response_model=ReviewScoreResponse, status_code=status.HTTP_200_OK)
 async def upsert_score(
     score_data: ReviewScoreCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -795,19 +795,15 @@ async def upsert_score(
             - updated_date: When the score was last updated
 
     Raises:
-        HTTPException: 201 Created if new score, 200 OK if updated
+        HTTPException: 200 OK on success
     """
     try:
         score = await score_service.upsert_score(score_data, db, include_details=True)
 
-        # Determine if this was a create or update by checking updated_date vs created_date
-        is_created = score.created_date == score.updated_date
-        status_code = status.HTTP_201_CREATED if is_created else status.HTTP_200_OK
+        # Return the Pydantic model directly - FastAPI will serialize it according to response_model
+        # Note: Using fixed 200 OK status code as per response_model declaration
+        return score
 
-        return JSONResponse(
-            status_code=status_code,
-            content=score.model_dump(mode="json"),
-        )
     except Exception as e:
         error_traceback = traceback.format_exc()
         logger.error(f"Failed to upsert score: {str(e)}\n{error_traceback}")

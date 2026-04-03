@@ -229,7 +229,7 @@ async def get_reviewers(
         reviewers = await user_service.get_active_reviewers(db, limit)
 
         return UserListResponse(
-            items=[UserResponse(**r.to_dict()) for r in reviewers],
+            items=[UserResponse(**r) for r in reviewers],
             total=len(reviewers),
             page=1,
             page_size=limit,
