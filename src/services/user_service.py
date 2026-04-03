@@ -155,7 +155,7 @@ class UserService:
 
     async def get_user_by_id(
         self, user_id: int, db: AsyncSession, use_cache: bool = True
-    ) -> User | None:
+    ) -> dict | None:
         """
         Get a user by ID
 
@@ -165,14 +165,14 @@ class UserService:
             use_cache: Whether to use cache
 
         Returns:
-            User: The user, or None if not found
+            Dict: The user as dictionary, or None if not found
         """
         # Try cache first
         if use_cache:
             cached = await self._get_user_from_cache(user_id)
             if cached:
                 logger.debug(f"Retrieved user from cache: {user_id}")
-                return User.from_dict(cached)
+                return cached
 
         # Query database
         result = await db.execute(select(User).where(User.id == user_id))
@@ -180,13 +180,15 @@ class UserService:
 
         if user:
             # Cache the result
-            await self._set_user_in_cache(user_id, user.to_dict())
+            user_dict = user.to_dict()
+            await self._set_user_in_cache(user_id, user_dict)
+            return user_dict
 
-        return user
+        return None
 
     async def get_user_by_username(
         self, username: str, db: AsyncSession, use_cache: bool = True
-    ) -> User | None:
+    ) -> dict | None:
         """
         Get a user by username
 
@@ -196,7 +198,7 @@ class UserService:
             use_cache: Whether to use cache
 
         Returns:
-            User: The user, or None if not found
+            Dict: The user as dictionary, or None if not found
         """
         # Try cache first
         if use_cache:
@@ -213,21 +215,24 @@ class UserService:
         result = await db.execute(select(User).where(User.username == username))
         user = result.scalar_one_or_none()
 
-        if user and use_cache:
-            try:
-                # Cache username to user_id mapping
-                cache_key = self._get_username_cache_key(username)
-                await self.redis_client.setex(cache_key, settings.CACHE_TTL_USERS, str(user.id))
-                # Cache the user
-                await self._set_user_in_cache(user.id, user.to_dict())
-            except Exception as e:
-                logger.warning(f"Failed to set username mapping in cache: {str(e)}")
+        if user:
+            user_dict = user.to_dict()
+            if use_cache:
+                try:
+                    # Cache username to user_id mapping
+                    cache_key = self._get_username_cache_key(username)
+                    await self.redis_client.setex(cache_key, settings.CACHE_TTL_USERS, str(user.id))
+                    # Cache the user
+                    await self._set_user_in_cache(user.id, user_dict)
+                except Exception as e:
+                    logger.warning(f"Failed to set username mapping in cache: {str(e)}")
+            return user_dict
 
-        return user
+        return None
 
     async def get_user_by_email(
         self, email: str, db: AsyncSession, use_cache: bool = True
-    ) -> User | None:
+    ) -> dict | None:
         """
         Get a user by email
 
@@ -237,7 +242,7 @@ class UserService:
             use_cache: Whether to use cache
 
         Returns:
-            User: The user, or None if not found
+            Dict: The user as dictionary, or None if not found
         """
         # Try cache first
         if use_cache:
@@ -254,17 +259,20 @@ class UserService:
         result = await db.execute(select(User).where(User.email_address == email))
         user = result.scalar_one_or_none()
 
-        if user and use_cache:
-            try:
-                # Cache email to user_id mapping
-                cache_key = self._get_email_cache_key(email)
-                await self.redis_client.setex(cache_key, settings.CACHE_TTL_USERS, str(user.id))
-                # Cache the user
-                await self._set_user_in_cache(user.id, user.to_dict())
-            except Exception as e:
-                logger.warning(f"Failed to set email mapping in cache: {str(e)}")
+        if user:
+            user_dict = user.to_dict()
+            if use_cache:
+                try:
+                    # Cache email to user_id mapping
+                    cache_key = self._get_email_cache_key(email)
+                    await self.redis_client.setex(cache_key, settings.CACHE_TTL_USERS, str(user.id))
+                    # Cache the user
+                    await self._set_user_in_cache(user.id, user_dict)
+                except Exception as e:
+                    logger.warning(f"Failed to set email mapping in cache: {str(e)}")
+            return user_dict
 
-        return user
+        return None
 
     async def list_users(
         self,
@@ -351,7 +359,7 @@ class UserService:
 
         return list(users), total
 
-    async def update_user(self, user_id: int, update_data: UserUpdate, db: AsyncSession) -> User:
+    async def update_user(self, user_id: int, update_data: UserUpdate, db: AsyncSession) -> dict:
         """
         Update a user
 
@@ -361,12 +369,15 @@ class UserService:
             db: Database session
 
         Returns:
-            User: The updated user
+            Dict: The updated user as dictionary
 
         Raises:
             UserNotFoundException: If the user doesn't exist
         """
-        user = await self.get_user_by_id(user_id, db, use_cache=False)
+        # Get ORM object for update
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
         if not user:
             raise UserNotFoundException(user_id=user_id)
 
@@ -397,7 +408,7 @@ class UserService:
                     self.metrics.decrement_reviewer_count()
 
         logger.info(f"Updated user: {user.username} (ID: {user_id})")
-        return user
+        return user.to_dict()
 
     async def delete_user(self, user_id: int, db: AsyncSession) -> bool:
         """
@@ -523,7 +534,7 @@ class UserService:
 
         return stats
 
-    async def get_active_reviewers(self, db: AsyncSession, limit: int = 100) -> list[User]:
+    async def get_active_reviewers(self, db: AsyncSession, limit: int = 100) -> list[dict]:
         """
         Get active reviewers
 
@@ -532,7 +543,7 @@ class UserService:
             limit: Maximum number of reviewers to return
 
         Returns:
-            List[User]: List of active reviewers
+            List[Dict]: List of active reviewers as dictionaries
         """
         result = await db.execute(
             select(User)
@@ -540,9 +551,10 @@ class UserService:
             .order_by(User.created_date)
             .limit(limit)
         )
-        return list(result.scalars().all())
+        users = result.scalars().all()
+        return [user.to_dict() for user in users]
 
-    async def toggle_reviewer_status(self, user_id: int, db: AsyncSession) -> User:
+    async def toggle_reviewer_status(self, user_id: int, db: AsyncSession) -> dict:
         """
         Toggle reviewer status for a user
 
@@ -551,12 +563,15 @@ class UserService:
             db: Database session
 
         Returns:
-            User: The updated user
+            Dict: The updated user as dictionary
 
         Raises:
             UserNotFoundException: If the user doesn't exist
         """
-        user = await self.get_user_by_id(user_id, db, use_cache=False)
+        # Get ORM object for update
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
         if not user:
             raise UserNotFoundException(user_id=user_id)
 
@@ -576,9 +591,9 @@ class UserService:
         logger.info(
             f"Toggled reviewer status for user: {user.username} (ID: {user_id}) to {user.is_reviewer}"
         )
-        return user
+        return user.to_dict()
 
-    async def activate_user(self, user_id: int, db: AsyncSession) -> User:
+    async def activate_user(self, user_id: int, db: AsyncSession) -> dict:
         """
         Activate a user
 
@@ -587,12 +602,15 @@ class UserService:
             db: Database session
 
         Returns:
-            User: The updated user
+            Dict: The updated user as dictionary
 
         Raises:
             UserNotFoundException: If the user doesn't exist
         """
-        user = await self.get_user_by_id(user_id, db, use_cache=False)
+        # Get ORM object for update
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
         if not user:
             raise UserNotFoundException(user_id=user_id)
 
@@ -604,9 +622,9 @@ class UserService:
 
             logger.info(f"Activated user: {user.username} (ID: {user_id})")
 
-        return user
+        return user.to_dict()
 
-    async def deactivate_user(self, user_id: int, db: AsyncSession) -> User:
+    async def deactivate_user(self, user_id: int, db: AsyncSession) -> dict:
         """
         Deactivate a user
 
@@ -615,12 +633,15 @@ class UserService:
             db: Database session
 
         Returns:
-            User: The updated user
+            Dict: The updated user as dictionary
 
         Raises:
             UserNotFoundException: If the user doesn't exist
         """
-        user = await self.get_user_by_id(user_id, db, use_cache=False)
+        # Get ORM object for update
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
         if not user:
             raise UserNotFoundException(user_id=user_id)
 
@@ -632,4 +653,4 @@ class UserService:
 
             logger.info(f"Deactivated user: {user.username} (ID: {user_id})")
 
-        return user
+        return user.to_dict()

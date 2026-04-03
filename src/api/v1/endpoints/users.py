@@ -319,7 +319,7 @@ async def get_user(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"error": "NOT_FOUND", "message": f"User with ID {user_id} not found"},
             )
-        return UserResponse(**user.to_dict())
+        return UserResponse(**user)
     except HTTPException:
         raise
     except Exception:
@@ -365,7 +365,7 @@ async def get_user_by_username(
                     "message": f"User with username '{username}' not found",
                 },
             )
-        return UserResponse(**user.to_dict())
+        return UserResponse(**user)
     except HTTPException:
         raise
     except Exception:
@@ -402,7 +402,7 @@ async def update_user(
     """
     try:
         user = await user_service.update_user(user_id, user_update, db)
-        return UserResponse(**user.to_dict())
+        return UserResponse(**user)
     except UserNotFoundException as e:
         metrics.increment_error(error_type=e.code, endpoint=f"PUT /api/v1/users/{user_id}")
         raise HTTPException(
@@ -447,7 +447,7 @@ async def toggle_reviewer_status(
     """
     try:
         user = await user_service.toggle_reviewer_status(user_id, db)
-        return UserResponse(**user.to_dict())
+        return UserResponse(**user)
     except UserNotFoundException as e:
         metrics.increment_error(
             error_type=e.code, endpoint=f"PATCH /api/v1/users/{user_id}/toggle-reviewer"
@@ -492,7 +492,7 @@ async def activate_user(
     """
     try:
         user = await user_service.activate_user(user_id, db)
-        return UserResponse(**user.to_dict())
+        return UserResponse(**user)
     except UserNotFoundException as e:
         metrics.increment_error(
             error_type=e.code, endpoint=f"PATCH /api/v1/users/{user_id}/activate"
@@ -533,7 +533,7 @@ async def deactivate_user(
     """
     try:
         user = await user_service.deactivate_user(user_id, db)
-        return UserResponse(**user.to_dict())
+        return UserResponse(**user)
     except UserNotFoundException as e:
         metrics.increment_error(
             error_type=e.code, endpoint=f"PATCH /api/v1/users/{user_id}/deactivate"

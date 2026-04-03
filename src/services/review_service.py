@@ -551,7 +551,7 @@ class ReviewService:
         db: AsyncSession,
         project_key: str | None = None,
         repository_slug: str | None = None,
-    ) -> PullRequestReview:
+    ) -> dict:
         """
         Update a pull request review
 
@@ -601,7 +601,7 @@ class ReviewService:
         await self._invalidate_list_cache()
 
         logger.info(f"Updated review: {pull_request_id}")
-        return review
+        return review.to_dict()
 
     async def delete_review(
         self,
@@ -826,7 +826,7 @@ class ReviewService:
         db: AsyncSession,
         project_key: str | None = None,
         repository_slug: str | None = None,
-    ) -> PullRequestReview:
+    ) -> dict:
         """
         Update the status of a pull request review
 
@@ -871,7 +871,7 @@ class ReviewService:
         )
         await self._invalidate_list_cache()
 
-        return review
+        return review.to_dict()
 
     async def _enrich_review_with_entities(
         self, review: PullRequestReview | dict[str, Any], db: AsyncSession

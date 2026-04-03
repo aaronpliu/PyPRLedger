@@ -196,7 +196,7 @@ class ProjectService:
 
     async def get_project_by_id(
         self, project_id: int, db: AsyncSession, use_cache: bool = True
-    ) -> Project | None:
+    ) -> dict | None:
         """
         Get a project by ID
 
@@ -206,14 +206,14 @@ class ProjectService:
             use_cache: Whether to use cache
 
         Returns:
-            Project: The project, or None if not found
+            Dict: The project as dictionary, or None if not found
         """
         # Try cache first
         if use_cache:
             cached = await self._get_project_from_cache(project_id)
             if cached:
                 logger.debug(f"Retrieved project from cache: {project_id}")
-                return Project.from_dict(cached)
+                return cached
 
         # Query database
         result = await db.execute(select(Project).where(Project.id == project_id))
@@ -221,13 +221,15 @@ class ProjectService:
 
         if project:
             # Cache the result
-            await self._set_project_in_cache(project_id, project.to_dict())
+            project_dict = project.to_dict()
+            await self._set_project_in_cache(project_id, project_dict)
+            return project_dict
 
-        return project
+        return None
 
     async def get_project_by_project_id(
         self, project_id: str, db: AsyncSession, use_cache: bool = True
-    ) -> Project | None:
+    ) -> dict | None:
         """
         Get a project by project identifier
 
@@ -237,21 +239,24 @@ class ProjectService:
             use_cache: Whether to use cache
 
         Returns:
-            Project: The project, or None if not found
+            Dict: The project as dictionary, or None if not found
         """
         # Query database
         result = await db.execute(select(Project).where(Project.project_id == project_id))
         project = result.scalar_one_or_none()
 
-        if project and use_cache:
+        if project:
+            project_dict = project.to_dict()
             # Cache the result
-            await self._set_project_in_cache(project.id, project.to_dict())
+            if use_cache:
+                await self._set_project_in_cache(project.id, project_dict)
+            return project_dict
 
-        return project
+        return None
 
     async def get_project_by_key(
         self, project_key: str, db: AsyncSession, use_cache: bool = True
-    ) -> Project | None:
+    ) -> dict | None:
         """
         Get a project by project key
 
@@ -261,7 +266,7 @@ class ProjectService:
             use_cache: Whether to use cache
 
         Returns:
-            Project: The project, or None if not found
+            Dict: The project as dictionary, or None if not found
         """
         # Try cache first
         if use_cache:
@@ -278,19 +283,22 @@ class ProjectService:
         result = await db.execute(select(Project).where(Project.project_key == project_key))
         project = result.scalar_one_or_none()
 
-        if project and use_cache:
-            try:
-                # Cache project key to project_id mapping
-                cache_key = self._get_project_key_cache_key(project_key)
-                await self.redis_client.setex(
-                    cache_key, settings.CACHE_TTL_PROJECTS, str(project.id)
-                )
-                # Cache the project
-                await self._set_project_in_cache(project.id, project.to_dict())
-            except Exception as e:
-                logger.warning(f"Failed to set project key mapping in cache: {str(e)}")
+        if project:
+            project_dict = project.to_dict()
+            if use_cache:
+                try:
+                    # Cache project key to project_id mapping
+                    cache_key = self._get_project_key_cache_key(project_key)
+                    await self.redis_client.setex(
+                        cache_key, settings.CACHE_TTL_PROJECTS, str(project.id)
+                    )
+                    # Cache the project
+                    await self._set_project_in_cache(project.id, project_dict)
+                except Exception as e:
+                    logger.warning(f"Failed to set project key mapping in cache: {str(e)}")
+            return project_dict
 
-        return project
+        return None
 
     async def list_projects(
         self,
@@ -381,7 +389,7 @@ class ProjectService:
 
     async def update_project(
         self, project_id: int, update_data: ProjectUpdate, db: AsyncSession
-    ) -> Project:
+    ) -> dict:
         """
         Update a project
 
@@ -391,12 +399,15 @@ class ProjectService:
             db: Database session
 
         Returns:
-            Project: The updated project
+            Dict: The updated project as dictionary
 
         Raises:
             ProjectNotFoundException: If the project doesn't exist
         """
-        project = await self.get_project_by_id(project_id, db, use_cache=False)
+        # Get ORM object for update
+        result = await db.execute(select(Project).where(Project.id == project_id))
+        project = result.scalar_one_or_none()
+
         if not project:
             raise ProjectNotFoundException(project_id=project_id)
 
@@ -410,7 +421,7 @@ class ProjectService:
         await self._invalidate_stats_cache()
 
         logger.info(f"Updated project: {project.project_id} (ID: {project_id})")
-        return project
+        return project.to_dict()
 
     async def delete_project(self, project_id: int, db: AsyncSession) -> bool:
         """
@@ -514,7 +525,7 @@ class ProjectService:
 
         return stats
 
-    async def get_active_projects(self, db: AsyncSession, limit: int = 100) -> list[Project]:
+    async def get_active_projects(self, db: AsyncSession, limit: int = 100) -> list[dict]:
         """
         Get active projects
 
@@ -523,7 +534,7 @@ class ProjectService:
             limit: Maximum number of projects to return
 
         Returns:
-            List[Project]: List of active projects
+            List[Dict]: List of active projects as dictionaries
         """
         result = await db.execute(
             select(Project)
@@ -531,7 +542,8 @@ class ProjectService:
             .order_by(Project.created_date)
             .limit(limit)
         )
-        return list(result.scalars().all())
+        projects = result.scalars().all()
+        return [project.to_dict() for project in projects]
 
     async def get_project_with_stats(self, project_id: int, db: AsyncSession) -> dict[str, Any]:
         """
@@ -580,8 +592,8 @@ class ProjectService:
         active_reviewer_result = await db.execute(active_reviewer_query)
         active_reviewer_count = active_reviewer_result.scalar()
 
-        # Combine results
-        project_dict = project.to_dict()
+        # Combine results (project is already a dict)
+        project_dict = project.copy()
         project_dict.update(
             {
                 "repository_count": repository_count,
@@ -593,7 +605,7 @@ class ProjectService:
 
         return project_dict
 
-    async def activate_project(self, project_id: int, db: AsyncSession) -> Project:
+    async def activate_project(self, project_id: int, db: AsyncSession) -> dict:
         """
         Activate a project
 
@@ -602,7 +614,7 @@ class ProjectService:
             db: Database session
 
         Returns:
-            Project: The updated project
+            Dict: The updated project as dictionary
 
         Raises:
             ProjectNotFoundException: If the project doesn't exist
@@ -611,18 +623,18 @@ class ProjectService:
         if not project:
             raise ProjectNotFoundException(project_id=project_id)
 
-        if not project.is_active:
-            project.is_active = True
+        if not project["is_active"]:
+            project["is_active"] = True
             # Invalidate cache
-            await self._invalidate_project_cache(project_id, project.project_key)
+            await self._invalidate_project_cache(project_id, project["project_key"])
             await self._invalidate_list_cache()
             await self._invalidate_stats_cache()
 
-            logger.info(f"Activated project: {project.project_id} (ID: {project_id})")
+            logger.info(f"Activated project: {project['project_id']} (ID: {project_id})")
 
         return project
 
-    async def deactivate_project(self, project_id: int, db: AsyncSession) -> Project:
+    async def deactivate_project(self, project_id: int, db: AsyncSession) -> dict:
         """
         Deactivate a project
 
@@ -631,7 +643,7 @@ class ProjectService:
             db: Database session
 
         Returns:
-            Project: The updated project
+            Dict: The updated project as dictionary
 
         Raises:
             ProjectNotFoundException: If the project doesn't exist
@@ -640,32 +652,32 @@ class ProjectService:
         if not project:
             raise ProjectNotFoundException(project_id=project_id)
 
-        if project.is_active:
-            project.is_active = False
+        if project["is_active"]:
+            project["is_active"] = False
             # Invalidate cache
-            await self._invalidate_project_cache(project_id, project.project_key)
+            await self._invalidate_project_cache(project_id, project["project_key"])
             await self._invalidate_list_cache()
             await self._invalidate_stats_cache()
 
-            logger.info(f"Deactivated project: {project.project_id} (ID: {project_id})")
+            logger.info(f"Deactivated project: {project['project_id']} (ID: {project_id})")
 
         return project
 
-    async def get_project_by_name(self, project_name: str, db: AsyncSession) -> Project | None:
+    async def get_project_by_name(self, project_name: str, db: AsyncSession) -> dict | None:
         """
-        Get a project by name (partial match)
+        Get a project by name
 
         Args:
-            project_name: The project name to search for
+            project_name: The project name
             db: Database session
 
         Returns:
-            Project: The project, or None if not found
+            Dict: The project as dictionary, or None if not found
         """
-        result = await db.execute(
-            select(Project).where(Project.project_name.ilike(f"%{project_name}%"))
-        )
-        return result.scalar_one_or_none()
+        result = await db.execute(select(Project).where(Project.project_name == project_name))
+        project = result.scalar_one_or_none()
+
+        return project.to_dict() if project else None
 
     async def search_projects(
         self,

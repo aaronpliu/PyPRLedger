@@ -354,10 +354,7 @@ async def get_project(
                 detail={"error": "NOT_FOUND", "message": f"Project with ID {project_id} not found"},
             )
 
-        # Get detailed project information
-        project_dict = await project_service.get_project_with_stats(project_id, db)
-
-        return ProjectDetailResponse(**project_dict)
+        return ProjectResponse(**project)
     except HTTPException:
         raise
     except Exception:
@@ -400,7 +397,7 @@ async def get_project_by_project_id(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"error": "NOT_FOUND", "message": f"Project with ID {project_id} not found"},
             )
-        return ProjectResponse(**project.to_dict())
+        return ProjectResponse(**project)
     except HTTPException:
         raise
     except Exception:
@@ -446,7 +443,7 @@ async def get_project_by_key(
                     "message": f"Project with key {project_key} not found",
                 },
             )
-        return ProjectResponse(**project.to_dict())
+        return ProjectResponse(**project)
     except HTTPException:
         raise
     except Exception:
@@ -489,10 +486,10 @@ async def get_project_by_name(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={
                     "error": "NOT_FOUND",
-                    "message": f"Project with name '{project_name}' not found",
+                    "message": f"Project with name {project_name} not found",
                 },
             )
-        return ProjectResponse(**project.to_dict())
+        return ProjectResponse(**project)
     except HTTPException:
         raise
     except Exception:
@@ -529,7 +526,7 @@ async def update_project(
     """
     try:
         project = await project_service.update_project(project_id, project_update, db)
-        return ProjectResponse(**project.to_dict())
+        return ProjectResponse(**project)
     except ProjectNotFoundException as e:
         metrics.increment_error(error_type=e.code, endpoint=f"PUT /api/v1/projects/{project_id}")
         raise HTTPException(
