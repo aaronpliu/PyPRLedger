@@ -180,6 +180,7 @@ class ReviewScoreResponse(ReviewScoreBase):
     id: int
     reviewer: str
     reviewer_info: dict[str, Any] | None = None  # Enriched user details
+    source_filename: str | None = None  # null means PR-level score, string means file-level score
     score: float
     score_description: str | None = None
     created_date: datetime
@@ -194,7 +195,6 @@ class ReviewScoreSummary(BaseModel):
     pull_request_id: str
     project_key: str
     repository_slug: str
-    source_filename: str | None  # Null means PR-level summary
     total_scores: int
     average_score: float
     scores: list[ReviewScoreResponse]

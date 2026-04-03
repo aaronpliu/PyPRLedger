@@ -926,18 +926,20 @@ class ReviewService:
         try:
             score_service = ReviewScoreService()
 
-            # Get all scores for this PR/file combination
+            # Get ALL scores for this PR, including both PR-level and file-level scores
+            # This provides complete scoring information for the review
             scores = await score_service.get_scores_by_review_target(
                 pull_request_id=review_dict.get("pull_request_id"),
                 project_key=review_dict.get("project_key"),
                 repository_slug=review_dict.get("repository_slug"),
-                source_filename=review_dict.get("source_filename"),
+                source_filename=None,  # Pass None to get ALL scores (both PR-level and file-level)
                 db=db,
                 use_cache=True,
             )
 
             logger.info(
-                f"Loaded {len(scores)} scores for review {review_dict.get('pull_request_id')}"
+                f"Loaded {len(scores)} score(s) for review {review_dict.get('pull_request_id')} "
+                f"(includes both PR-level and file-level scores)"
             )
 
             # Calculate and add score summary with simplified score list
@@ -956,6 +958,9 @@ class ReviewService:
                                 "reviewer_info": score.get("reviewer_info"),  # Already a dict
                                 "score": score.get("score"),
                                 "score_description": score.get("score_description"),
+                                "source_filename": score.get(
+                                    "source_filename"
+                                ),  # null means PR-level, string means file-level
                                 "created_date": score.get("created_date"),
                                 "updated_date": score.get("updated_date"),
                             }
@@ -978,6 +983,7 @@ class ReviewService:
                                 "reviewer_info": reviewer_info_data,
                                 "score": score.score,
                                 "score_description": score.score_description,
+                                "source_filename": score.source_filename,  # null means PR-level, string means file-level
                                 "created_date": score.created_date,
                                 "updated_date": score.updated_date,
                             }
@@ -987,7 +993,6 @@ class ReviewService:
                     "pull_request_id": review_dict.get("pull_request_id"),
                     "project_key": review_dict.get("project_key"),
                     "repository_slug": review_dict.get("repository_slug"),
-                    "source_filename": review_dict.get("source_filename"),
                     "total_scores": len(scores),
                     "average_score": round(avg_score, 2),
                     "scores": simplified_scores,
