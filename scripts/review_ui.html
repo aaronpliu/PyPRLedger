@@ -941,6 +941,12 @@
             const hasAiSuggestions = review.ai_suggestions && Object.keys(review.ai_suggestions).length > 0;
             const hasCodeDiff = review.git_code_diff;
 
+            console.log(`Creating review card for review ${review.id}:`, {
+                reviewer_comments: review.reviewer_comments,
+                scores_count: scores.length,
+                scores: scores.map(s => ({ reviewer: s.reviewer, comments: s.reviewer_comments }))
+            });
+
             return `
                 <div class="review-card">
                     <div class="review-header">
@@ -976,7 +982,13 @@
                     ${scores.length > 0 ? `
                         <div class="scores-section">
                             <h4>📊 Scores (${scores.length})</h4>
-                            ${scores.map(score => `
+                            ${scores.map((score, index) => {
+                                console.log(`Score ${index + 1} for review ${review.id}:`, {
+                                    reviewer: score.reviewer,
+                                    reviewer_comments: score.reviewer_comments,
+                                    has_comments: !!score.reviewer_comments
+                                });
+                                return `
                                 <div class="score-item">
                                     <div class="score-value ${getScoreClass(score.score)}">${score.score}</div>
                                     <div class="score-details">
@@ -991,7 +1003,7 @@
                                         ` : ''}
                                     </div>
                                 </div>
-                            `).join('')}
+                            `}).join('')}
                         </div>
                     ` : ''}
 

@@ -963,6 +963,7 @@ class ReviewService:
                                 ),  # null means PR-level, string means file-level
                                 "created_date": score.get("created_date"),
                                 "updated_date": score.get("updated_date"),
+                                "reviewer_comments": score.get("reviewer_comments"),
                             }
                         )
                     else:
@@ -986,6 +987,7 @@ class ReviewService:
                                 "source_filename": score.source_filename,  # null means PR-level, string means file-level
                                 "created_date": score.created_date,
                                 "updated_date": score.updated_date,
+                                "reviewer_comments": score.reviewer_comments,
                             }
                         )
 
