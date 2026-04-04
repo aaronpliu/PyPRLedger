@@ -355,6 +355,26 @@
             font-style: italic;
         }
 
+        .score-comments {
+            margin-top: 8px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 3px solid #667eea;
+        }
+
+        .score-comments strong {
+            color: #212529;
+            font-size: 0.85rem;
+        }
+
+        .score-comments p {
+            color: #495057;
+            line-height: 1.5;
+            font-size: 0.9rem;
+            margin: 4px 0 0 0;
+        }
+
         /* Scoring Form */
         .scoring-form-container {
             background: white;
@@ -379,21 +399,33 @@
 
         .scoring-form input[type="number"] {
             width: 100%;
-            padding: 8px 12px;
+            padding: 10px 12px;
             border: 2px solid #dee2e6;
             border-radius: 6px;
             font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .scoring-form input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
         }
 
         .scoring-form textarea {
             width: 100%;
-            padding: 8px 12px;
+            padding: 10px 12px;
             border: 2px solid #dee2e6;
             border-radius: 6px;
             font-size: 0.9rem;
             resize: vertical;
-            min-height: 60px;
+            min-height: 80px;
             grid-column: 2;
+            transition: border-color 0.3s;
+        }
+
+        .scoring-form textarea:focus {
+            outline: none;
+            border-color: #667eea;
         }
 
         .form-actions {
@@ -425,19 +457,262 @@
             color: #1976d2;
             margin-bottom: 10px;
             font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .ai-suggestion-item {
             background: white;
-            padding: 12px;
+            padding: 15px;
             border-radius: 6px;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
+            border: 1px solid #bbdefb;
+            transition: all 0.3s;
+        }
+
+        .ai-suggestion-item:hover {
+            box-shadow: 0 3px 10px rgba(33, 150, 243, 0.15);
+            transform: translateX(2px);
         }
 
         .ai-suggestion-text {
             color: #495057;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        .ai-suggestion-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .quick-score-btn {
+            padding: 6px 16px;
+            border: 2px solid transparent;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .quick-score-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .quick-score-btn.score-10 { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; }
+        .quick-score-btn.score-9 { background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%); color: white; }
+        .quick-score-btn.score-8 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .quick-score-btn.score-7 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; }
+        .quick-score-btn.score-6 { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; }
+        .quick-score-btn.score-5 { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: white; }
+
+        .quick-score-btn.selected {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Code Diff Viewer */
+        .code-diff-section {
+            margin-top: 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .code-diff-header {
+            background: #f6f8fa;
+            padding: 12px 16px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .code-diff-header h4 {
+            color: #24292e;
+            font-size: 0.95rem;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .code-diff-toggle {
+            font-size: 1.2rem;
+            transition: transform 0.3s;
+        }
+
+        .code-diff-section.collapsed .code-diff-toggle {
+            transform: rotate(-90deg);
+        }
+
+        .code-diff-content {
+            padding: 0;
+            overflow-x: auto;
+            background: #fafbfc;
+        }
+
+        .code-diff-section.collapsed .code-diff-content {
+            display: none;
+        }
+
+        .diff-viewer {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', monospace;
+            font-size: 0.85rem;
             line-height: 1.5;
+            white-space: pre;
+        }
+
+        .diff-line {
+            padding: 4px 16px;
+            border-bottom: 1px solid #ebebeb;
+        }
+
+        .diff-line:last-child {
+            border-bottom: none;
+        }
+
+        .diff-line-add {
+            background-color: #e6ffed;
+            color: #24292e;
+        }
+
+        .diff-line-del {
+            background-color: #ffeef0;
+            color: #cb2431;
+        }
+
+        .diff-line-context {
+            background-color: #fafbfc;
+            color: #24292e;
+        }
+
+        .diff-line-number {
+            display: inline-block;
+            width: 60px;
+            color: #959da5;
+            user-select: none;
+            text-align: right;
+            margin-right: 16px;
+        }
+
+        /* Score Display Slider */
+        .score-slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        .score-slider-input {
+            width: 100%;
+            -webkit-appearance: none;
+            height: 8px;
+            border-radius: 4px;
+            background: linear-gradient(to right, 
+                #eb3349 0%, 
+                #fa709a 20%, 
+                #f093fb 40%, 
+                #667eea 60%, 
+                #56ab2f 80%, 
+                #11998e 100%
+            );
+            outline: none;
+        }
+
+        .score-slider-input::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: white;
+            border: 3px solid #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .score-slider-input::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: white;
+            border: 3px solid #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            border-image: none; /* Prevent double border in Firefox */
+        }
+        
+        /* Remove default focus outline to prevent double ring */
+        .score-slider-input:focus {
+            outline: none;
+        }
+
+        .score-display {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+            margin: 10px 0;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+
+        /* File Tree Navigation */
+        .file-tree {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .file-tree h3 {
+            color: #212529;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .file-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .file-chip {
+            background: white;
+            border: 2px solid #dee2e6;
+            border-radius: 20px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .file-chip:hover {
+            border-color: #667eea;
+            background: #f0f0ff;
+        }
+
+        .file-chip.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+        }
+
+        .file-icon {
+            font-size: 1.1rem;
         }
 
         @media (max-width: 768px) {
@@ -454,6 +729,22 @@
                 align-items: flex-start;
                 gap: 10px;
             }
+
+            .file-list {
+                flex-direction: column;
+            }
+
+            .scoring-form {
+                grid-template-columns: 1fr;
+            }
+
+            .scoring-form textarea {
+                grid-column: 1;
+            }
+
+            .form-actions {
+                grid-column: 1;
+            }
         }
     </style>
 </head>
@@ -465,6 +756,11 @@
         </div>
 
         <div class="filters">
+            <div class="filter-group">
+                <label for="currentReviewer">👤 Current Reviewer (Required):</label>
+                <input type="text" id="currentReviewer" placeholder="Your username" list="reviewerList">
+                <datalist id="reviewerList"></datalist>
+            </div>
             <div class="filter-group">
                 <label for="projectKey">Project Key:</label>
                 <input type="text" id="projectKey" placeholder="Leave empty for all projects">
@@ -482,6 +778,11 @@
             </div>
         </div>
 
+        <div class="file-tree" id="fileTree" style="display: none;">
+            <h3>📁 Files Reviewed</h3>
+            <div class="file-list" id="fileList"></div>
+        </div>
+
         <div class="content">
             <div id="successMessage" class="success-message"></div>
             <div id="loading" class="loading">Loading all reviews...</div>
@@ -492,6 +793,15 @@
 
     <script>
         const API_BASE_URL = 'http://localhost:8000/api/v1';
+        let currentReviewer = localStorage.getItem('currentReviewer') || '';
+        let allReviews = []; // Store loaded reviews for reference
+
+        // Initialize current reviewer from localStorage
+        if (currentReviewer) {
+            document.addEventListener('DOMContentLoaded', () => {
+                document.getElementById('currentReviewer').value = currentReviewer;
+            });
+        }
 
         // Helper function to format dates
         function formatDate(dateString) {
@@ -511,6 +821,17 @@
             const errorEl = document.getElementById('error');
             const container = document.getElementById('reviewsContainer');
             const successMsg = document.getElementById('successMessage');
+            const currentReviewerInput = document.getElementById('currentReviewer');
+
+            // Validate current reviewer
+            if (!currentReviewerInput.value.trim()) {
+                errorEl.textContent = '⚠️ Please enter your username (Current Reviewer) before loading reviews';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            currentReviewer = currentReviewerInput.value.trim();
+            localStorage.setItem('currentReviewer', currentReviewer);
 
             successMsg.style.display = 'none';
             errorEl.style.display = 'none';
@@ -535,7 +856,12 @@
                 }
 
                 const data = await response.json();
-                displayGroupedReviews(data.items || []);
+                allReviews = data.items || [];
+                
+                // Populate reviewer datalist with unique reviewers from loaded reviews
+                populateReviewerList(allReviews);
+                
+                displayGroupedReviews(allReviews);
 
             } catch (error) {
                 errorEl.textContent = `Error: ${error.message}`;
@@ -545,6 +871,25 @@
             }
         }
 
+        function populateReviewerList(reviews) {
+            const datalist = document.getElementById('reviewerList');
+            const reviewers = new Set();
+            
+            // Collect all unique reviewers from the reviews
+            reviews.forEach(review => {
+                if (review.reviewer) reviewers.add(review.reviewer);
+                if (review.reviewer_info?.username) reviewers.add(review.reviewer_info.username);
+                if (review.pull_request_user) reviewers.add(review.pull_request_user);
+                if (review.pull_request_user_info?.username) reviewers.add(review.pull_request_user_info.username);
+            });
+            
+            // Add existing reviewers to datalist
+            datalist.innerHTML = Array.from(reviewers)
+                .sort()
+                .map(r => `<option value="${escapeHtml(r)}">`)
+                .join('');
+        }
+
         function displayGroupedReviews(reviews) {
             const container = document.getElementById('reviewsContainer');
 
@@ -552,6 +897,8 @@
                 container.innerHTML = '<div class="loading">No reviews found</div>';
                 return;
             }
+
+            console.log('Displaying reviews with currentReviewer:', currentReviewer);
 
             // Group reviews by project/repository/pull_request_id
             const grouped = {};
@@ -592,6 +939,7 @@
         function createReviewCard(review) {
             const scores = review.score_summary?.scores || [];
             const hasAiSuggestions = review.ai_suggestions && Object.keys(review.ai_suggestions).length > 0;
+            const hasCodeDiff = review.git_code_diff;
 
             return `
                 <div class="review-card">
@@ -613,6 +961,18 @@
                         ${review.reviewer_comments ? `<div class="review-text">${escapeHtml(review.reviewer_comments)}</div>` : ''}
                     </div>
 
+                    ${hasCodeDiff ? `
+                        <div class="code-diff-section" id="diffSection_${review.id}">
+                            <div class="code-diff-header" onclick="toggleDiff(${review.id})">
+                                <h4>📝 Code Changes</h4>
+                                <span class="code-diff-toggle">▼</span>
+                            </div>
+                            <div class="code-diff-content">
+                                <div class="diff-viewer">${renderCodeDiff(review.git_code_diff)}</div>
+                            </div>
+                        </div>
+                    ` : ''}
+
                     ${scores.length > 0 ? `
                         <div class="scores-section">
                             <h4>📊 Scores (${scores.length})</h4>
@@ -623,6 +983,12 @@
                                         <div class="score-reviewer">${escapeHtml(score.reviewer_info?.display_name || score.reviewer)}</div>
                                         <div class="score-description">${escapeHtml(score.score_description || 'No description')}</div>
                                         <div class="score-type">${score.source_filename ? '📄 File: ' + escapeHtml(score.source_filename) : '📋 PR-Level'}</div>
+                                        ${score.reviewer_comments ? `
+                                            <div class="score-comments" style="margin-top: 8px; padding: 8px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #667eea;">
+                                                <strong>💬 Comments:</strong>
+                                                <p style="margin: 4px 0 0 0; color: #495057; line-height: 1.5;">${escapeHtml(score.reviewer_comments)}</p>
+                                            </div>
+                                        ` : ''}
                                     </div>
                                 </div>
                             `).join('')}
@@ -635,9 +1001,16 @@
                             ${Object.entries(review.ai_suggestions).map(([key, suggestion], index) => `
                                 <div class="ai-suggestion-item">
                                     <div class="ai-suggestion-text">${escapeHtml(suggestion)}</div>
-                                    <button class="btn btn-success btn-small" onclick="showAiScoringForm(${review.id}, '${escapeHtml(key)}', ${index})">
-                                        Score This Suggestion
-                                    </button>
+                                    <div class="ai-suggestion-actions">
+                                        <span style="font-size: 0.85rem; color: #666; font-weight: 600;">Quick Score:</span>
+                                        <button class="quick-score-btn score-10" onclick="selectQuickScore(${review.id}, '${escapeHtml(key)}', 10, this)">10</button>
+                                        <button class="quick-score-btn score-8" onclick="selectQuickScore(${review.id}, '${escapeHtml(key)}', 8, this)">8</button>
+                                        <button class="quick-score-btn score-6" onclick="selectQuickScore(${review.id}, '${escapeHtml(key)}', 6, this)">6</button>
+                                        <button class="quick-score-btn score-5" onclick="selectQuickScore(${review.id}, '${escapeHtml(key)}', 5, this)">5</button>
+                                        <button class="btn btn-success btn-small" onclick="showScoringFormForSuggestion(${review.id}, '${escapeHtml(key)}')">
+                                            Custom Score
+                                        </button>
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>
@@ -645,8 +1018,18 @@
 
                     <div class="scoring-form-container" id="scoringForm_${review.id}" style="display: none;">
                         <div class="scoring-form">
+                            <label for="reviewer_${review.id}">👤 Reviewer:</label>
+                            <input type="text" id="reviewer_${review.id}" value="${escapeHtml(currentReviewer)}" readonly style="background: #f0f0f0; cursor: not-allowed;">
+                            
                             <label for="score_${review.id}">Score (0-10):</label>
-                            <input type="number" id="score_${review.id}" min="0" max="10" step="0.5" placeholder="Enter score">
+                            <div>
+                                <input type="number" id="score_${review.id}" min="0" max="10" step="0.5" placeholder="Enter score" oninput="updateScoreDisplay(${review.id})">
+                                <div class="score-slider">
+                                    <input type="range" class="score-slider-input" id="scoreSlider_${review.id}" 
+                                           min="0" max="10" step="0.5" value="5" oninput="syncScoreInput(${review.id})">
+                                </div>
+                                <div class="score-display" id="scoreDisplay_${review.id}">5.0</div>
+                            </div>
                             
                             <label for="comment_${review.id}">Comment:</label>
                             <textarea id="comment_${review.id}" placeholder="Review comment (optional)" rows="3"></textarea>
@@ -666,10 +1049,109 @@
             group.classList.toggle('expanded');
         }
 
+        function toggleDiff(reviewId) {
+            const section = document.getElementById(`diffSection_${reviewId}`);
+            section.classList.toggle('collapsed');
+        }
+
+        function renderCodeDiff(diff) {
+            if (!diff) return '';
+            
+            const lines = diff.split('\n');
+            let renderedLines = [];
+            
+            for (const line of lines) {
+                let lineClass = 'diff-line-context';
+                let prefix = ' ';
+                let lineContent = escapeHtml(line);
+                
+                if (line.startsWith('+') && !line.startsWith('+++')) {
+                    lineClass = 'diff-line-add';
+                    prefix = '+';
+                } else if (line.startsWith('-') && !line.startsWith('---')) {
+                    lineClass = 'diff-line-del';
+                    prefix = '-';
+                } else if (line.startsWith('@@') || line.startsWith('diff --git') || line.startsWith('index')) {
+                    // Metadata lines - skip or style differently
+                    continue;
+                }
+                
+                renderedLines.push(
+                    `<div class="diff-line ${lineClass}">` +
+                    `<span class="diff-line-number">&nbsp;</span>` +
+                    `<span>${prefix}${lineContent}</span></div>`
+                );
+            }
+            
+            return renderedLines.join('');
+        }
+
+        function updateScoreDisplay(reviewId) {
+            const scoreInput = document.getElementById(`score_${reviewId}`);
+            const scoreSlider = document.getElementById(`scoreSlider_${reviewId}`);
+            const scoreDisplay = document.getElementById(`scoreDisplay_${reviewId}`);
+            
+            const value = parseFloat(scoreInput.value) || 0;
+            scoreSlider.value = value;
+            scoreDisplay.textContent = value.toFixed(1);
+        }
+
+        function syncScoreInput(reviewId) {
+            const scoreSlider = document.getElementById(`scoreSlider_${reviewId}`);
+            const scoreInput = document.getElementById(`score_${reviewId}`);
+            const scoreDisplay = document.getElementById(`scoreDisplay_${reviewId}`);
+            
+            const value = parseFloat(scoreSlider.value);
+            scoreInput.value = value.toFixed(1);
+            scoreDisplay.textContent = value.toFixed(1);
+        }
+
+        function selectQuickScore(reviewId, suggestionKey, score, btnElement) {
+            // Remove selected class from all quick score buttons in this suggestion
+            const suggestionItem = btnElement.closest('.ai-suggestion-item');
+            const allButtons = suggestionItem.querySelectorAll('.quick-score-btn');
+            allButtons.forEach(btn => btn.classList.remove('selected'));
+            
+            // Add selected class to clicked button
+            btnElement.classList.add('selected');
+            
+            // Show scoring form with pre-filled score
+            showScoringFormForSuggestion(reviewId, suggestionKey, score);
+        }
+
+        function showScoringFormForSuggestion(reviewId, suggestionKey, prefillScore = null) {
+            const form = document.getElementById(`scoringForm_${reviewId}`);
+            form.style.display = 'block';
+            form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            if (prefillScore !== null) {
+                const scoreInput = document.getElementById(`score_${reviewId}`);
+                const scoreSlider = document.getElementById(`scoreSlider_${reviewId}`);
+                const scoreDisplay = document.getElementById(`scoreDisplay_${reviewId}`);
+                
+                scoreInput.value = prefillScore.toFixed(1);
+                scoreSlider.value = prefillScore;
+                scoreDisplay.textContent = prefillScore.toFixed(1);
+            }
+            
+            // Store the suggestion key for reference when submitting
+            form.dataset.suggestionKey = suggestionKey;
+        }
+
         function showScoringForm(reviewId) {
             const form = document.getElementById(`scoringForm_${reviewId}`);
             form.style.display = 'block';
             form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            form.dataset.suggestionKey = null; // Clear any previous suggestion key
+            
+            // Debug: Check if reviewer field is populated
+            setTimeout(() => {
+                const reviewerInput = document.getElementById(`reviewer_${reviewId}`);
+                console.log(`Reviewer input value for review ${reviewId}:`, reviewerInput?.value);
+                if (!reviewerInput?.value) {
+                    console.warn('⚠️ Reviewer field is empty! Current reviewer:', currentReviewer);
+                }
+            }, 100);
         }
 
         function hideScoringForm(reviewId) {
@@ -680,11 +1162,24 @@
         async function submitScore(reviewId) {
             const scoreInput = document.getElementById(`score_${reviewId}`);
             const commentInput = document.getElementById(`comment_${reviewId}`);
+            const reviewerInput = document.getElementById(`reviewer_${reviewId}`);
             const successMsg = document.getElementById('successMessage');
             const errorEl = document.getElementById('error');
+            const form = document.getElementById(`scoringForm_${reviewId}`);
 
             const score = parseFloat(scoreInput.value);
             const comment = commentInput.value.trim();
+            const reviewer = reviewerInput.value.trim();
+            const suggestionKey = form.dataset.suggestionKey;
+
+            console.log('Submitting score:', { reviewId, reviewer, score, comment });
+
+            // Validate reviewer
+            if (!reviewer) {
+                errorEl.textContent = '⚠️ Reviewer is required. Please set your username in the top filter section.';
+                errorEl.style.display = 'block';
+                return;
+            }
 
             if (isNaN(score) || score < 0 || score > 10) {
                 errorEl.textContent = 'Please enter a valid score between 0 and 10';
@@ -694,18 +1189,15 @@
 
             try {
                 const reviewData = findReviewById(reviewId);
+                console.log('Review data:', reviewData);
+                
                 if (!reviewData) {
                     throw new Error('Review data not found');
                 }
 
-                const reviewer = reviewData.reviewer || reviewData.reviewer_info?.username;
-                if (!reviewer) {
-                    throw new Error('Reviewer information not found');
-                }
-
                 const requestBody = {
                     pull_request_id: reviewData.pull_request_id,
-                    pull_request_commit_id: reviewData.pull_request_commit_id,
+                    pull_request_commit_id: reviewData.pull_request_commit_id || 'unknown',
                     project_key: reviewData.project_key,
                     repository_slug: reviewData.repository_slug,
                     reviewer: reviewer,
@@ -714,6 +1206,9 @@
                     reviewer_comments: comment
                 };
 
+                console.log('Request body:', requestBody);
+
+                // Include source_filename if available (for file-level scoring)
                 if (reviewData.source_filename) {
                     requestBody.source_filename = reviewData.source_filename;
                 }
@@ -726,12 +1221,16 @@
                     body: JSON.stringify(requestBody)
                 });
 
+                console.log('Response status:', response.status);
+
                 if (!response.ok) {
                     const errorData = await response.json();
+                    console.error('Error response:', errorData);
                     throw new Error(errorData.message || 'Failed to submit score');
                 }
 
                 const result = await response.json();
+                console.log('Success result:', result);
                 
                 successMsg.textContent = `✅ Score submitted successfully! Score: ${result.score}`;
                 successMsg.style.display = 'block';
@@ -741,19 +1240,20 @@
                 commentInput.value = '';
                 hideScoringForm(reviewId);
 
+                // Reload reviews to show updated scores
                 setTimeout(() => {
                     loadAllReviews();
                 }, 1500);
 
             } catch (error) {
+                console.error('Submit score error:', error);
                 errorEl.textContent = `Error: ${error.message}`;
                 errorEl.style.display = 'block';
             }
         }
 
         function findReviewById(reviewId) {
-            // This is a simplified version - in real implementation you'd need to store the reviews
-            return window.currentReviews?.find(r => r.id === reviewId);
+            return allReviews.find(r => r.id === reviewId);
         }
 
         function getScoreClass(score) {

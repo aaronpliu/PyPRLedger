@@ -123,12 +123,23 @@ class ReviewScoreService:
         await db.commit()
 
         # Cache invalidation
+        # Invalidate both specific file cache and PR-level (all_files) cache
         await self._invalidate_score_cache(
             pull_request_id=score_data.pull_request_id,
             project_key=project.project_key,
             repository_slug=repository.repository_slug,
             source_filename=source_filename,
         )
+
+        # Also invalidate the PR-level summary cache (all_files) to ensure UI gets fresh data
+        if source_filename is not None:
+            # If this was a file-level score, also invalidate the all_files cache
+            await self._invalidate_score_cache(
+                pull_request_id=score_data.pull_request_id,
+                project_key=project.project_key,
+                repository_slug=repository.repository_slug,
+                source_filename=None,
+            )
 
         # Update metrics
         self.metrics.observe_review_score(project=project.project_key, score=score_data.score)
@@ -448,6 +459,7 @@ class ReviewScoreService:
                 repository_slug=repository_slug,
                 source_filename=source_filename,
             )
+            logger.info(f"Invalidating score cache: {cache_key}")
             await self.redis_client.delete(cache_key)
         except Exception as e:
             logger.warning(f"Failed to invalidate score cache: {str(e)}")
