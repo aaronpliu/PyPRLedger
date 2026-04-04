@@ -411,6 +411,66 @@
             border-color: #667eea;
         }
 
+        /* Score Range Guide */
+        .score-range-guide {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: 15px;
+            padding: 12px;
+            background: linear-gradient(to bottom, #f8f9fa, #ffffff);
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .range-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .range-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .range-value {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .range-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .range-poor {
+            background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
+            color: #d63031;
+        }
+
+        .range-average {
+            background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+            color: #ffffff;
+        }
+
+        .range-good {
+            background: linear-gradient(135deg, #55efc4 0%, #00b894 100%);
+            color: #ffffff;
+        }
+
+        .range-excellent {
+            background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);
+            color: #ffffff;
+        }
+
         .scoring-form textarea {
             width: 100%;
             padding: 10px 12px;
@@ -745,6 +805,14 @@
             .form-actions {
                 grid-column: 1;
             }
+
+            .score-range-guide {
+                flex-wrap: wrap;
+            }
+
+            .range-item {
+                flex: 0 0 calc(50% - 4px);
+            }
         }
     </style>
 </head>
@@ -1041,6 +1109,12 @@
                                            min="0" max="10" step="0.5" value="5" oninput="syncScoreInput(${review.id})">
                                 </div>
                                 <div class="score-display" id="scoreDisplay_${review.id}">5.0</div>
+                                <div class="score-range-guide">
+                                    <div class="range-item range-poor"><span class="range-value">0-2</span><span class="range-label">Poor</span></div>
+                                    <div class="range-item range-average"><span class="range-value">3-5</span><span class="range-label">Average</span></div>
+                                    <div class="range-item range-good"><span class="range-value">6-8</span><span class="range-label">Good</span></div>
+                                    <div class="range-item range-excellent"><span class="range-value">9-10</span><span class="range-label">Excellent</span></div>
+                                </div>
                             </div>
                             
                             <label for="comment_${review.id}">Comment:</label>
