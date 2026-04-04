@@ -464,6 +464,9 @@ class ReviewFilter(BaseModel):
     pull_request_status: str | None = Field(
         None, description="Filter by pull request status (open, merged, closed, draft)"
     )
+    pull_request_commit_id: str | None = Field(
+        None, description="Filter by commit ID (supports prefix matching)"
+    )
     score_min: float | None = Field(None, ge=0.0, le=10.0, description="Filter by minimum score")
     score_max: float | None = Field(None, ge=0.0, le=10.0, description="Filter by maximum score")
     date_from: datetime | None = Field(None, description="Filter reviews created after this date")

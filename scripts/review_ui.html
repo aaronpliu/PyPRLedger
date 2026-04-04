@@ -11,9 +11,37 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --primary-gradient: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            --secondary-gradient: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            --success-gradient: linear-gradient(135deg, #059669 0%, #047857 100%);
+            --bg-gradient: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="warm"] {
+            --primary-gradient: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            --secondary-gradient: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+            --success-gradient: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+            --bg-gradient: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        }
+
+        [data-theme="cool"] {
+            --primary-gradient: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
+            --secondary-gradient: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            --success-gradient: linear-gradient(135deg, #059669 0%, #047857 100%);
+            --bg-gradient: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-gradient);
             min-height: 100vh;
             padding: 20px;
         }
@@ -28,10 +56,106 @@
         }
 
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--primary-gradient);
             color: white;
             padding: 30px;
             text-align: center;
+            position: relative;
+        }
+
+        /* Theme Switcher */
+        .theme-switcher {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: inline-block;
+        }
+
+        .theme-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .theme-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.3rem;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+
+        .theme-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: rotate(15deg);
+        }
+
+        .theme-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 55px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+            min-width: 200px;
+            overflow: hidden;
+            z-index: 1000;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .theme-menu.show {
+            display: block;
+        }
+
+        .theme-menu-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+        }
+
+        .theme-menu-item:hover {
+            background: #f1f5f9;
+        }
+
+        .theme-menu-item.active {
+            background: #eff6ff;
+            color: #2563eb;
+            font-weight: 600;
+        }
+
+        .theme-icon {
+            font-size: 1.2rem;
+        }
+
+        .theme-divider {
+            height: 1px;
+            background: #e2e8f0;
+            margin: 4px 0;
         }
 
         .header h1 {
@@ -40,27 +164,29 @@
         }
 
         .header p {
-            opacity: 0.9;
+            opacity: 0.95;
             font-size: 1.1rem;
         }
 
         .filters {
             padding: 20px 30px;
-            background: #f8f9fa;
-            border-bottom: 2px solid #e9ecef;
+            background: var(--card-bg);
+            border-bottom: 2px solid var(--border-color);
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
+            box-shadow: var(--shadow-sm);
         }
 
         .filter-group {
             display: flex;
             flex-direction: column;
+            justify-content: flex-end;
         }
 
         .filter-group label {
             font-weight: 600;
-            color: #495057;
+            color: var(--text-primary);
             margin-bottom: 5px;
             font-size: 0.9rem;
         }
@@ -68,16 +194,20 @@
         .filter-group input,
         .filter-group select {
             padding: 10px 15px;
-            border: 2px solid #dee2e6;
+            border: 2px solid var(--border-color);
             border-radius: 6px;
             font-size: 1rem;
-            transition: border-color 0.3s;
+            transition: all 0.3s;
+            background: white;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .filter-group input:focus,
         .filter-group select:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         .btn {
@@ -91,23 +221,36 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--primary-gradient);
             color: white;
+            box-shadow: var(--shadow-md);
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: var(--shadow-lg);
         }
 
         .btn-success {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            background: var(--success-gradient);
             color: white;
+            box-shadow: var(--shadow-md);
         }
 
         .btn-success:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(17, 153, 142, 0.4);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-secondary {
+            background: var(--secondary-gradient);
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
         }
 
         .content {
@@ -117,50 +260,58 @@
         .loading {
             text-align: center;
             padding: 50px;
-            color: #667eea;
+            color: var(--text-secondary);
             font-size: 1.2rem;
+            font-weight: 600;
+            background: #f1f5f9;
+            border-radius: 8px;
+            margin: 20px 0;
         }
 
         .error {
-            background: #fee;
-            color: #c33;
+            background: #fee2e2;
+            color: #991b1b;
             padding: 20px;
             border-radius: 8px;
-            border-left: 4px solid #c33;
+            border-left: 4px solid #ef4444;
             margin: 20px 0;
+            box-shadow: var(--shadow-md);
         }
 
         .success-message {
-            background: #efe;
-            color: #3c3;
+            background: #dcfce7;
+            color: #166534;
             padding: 20px;
             border-radius: 8px;
-            border-left: 4px solid #3c3;
+            border-left: 4px solid #22c55e;
             margin: 20px 0;
             display: none;
+            box-shadow: var(--shadow-md);
         }
 
-        /* Grouped Reviews */
         .pr-group {
             margin-bottom: 30px;
-            border: 2px solid #e9ecef;
+            border: 2px solid var(--border-color);
             border-radius: 8px;
             overflow: hidden;
+            box-shadow: var(--shadow-md);
         }
 
         .pr-group-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background: var(--card-bg);
+            color: var(--text-primary);
             padding: 15px 20px;
             cursor: pointer;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: background 0.3s;
+            transition: all 0.3s;
+            border-bottom: 2px solid var(--border-color);
         }
 
         .pr-group-header:hover {
-            background: linear-gradient(135deg, #5568d3 0%, #6a4190 100%);
+            background: #f8fafc;
+            transform: translateX(5px);
         }
 
         .pr-group-info {
@@ -171,11 +322,14 @@
         }
 
         .pr-badge {
-            background: rgba(255, 255, 255, 0.2);
+            background: #f1f5f9;
             padding: 5px 12px;
             border-radius: 20px;
             font-size: 0.9rem;
             font-weight: 600;
+            color: var(--text-primary);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
         }
 
         .pr-toggle {
@@ -190,27 +344,27 @@
         .pr-group-body {
             display: none;
             padding: 20px;
-            background: #f8f9fa;
+            background: #f8fafc;
         }
 
         .pr-group.expanded .pr-group-body {
             display: block;
         }
 
-        /* Review Cards */
         .review-card {
-            background: white;
+            background: var(--card-bg);
             border-radius: 8px;
             padding: 20px;
             margin-bottom: 15px;
-            border-left: 4px solid #667eea;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s, box-shadow 0.3s;
+            border-left: 4px solid #2563eb;
+            box-shadow: var(--shadow-md);
+            transition: all 0.3s;
         }
 
         .review-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+            border-left-color: #1e40af;
         }
 
         .review-header {
@@ -237,23 +391,23 @@
         }
 
         .badge-reviewer {
-            background: #e3f2fd;
-            color: #1976d2;
+            background: #dbeafe;
+            color: #1e40af;
         }
 
         .badge-file {
-            background: #fff3e0;
-            color: #f57c00;
+            background: #fef3c7;
+            color: #92400e;
         }
 
         .badge-pr-level {
-            background: #f3e5f5;
-            color: #7b1fa2;
+            background: #ede9fe;
+            color: #6b21a8;
         }
 
         .badge-status {
-            background: #e8f5e9;
-            color: #388e3c;
+            background: #dcfce7;
+            color: #166534;
         }
 
         .review-author {
@@ -266,13 +420,14 @@
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--primary-gradient);
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
             font-weight: 700;
             font-size: 1.1rem;
+            box-shadow: var(--shadow-md);
         }
 
         .review-body {
@@ -281,107 +436,126 @@
 
         .review-title {
             font-weight: 700;
-            color: #212529;
+            color: var(--text-primary);
             margin-bottom: 8px;
             font-size: 1.1rem;
         }
 
         .review-text {
-            color: #495057;
-            line-height: 1.6;
+            color: var(--text-secondary);
+            line-height: 1.7;
         }
 
-        /* Scores Section */
         .scores-section {
-            background: #f8f9fa;
+            background: #f8fafc;
             padding: 15px;
-            border-radius: 6px;
+            border-radius: 8px;
             margin-top: 15px;
+            border: 1px solid var(--border-color);
         }
 
         .scores-section h4 {
-            color: #212529;
+            color: var(--text-primary);
             margin-bottom: 10px;
             font-size: 1rem;
+            font-weight: 700;
         }
 
         .score-item {
             display: flex;
             align-items: center;
             gap: 10px;
-            padding: 10px;
+            padding: 12px;
             background: white;
-            border-radius: 6px;
+            border-radius: 8px;
             margin-bottom: 8px;
-            border-left: 3px solid #667eea;
+            border-left: 3px solid #2563eb;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s;
+        }
+
+        .score-item:hover {
+            transform: translateX(5px);
+            box-shadow: var(--shadow-md);
         }
 
         .score-value {
-            width: 40px;
-            height: 40px;
+            width: 45px;
+            height: 45px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 700;
-            font-size: 1.1rem;
+            font-weight: 800;
+            font-size: 1.2rem;
             color: white;
             flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
-        .score-excellent { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
-        .score-good { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .score-average { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-        .score-poor { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); }
+        .score-excellent { background: #22c55e; }
+        .score-good { background: #3b82f6; }
+        .score-average { background: #f59e0b; }
+        .score-poor { background: #ef4444; }
 
         .score-details {
             flex-grow: 1;
         }
 
         .score-reviewer {
-            font-weight: 600;
-            color: #212529;
+            font-weight: 700;
+            color: var(--text-primary);
             margin-bottom: 3px;
         }
 
         .score-description {
             font-size: 0.9rem;
-            color: #6c757d;
+            color: var(--text-secondary);
+            font-style: italic;
         }
 
         .score-type {
             font-size: 0.8rem;
-            color: #999;
+            color: #94a3b8;
             font-style: italic;
+        }
+
+        .score-updated {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
 
         .score-comments {
             margin-top: 8px;
-            padding: 8px;
-            background: #f8f9fa;
-            border-radius: 4px;
-            border-left: 3px solid #667eea;
+            padding: 10px;
+            background: #f1f5f9;
+            border-radius: 6px;
+            border-left: 3px solid #3b82f6;
         }
 
         .score-comments strong {
-            color: #212529;
+            color: var(--text-primary);
             font-size: 0.85rem;
         }
 
         .score-comments p {
-            color: #495057;
-            line-height: 1.5;
+            color: var(--text-secondary);
+            line-height: 1.6;
             font-size: 0.9rem;
             margin: 4px 0 0 0;
         }
 
-        /* Scoring Form */
         .scoring-form-container {
-            background: white;
-            padding: 15px;
-            border-radius: 6px;
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
             margin-top: 15px;
-            border: 2px dashed #667eea;
+            border: 2px dashed #cbd5e1;
+            box-shadow: var(--shadow-sm);
         }
 
         .scoring-form {
@@ -393,22 +567,23 @@
 
         .scoring-form label {
             font-weight: 600;
-            color: #495057;
+            color: var(--text-primary);
             font-size: 0.9rem;
         }
 
         .scoring-form input[type="number"] {
             width: 100%;
             padding: 10px 12px;
-            border: 2px solid #dee2e6;
+            border: 2px solid var(--border-color);
             border-radius: 6px;
             font-size: 1rem;
-            transition: border-color 0.3s;
+            transition: all 0.3s;
         }
 
         .scoring-form input[type="number"]:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         /* Score Range Guide */
@@ -418,9 +593,9 @@
             gap: 8px;
             margin-top: 15px;
             padding: 12px;
-            background: linear-gradient(to bottom, #f8f9fa, #ffffff);
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
+            background: #f8fafc;
+            border-radius: 10px;
+            border: 2px solid var(--border-color);
         }
 
         .range-item {
@@ -428,118 +603,98 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 8px;
-            border-radius: 6px;
+            padding: 10px;
+            border-radius: 8px;
             transition: all 0.3s ease;
+            box-shadow: var(--shadow-sm);
         }
 
         .range-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
         }
 
         .range-value {
-            font-size: 1.1rem;
-            font-weight: bold;
+            font-size: 1.2rem;
+            font-weight: 800;
             margin-bottom: 4px;
         }
 
         .range-label {
             font-size: 0.75rem;
-            font-weight: 600;
+            font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
-        .range-poor {
-            background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
-            color: #d63031;
-        }
-
-        .range-average {
-            background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
-            color: #ffffff;
-        }
-
-        .range-good {
-            background: linear-gradient(135deg, #55efc4 0%, #00b894 100%);
-            color: #ffffff;
-        }
-
-        .range-excellent {
-            background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);
-            color: #ffffff;
-        }
+        .range-poor { background: #ef4444; color: white; }
+        .range-average { background: #f59e0b; color: white; }
+        .range-good { background: #3b82f6; color: white; }
+        .range-excellent { background: #22c55e; color: white; }
 
         .scoring-form textarea {
             width: 100%;
             padding: 10px 12px;
-            border: 2px solid #dee2e6;
+            border: 2px solid var(--border-color);
             border-radius: 6px;
             font-size: 0.9rem;
             resize: vertical;
             min-height: 80px;
             grid-column: 2;
-            transition: border-color 0.3s;
+            transition: all 0.3s;
         }
 
         .scoring-form textarea:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
         .form-actions {
             grid-column: 2;
             display: flex;
             gap: 10px;
-            margin-top: 10px;
-        }
-
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #5a6268;
-        }
-
-        /* AI Suggestions */
-        .ai-suggestions {
-            background: #e3f2fd;
-            padding: 15px;
-            border-radius: 6px;
             margin-top: 15px;
-            border-left: 4px solid #2196f3;
+        }
+
+        .ai-suggestions {
+            background: #f1f5f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border-left: 4px solid #3b82f6;
+            box-shadow: var(--shadow-sm);
         }
 
         .ai-suggestions h4 {
-            color: #1976d2;
+            color: var(--text-primary);
             margin-bottom: 10px;
             font-size: 1rem;
             display: flex;
             align-items: center;
             gap: 8px;
+            font-weight: 700;
         }
 
         .ai-suggestion-item {
             background: white;
             padding: 15px;
-            border-radius: 6px;
+            border-radius: 8px;
             margin-bottom: 12px;
-            border: 1px solid #bbdefb;
+            border: 1px solid var(--border-color);
             transition: all 0.3s;
+            box-shadow: var(--shadow-sm);
         }
 
         .ai-suggestion-item:hover {
-            box-shadow: 0 3px 10px rgba(33, 150, 243, 0.15);
-            transform: translateX(2px);
+            box-shadow: var(--shadow-md);
+            transform: translateX(3px);
         }
 
         .ai-suggestion-text {
-            color: #495057;
+            color: var(--text-secondary);
             margin-bottom: 12px;
-            line-height: 1.6;
+            line-height: 1.7;
             font-size: 0.95rem;
         }
 
@@ -552,77 +707,93 @@
 
         .quick-score-btn {
             padding: 6px 16px;
-            border: 2px solid transparent;
+            border: 2px solid var(--border-color);
             border-radius: 20px;
             font-size: 0.85rem;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.3s;
-            background: #f0f0f0;
-            color: #666;
+            background: white;
+            color: var(--text-secondary);
+            box-shadow: var(--shadow-sm);
         }
 
         .quick-score-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+            box-shadow: var(--shadow-md);
         }
 
-        .quick-score-btn.score-10 { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; }
-        .quick-score-btn.score-9 { background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%); color: white; }
-        .quick-score-btn.score-8 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-        .quick-score-btn.score-7 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; }
-        .quick-score-btn.score-6 { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; }
-        .quick-score-btn.score-5 { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: white; }
+        .quick-score-btn.score-10 { background: #22c55e; color: white; border-color: #22c55e; }
+        .quick-score-btn.score-9 { background: #16a34a; color: white; border-color: #16a34a; }
+        .quick-score-btn.score-8 { background: #3b82f6; color: white; border-color: #3b82f6; }
+        .quick-score-btn.score-7 { background: #60a5fa; color: white; border-color: #60a5fa; }
+        .quick-score-btn.score-6 { background: #f59e0b; color: white; border-color: #f59e0b; }
+        .quick-score-btn.score-5 { background: #ef4444; color: white; border-color: #ef4444; }
 
         .quick-score-btn.selected {
-            transform: scale(1.1);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transform: scale(1.15);
+            box-shadow: var(--shadow-lg);
+            border-color: #1e293b;
         }
 
-        /* Manual Scoring Section */
         .manual-scoring-section {
             margin-top: 15px;
             padding: 15px;
-            background: #fff3cd;
-            border-radius: 6px;
-            border-left: 4px solid #ffc107;
+            background: #fef3c7;
+            border-radius: 8px;
+            border-left: 4px solid #f59e0b;
+            box-shadow: var(--shadow-sm);
         }
 
         .manual-scoring-section p {
-            color: #856404;
-            margin-bottom: 10px;
+            color: #92400e;
+            font-weight: 500;
         }
 
         .btn-small {
             padding: 8px 16px;
             font-size: 0.9rem;
+            border-radius: 20px;
+            transition: all 0.3s;
+        }
+
+        .btn-small:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
         }
 
         /* Code Diff Viewer */
         .code-diff-section {
             margin-top: 15px;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
             overflow: hidden;
+            box-shadow: var(--shadow-sm);
         }
 
         .code-diff-header {
-            background: #f6f8fa;
+            background: #f8fafc;
             padding: 12px 16px;
-            border-bottom: 1px solid #dee2e6;
+            border-bottom: 2px solid var(--border-color);
             display: flex;
             justify-content: space-between;
             align-items: center;
             cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .code-diff-header:hover {
+            background: #f1f5f9;
         }
 
         .code-diff-header h4 {
-            color: #24292e;
+            color: var(--text-primary);
             font-size: 0.95rem;
             margin: 0;
             display: flex;
             align-items: center;
             gap: 8px;
+            font-weight: 700;
         }
 
         .code-diff-toggle {
@@ -637,11 +808,217 @@
         .code-diff-content {
             padding: 0;
             overflow-x: auto;
-            background: #fafbfc;
+            background: #fafafa;
         }
 
         .code-diff-section.collapsed .code-diff-content {
             display: none;
+        }
+
+        /* Dual Column Layout for Code Diff and AI Review */
+        .review-analysis-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .analysis-column {
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            background: white;
+        }
+
+        .analysis-column-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 16px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .analysis-column-body {
+            padding: 15px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        /* AI Review Results Styling */
+        .ai-review-summary {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .ai-summary-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .ai-stat-card {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+            border: 2px solid var(--border-color);
+        }
+
+        .ai-stat-value {
+            font-size: 1.5rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .ai-stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .ai-stat-critical { color: #ef4444; }
+        .ai-stat-total { color: #f59e0b; }
+        .ai-stat-files { color: #3b82f6; }
+
+        .ai-overall-assessment {
+            background: #eff6ff;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 4px solid #2563eb;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: var(--text-primary);
+        }
+
+        .ai-issues-list {
+            margin-top: 15px;
+        }
+
+        .ai-issue-item {
+            background: white;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+
+        .ai-issue-item:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateX(3px);
+        }
+
+        /* Severity-based border colors */
+        .ai-issue-item.severity-critical {
+            border-left: 4px solid #ef4444;
+        }
+
+        .ai-issue-item.severity-high {
+            border-left: 4px solid #f97316;
+        }
+
+        .ai-issue-item.severity-medium {
+            border-left: 4px solid #eab308;
+        }
+
+        .ai-issue-item.severity-low {
+            border-left: 4px solid #3b82f6;
+        }
+
+        .ai-issue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .ai-issue-file {
+            font-weight: 700;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .ai-issue-line {
+            background: #f1f5f9;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .ai-issue-type {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        /* Severity badges */
+        .severity-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-left: 8px;
+        }
+
+        .severity-critical-badge { background: #fee2e2; color: #991b1b; }
+        .severity-high-badge { background: #ffedd5; color: #9a3412; }
+        .severity-medium-badge { background: #fef9c3; color: #854d0e; }
+        .severity-low-badge { background: #dbeafe; color: #1e40af; }
+
+        .issue-type-critical { background: #fee2e2; color: #991b1b; }
+        .issue-type-performance { background: #fef3c7; color: #92400e; }
+        .issue-type-style { background: #dbeafe; color: #1e40af; }
+        .issue-type-security { background: #fce7f3; color: #9d174d; }
+        .issue-type-bug { background: #fee2e2; color: #991b1b; }
+
+        .ai-issue-description {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+
+        .ai-issue-suggestion {
+            background: #f0fdf4;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 3px solid #22c55e;
+            font-size: 0.85rem;
+            color: #166534;
+            margin-bottom: 8px;
+        }
+
+        .ai-issue-code {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
         }
 
         .diff-viewer {
@@ -653,7 +1030,12 @@
 
         .diff-line {
             padding: 4px 16px;
-            border-bottom: 1px solid #ebebeb;
+            border-bottom: 1px solid var(--border-color);
+            transition: all 0.2s;
+        }
+
+        .diff-line:hover {
+            background-color: rgba(37, 99, 235, 0.05);
         }
 
         .diff-line:last-child {
@@ -661,24 +1043,24 @@
         }
 
         .diff-line-add {
-            background-color: #e6ffed;
-            color: #24292e;
+            background-color: #dcfce7;
+            color: #166534;
         }
 
         .diff-line-del {
-            background-color: #ffeef0;
-            color: #cb2431;
+            background-color: #fee2e2;
+            color: #991b1b;
         }
 
         .diff-line-context {
-            background-color: #fafbfc;
-            color: #24292e;
+            background-color: #fafafa;
+            color: var(--text-secondary);
         }
 
         .diff-line-number {
             display: inline-block;
             width: 60px;
-            color: #959da5;
+            color: #94a3b8;
             user-select: none;
             text-align: right;
             margin-right: 16px;
@@ -696,12 +1078,10 @@
             height: 8px;
             border-radius: 4px;
             background: linear-gradient(to right, 
-                #eb3349 0%, 
-                #fa709a 20%, 
-                #f093fb 40%, 
-                #667eea 60%, 
-                #56ab2f 80%, 
-                #11998e 100%
+                #ef4444 0%, 
+                #f59e0b 20%, 
+                #3b82f6 60%, 
+                #22c55e 100%
             );
             outline: none;
         }
@@ -713,9 +1093,9 @@
             height: 24px;
             border-radius: 50%;
             background: white;
-            border: 3px solid #667eea;
+            border: 3px solid #2563eb;
             cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            box-shadow: var(--shadow-md);
         }
 
         .score-slider-input::-moz-range-thumb {
@@ -723,9 +1103,9 @@
             height: 24px;
             border-radius: 50%;
             background: white;
-            border: 3px solid #667eea;
+            border: 3px solid #2563eb;
             cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            box-shadow: var(--shadow-md);
             border-image: none; /* Prevent double border in Firefox */
         }
         
@@ -738,7 +1118,7 @@
             text-align: center;
             font-size: 2rem;
             font-weight: 700;
-            color: #667eea;
+            color: var(--text-primary);
             margin: 10px 0;
         }
 
@@ -747,15 +1127,14 @@
             font-size: 0.85rem;
         }
 
-        /* File Tree Navigation */
         .file-tree {
-            background: #f8f9fa;
+            background: #f8fafc;
             padding: 20px;
-            border-bottom: 2px solid #e9ecef;
+            border-bottom: 2px solid var(--border-color);
         }
 
         .file-tree h3 {
-            color: #212529;
+            color: var(--text-primary);
             margin-bottom: 15px;
             font-size: 1.1rem;
         }
@@ -768,7 +1147,7 @@
 
         .file-chip {
             background: white;
-            border: 2px solid #dee2e6;
+            border: 2px solid var(--border-color);
             border-radius: 20px;
             padding: 8px 16px;
             cursor: pointer;
@@ -777,17 +1156,21 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            box-shadow: var(--shadow-sm);
         }
 
         .file-chip:hover {
-            border-color: #667eea;
-            background: #f0f0ff;
+            border-color: #2563eb;
+            background: #eff6ff;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
         }
 
         .file-chip.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--primary-gradient);
             color: white;
-            border-color: #667eea;
+            border-color: #2563eb;
+            box-shadow: var(--shadow-md);
         }
 
         .file-icon {
@@ -799,7 +1182,27 @@
                 font-size: 1.8rem;
             }
 
+            .theme-switcher {
+                position: static;
+                margin-top: 15px;
+                text-align: center;
+            }
+
+            .theme-menu {
+                right: auto;
+                left: 50%;
+                transform: translateX(-50%);
+            }
+
             .filters {
+                grid-template-columns: 1fr;
+            }
+
+            .review-analysis-container {
+                grid-template-columns: 1fr;
+            }
+
+            .ai-summary-stats {
                 grid-template-columns: 1fr;
             }
 
@@ -838,8 +1241,32 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📝 Pull Request Review System - Enhanced</h1>
-            <p>View and score all reviews with AI suggestions</p>
+            <h1>📝 Pull Request Review System</h1>
+            <p>View and score all reviews with AI suggestion</p>
+            
+            <div class="theme-switcher">
+                <div class="theme-dropdown">
+                    <button class="theme-btn" onclick="toggleThemeMenu()" title="Change Theme">
+                        🎨
+                    </button>
+                    <div class="theme-menu" id="themeMenu">
+                        <button class="theme-menu-item active" onclick="setTheme('default')">
+                            <span class="theme-icon">💼</span>
+                            <span>Default (Professional Blue)</span>
+                        </button>
+                        <div class="theme-divider"></div>
+                        <button class="theme-menu-item" onclick="setTheme('warm')">
+                            <span class="theme-icon">🔥</span>
+                            <span>Warm (Energetic)</span>
+                        </button>
+                        <div class="theme-divider"></div>
+                        <button class="theme-menu-item" onclick="setTheme('cool')">
+                            <span class="theme-icon">❄️</span>
+                            <span>Cool (Tech Cyan)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="filters">
@@ -847,6 +1274,15 @@
                 <label for="currentReviewer">👤 Current Reviewer (Required):</label>
                 <input type="text" id="currentReviewer" placeholder="Your username" list="reviewerList">
                 <datalist id="reviewerList"></datalist>
+            </div>
+            <div class="filter-group">
+                <label for="pullRequestUser">🔧 Pull Request User:</label>
+                <input type="text" id="pullRequestUser" placeholder="Enter PR user to filter" list="prUserList">
+                <datalist id="prUserList"></datalist>
+            </div>
+            <div class="filter-group">
+                <label for="commitId">🔖 Pull Request Commit ID:</label>
+                <input type="text" id="commitId" placeholder="Full or short commit ID">
             </div>
             <div class="filter-group">
                 <label for="projectKey">Project Key:</label>
@@ -860,8 +1296,8 @@
                 <label for="pullRequestId">Pull Request ID:</label>
                 <input type="text" id="pullRequestId" placeholder="Leave empty for all PRs">
             </div>
-            <div class="filter-group" style="justify-content: flex-end;">
-                <button class="btn btn-primary" onclick="loadAllReviews()">Load All Reviews</button>
+            <div class="filter-group">
+                <button class="btn btn-primary" onclick="loadAllReviews()" style="width: 100%;">Load All Reviews</button>
             </div>
         </div>
 
@@ -872,22 +1308,187 @@
 
         <div class="content">
             <div id="successMessage" class="success-message"></div>
-            <div id="loading" class="loading">Loading all reviews...</div>
+            <div id="loading" class="loading" style="display: none;">Loading all reviews...</div>
             <div id="error" class="error" style="display: none;"></div>
-            <div id="reviewsContainer"></div>
+            <div id="reviewsContainer">
+                <div class="loading" style="background: transparent; color: #94a3b8; font-size: 1rem;">
+                    👆 Please select a reviewer to load reviews
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
         const API_BASE_URL = 'http://localhost:8000/api/v1';
-        let currentReviewer = localStorage.getItem('currentReviewer') || '';
+        let currentReviewer = ''; // Start with empty reviewer
         let allReviews = []; // Store loaded reviews for reference
 
-        // Initialize current reviewer from localStorage
-        if (currentReviewer) {
-            document.addEventListener('DOMContentLoaded', () => {
-                document.getElementById('currentReviewer').value = currentReviewer;
+        // Theme management
+        function setTheme(themeName) {
+            if (themeName === 'default') {
+                document.documentElement.removeAttribute('data-theme');
+            } else {
+                document.documentElement.setAttribute('data-theme', themeName);
+            }
+            localStorage.setItem('selectedTheme', themeName);
+            
+            // Update active state in menu
+            updateThemeMenuActiveState(themeName);
+            
+            // Close menu after selection
+            closeThemeMenu();
+        }
+
+        function updateThemeMenuActiveState(themeName) {
+            const items = document.querySelectorAll('.theme-menu-item');
+            items.forEach(item => {
+                item.classList.remove('active');
+                const onclick = item.getAttribute('onclick');
+                if (onclick && onclick.includes(themeName)) {
+                    item.classList.add('active');
+                }
             });
+        }
+
+        function toggleThemeMenu() {
+            const menu = document.getElementById('themeMenu');
+            menu.classList.toggle('show');
+        }
+
+        function closeThemeMenu() {
+            const menu = document.getElementById('themeMenu');
+            menu.classList.remove('show');
+        }
+
+        // Close menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const themeSwitcher = document.querySelector('.theme-switcher');
+            if (themeSwitcher && !themeSwitcher.contains(event.target)) {
+                closeThemeMenu();
+            }
+        });
+
+        // Load saved theme on page load
+        const savedTheme = localStorage.getItem('selectedTheme');
+        if (savedTheme) {
+            setTheme(savedTheme);
+        }
+
+        // Initialize reviewer input as empty (no default value)
+        document.addEventListener('DOMContentLoaded', () => {
+            const reviewerInput = document.getElementById('currentReviewer');
+            reviewerInput.value = ''; // Ensure it's empty on page load
+        });
+
+        // Load users from API for reviewer autocomplete
+        async function loadUsersForAutocomplete() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/users?page=1&page_size=100`);
+                if (!response.ok) {
+                    console.warn('Failed to load users from API');
+                    return;
+                }
+                
+                const data = await response.json();
+                const users = data.items || [];
+                
+                // Populate datalist with usernames and display names
+                const datalist = document.getElementById('reviewerList');
+                datalist.innerHTML = users
+                    .map(user => {
+                        const username = user.username || '';
+                        const displayName = user.display_name || username;
+                        return `<option value="${escapeHtml(username)}">${escapeHtml(displayName)}`;
+                    })
+                    .join('');
+                
+                console.log(`Loaded ${users.length} users for autocomplete`);
+            } catch (error) {
+                console.warn('Error loading users:', error);
+            }
+        }
+
+        // Load users on page load
+        document.addEventListener('DOMContentLoaded', loadUsersForAutocomplete);
+
+        // Auto-load reviews when reviewer is selected
+        let reviewLoadTimeout = null;
+        let prUserLoadTimeout = null;
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const reviewerInput = document.getElementById('currentReviewer');
+            const prUserInput = document.getElementById('pullRequestUser');
+            
+            // Current Reviewer - Listen for input changes with debounce
+            reviewerInput.addEventListener('input', function() {
+                const value = this.value.trim();
+                
+                // Clear previous timeout
+                if (reviewLoadTimeout) {
+                    clearTimeout(reviewLoadTimeout);
+                }
+                
+                if (value) {
+                    // User entered something - auto load after 500ms delay
+                    reviewLoadTimeout = setTimeout(() => {
+                        currentReviewer = value;
+                        localStorage.setItem('currentReviewer', currentReviewer); // Save for convenience
+                        loadAllReviews();
+                    }, 500);
+                } else {
+                    // User cleared the input - clear all data immediately
+                    currentReviewer = '';
+                    clearAllData();
+                }
+            });
+            
+            // Current Reviewer - Also trigger on blur
+            reviewerInput.addEventListener('blur', function() {
+                const value = this.value.trim();
+                if (value && !allReviews.length) {
+                    // If there's a value but no data loaded, load now
+                    currentReviewer = value;
+                    localStorage.setItem('currentReviewer', currentReviewer);
+                    loadAllReviews();
+                }
+            });
+            
+            // Pull Request User - Listen for input changes with debounce
+            prUserInput.addEventListener('input', function() {
+                const value = this.value.trim();
+                
+                // Clear previous timeout
+                if (prUserLoadTimeout) {
+                    clearTimeout(prUserLoadTimeout);
+                }
+                
+                // Only auto-load if current reviewer is already set
+                if (currentReviewer) {
+                    prUserLoadTimeout = setTimeout(() => {
+                        loadAllReviews();
+                    }, 500);
+                }
+            });
+        });
+
+        function clearAllData() {
+            const container = document.getElementById('reviewsContainer');
+            const loadingEl = document.getElementById('loading');
+            const errorEl = document.getElementById('error');
+            const successMsg = document.getElementById('successMessage');
+            
+            // Clear all displays
+            allReviews = [];
+            container.innerHTML = `
+                <div class="loading" style="background: transparent; color: #94a3b8; font-size: 1rem;">
+                    👆 Please select a reviewer to load reviews
+                </div>
+            `;
+            loadingEl.style.display = 'none';
+            errorEl.style.display = 'none';
+            successMsg.style.display = 'none';
+            
+            console.log('Cleared all data');
         }
 
         // Helper function to format dates
@@ -912,8 +1513,7 @@
 
             // Validate current reviewer
             if (!currentReviewerInput.value.trim()) {
-                errorEl.textContent = '⚠️ Please enter your username (Current Reviewer) before loading reviews';
-                errorEl.style.display = 'block';
+                clearAllData();
                 return;
             }
 
@@ -929,12 +1529,16 @@
                 const projectKey = document.getElementById('projectKey').value;
                 const repositorySlug = document.getElementById('repositorySlug').value;
                 const pullRequestId = document.getElementById('pullRequestId').value;
+                const pullRequestUser = document.getElementById('pullRequestUser').value;
+                const commitId = document.getElementById('commitId').value;
 
                 // Build query parameters
                 const params = new URLSearchParams();
                 if (projectKey) params.append('project_key', projectKey);
                 if (repositorySlug) params.append('repository_slug', repositorySlug);
                 if (pullRequestId) params.append('pull_request_id', pullRequestId);
+                if (pullRequestUser) params.append('pull_request_user', pullRequestUser);
+                if (commitId) params.append('pull_request_commit_id', commitId);
 
                 const response = await fetch(`${API_BASE_URL}/reviews?${params}`);
                 
@@ -960,20 +1564,28 @@
 
         function populateReviewerList(reviews) {
             const datalist = document.getElementById('reviewerList');
+            const prUserDatalist = document.getElementById('prUserList');
             const reviewers = new Set();
+            const prUsers = new Set();
             
-            // Collect all unique reviewers from the reviews
+            // Collect all unique reviewers and PR users from the reviews
             reviews.forEach(review => {
                 if (review.reviewer) reviewers.add(review.reviewer);
                 if (review.reviewer_info?.username) reviewers.add(review.reviewer_info.username);
-                if (review.pull_request_user) reviewers.add(review.pull_request_user);
-                if (review.pull_request_user_info?.username) reviewers.add(review.pull_request_user_info.username);
+                if (review.pull_request_user) prUsers.add(review.pull_request_user);
+                if (review.pull_request_user_info?.username) prUsers.add(review.pull_request_user_info.username);
             });
             
             // Add existing reviewers to datalist
             datalist.innerHTML = Array.from(reviewers)
                 .sort()
                 .map(r => `<option value="${escapeHtml(r)}">`)
+                .join('');
+            
+            // Add PR users to datalist
+            prUserDatalist.innerHTML = Array.from(prUsers)
+                .sort()
+                .map(u => `<option value="${escapeHtml(u)}">`)
                 .join('');
         }
 
@@ -1026,13 +1638,20 @@
         function createReviewCard(review) {
             const scores = review.score_summary?.scores || [];
             const hasAiSuggestions = review.ai_suggestions && Object.keys(review.ai_suggestions).length > 0;
-            const hasCodeDiff = review.git_code_diff;
+            
+            // Each review should have git_code_diff from the API
+            const gitCodeDiff = review.git_code_diff;
 
             console.log(`Creating review card for review ${review.id}:`, {
+                reviewer: review.reviewer,
+                source_filename: review.source_filename,
                 reviewer_comments: review.reviewer_comments,
                 scores_count: scores.length,
                 scores: scores.map(s => ({ reviewer: s.reviewer, comments: s.reviewer_comments })),
-                review_level: review.source_filename ? 'FILE-LEVEL' : 'PR-LEVEL'
+                review_level: review.source_filename ? 'FILE-LEVEL' : 'PR-LEVEL',
+                has_git_code_diff: !!gitCodeDiff,
+                git_code_diff_length: gitCodeDiff ? gitCodeDiff.length : 0,
+                git_code_diff_preview: gitCodeDiff ? gitCodeDiff.substring(0, 100) + '...' : null
             });
 
             // Filter scores to match the review level (PR-level or file-level)
@@ -1078,15 +1697,30 @@
                         ${review.reviewer_comments ? `<div class="review-text">${escapeHtml(review.reviewer_comments)}</div>` : ''}
                     </div>
 
-                    ${hasCodeDiff ? `
-                        <div class="code-diff-section" id="diffSection_${review.id}">
-                            <div class="code-diff-header" onclick="toggleDiff(${review.id})">
-                                <h4>📝 Code Changes</h4>
-                                <span class="code-diff-toggle">▼</span>
-                            </div>
-                            <div class="code-diff-content">
-                                <div class="diff-viewer">${renderCodeDiff(review.git_code_diff)}</div>
-                            </div>
+                    <!-- Dual Column Layout: Code Diff + AI Review Results -->
+                    ${(gitCodeDiff || hasAiSuggestions) ? `
+                        <div class="review-analysis-container">
+                            ${gitCodeDiff ? `
+                                <div class="analysis-column">
+                                    <div class="analysis-column-header">
+                                        📝 Code Changes
+                                    </div>
+                                    <div class="analysis-column-body">
+                                        <div class="diff-viewer">${renderCodeDiff(gitCodeDiff)}</div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            
+                            ${hasAiSuggestions ? `
+                                <div class="analysis-column">
+                                    <div class="analysis-column-header">
+                                        🤖 AI Review Results
+                                    </div>
+                                    <div class="analysis-column-body">
+                                        ${renderAIReviewResults(review.ai_suggestions)}
+                                    </div>
+                                </div>
+                            ` : ''}
                         </div>
                     ` : ''}
 
@@ -1104,8 +1738,9 @@
                                     <div class="score-value ${getScoreClass(score.score)}">${score.score}</div>
                                     <div class="score-details">
                                         <div class="score-reviewer">${escapeHtml(score.reviewer_info?.display_name || score.reviewer)}</div>
-                                        <div class="score-description">${escapeHtml(score.score_description || 'No description')}</div>
+                                        <div class="score-description">def: ${escapeHtml(score.score_description || 'No description')}</div>
                                         <div class="score-type">${score.source_filename ? '📄 File: ' + escapeHtml(score.source_filename) : '📋 PR-Level'}</div>
+                                        ${score.updated_date ? `<div class="score-updated" style="font-size: 0.75rem; color: #94a3b8; margin-top: 4px;">🕒 Updated: ${formatDate(score.updated_date)}</div>` : ''}
                                         ${score.reviewer_comments ? `
                                             <div class="score-comments" style="margin-top: 8px; padding: 8px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #667eea;">
                                                 <strong>💬 Comments:</strong>
@@ -1187,10 +1822,27 @@
         function renderCodeDiff(diff) {
             if (!diff) return '';
             
-            const lines = diff.split('\n');
+            // Normalize line endings and ensure proper formatting
+            let normalizedDiff = diff;
+            
+            // If the diff doesn't contain newlines but has multiple sections,
+            // try to add newlines before common diff markers
+            if (!diff.includes('\n') && !diff.includes('\r')) {
+                // Add newlines before common diff patterns
+                normalizedDiff = diff
+                    .replace(/(@@)/g, '\n$1')
+                    .replace(/(\+[^+])/g, '\n$1')
+                    .replace(/(-[^-])/g, '\n$1')
+                    .replace(/(diff --git)/g, '\n$1')
+                    .trim();
+            }
+            
+            const lines = normalizedDiff.split('\n');
             let renderedLines = [];
             
             for (const line of lines) {
+                if (!line.trim()) continue; // Skip empty lines
+                
                 let lineClass = 'diff-line-context';
                 let prefix = ' ';
                 let lineContent = escapeHtml(line);
@@ -1214,6 +1866,94 @@
             }
             
             return renderedLines.join('');
+        }
+
+        function renderAIReviewResults(aiSuggestions) {
+            if (!aiSuggestions || Object.keys(aiSuggestions).length === 0) return '';
+            
+            const reviewedFiles = aiSuggestions.Reviewed_files || 0;
+            const criticalIssues = aiSuggestions.Critical_issues || 0;
+            const totalIssues = aiSuggestions.Total_issues || 0;
+            const issues = aiSuggestions.issues || [];
+            const overallAssessment = aiSuggestions.overall_assessment || '';
+            
+            // Render summary stats
+            const statsHtml = `
+                <div class="ai-summary-stats">
+                    <div class="ai-stat-card">
+                        <div class="ai-stat-value ai-stat-files">${reviewedFiles}</div>
+                        <div class="ai-stat-label">Files Reviewed</div>
+                    </div>
+                    <div class="ai-stat-card">
+                        <div class="ai-stat-value ai-stat-critical">${criticalIssues}</div>
+                        <div class="ai-stat-label">Critical Issues</div>
+                    </div>
+                    <div class="ai-stat-card">
+                        <div class="ai-stat-value ai-stat-total">${totalIssues}</div>
+                        <div class="ai-stat-label">Total Issues</div>
+                    </div>
+                </div>
+            `;
+            
+            // Render issues list
+            const issuesHtml = issues.length > 0 ? `
+                <div class="ai-issues-list">
+                    <h4 style="color: var(--text-primary); margin-bottom: 12px; font-size: 1rem;">🔍 Detailed Issues (${issues.length})</h4>
+                    ${issues.map((issue, index) => {
+                        const issueTypeClass = `issue-type-${issue.issue_type || 'style'}`;
+                        const severity = issue.severity || 'low';
+                        const severityClass = `severity-${severity}`;
+                        const severityBadgeClass = `severity-${severity}-badge`;
+                        
+                        return `
+                            <div class="ai-issue-item ${severityClass}">
+                                <div class="ai-issue-header">
+                                    <span class="ai-issue-file">📄 ${escapeHtml(issue.file_name || 'Unknown file')}</span>
+                                    <span class="ai-issue-line">Line ${issue.line_number || 'N/A'}</span>
+                                </div>
+                                <div style="margin-bottom: 8px;">
+                                    <span class="ai-issue-type ${issueTypeClass}">${escapeHtml(issue.issue_type || 'general')}</span>
+                                    <span class="severity-badge ${severityBadgeClass}">${severity.toUpperCase()}</span>
+                                </div>
+                                ${issue.description ? `
+                                    <div style="margin-bottom: 10px;">
+                                        <strong style="color: var(--text-primary); font-size: 0.85rem; display: block; margin-bottom: 4px;">📝 Description:</strong>
+                                        <div class="ai-issue-description">${escapeHtml(issue.description)}</div>
+                                    </div>
+                                ` : ''}
+                                ${issue.suggestion ? `
+                                    <div class="ai-issue-suggestion">
+                                        <strong style="display: block; margin-bottom: 4px;">💡 Suggestion:</strong>
+                                        ${escapeHtml(issue.suggestion)}
+                                    </div>
+                                ` : ''}
+                                ${issue.code_snippet ? `
+                                    <div style="margin-top: 8px;">
+                                        <strong style="color: var(--text-primary); font-size: 0.85rem; display: block; margin-bottom: 4px;">💻 Code Snippet:</strong>
+                                        <div class="ai-issue-code">${escapeHtml(issue.code_snippet)}</div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            ` : '<p style="color: #6c757d; text-align: center; padding: 20px;">✅ No issues found! Great code!</p>';
+            
+            // Render overall assessment at the bottom
+            const assessmentHtml = overallAssessment ? `
+                <div class="ai-overall-assessment" style="margin-top: 20px;">
+                    <strong style="font-size: 1rem;">📊 Overall Assessment:</strong>
+                    <p style="margin: 8px 0 0 0; line-height: 1.6;">${escapeHtml(overallAssessment)}</p>
+                </div>
+            ` : '';
+            
+            return `
+                <div class="ai-review-summary">
+                    ${statsHtml}
+                    ${issuesHtml}
+                    ${assessmentHtml}
+                </div>
+            `;
         }
 
         function updateScoreDisplay(reviewId) {

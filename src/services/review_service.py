@@ -487,6 +487,11 @@ class ReviewService:
             conditions.append(PullRequestReview.target_branch == filters.target_branch)
         if filters.pull_request_status:
             conditions.append(PullRequestReview.pull_request_status == filters.pull_request_status)
+        if filters.pull_request_commit_id:
+            # Support prefix matching for short commit IDs
+            conditions.append(
+                PullRequestReview.pull_request_commit_id.like(f"{filters.pull_request_commit_id}%")
+            )
         if filters.score_min is not None:
             conditions.append(PullRequestReview.score >= filters.score_min)
         if filters.score_max is not None:

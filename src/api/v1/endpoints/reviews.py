@@ -135,6 +135,9 @@ async def list_reviews(
     pull_request_status: str | None = Query(
         None, description="Filter by pull request status (open, merged, closed, draft)"
     ),
+    pull_request_commit_id: str | None = Query(
+        None, description="Filter by commit ID (supports prefix matching for short commit IDs)"
+    ),
     date_from: datetime | None = Query(None, description="Filter reviews created after this date"),
     date_to: datetime | None = Query(None, description="Filter reviews created before this date"),
     app_names: str | None = Query(
@@ -159,6 +162,7 @@ async def list_reviews(
         source_branch: Filter by source branch
         target_branch: Filter by target branch
         pull_request_status: Filter by pull request status
+        pull_request_commit_id: Filter by commit ID (supports prefix matching)
         date_from: Filter reviews created after this date
         date_to: Filter reviews created before this date
         app_names: Filter by application names (comma-separated for multiple apps)
@@ -180,6 +184,7 @@ async def list_reviews(
             source_branch=source_branch,
             target_branch=target_branch,
             pull_request_status=pull_request_status,
+            pull_request_commit_id=pull_request_commit_id,
             date_from=date_from,
             date_to=date_to,
         )
