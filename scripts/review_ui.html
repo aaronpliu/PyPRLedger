@@ -579,6 +579,25 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
+        /* Manual Scoring Section */
+        .manual-scoring-section {
+            margin-top: 15px;
+            padding: 15px;
+            background: #fff3cd;
+            border-radius: 6px;
+            border-left: 4px solid #ffc107;
+        }
+
+        .manual-scoring-section p {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+        }
+
         /* Code Diff Viewer */
         .code-diff-section {
             margin-top: 15px;
@@ -1012,7 +1031,31 @@
             console.log(`Creating review card for review ${review.id}:`, {
                 reviewer_comments: review.reviewer_comments,
                 scores_count: scores.length,
-                scores: scores.map(s => ({ reviewer: s.reviewer, comments: s.reviewer_comments }))
+                scores: scores.map(s => ({ reviewer: s.reviewer, comments: s.reviewer_comments })),
+                review_level: review.source_filename ? 'FILE-LEVEL' : 'PR-LEVEL'
+            });
+
+            // Filter scores to match the review level (PR-level or file-level)
+            const filteredScores = scores.filter(score => {
+                // For PR-level review, show only PR-level scores (source_filename is null)
+                // For file-level review, show only scores for the same file
+                if (!review.source_filename) {
+                    // This is a PR-level review, show only PR-level scores
+                    return score.source_filename === null;
+                } else {
+                    // This is a file-level review, show only scores for the same file
+                    return score.source_filename === review.source_filename;
+                }
+            });
+
+            console.log(`Filtered scores for review ${review.id}:`, {
+                original_count: scores.length,
+                filtered_count: filteredScores.length,
+                review_source_filename: review.source_filename || 'null (PR-level)',
+                filtered_scores: filteredScores.map(s => ({ 
+                    reviewer: s.reviewer, 
+                    source_filename: s.source_filename || 'null (PR-level)' 
+                }))
             });
 
             return `
@@ -1047,10 +1090,10 @@
                         </div>
                     ` : ''}
 
-                    ${scores.length > 0 ? `
+                    ${filteredScores.length > 0 ? `
                         <div class="scores-section">
-                            <h4>📊 Scores (${scores.length})</h4>
-                            ${scores.map((score, index) => {
+                            <h4>📊 Scores (${filteredScores.length})</h4>
+                            ${filteredScores.map((score, index) => {
                                 console.log(`Score ${index + 1} for review ${review.id}:`, {
                                     reviewer: score.reviewer,
                                     reviewer_comments: score.reviewer_comments,
@@ -1073,33 +1116,34 @@
                                 </div>
                             `}).join('')}
                         </div>
-                    ` : ''}
-
-                    ${hasAiSuggestions ? `
-                        <div class="ai-suggestions">
-                            <h4>🤖 AI Suggestions</h4>
-                            ${Object.entries(review.ai_suggestions).map(([key, suggestion], index) => `
-                                <div class="ai-suggestion-item">
-                                    <div class="ai-suggestion-text">${escapeHtml(suggestion)}</div>
-                                    <div class="ai-suggestion-actions">
-                                        <span style="font-size: 0.85rem; color: #666; font-weight: 600;">Quick Score:</span>
-                                        <button class="quick-score-btn score-10" onclick="selectQuickScore(${review.id}, '${escapeHtml(key)}', 10, this)">10</button>
-                                        <button class="quick-score-btn score-8" onclick="selectQuickScore(${review.id}, '${escapeHtml(key)}', 8, this)">8</button>
-                                        <button class="quick-score-btn score-6" onclick="selectQuickScore(${review.id}, '${escapeHtml(key)}', 6, this)">6</button>
-                                        <button class="quick-score-btn score-5" onclick="selectQuickScore(${review.id}, '${escapeHtml(key)}', 5, this)">5</button>
-                                        <button class="btn btn-success btn-small" onclick="showScoringFormForSuggestion(${review.id}, '${escapeHtml(key)}')">
-                                            Custom Score
-                                        </button>
-                                    </div>
-                                </div>
-                            `).join('')}
+                    ` : `
+                        <div class="scores-section">
+                            <p style="color: #6c757d; font-style: italic; text-align: center; margin: 20px 0;">
+                                No scores yet for this ${review.source_filename ? 'file' : 'PR level'}. Be the first to score!
+                            </p>
                         </div>
-                    ` : ''}
+                    `}
+
+                    <!-- Manual scoring section - always show -->
+                    <div class="manual-scoring-section">
+                        <p style="color: #856404; margin-bottom: 10px;">
+                            Provide your score for this ${review.source_filename ? 'file' : 'PR level'}
+                        </p>
+                        <button class="btn btn-primary" onclick="showScoringForm(${review.id})">
+                            📝 Provide Score
+                        </button>
+                    </div>
 
                     <div class="scoring-form-container" id="scoringForm_${review.id}" style="display: none;">
                         <div class="scoring-form">
                             <label for="reviewer_${review.id}">👤 Reviewer:</label>
                             <input type="text" id="reviewer_${review.id}" value="${escapeHtml(currentReviewer)}" readonly style="background: #f0f0f0; cursor: not-allowed;">
+                            
+                            <div style="grid-column: 1 / -1; padding: 10px; background: ${review.source_filename ? '#e3f2fd' : '#f3e5f5'}; border-radius: 6px; border-left: 4px solid ${review.source_filename ? '#2196f3' : '#7b1fa2'}; margin: 10px 0;">
+                                <strong style="color: ${review.source_filename ? '#1976d2' : '#6a1b9a'};">
+                                    ${review.source_filename ? '📄 File-Level Scoring: ' + escapeHtml(review.source_filename) : '📋 PR-Level Scoring (Overall PR)'}
+                                </strong>
+                            </div>
                             
                             <label for="score_${review.id}">Score (0-10):</label>
                             <div>
@@ -1281,6 +1325,15 @@
                     throw new Error('Review data not found');
                 }
 
+                // Determine scoring level
+                const scoringLevel = reviewData.source_filename ? 'FILE-LEVEL' : 'PR-LEVEL';
+                console.log(`📊 Submitting ${scoringLevel} score:`, {
+                    review_id: reviewId,
+                    source_filename: reviewData.source_filename || null,
+                    reviewer,
+                    score
+                });
+
                 const requestBody = {
                     pull_request_id: reviewData.pull_request_id,
                     pull_request_commit_id: reviewData.pull_request_commit_id || 'unknown',
@@ -1289,14 +1342,27 @@
                     reviewer: reviewer,
                     score: score,
                     score_description: getScoreDescription(score),
-                    reviewer_comments: comment
+                    reviewer_comments: comment,
+                    // Explicitly set source_filename to null for PR-level scoring
+                    source_filename: reviewData.source_filename || null
                 };
 
                 console.log('Request body:', requestBody);
 
-                // Include source_filename if available (for file-level scoring)
-                if (reviewData.source_filename) {
-                    requestBody.source_filename = reviewData.source_filename;
+                // Show confirmation dialog before submitting
+                const confirmMessage = `📋 Confirm Your Score\n\n` +
+                    `Reviewer: ${reviewer}\n` +
+                    `Level: ${scoringLevel}${reviewData.source_filename ? '\nFile: ' + reviewData.source_filename : ''}\n` +
+                    `Score: ${score.toFixed(1)} (${getScoreDescription(score)})\n` +
+                    `${comment ? '\nComment:\n' + comment : ''}\n\n` +
+                    `Do you want to submit this score?`;
+
+                const confirmed = confirm(confirmMessage);
+                
+                if (!confirmed) {
+                    // User cancelled - hide error message if any
+                    errorEl.style.display = 'none';
+                    return;
                 }
 
                 const response = await fetch(`${API_BASE_URL}/reviews/score`, {
