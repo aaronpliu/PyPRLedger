@@ -1,0 +1,225 @@
+/**
+ * Material Design 3 - Button Components
+ * Includes: Filled, Tonal, Outlined, Text, FAB, Icon Buttons
+ */
+
+/* ============================================
+   Base Button Styles
+   ============================================ */
+.md-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border: none;
+  border-radius: var(--md-shape-full);
+  font: var(--md-label-large-font);
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 40px;
+}
+
+.md-btn:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 2px;
+}
+
+.md-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ============================================
+   Ripple Effect
+   ============================================ */
+.md-btn .ripple {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  animation: ripple-animation 0.6s ease-out;
+  background-color: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+@keyframes ripple-animation {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* ============================================
+   Filled Button (Primary action)
+   ============================================ */
+.md-btn-filled {
+  background-color: var(--md-primary);
+  color: var(--md-on-primary);
+  box-shadow: var(--md-elevation-1);
+}
+
+.md-btn-filled:hover {
+  box-shadow: var(--md-elevation-2);
+  background-color: color-mix(in srgb, var(--md-primary), black 8%);
+}
+
+.md-btn-filled:active {
+  box-shadow: var(--md-elevation-0);
+  background-color: color-mix(in srgb, var(--md-primary), black 12%);
+}
+
+/* ============================================
+   Tonal Button (Secondary action)
+   ============================================ */
+.md-btn-tonal {
+  background-color: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+}
+
+.md-btn-tonal:hover {
+  box-shadow: var(--md-elevation-1);
+  background-color: color-mix(in srgb, var(--md-secondary-container), black 8%);
+}
+
+.md-btn-tonal:active {
+  background-color: color-mix(in srgb, var(--md-secondary-container), black 12%);
+}
+
+/* ============================================
+   Outlined Button (Low emphasis)
+   ============================================ */
+.md-btn-outlined {
+  background-color: transparent;
+  color: var(--md-primary);
+  border: 1px solid var(--md-outline);
+}
+
+.md-btn-outlined:hover {
+  background-color: color-mix(in srgb, var(--md-primary), transparent 92%);
+}
+
+.md-btn-outlined:active {
+  background-color: color-mix(in srgb, var(--md-primary), transparent 88%);
+}
+
+/* ============================================
+   Text Button (Minimal emphasis)
+   ============================================ */
+.md-btn-text {
+  background-color: transparent;
+  color: var(--md-primary);
+  padding: 10px 12px;
+}
+
+.md-btn-text:hover {
+  background-color: color-mix(in srgb, var(--md-primary), transparent 92%);
+}
+
+.md-btn-text:active {
+  background-color: color-mix(in srgb, var(--md-primary), transparent 88%);
+}
+
+/* ============================================
+   Floating Action Button (FAB)
+   ============================================ */
+.md-btn-fab {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: var(--md-shape-large);
+  background-color: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+  box-shadow: var(--md-elevation-3);
+}
+
+.md-btn-fab:hover {
+  box-shadow: var(--md-elevation-4);
+  background-color: color-mix(in srgb, var(--md-primary-container), black 8%);
+}
+
+.md-btn-fab:active {
+  box-shadow: var(--md-elevation-2);
+}
+
+.md-btn-fab-small {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--md-shape-medium);
+}
+
+/* ============================================
+   Icon Button
+   ============================================ */
+.md-btn-icon {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: var(--md-shape-full);
+  background-color: transparent;
+  color: var(--md-on-surface-variant);
+}
+
+.md-btn-icon:hover {
+  background-color: color-mix(in srgb, var(--md-on-surface-variant), transparent 92%);
+}
+
+.md-btn-icon:active {
+  background-color: color-mix(in srgb, var(--md-on-surface-variant), transparent 88%);
+}
+
+/* ============================================
+   Button Sizes
+   ============================================ */
+.md-btn-small {
+  padding: 8px 16px;
+  font: var(--md-label-medium-font);
+  min-height: 32px;
+}
+
+.md-btn-large {
+  padding: 12px 32px;
+  font: var(--md-label-large-font);
+  min-height: 48px;
+}
+
+/* ============================================
+   Button with Icon
+   ============================================ */
+.md-btn .md-icon {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.md-btn-fab .md-icon {
+  width: 24px;
+  height: 24px;
+}
+
+/* ============================================
+   Legacy Compatibility Classes
+   ============================================ */
+.btn-primary {
+  composes: md-btn md-btn-filled from global;
+}
+
+.btn-secondary {
+  composes: md-btn md-btn-tonal from global;
+}
+
+.btn-success {
+  composes: md-btn md-btn-filled from global;
+  background-color: #059669;
+}
+
+.btn-danger {
+  composes: md-btn md-btn-filled from global;
+  background-color: var(--md-error);
+  color: var(--md-on-error);
+}

@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pull Request Review System - Enhanced</title>
+    <title>Pull Request Review System - Material Design</title>
+    <!-- Material Design 3 Styles -->
+    <link rel="stylesheet" href="css/main.css">
     <style>
         * {
             margin: 0;
@@ -331,26 +333,76 @@
         }
 
         .error {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            left: auto;
             background: #fee2e2;
             color: #991b1b;
-            padding: 20px;
+            padding: 16px 24px;
             border-radius: 8px;
             border-left: 4px solid #ef4444;
-            margin: 20px auto;
-            box-shadow: var(--shadow-md);
-            max-width: 600px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            max-width: 500px;
             text-align: center;
+            z-index: 10000;
+            animation: slideInRight 0.3s ease-out;
+            font-weight: 500;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
         }
 
         .success-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            left: auto;
             background: #dcfce7;
             color: #166534;
-            padding: 20px;
+            padding: 16px 24px;
             border-radius: 8px;
             border-left: 4px solid #22c55e;
-            margin: 20px 0;
-            display: none;
-            box-shadow: var(--shadow-md);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            max-width: 500px;
+            text-align: center;
+            z-index: 10000;
+            animation: slideInRight 0.3s ease-out;
+            font-weight: 500;
+        }
+
+        /* Dark theme support for alerts */
+        [data-theme="dark"] .error {
+            background: #7f1d1d;
+            color: #fecaca;
+            border-left-color: #dc2626;
+        }
+
+        [data-theme="dark"] .success-message {
+            background: #064e3b;
+            color: #6ee7b7;
+            border-left-color: #059669;
+        }
+
+        /* Mobile responsive for alerts */
+        @media (max-width: 768px) {
+            .error,
+            .success-message {
+                top: 10px;
+                right: 10px;
+                left: 10px;
+                max-width: none;
+                font-size: 0.9rem;
+                padding: 12px 16px;
+            }
         }
 
         .pr-group {
@@ -749,36 +801,50 @@
         }
 
         .scoring-form {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 12px;
-            align-items: center;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
         }
 
         .scoring-form label {
             font-weight: 600;
             color: var(--text-primary);
             font-size: 0.9rem;
+            margin-bottom: 4px;
+            display: block;
         }
 
-        .scoring-form input[type="number"] {
+        .scoring-form input[type="number"],
+        .scoring-form input[type="text"],
+        .scoring-form textarea {
             width: 100%;
             padding: 10px 12px;
             border: 2px solid var(--border-color);
             border-radius: 6px;
             font-size: 1rem;
             transition: all 0.3s;
+            box-sizing: border-box;
         }
 
-        [data-theme="dark"] .scoring-form input[type="number"] {
+        [data-theme="dark"] .scoring-form input[type="number"],
+        [data-theme="dark"] .scoring-form input[type="text"],
+        [data-theme="dark"] .scoring-form textarea {
             background: #0f172a;
             color: var(--text-primary);
         }
 
-        .scoring-form input[type="number"]:focus {
+        .scoring-form input[type="number"]:focus,
+        .scoring-form input[type="text"]:focus,
+        .scoring-form textarea:focus {
             outline: none;
             border-color: #2563eb;
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .scoring-form textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
         }
 
         /* Score Range Guide */
@@ -832,34 +898,19 @@
         .range-excellent { background: #22c55e; color: white; }
 
         .scoring-form textarea {
-            width: 100%;
-            padding: 10px 12px;
-            border: 2px solid var(--border-color);
-            border-radius: 6px;
-            font-size: 0.9rem;
             resize: vertical;
             min-height: 80px;
-            grid-column: 2;
-            transition: all 0.3s;
-        }
-
-        [data-theme="dark"] .scoring-form textarea {
-            background: #0f172a;
-            color: var(--text-primary);
-        }
-
-        .scoring-form textarea:focus {
-            outline: none;
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+            font-family: inherit;
         }
 
         .form-actions {
-            grid-column: 2;
             display: flex;
             gap: 10px;
-            margin-top: 15px;
+            margin-top: 8px;
+            justify-content: center; /* Center the buttons */
         }
+
+        /* Score Range Guide */
 
         .ai-suggestions {
             background: #f1f5f9;
@@ -1549,7 +1600,7 @@
             
             <div class="theme-switcher">
                 <div class="theme-dropdown">
-                    <button class="theme-btn" onclick="toggleThemeMenu()" title="Change Theme">
+                    <button class="theme-btn md-btn-icon" onclick="toggleThemeMenu()" title="Change Theme">
                         🎨
                     </button>
                     <div class="theme-menu" id="themeMenu">
@@ -1578,33 +1629,33 @@
         </div>
 
         <div class="filters">
-            <div class="filter-group">
+            <div class="filter-group md-text-field-outlined">
                 <label for="currentReviewer">👤 Current Reviewer (Required):</label>
                 <input type="text" id="currentReviewer" placeholder="Select from list" list="reviewerList" autocomplete="off">
                 <datalist id="reviewerList"></datalist>
             </div>
-            <div class="filter-group">
+            <div class="filter-group md-text-field-outlined">
                 <label for="pullRequestUser">🔧 Pull Request User:</label>
                 <input type="text" id="pullRequestUser" placeholder="Enter PR user to filter" list="prUserList">
                 <datalist id="prUserList"></datalist>
             </div>
-            <div class="filter-group">
+            <div class="filter-group md-text-field-outlined">
                 <label for="commitId">🔖 Pull Request Commit ID:</label>
                 <input type="text" id="commitId" placeholder="Full or short commit ID">
             </div>
-            <div class="filter-group">
+            <div class="filter-group md-text-field-outlined">
                 <label for="projectKey">Project Key:</label>
                 <input type="text" id="projectKey" placeholder="Leave empty for all projects">
             </div>
-            <div class="filter-group">
+            <div class="filter-group md-text-field-outlined">
                 <label for="repositorySlug">Repository:</label>
                 <input type="text" id="repositorySlug" placeholder="Leave empty for all repositories">
             </div>
-            <div class="filter-group">
+            <div class="filter-group md-text-field-outlined">
                 <label for="pullRequestId">Pull Request ID:</label>
                 <input type="text" id="pullRequestId" placeholder="Leave empty for all PRs">
             </div>
-            <div class="filter-group">
+            <div class="filter-group md-text-field-outlined">
                 <label for="reviewStatus">📊 Review Status:</label>
                 <select id="reviewStatus">
                     <option value="all">All Reviews</option>
@@ -1615,8 +1666,8 @@
         </div>
         
         <div class="filter-actions">
-            <button class="btn btn-danger" onclick="clearAllFilters()">🗑️ Clear All Filters</button>
-            <button class="btn btn-primary" onclick="loadAllReviews()">🔄 Load All Reviews</button>
+            <button class="btn btn-danger md-btn md-btn-filled" onclick="clearAllFilters()" style="background-color: var(--md-error);">🗑️ Clear All Filters</button>
+            <button class="btn btn-primary md-btn md-btn-filled" onclick="loadAllReviews()">🔄 Load All Reviews</button>
         </div>
 
         <div class="file-tree" id="fileTree" style="display: none;">
@@ -1724,6 +1775,36 @@
             } catch (error) {
                 console.warn('Error loading users:', error);
             }
+        }
+
+        // Helper function to show error messages with auto-hide
+        function showError(message, duration = 5000) {
+            const errorEl = document.getElementById('error');
+            const successMsg = document.getElementById('successMessage');
+            
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            successMsg.style.display = 'none';
+            
+            // Auto-hide after duration
+            setTimeout(() => {
+                errorEl.style.display = 'none';
+            }, duration);
+        }
+
+        // Helper function to show success messages with auto-hide
+        function showSuccess(message, duration = 3000) {
+            const successMsg = document.getElementById('successMessage');
+            const errorEl = document.getElementById('error');
+            
+            successMsg.textContent = message;
+            successMsg.style.display = 'block';
+            errorEl.style.display = 'none';
+            
+            // Auto-hide after duration
+            setTimeout(() => {
+                successMsg.style.display = 'none';
+            }, duration);
         }
 
         // Load users on page load
@@ -1861,8 +1942,7 @@
             // Validate current reviewer - must be selected from the list
             if (!currentReviewerInput.value.trim()) {
                 // Show alert message when no reviewer is selected
-                errorEl.textContent = '⚠️ Please select a reviewer to load reviews';
-                errorEl.style.display = 'block';
+                showError('⚠️ Please select a reviewer to load reviews');
                 loadingEl.style.display = 'none';
                 container.innerHTML = `
                     <div class="loading" style="background: transparent; color: #94a3b8; font-size: 1rem;">
@@ -1878,8 +1958,7 @@
             const selectedReviewer = currentReviewerInput.value.trim();
             
             if (!validReviewers.includes(selectedReviewer)) {
-                errorEl.textContent = '⚠️ Invalid reviewer. Please select a valid reviewer from the dropdown list.';
-                errorEl.style.display = 'block';
+                showError('⚠️ Invalid reviewer. Please select a valid reviewer from the dropdown list.');
                 loadingEl.style.display = 'none';
                 currentReviewerInput.value = '';
                 currentReviewer = '';
@@ -1924,8 +2003,7 @@
                 displayGroupedReviews(allReviews);
 
             } catch (error) {
-                errorEl.textContent = `Error: ${error.message}`;
-                errorEl.style.display = 'block';
+                showError(`Error: ${error.message}`);
             } finally {
                 loadingEl.style.display = 'none';
             }
@@ -2021,8 +2099,8 @@
                     '<span class="tooltip-container"><span class="pr-badge pr-badge-not-reviewed">❌ Not Reviewed</span><span class="tooltip-text">This PR has not been reviewed yet - no scores</span></span>';
                 
                 return `
-                <div class="pr-group">
-                    <div class="pr-group-header" onclick="toggleGroup(this)">
+                <div class="pr-group md-card md-card-elevated">
+                    <div class="pr-group-header md-card-header" onclick="toggleGroup(this)">
                         <div class="pr-group-info">
                             <span class="tooltip-container"><span class="pr-badge">📋 ${escapeHtml(group.project_key)}</span><span class="tooltip-text">Project Key: ${escapeHtml(group.project_key)}</span></span>
                             <span class="tooltip-container"><span class="pr-badge">📁 ${escapeHtml(group.repository_slug)}</span><span class="tooltip-text">Repository: ${escapeHtml(group.repository_slug)}</span></span>
@@ -2085,7 +2163,7 @@
             });
 
             return `
-                <div class="review-card">
+                <div class="review-card md-card md-card-filled">
                     <div class="review-header">
                         <div class="review-meta">
                             <span class="badge badge-reviewer">👤 ${escapeHtml(review.reviewer_info?.display_name || review.reviewer)}</span>
@@ -2141,7 +2219,7 @@
                                     has_comments: !!score.reviewer_comments
                                 });
                                 return `
-                                <div class="score-item">
+                                <div class="score-item md-card md-card-outlined">
                                     <div class="score-value ${getScoreClass(score.score)}">${score.score}</div>
                                     <div class="score-details">
                                         <div class="score-reviewer">${escapeHtml(score.reviewer_info?.display_name || score.reviewer)}</div>
@@ -2171,15 +2249,17 @@
                         <p style="color: #856404; margin-bottom: 10px;">
                             Provide your score for this ${review.source_filename ? 'file' : 'PR level'}
                         </p>
-                        <button class="btn btn-primary" onclick="showScoringForm(${review.id})">
+                        <button class="btn btn-primary md-btn md-btn-filled" onclick="showScoringForm(${review.id})">
                             📝 Provide Score
                         </button>
                     </div>
 
                     <div class="scoring-form-container" id="scoringForm_${review.id}" style="display: none;">
                         <div class="scoring-form">
-                            <label for="reviewer_${review.id}">👤 Reviewer:</label>
-                            <input type="text" id="reviewer_${review.id}" value="${escapeHtml(currentReviewer)}" readonly style="background: #f0f0f0; cursor: not-allowed;">
+                            <div>
+                                <label for="reviewer_${review.id}">👤 Reviewer:</label>
+                                <input type="text" id="reviewer_${review.id}" value="${escapeHtml(currentReviewer)}" readonly style="background: #f0f0f0; cursor: not-allowed;">
+                            </div>
                             
                             <div style="grid-column: 1 / -1; padding: 10px; background: ${review.source_filename ? '#e3f2fd' : '#f3e5f5'}; border-radius: 6px; border-left: 4px solid ${review.source_filename ? '#2196f3' : '#7b1fa2'}; margin: 10px 0;">
                                 <strong style="color: ${review.source_filename ? '#1976d2' : '#6a1b9a'};">
@@ -2187,28 +2267,30 @@
                                 </strong>
                             </div>
                             
-                            <label for="score_${review.id}">Score (0-10):</label>
                             <div>
+                                <label for="score_${review.id}">Score (0-10):</label>
                                 <input type="number" id="score_${review.id}" min="0" max="10" step="0.5" placeholder="Enter score" oninput="updateScoreDisplay(${review.id})">
-                                <div class="score-slider">
-                                    <input type="range" class="score-slider-input" id="scoreSlider_${review.id}" 
-                                           min="0" max="10" step="0.5" value="5" oninput="syncScoreInput(${review.id})">
-                                </div>
-                                <div class="score-display" id="scoreDisplay_${review.id}">5.0</div>
-                                <div class="score-range-guide">
-                                    <div class="range-item range-poor"><span class="range-value">0-2</span><span class="range-label">Poor</span></div>
-                                    <div class="range-item range-average"><span class="range-value">3-5</span><span class="range-label">Average</span></div>
-                                    <div class="range-item range-good"><span class="range-value">6-8</span><span class="range-label">Good</span></div>
-                                    <div class="range-item range-excellent"><span class="range-value">9-10</span><span class="range-label">Excellent</span></div>
-                                </div>
+                            </div>
+                            <div class="score-slider">
+                                <input type="range" class="score-slider-input md-slider" id="scoreSlider_${review.id}" 
+                                       min="0" max="10" step="0.5" value="5" oninput="syncScoreInput(${review.id})">
+                            </div>
+                            <div class="score-display" id="scoreDisplay_${review.id}">5.0</div>
+                            <div class="score-range-guide">
+                                <div class="range-item range-poor"><span class="range-value">0-2</span><span class="range-label">Poor</span></div>
+                                <div class="range-item range-average"><span class="range-value">3-5</span><span class="range-label">Average</span></div>
+                                <div class="range-item range-good"><span class="range-value">6-8</span><span class="range-label">Good</span></div>
+                                <div class="range-item range-excellent"><span class="range-value">9-10</span><span class="range-label">Excellent</span></div>
                             </div>
                             
-                            <label for="comment_${review.id}">Comment:</label>
-                            <textarea id="comment_${review.id}" placeholder="Review comment (optional)" rows="3"></textarea>
+                            <div>
+                                <label for="comment_${review.id}">Comment:</label>
+                                <textarea id="comment_${review.id}" placeholder="Review comment (optional)" rows="3"></textarea>
+                            </div>
                             
                             <div class="form-actions">
-                                <button class="btn btn-success" onclick="submitScore(${review.id})">Submit Score</button>
-                                <button class="btn btn-secondary" onclick="hideScoringForm(${review.id})">Cancel</button>
+                                <button class="btn btn-success md-btn md-btn-filled" onclick="submitScore(${review.id})" style="background-color: #059669;">Submit</button>
+                                <button class="btn btn-secondary md-btn md-btn-tonal" onclick="hideScoringForm(${review.id})">Cancel</button>
                             </div>
                         </div>
                     </div>
@@ -2456,14 +2538,12 @@
 
             // Validate reviewer
             if (!reviewer) {
-                errorEl.textContent = '⚠️ Reviewer is required. Please set your username in the top filter section.';
-                errorEl.style.display = 'block';
+                showError('⚠️ Reviewer is required. Please set your username in the top filter section.');
                 return;
             }
 
             if (isNaN(score) || score < 0 || score > 10) {
-                errorEl.textContent = 'Please enter a valid score between 0 and 10';
-                errorEl.style.display = 'block';
+                showError('Please enter a valid score between 0 and 10');
                 return;
             }
 
@@ -2534,9 +2614,7 @@
                 const result = await response.json();
                 console.log('Success result:', result);
                 
-                successMsg.textContent = `✅ Score submitted successfully! Score: ${result.score}`;
-                successMsg.style.display = 'block';
-                errorEl.style.display = 'none';
+                showSuccess(`✅ Score submitted successfully! Score: ${result.score}`);
 
                 scoreInput.value = '';
                 commentInput.value = '';
@@ -2549,8 +2627,7 @@
 
             } catch (error) {
                 console.error('Submit score error:', error);
-                errorEl.textContent = `Error: ${error.message}`;
-                errorEl.style.display = 'block';
+                showError(`Error: ${error.message}`);
             }
         }
 
@@ -2587,5 +2664,8 @@
         // Load reviews on page load
         window.addEventListener('DOMContentLoaded', loadAllReviews);
     </script>
+    
+    <!-- Material Design Ripple Effect -->
+    <script src="js/components/Ripple.js"></script>
 </body>
 </html>

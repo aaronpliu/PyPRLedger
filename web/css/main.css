@@ -1,0 +1,43 @@
+/**
+ * Material Design 3 - Main Stylesheet
+ * Imports all component styles
+ */
+
+/* Import design system */
+@import './material-design.css';
+@import './typography.css';
+
+/* Import components */
+@import './components/buttons.css';
+@import './components/cards.css';
+@import './components/forms.css';
+@import './components/chips.css';
+
+/* ============================================
+   Global Resets & Base Styles
+   ============================================ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font: var(--md-body-medium-font);
+  color: var(--md-on-surface);
+  background-color: var(--md-surface);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+.md-elevation-1 { box-shadow: var(--md-elevation-1); }
+.md-elevation-2 { box-shadow: var(--md-elevation-2); }
+.md-elevation-3 { box-shadow: var(--md-elevation-3); }
+
+.md-text-primary { color: var(--md-primary); }
+.md-text-secondary { color: var(--md-secondary); }
+.md-text-error { color: var(--md-error); }

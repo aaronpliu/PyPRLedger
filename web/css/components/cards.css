@@ -1,0 +1,174 @@
+/**
+ * Material Design 3 - Card Components
+ * Includes: Elevated, Filled, Outlined Cards
+ */
+
+/* ============================================
+   Base Card Styles
+   ============================================ */
+.md-card {
+  border-radius: var(--md-shape-medium);
+  overflow: visible; /* Allow tooltips to show */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================
+   Elevated Card (with shadow)
+   ============================================ */
+.md-card-elevated {
+  background-color: var(--md-surface-container-low);
+  box-shadow: var(--md-elevation-1);
+}
+
+.md-card-elevated:hover {
+  box-shadow: var(--md-elevation-2);
+  transform: translateY(-2px);
+}
+
+/* ============================================
+   Filled Card (with background color)
+   ============================================ */
+.md-card-filled {
+  background-color: var(--md-surface-container-highest);
+}
+
+.md-card-filled:hover {
+  box-shadow: var(--md-elevation-1);
+}
+
+/* ============================================
+   Outlined Card (with border)
+   ============================================ */
+.md-card-outlined {
+  background-color: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+}
+
+.md-card-outlined:hover {
+  box-shadow: var(--md-elevation-1);
+  border-color: var(--md-outline);
+}
+
+/* ============================================
+   Card Header
+   ============================================ */
+.md-card-header {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+
+.md-card-header-title {
+  font: var(--md-title-medium-font);
+  color: var(--md-on-surface);
+  flex: 1;
+}
+
+.md-card-header-subtitle {
+  font: var(--md-body-small-font);
+  color: var(--md-on-surface-variant);
+}
+
+/* ============================================
+   Card Content
+   ============================================ */
+.md-card-content {
+  padding: 16px;
+  font: var(--md-body-medium-font);
+  color: var(--md-on-surface-variant);
+}
+
+/* ============================================
+   Card Actions
+   ============================================ */
+.md-card-actions {
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ============================================
+   PR Group Card (Custom for this app)
+   ============================================ */
+.pr-group {
+  composes: md-card md-card-elevated from global;
+  margin-bottom: 24px;
+}
+
+.pr-group-header {
+  composes: md-card-header from global;
+  cursor: pointer;
+  background-color: var(--md-surface);
+  transition: background-color 0.2s;
+}
+
+.pr-group-header:hover {
+  background-color: var(--md-surface-container);
+}
+
+.pr-group-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.pr-group-body {
+  display: none;
+  padding: 20px;
+  background-color: var(--md-surface-container-low);
+}
+
+.pr-group.expanded .pr-group-body {
+  display: block;
+  animation: expand-animation 0.3s ease-out;
+}
+
+@keyframes expand-animation {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================
+   Review Card (Custom for this app)
+   ============================================ */
+.review-card {
+  composes: md-card md-card-filled from global;
+  padding: 20px;
+  margin-bottom: 16px;
+  border-left: 4px solid var(--md-primary);
+}
+
+.review-card:hover {
+  box-shadow: var(--md-elevation-2);
+  transform: translateY(-4px);
+  border-left-color: var(--md-primary-container);
+}
+
+/* ============================================
+   Score Item Card
+   ============================================ */
+.score-item {
+  composes: md-card md-card-outlined from global;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-left: 3px solid var(--md-primary);
+}
+
+.score-item:hover {
+  box-shadow: var(--md-elevation-1);
+  transform: translateX(4px);
+}

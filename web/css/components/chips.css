@@ -1,0 +1,72 @@
+/**
+ * Material Design 3 - Chips & Badges
+ */
+
+/* ============================================
+   Assist Chip (Informational)
+   ============================================ */
+.md-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--md-shape-small);
+  background-color: var(--md-surface-container-high);
+  color: var(--md-on-surface-variant);
+  font: var(--md-label-large-font);
+  border: 1px solid var(--md-outline-variant);
+  transition: all 0.2s;
+  cursor: default;
+}
+
+.md-chip:hover {
+  background-color: var(--md-surface-container-highest);
+  box-shadow: var(--md-elevation-1);
+}
+
+/* ============================================
+   Filter Chip (Selectable)
+   ============================================ */
+.md-chip-filter {
+  composes: md-chip from global;
+  cursor: pointer;
+}
+
+.md-chip-filter.selected {
+  background-color: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+  border-color: transparent;
+}
+
+/* ============================================
+   Badge Styles (Legacy compatibility)
+   ============================================ */
+.pr-badge {
+  composes: md-chip from global;
+  padding: 5px 12px;
+  font-size: 0.9rem;
+}
+
+.pr-badge-reviewed {
+  background-color: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
+[data-theme="dark"] .pr-badge-reviewed {
+  background-color: #064e3b;
+  color: #6ee7b7;
+  border-color: #059669;
+}
+
+.pr-badge-not-reviewed {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+[data-theme="dark"] .pr-badge-not-reviewed {
+  background-color: #7f1d1d;
+  color: #fecaca;
+  border-color: #dc2626;
+}

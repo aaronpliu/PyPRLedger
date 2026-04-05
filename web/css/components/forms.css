@@ -1,0 +1,143 @@
+/**
+ * Material Design 3 - Form Components
+ * Includes: Text Fields, Select, Slider
+ */
+
+/* ============================================
+   Text Field (Filled variant)
+   ============================================ */
+.md-text-field {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.md-text-field input,
+.md-text-field textarea,
+.md-text-field select {
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-bottom: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-extra-small) var(--md-shape-extra-small) 0 0;
+  background-color: var(--md-surface-container-highest);
+  font: var(--md-body-large-font);
+  color: var(--md-on-surface);
+  transition: all 0.2s;
+}
+
+.md-text-field input:focus,
+.md-text-field textarea:focus,
+.md-text-field select:focus {
+  outline: none;
+  border-bottom-color: var(--md-primary);
+  border-bottom-width: 2px;
+  background-color: var(--md-surface-container-high);
+}
+
+.md-text-field label {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font: var(--md-body-large-font);
+  color: var(--md-on-surface-variant);
+  pointer-events: none;
+  transition: all 0.2s;
+}
+
+.md-text-field input:focus + label,
+.md-text-field input:not(:placeholder-shown) + label,
+.md-text-field textarea:focus + label,
+.md-text-field textarea:not(:placeholder-shown) + label {
+  top: 8px;
+  transform: translateY(0);
+  font: var(--md-label-small-font);
+  color: var(--md-primary);
+}
+
+/* ============================================
+   Text Field (Outlined variant)
+   ============================================ */
+.md-text-field-outlined input,
+.md-text-field-outlined textarea,
+.md-text-field-outlined select {
+  background-color: transparent;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-small);
+}
+
+.md-text-field-outlined input:focus,
+.md-text-field-outlined textarea:focus,
+.md-text-field-outlined select:focus {
+  border-color: var(--md-primary);
+  border-width: 2px;
+}
+
+/* ============================================
+   Helper Text
+   ============================================ */
+.md-helper-text {
+  font: var(--md-label-small-font);
+  color: var(--md-on-surface-variant);
+  margin-top: 4px;
+  padding: 0 16px;
+}
+
+.md-helper-text-error {
+  color: var(--md-error);
+}
+
+/* ============================================
+   Slider
+   ============================================ */
+.md-slider {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--md-surface-container-highest);
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.md-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--md-primary);
+  cursor: pointer;
+  box-shadow: var(--md-elevation-1);
+  transition: all 0.2s;
+}
+
+.md-slider::-webkit-slider-thumb:hover {
+  box-shadow: var(--md-elevation-2);
+  transform: scale(1.1);
+}
+
+.md-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--md-primary);
+  cursor: pointer;
+  border: none;
+  box-shadow: var(--md-elevation-1);
+}
+
+/* ============================================
+   Legacy Compatibility
+   ============================================ */
+.filter-group input,
+.filter-group select {
+  composes: md-text-field-outlined from global;
+}
+
+.scoring-form input[type="number"] {
+  composes: md-text-field from global;
+}
+
+.score-slider-input {
+  composes: md-slider from global;
+}

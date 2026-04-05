@@ -1,0 +1,164 @@
+/**
+ * Material Design 3 - Color System
+ * Offline-compatible color tokens based on MD3 specification
+ */
+
+:root {
+  /* ============================================
+     Primary Colors (Purple theme - default)
+     ============================================ */
+  --md-primary: #6750A4;
+  --md-on-primary: #FFFFFF;
+  --md-primary-container: #EADDFF;
+  --md-on-primary-container: #21005D;
+  
+  /* ============================================
+     Secondary Colors
+     ============================================ */
+  --md-secondary: #625B71;
+  --md-on-secondary: #FFFFFF;
+  --md-secondary-container: #E8DEF8;
+  --md-on-secondary-container: #1D192B;
+  
+  /* ============================================
+     Tertiary Colors
+     ============================================ */
+  --md-tertiary: #7D5260;
+  --md-on-tertiary: #FFFFFF;
+  --md-tertiary-container: #FFD8E4;
+  --md-on-tertiary-container: #31111D;
+  
+  /* ============================================
+     Error Colors
+     ============================================ */
+  --md-error: #B3261E;
+  --md-on-error: #FFFFFF;
+  --md-error-container: #F9DEDC;
+  --md-on-error-container: #410E0B;
+  
+  /* ============================================
+     Surface & Background Colors
+     ============================================ */
+  --md-surface: #FFFBFE;
+  --md-surface-dim: #DED8E1;
+  --md-surface-bright: #FFFBFE;
+  --md-surface-container-lowest: #FFFFFF;
+  --md-surface-container-low: #F7F2FA;
+  --md-surface-container: #F3EDF7;
+  --md-surface-container-high: #ECE6F0;
+  --md-surface-container-highest: #E6E0E9;
+  --md-on-surface: #1C1B1F;
+  --md-on-surface-variant: #49454F;
+  
+  /* ============================================
+     Outline & Border Colors
+     ============================================ */
+  --md-outline: #79747E;
+  --md-outline-variant: #CAC4D0;
+  
+  /* ============================================
+     State Layer Opacities
+     ============================================ */
+  --md-state-hover: 0.08;
+  --md-state-focus: 0.12;
+  --md-state-pressed: 0.12;
+  --md-state-dragged: 0.16;
+  
+  /* ============================================
+     Elevation Shadows (Material Design Levels)
+     ============================================ */
+  --md-elevation-0: none;
+  --md-elevation-1: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+  --md-elevation-2: 0 3px 6px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.12);
+  --md-elevation-3: 0 10px 20px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.10);
+  --md-elevation-4: 0 15px 25px rgba(0, 0, 0, 0.15), 0 5px 10px rgba(0, 0, 0, 0.05);
+  --md-elevation-5: 0 20px 40px rgba(0, 0, 0, 0.2);
+  
+  /* ============================================
+     Shape (Border Radius)
+     ============================================ */
+  --md-shape-none: 0px;
+  --md-shape-extra-small: 4px;
+  --md-shape-small: 8px;
+  --md-shape-medium: 12px;
+  --md-shape-large: 16px;
+  --md-shape-extra-large: 28px;
+  --md-shape-full: 9999px;
+}
+
+/* ============================================
+   Dark Theme Colors
+   ============================================ */
+[data-theme="dark"] {
+  --md-primary: #D0BCFF;
+  --md-on-primary: #381E72;
+  --md-primary-container: #4F378B;
+  --md-on-primary-container: #EADDFF;
+  
+  --md-secondary: #CCC2DC;
+  --md-on-secondary: #332D41;
+  --md-secondary-container: #4A4458;
+  --md-on-secondary-container: #E8DEF8;
+  
+  --md-tertiary: #EFB8C8;
+  --md-on-tertiary: #492532;
+  --md-tertiary-container: #633B48;
+  --md-on-tertiary-container: #FFD8E4;
+  
+  --md-error: #F2B8B5;
+  --md-on-error: #601410;
+  --md-error-container: #8C1D18;
+  --md-on-error-container: #F9DEDC;
+  
+  --md-surface: #141218;
+  --md-surface-dim: #141218;
+  --md-surface-bright: #3B383E;
+  --md-surface-container-lowest: #0F0D13;
+  --md-surface-container-low: #1D1B20;
+  --md-surface-container: #211F26;
+  --md-surface-container-high: #2B2930;
+  --md-surface-container-highest: #36343B;
+  --md-on-surface: #E6E1E5;
+  --md-on-surface-variant: #CAC4D0;
+  
+  --md-outline: #938F99;
+  --md-outline-variant: #49454F;
+}
+
+/* ============================================
+   Warm Theme Colors
+   ============================================ */
+[data-theme="warm"] {
+  --md-primary: #9C27B0;
+  --md-on-primary: #FFFFFF;
+  --md-primary-container: #F3E5F5;
+  --md-on-primary-container: #4A148C;
+  
+  --md-secondary: #FF6F00;
+  --md-on-secondary: #FFFFFF;
+  --md-secondary-container: #FFF3E0;
+  --md-on-secondary-container: #E65100;
+  
+  --md-surface: #FFF8E1;
+  --md-surface-container: #FFECB3;
+  --md-on-surface: #212121;
+}
+
+/* ============================================
+   Cool Theme Colors
+   ============================================ */
+[data-theme="cool"] {
+  --md-primary: #00BCD4;
+  --md-on-primary: #FFFFFF;
+  --md-primary-container: #E0F7FA;
+  --md-on-primary-container: #006064;
+  
+  --md-secondary: #607D8B;
+  --md-on-secondary: #FFFFFF;
+  --md-secondary-container: #ECEFF1;
+  --md-on-secondary-container: #37474F;
+  
+  --md-surface: #E0F2F1;
+  --md-surface-container: #B2DFDB;
+  --md-on-surface: #004D40;
+}
