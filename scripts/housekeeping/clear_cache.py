@@ -52,13 +52,17 @@ class CacheClearer:
     CACHE_PATTERNS = {
         "users": [
             "user:*",  # user:{id}
-            "username:*",  # username:{username}
-            "user_email:*",  # user_email:{email}
+            "user:username:*",  # user:username:{username}
+            "user:email:*",  # user:email:{email}
+            "users:list:*",  # users:list:{filters}:{page}:{page_size}
         ],
         "projects": [
-            "project:*",  # project:{id}
-            "project_key:*",  # project_key:{key}
-            "project_name:*",  # project_name:{name}
+            "project:*",  # project:{id}, project:{id}:repo_count, project:{id}:review_count, project:{id}:active_reviewer_count
+            "project:key:*",  # project:key:{project_key}
+            "project_key:*",  # project_key:{key} (legacy)
+            "project_name:*",  # project_name:{name} (legacy)
+            "projects:list:*",  # projects:list:{filters}:{page}:{page_size}
+            "stats:projects:*",  # stats:projects:{project_id or 'all'}
         ],
         "repositories": [
             "repo:*",  # repo:{id}
@@ -66,12 +70,11 @@ class CacheClearer:
         ],
         "reviews": [
             "review:*",  # review:{project_key}:{repo_slug}:{pr_id}
+            "reviews:list:*",  # reviews:list:{filters}:{page}:{page_size}
+            "stats:reviews:*",  # stats:reviews:{project_key or 'all'}
         ],
-        "lists": [
-            "list:*",  # list:{entity_type}:*
-        ],
-        "stats": [
-            "stats:*",  # stats:{entity_type}
+        "scores": [
+            "scores:*",  # scores:{project_key}:{repo_slug}:{pr_id}:{file_part}
         ],
         "registry": [
             "registry:*",  # registry:{project_key}:{repo_slug}
@@ -289,7 +292,7 @@ Examples:
         "--type",
         "-t",
         type=str,
-        help="Comma-separated cache types to clear (users,projects,repositories,reviews,lists,stats,registry)",
+        help="Comma-separated cache types to clear (users,projects,repositories,reviews,scores,registry)",
     )
 
     parser.add_argument(
