@@ -136,6 +136,7 @@ class ProjectService:
         db.add(new_project)
         await db.flush()
         await db.refresh(new_project)
+        await db.commit()  # Commit the transaction to make data visible to other connections
 
         # Cache the new project
         project_dict = new_project.to_dict()
@@ -183,6 +184,7 @@ class ProjectService:
 
         await db.flush()
         await db.refresh(project)
+        await db.commit()  # Commit the transaction to make data visible to other connections
 
         # Cache the project
         await self._set_project_in_cache(project.id, project.to_dict())

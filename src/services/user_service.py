@@ -137,6 +137,7 @@ class UserService:
         db.add(new_user)
         await db.flush()
         await db.refresh(new_user)
+        await db.commit()  # Commit the transaction to make data visible to other connections
 
         # Cache the new user
         user_dict = new_user.to_dict()

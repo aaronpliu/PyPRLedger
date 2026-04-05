@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +19,10 @@ from src.schemas.pull_request import (
 from src.services.entity_sync_service import EntitySyncService
 from src.utils.redis import get_redis_client
 from src.utils.score_utils import normalize_source_filename
+
+
+if TYPE_CHECKING:
+    from src.models.user import User
 
 
 logger = logging.getLogger(__name__)
@@ -82,6 +88,7 @@ class ReviewScoreService:
 
             existing_score.updated_date = datetime.now(UTC)
             await db.flush()
+            await db.commit()  # Commit immediately after flush to make data visible
             await db.refresh(existing_score)
             score_obj = existing_score
 
@@ -111,6 +118,7 @@ class ReviewScoreService:
             )
             db.add(new_score)
             await db.flush()
+            await db.commit()  # Commit immediately after flush to make data visible
             await db.refresh(new_score)
             score_obj = new_score
 
@@ -118,9 +126,6 @@ class ReviewScoreService:
             logger.info(
                 f"Created new score for reviewer '{reviewer.username}' on {target}: {score_data.score}"
             )
-
-        # Commit transaction
-        await db.commit()
 
         # Cache invalidation
         # Invalidate both specific file cache and PR-level (all_files) cache
@@ -144,8 +149,10 @@ class ReviewScoreService:
         # Update metrics
         self.metrics.observe_review_score(project=project.project_key, score=score_data.score)
 
-        # Return enriched response
-        return await self._enrich_score_response(score_obj, db, include_details)
+        # Return enriched response - pass reviewer_obj to avoid lazy loading after commit
+        return await self._enrich_score_response(
+            score_obj, db, include_details, reviewer_obj=reviewer
+        )
 
     async def get_scores_by_review_target(
         self,
@@ -408,8 +415,16 @@ class ReviewScoreService:
         score: PullRequestScore,
         db: AsyncSession,
         include_details: bool = False,
+        reviewer_obj: User | None = None,
     ) -> ReviewScoreResponse:
-        """Enrich score with entity information"""
+        """Enrich score with entity information
+
+        Args:
+            score: The score object
+            db: Database session
+            include_details: Whether to include reviewer details
+            reviewer_obj: Optional pre-loaded reviewer object (to avoid lazy loading after commit)
+        """
         # Handle both ORM objects and dicts (from cache)
         if isinstance(score, dict):
             # Already a dict, create response directly
@@ -421,12 +436,18 @@ class ReviewScoreService:
             "reviewer_info": None,
         }
 
-        if include_details and score.reviewer_rel:
-            score_dict["reviewer_info"] = {
-                "username": score.reviewer_rel.username,
-                "display_name": score.reviewer_rel.display_name,
-                "email_address": score.reviewer_rel.email_address,
-            }
+        if include_details:
+            # Use provided reviewer_obj if available, otherwise try to load from relationship
+            reviewer = reviewer_obj
+            if not reviewer and score.reviewer_rel:
+                reviewer = score.reviewer_rel
+
+            if reviewer:
+                score_dict["reviewer_info"] = {
+                    "username": reviewer.username,
+                    "display_name": reviewer.display_name,
+                    "email_address": reviewer.email_address,
+                }
 
         return ReviewScoreResponse(**score_dict)
 
