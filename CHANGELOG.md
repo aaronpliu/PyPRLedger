@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2026-04-06
+
+### Added
+- **Version Publish Skill** - Automated release workflow documentation
+  - New `SKILL.md` for version publishing instructions
+  - Streamlined release process with one-liner command
+  - Docker image publishing optional steps
+
+### Changed
+- **Version Bump** - Incremental version progression
+  - Version updated to 1.4.0 from 1.3.2
+  - Continues stable development cycle
+
+---
+
 ## [1.3.2] - 2026-04-05
 
 ### Added
