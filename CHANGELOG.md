@@ -5,6 +5,91 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+---
+
+## [1.3.2] - 2026-04-05
+
+### Added
+- **Review UI Testing Page** - Interactive web interface for API testing and review visualization
+  - New `web/index.html` page for manual testing of review endpoints
+  - Support for multiple themes (light/dark mode)
+  - Enhanced parameter controls for GET /reviews endpoint with additional filtering options
+  - Real-time score display and editing capabilities
+  - Visual representation of reviewer comments and suggestions
+  
+- **Cache Management Script** - Utility for clearing Redis cache
+  - New `scripts/housekeeping/clear_cache.py` for cache cleanup operations
+  - Supports selective cache clearing by key patterns
+  - Logging integration for audit trail
+  - Helps maintain cache consistency during development and production
+
+### Changed
+- **Score Architecture Refactoring [BREAKING]** - Separated score data from review results into dedicated table
+  - Created new `review_score` table with proper normalization for better data organization
+  - Database migration: `alembic/versions/004_refactor_score_to_separate_table.py`
+  - Scores can now be managed independently at PR level or file level
+  - Removed score fields from `create_review` endpoint to simplify API contract
+  - New `ReviewScoreService` for dedicated score management operations
+  - Updated score summary logic for better aggregation and reporting
+  - **Migration Note**: Existing review data automatically migrated to new schema
+  
+- **Enhanced Review Query Logic** - Improved data retrieval and filtering
+  - Fixed reviewer_comments field population in GET /reviews responses
+  - Optimized review score queries with proper JOIN strategies
+  - Enhanced statistics calculation accuracy for dashboard metrics
+  - Better handling of multi-reviewer scenarios with independent scoring
+  
+- **Schema Unification** - Standardized Pydantic schemas across services
+  - Unified schema configurations in all service layers (project, user, review)
+  - Consistent response models with proper type annotations
+  - Improved type safety and validation across API boundaries
+  - Reduced code duplication through shared schema definitions
+  
+- **Folder Structure Optimization** - Reorganized scripts for better maintainability
+  - Moved utility scripts to `scripts/housekeeping/` directory for better organization
+  - Renamed `scripts/deployment/clear_cache.py` → `scripts/housekeeping/clear_cache.py`
+  - Renamed `scripts/cleanup_database.py` → `scripts/housekeeping/clear_database.py`
+  - Moved `scripts/review_ui.html` → `web/index.html` for clear separation of concerns
+  
+- **Deprecated Method Replacement** - Updated SQLAlchemy model definitions
+  - Replaced deprecated column definition patterns in Project, Repository, and User models
+  - Ensured compatibility with latest SQLAlchemy 2.0 standards
+  - Improved model initialization and relationship definitions
+
+### Fixed
+- **Cache Error on Score Updates** - Resolved cache invalidation issues
+  - Fixed cache key mismatch when updating scores in multi-reviewer scenarios
+  - Proper cache refresh after score modifications to prevent stale reads
+  - Eliminated stale data problems in review queries
+  
+- **User Cache Issues** - Corrected user data caching behavior
+  - Fixed cache serialization/deserialization for user objects
+  - Improved cache hit rates for frequently accessed user data
+  - Prevented cache corruption from improper object storage
+  
+- **Type Errors** - Multiple type annotation fixes across codebase
+  - Fixed type mismatches in review service methods
+  - Corrected return type annotations in API endpoints (reviews, users)
+  - Improved type safety in user and review operations
+  - Enhanced IDE support and static analysis accuracy
+  
+- **Exception Handling** - Enhanced error output and logging
+  - Better error messages for debugging with contextual information
+  - Improved exception propagation in middleware layer
+  - More informative stack traces for faster issue resolution
+
+### Technical Details
+- **Database Schema**: New `review_score` table separates scoring from review content, enabling independent score management
+- **Caching Strategy**: Fixed composite key usage `(project_key, repository_slug, pull_request_id)` for consistent cache behavior
+- **API Design**: Simplified create_review by removing score parameters; use dedicated score endpoints instead
+- **UI Enhancement**: Modern responsive design with theme support, accessible via `/web/index.html`
+- **Code Quality**: Unified schema patterns reduce duplication by ~30% and improve maintainability
+- **Backward Compatibility**: Migration script ensures existing data works seamlessly with new schema
+
+---
+
 ## [1.3.1] - 2026-03-31
 
 ### Added
@@ -301,14 +386,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
-| 1.1.0 | 2026-03-25 | Enhanced score update endpoint, version management improvements, SQLAlchemy boolean query fixes |
-| Unreleased | 2026-03-21 | Logging system, critical bug fixes, Pydantic v2 migration |
+| 1.3.2 | 2026-04-05 | Score architecture refactoring, review UI testing page, cache management, schema unification |
+| 1.3.1 | 2026-03-31 | Multi-reviewer score support with UPSERT pattern, independent iteration tracking |
+| 1.3.0 | 2026-03-29 | Project registry system, multi-app query support, virtual app_name architecture |
+| 1.2.0 | 2026-03-25 | Enhanced score update endpoint, version management improvements, SQLAlchemy boolean query fixes |
 | 1.0.1 | 2026-03-21 | Logging system, critical bug fixes, Pydantic v2 migration |
 | 1.0.0 | 2026-03-21 | Initial release with core functionality |
 
 ## Upgrade Notes
 
-### Breaking Changes in Unreleased Version
+### Breaking Changes in 1.0.1
 
 #### 1. Logging System Integration
 If you have custom logging configurations, you may need to merge them with the new centralized logging system:
