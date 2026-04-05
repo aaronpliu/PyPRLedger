@@ -357,7 +357,7 @@
             margin-bottom: 30px;
             border: 2px solid var(--border-color);
             border-radius: 8px;
-            overflow: hidden;
+            overflow: visible;
             box-shadow: var(--shadow-md);
         }
 
@@ -371,6 +371,8 @@
             align-items: center;
             transition: all 0.3s;
             border-bottom: 2px solid var(--border-color);
+            position: relative;
+            z-index: 1;
         }
 
         .pr-group-header:hover {
@@ -402,6 +404,101 @@
 
         [data-theme="dark"] .pr-badge {
             background: #334155;
+        }
+
+        .pr-badge-reviewed {
+            background: #dcfce7;
+            color: #166534;
+            border-color: #86efac;
+        }
+
+        [data-theme="dark"] .pr-badge-reviewed {
+            background: #064e3b;
+            color: #6ee7b7;
+            border-color: #059669;
+        }
+
+        .pr-badge-not-reviewed {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fca5a5;
+        }
+
+        [data-theme="dark"] .pr-badge-not-reviewed {
+            background: #7f1d1d;
+            color: #fecaca;
+            border-color: #dc2626;
+        }
+
+        /* Tooltip Styles */
+        .tooltip-container {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+            z-index: 100;
+        }
+
+        .tooltip-text {
+            visibility: hidden;
+            background-color: #1e293b;
+            color: #fff;
+            text-align: center;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            white-space: nowrap;
+            position: absolute;
+            z-index: 99999;
+            bottom: calc(100% + 10px);
+            left: 50%;
+            transform: translateX(-50%) translateY(0);
+            opacity: 0;
+            transition: opacity 0.3s, visibility 0.3s, transform 0.3s;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+        }
+
+        .tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #1e293b transparent transparent transparent;
+        }
+
+        [data-theme="dark"] .tooltip-text {
+            background-color: #f1f5f9;
+            color: #1e293b;
+        }
+
+        [data-theme="dark"] .tooltip-text::after {
+            border-color: #f1f5f9 transparent transparent transparent;
+        }
+
+        .tooltip-container:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+            transform: translateX(-50%) translateY(-5px);
+        }
+
+        /* Alternative tooltip positions */
+        .tooltip-bottom .tooltip-text {
+            bottom: auto;
+            top: 125%;
+        }
+
+        .tooltip-bottom .tooltip-text::after {
+            top: auto;
+            bottom: 100%;
+            border-color: transparent transparent #1e293b transparent;
+        }
+
+        [data-theme="dark"] .tooltip-bottom .tooltip-text::after {
+            border-color: transparent transparent #f1f5f9 transparent;
         }
 
         .pr-toggle {
@@ -986,11 +1083,16 @@
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 15px;
-            border-left: 4px solid #3b82f6;
         }
 
         [data-theme="dark"] .ai-review-summary {
             background: #0f172a;
+        }
+
+        [data-theme="dark"] [data-theme-disclaimer] {
+            background: #451a03 !important;
+            color: #fbbf24 !important;
+            border-left-color: #f59e0b !important;
         }
 
         .ai-summary-stats {
@@ -1478,7 +1580,7 @@
         <div class="filters">
             <div class="filter-group">
                 <label for="currentReviewer">👤 Current Reviewer (Required):</label>
-                <input type="text" id="currentReviewer" placeholder="Your username" list="reviewerList">
+                <input type="text" id="currentReviewer" placeholder="Select from list" list="reviewerList" autocomplete="off">
                 <datalist id="reviewerList"></datalist>
             </div>
             <div class="filter-group">
@@ -1501,6 +1603,14 @@
             <div class="filter-group">
                 <label for="pullRequestId">Pull Request ID:</label>
                 <input type="text" id="pullRequestId" placeholder="Leave empty for all PRs">
+            </div>
+            <div class="filter-group">
+                <label for="reviewStatus">📊 Review Status:</label>
+                <select id="reviewStatus">
+                    <option value="all">All Reviews</option>
+                    <option value="reviewed">✅ Reviewed (Has Scores)</option>
+                    <option value="not-reviewed">❌ Not Reviewed (No Scores)</option>
+                </select>
             </div>
         </div>
         
@@ -1626,38 +1736,40 @@
         document.addEventListener('DOMContentLoaded', () => {
             const reviewerInput = document.getElementById('currentReviewer');
             const prUserInput = document.getElementById('pullRequestUser');
+            const reviewStatusSelect = document.getElementById('reviewStatus');
             
-            // Current Reviewer - Listen for input changes with debounce
-            reviewerInput.addEventListener('input', function() {
+            // Current Reviewer - Listen for changes (only from datalist selection)
+            reviewerInput.addEventListener('change', function() {
                 const value = this.value.trim();
                 
-                // Clear previous timeout
-                if (reviewLoadTimeout) {
-                    clearTimeout(reviewLoadTimeout);
-                }
+                // Check if the value matches a valid user from the datalist
+                const datalist = document.getElementById('reviewerList');
+                const options = Array.from(datalist.options).map(opt => opt.value);
                 
-                if (value) {
-                    // User entered something - auto load after 500ms delay
-                    reviewLoadTimeout = setTimeout(() => {
-                        currentReviewer = value;
-                        localStorage.setItem('currentReviewer', currentReviewer); // Save for convenience
-                        loadAllReviews();
-                    }, 500);
-                } else {
-                    // User cleared the input - clear all data immediately
-                    currentReviewer = '';
-                    clearAllData();
-                }
-            });
-            
-            // Current Reviewer - Also trigger on blur
-            reviewerInput.addEventListener('blur', function() {
-                const value = this.value.trim();
-                if (value && !allReviews.length) {
-                    // If there's a value but no data loaded, load now
+                if (value && options.includes(value)) {
+                    // Valid reviewer selected - load reviews
                     currentReviewer = value;
                     localStorage.setItem('currentReviewer', currentReviewer);
                     loadAllReviews();
+                } else if (!value) {
+                    // Input cleared - clear all data
+                    currentReviewer = '';
+                    clearAllData();
+                } else {
+                    // Invalid input - show error and clear
+                    showError('⚠️ Please select a valid reviewer from the dropdown list');
+                    this.value = '';
+                    currentReviewer = '';
+                }
+            });
+            
+            // Prevent arbitrary input - only allow selecting from datalist
+            reviewerInput.addEventListener('input', function() {
+                // Don't auto-load on typing, only on selection
+                const value = this.value.trim();
+                if (!value) {
+                    currentReviewer = '';
+                    clearAllData();
                 }
             });
             
@@ -1675,6 +1787,13 @@
                     prUserLoadTimeout = setTimeout(() => {
                         loadAllReviews();
                     }, 500);
+                }
+            });
+            
+            // Review Status Filter - Listen for changes
+            reviewStatusSelect.addEventListener('change', function() {
+                if (currentReviewer) {
+                    displayGroupedReviews(allReviews);
                 }
             });
         });
@@ -1707,6 +1826,7 @@
             document.getElementById('projectKey').value = '';
             document.getElementById('repositorySlug').value = '';
             document.getElementById('pullRequestId').value = '';
+            document.getElementById('reviewStatus').value = 'all';
             
             // Reset currentReviewer variable
             currentReviewer = '';
@@ -1738,16 +1858,35 @@
             const successMsg = document.getElementById('successMessage');
             const currentReviewerInput = document.getElementById('currentReviewer');
 
-            // Validate current reviewer
+            // Validate current reviewer - must be selected from the list
             if (!currentReviewerInput.value.trim()) {
-                // Show alert message
+                // Show alert message when no reviewer is selected
                 errorEl.textContent = '⚠️ Please select a reviewer to load reviews';
                 errorEl.style.display = 'block';
                 loadingEl.style.display = 'none';
+                container.innerHTML = `
+                    <div class="loading" style="background: transparent; color: #94a3b8; font-size: 1rem;">
+                        👆 Please select a reviewer to load reviews
+                    </div>
+                `;
                 return;
             }
 
-            currentReviewer = currentReviewerInput.value.trim();
+            // Verify the reviewer is valid (exists in datalist)
+            const datalist = document.getElementById('reviewerList');
+            const validReviewers = Array.from(datalist.options).map(opt => opt.value);
+            const selectedReviewer = currentReviewerInput.value.trim();
+            
+            if (!validReviewers.includes(selectedReviewer)) {
+                errorEl.textContent = '⚠️ Invalid reviewer. Please select a valid reviewer from the dropdown list.';
+                errorEl.style.display = 'block';
+                loadingEl.style.display = 'none';
+                currentReviewerInput.value = '';
+                currentReviewer = '';
+                return;
+            }
+
+            currentReviewer = selectedReviewer;
             localStorage.setItem('currentReviewer', currentReviewer);
 
             successMsg.style.display = 'none';
@@ -1821,17 +1960,37 @@
 
         function displayGroupedReviews(reviews) {
             const container = document.getElementById('reviewsContainer');
+            const reviewStatusFilter = document.getElementById('reviewStatus').value;
 
-            if (reviews.length === 0) {
-                container.innerHTML = '<div class="loading">No reviews found</div>';
+            // Apply review status filter
+            let filteredReviews = reviews;
+            if (reviewStatusFilter === 'reviewed') {
+                // Show only reviews that have scores
+                filteredReviews = reviews.filter(review => {
+                    const scores = review.score_summary?.scores || [];
+                    return scores.length > 0;
+                });
+            } else if (reviewStatusFilter === 'not-reviewed') {
+                // Show only reviews without scores
+                filteredReviews = reviews.filter(review => {
+                    const scores = review.score_summary?.scores || [];
+                    return scores.length === 0;
+                });
+            }
+
+            if (filteredReviews.length === 0) {
+                const statusText = reviewStatusFilter === 'reviewed' ? 'reviewed' : 
+                                   reviewStatusFilter === 'not-reviewed' ? 'not reviewed' : '';
+                container.innerHTML = `<div class="loading">No ${statusText} reviews found</div>`;
                 return;
             }
 
             console.log('Displaying reviews with currentReviewer:', currentReviewer);
+            console.log('Review status filter:', reviewStatusFilter, '- Total:', reviews.length, 'Filtered:', filteredReviews.length);
 
             // Group reviews by project/repository/pull_request_id
             const grouped = {};
-            reviews.forEach(review => {
+            filteredReviews.forEach(review => {
                 const key = `${review.project_key}|${review.repository_slug}|${review.pull_request_id}`;
                 if (!grouped[key]) {
                     grouped[key] = {
@@ -1849,18 +2008,28 @@
                 // Get commit ID from the first review (all reviews in same PR should have same commit)
                 const commitId = group.reviews[0]?.pull_request_commit_id;
                 const commitBadge = commitId ? 
-                    `<span class="pr-badge" style="background: #f3e8ff; color: #7c3aed; border: 1px solid #c084fc;">🔖 ${escapeHtml(commitId.substring(0, 8))}</span>` : 
+                    `<span class="tooltip-container"><span class="pr-badge" style="background: #f3e8ff; color: #7c3aed; border: 1px solid #c084fc;">🔖 ${escapeHtml(commitId.substring(0, 8))}</span><span class="tooltip-text">Full Commit ID: ${escapeHtml(commitId)}</span></span>` : 
                     '';
+                
+                // Check if this PR has been reviewed (has any scores)
+                const hasScores = group.reviews.some(review => {
+                    const scores = review.score_summary?.scores || [];
+                    return scores.length > 0;
+                });
+                const reviewStatusBadge = hasScores ?
+                    '<span class="tooltip-container"><span class="pr-badge pr-badge-reviewed">✅ Reviewed</span><span class="tooltip-text">This PR has been reviewed and has scores</span></span>' :
+                    '<span class="tooltip-container"><span class="pr-badge pr-badge-not-reviewed">❌ Not Reviewed</span><span class="tooltip-text">This PR has not been reviewed yet - no scores</span></span>';
                 
                 return `
                 <div class="pr-group">
                     <div class="pr-group-header" onclick="toggleGroup(this)">
                         <div class="pr-group-info">
-                            <span class="pr-badge">📋 ${escapeHtml(group.project_key)}</span>
-                            <span class="pr-badge">📁 ${escapeHtml(group.repository_slug)}</span>
-                            <span class="pr-badge">🔖 ${escapeHtml(group.pull_request_id)}</span>
+                            <span class="tooltip-container"><span class="pr-badge">📋 ${escapeHtml(group.project_key)}</span><span class="tooltip-text">Project Key: ${escapeHtml(group.project_key)}</span></span>
+                            <span class="tooltip-container"><span class="pr-badge">📁 ${escapeHtml(group.repository_slug)}</span><span class="tooltip-text">Repository: ${escapeHtml(group.repository_slug)}</span></span>
+                            <span class="tooltip-container"><span class="pr-badge">🔖 ${escapeHtml(group.pull_request_id)}</span><span class="tooltip-text">Pull Request ID: ${escapeHtml(group.pull_request_id)}</span></span>
                             ${commitBadge}
-                            <span class="pr-badge">👥 ${group.reviews.length} review(s)</span>
+                            ${reviewStatusBadge}
+                            <span class="tooltip-container"><span class="pr-badge">👥 ${group.reviews.length} review(s)</span><span class="tooltip-text">Total number of reviews in this PR</span></span>
                         </div>
                         <span class="pr-toggle">▼</span>
                     </div>
@@ -2187,6 +2356,9 @@
             
             return `
                 <div class="ai-review-summary">
+                    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; border-radius: 6px; margin-bottom: 15px; font-size: 0.85rem; color: #92400e;" data-theme-disclaimer>
+                        <strong>⚠️ Disclaimer:</strong> This review result was generated by AI and may not be fully accurate. Please verify all important information independently.
+                    </div>
                     ${statsHtml}
                     ${issuesHtml}
                     ${assessmentHtml}
