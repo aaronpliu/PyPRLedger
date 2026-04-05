@@ -203,6 +203,7 @@ class ReviewScoreService:
                 PullRequestScore.pull_request_id == pull_request_id,
                 PullRequestScore.project_key == project_key,
                 PullRequestScore.repository_slug == repository_slug,
+                PullRequestScore.active == True,  # Only return active scores
             )
             .options(
                 selectinload(PullRequestScore.project),
@@ -323,11 +324,27 @@ class ReviewScoreService:
         source_filename: str | None,
         reviewer: str,
         db: AsyncSession,
+        current_user: str | None = None,
     ) -> bool:
-        """Delete a reviewer's score"""
+        """
+        Soft delete a reviewer's score (mark as inactive)
+
+        Args:
+            pull_request_id: Pull request ID
+            project_key: Project key
+            repository_slug: Repository slug
+            source_filename: Source filename or None for PR-level
+            reviewer: Reviewer username who owns the score
+            db: Database session
+            current_user: Current user performing deletion (defaults to reviewer)
+
+        Returns:
+            bool: True if deleted, False if not found
+        """
         from src.utils.score_utils import normalize_source_filename
 
         source_filename = normalize_source_filename(source_filename)
+        current_user = current_user or reviewer  # Default to reviewer if not provided
 
         score = await self._get_score_by_reviewer(
             db=db,
@@ -341,7 +358,22 @@ class ReviewScoreService:
         if not score:
             return False
 
-        await db.delete(score)
+        # Check if already inactive
+        if not score.active:
+            logger.warning(f"Score already inactive: {score.id}")
+            return False
+
+        # Soft delete: mark as inactive and record deletion info
+        score.active = False
+        score.deleted_by = current_user
+        score.deleted_at = datetime.now(UTC)
+        score.updated_date = datetime.now(UTC)
+
+        await db.flush()
+        await db.commit()
+        await db.refresh(score)
+
+        # Invalidate cache
         await self._invalidate_score_cache(
             pull_request_id=pull_request_id,
             project_key=project_key,
@@ -349,9 +381,102 @@ class ReviewScoreService:
             source_filename=source_filename,
         )
 
+        # Also invalidate PR-level cache
+        await self._invalidate_score_cache(
+            pull_request_id=pull_request_id,
+            project_key=project_key,
+            repository_slug=repository_slug,
+            source_filename=None,
+        )
+
         target = f"file '{source_filename}'" if source_filename else "PR"
-        logger.info(f"Deleted score for reviewer '{reviewer}' on {target}")
+        logger.info(
+            f"Soft deleted score {score.id} for reviewer '{reviewer}' on {target} by '{current_user}'"
+        )
         return True
+
+    async def delete_scores_batch(
+        self,
+        scores_to_delete: list[dict[str, Any]],
+        db: AsyncSession,
+        current_user: str,
+    ) -> dict[str, Any]:
+        """
+        Batch soft delete multiple scores
+
+        Args:
+            scores_to_delete: List of dicts with keys:
+                - pull_request_id
+                - project_key
+                - repository_slug
+                - source_filename (optional)
+                - reviewer
+            db: Database session
+            current_user: Current user performing deletion
+
+        Returns:
+            dict: {
+                "deleted": int,  # Number of successfully deleted scores
+                "not_found": int,  # Number of scores not found
+                "already_inactive": int,  # Number already inactive
+                "errors": list[str]  # List of error messages
+            }
+        """
+        result = {
+            "deleted": 0,
+            "not_found": 0,
+            "already_inactive": 0,
+            "errors": [],
+        }
+
+        for score_info in scores_to_delete:
+            try:
+                deleted = await self.delete_score(
+                    pull_request_id=score_info["pull_request_id"],
+                    project_key=score_info["project_key"],
+                    repository_slug=score_info["repository_slug"],
+                    source_filename=score_info.get("source_filename"),
+                    reviewer=score_info["reviewer"],
+                    db=db,
+                    current_user=current_user,
+                )
+
+                if deleted:
+                    result["deleted"] += 1
+                else:
+                    # Check why it wasn't deleted
+                    score = await self._get_score_by_reviewer(
+                        db=db,
+                        pull_request_id=score_info["pull_request_id"],
+                        project_key=score_info["project_key"],
+                        repository_slug=score_info["repository_slug"],
+                        source_filename=normalize_source_filename(
+                            score_info.get("source_filename")
+                        ),
+                        reviewer=score_info["reviewer"],
+                    )
+
+                    if not score:
+                        result["not_found"] += 1
+                    elif not score.active:
+                        result["already_inactive"] += 1
+
+            except Exception as e:
+                error_msg = (
+                    f"Failed to delete score for "
+                    f"{score_info.get('reviewer')} on {score_info.get('pull_request_id')}: "
+                    f"{str(e)}"
+                )
+                logger.error(error_msg)
+                result["errors"].append(error_msg)
+
+        logger.info(
+            f"Batch deletion completed: {result['deleted']} deleted, "
+            f"{result['not_found']} not found, {result['already_inactive']} already inactive, "
+            f"{len(result['errors'])} errors"
+        )
+
+        return result
 
     # === Helper Methods ===
 
@@ -380,6 +505,7 @@ class ReviewScoreService:
                 PullRequestScore.project_key == project_key,
                 PullRequestScore.repository_slug == repository_slug,
                 PullRequestScore.reviewer == reviewer,
+                PullRequestScore.active == True,  # Only return active scores
             )
         )
 

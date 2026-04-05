@@ -1024,10 +1024,13 @@ async def delete_score(
     score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
 ) -> None:
     """
-    Delete a reviewer's score for a review target
+    Soft delete a reviewer's score for a review target (mark as inactive)
+
+    The reviewer parameter acts as the current user (no auth system yet).
+    Only the score owner can delete their own score.
 
     Args:
-        reviewer: Reviewer username
+        reviewer: Reviewer username (acts as current user)
         pull_request_id: Pull request ID
         project_key: Project key
         repository_slug: Repository slug
@@ -1039,9 +1042,10 @@ async def delete_score(
         None: Successful deletion returns 204 No Content
 
     Raises:
-        HTTPException: 404 if score not found
+        HTTPException: 404 if score not found or already deleted
     """
     try:
+        # Use reviewer as current_user (no auth system yet)
         deleted = await score_service.delete_score(
             pull_request_id=pull_request_id,
             project_key=project_key,
@@ -1049,6 +1053,7 @@ async def delete_score(
             source_filename=source_filename,
             reviewer=reviewer,
             db=db,
+            current_user=reviewer,  # reviewer acts as current user
         )
 
         if not deleted:
@@ -1056,7 +1061,7 @@ async def delete_score(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={
                     "error": "NOT_FOUND",
-                    "message": f"Score not found for reviewer '{reviewer}'",
+                    "message": f"Score not found for reviewer '{reviewer}' or already deleted",
                 },
             )
     except HTTPException:
@@ -1071,4 +1076,90 @@ async def delete_score(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to delete score"},
+        )
+
+
+@router.post("/scores/batch-delete")
+async def batch_delete_scores(
+    request_data: dict,
+    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
+    score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
+) -> dict:
+    """
+    Batch soft delete multiple scores (mark as inactive)
+
+    The current_user is extracted from the first score's reviewer field
+    (no auth system yet). All scores must belong to the same reviewer.
+
+    Args:
+        request_data: JSON body containing:
+            - scores: List of score objects to delete, each with:
+                - pull_request_id
+                - project_key
+                - repository_slug
+                - source_filename (optional)
+                - reviewer
+        db: Database session
+        score_service: Review score service instance
+
+    Returns:
+        dict: Deletion results with counts
+
+    Raises:
+        HTTPException: 400 if invalid request, 500 on server error
+    """
+    try:
+        # Extract scores from request
+        scores_to_delete = request_data.get("scores", [])
+
+        if not scores_to_delete:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "BAD_REQUEST", "message": "No scores provided for deletion"},
+            )
+
+        # Extract current_user from first score (all should be same reviewer)
+        current_user = scores_to_delete[0].get("reviewer")
+
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "BAD_REQUEST", "message": "Reviewer field is required"},
+            )
+
+        # Validate all scores have same reviewer
+        for score_info in scores_to_delete:
+            if score_info.get("reviewer") != current_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={
+                        "error": "BAD_REQUEST",
+                        "message": "All scores must belong to the same reviewer",
+                    },
+                )
+
+        # Perform batch deletion
+        result = await score_service.delete_scores_batch(
+            scores_to_delete=scores_to_delete,
+            db=db,
+            current_user=current_user,
+        )
+
+        return {
+            "message": "Batch deletion completed",
+            "results": result,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to batch delete scores: {str(e)}\n{error_traceback}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint="POST /api/v1/reviews/scores/batch-delete",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to batch delete scores"},
         )

@@ -950,6 +950,45 @@
             margin: 4px 0 0 0;
         }
 
+        /* Delete Score Button */
+        .btn-delete-score {
+            padding: 6px 14px;
+            font-size: 0.85rem;
+            color: #ef4444;
+            background: transparent;
+            border: 1.5px solid #ef4444;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-delete-score:hover {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            border-color: transparent;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-delete-score:active {
+            transform: translateY(0);
+        }
+
+        [data-theme="dark"] .btn-delete-score {
+            color: #f87171;
+            border-color: #f87171;
+        }
+
+        [data-theme="dark"] .btn-delete-score:hover {
+            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+            color: #1e293b;
+            box-shadow: 0 4px 12px rgba(248, 113, 113, 0.4);
+        }
+
         .scoring-form-container {
             background: #f8fafc;
             padding: 20px;
@@ -2634,6 +2673,17 @@
                                                 <p style="margin: 4px 0 0 0; color: #495057; line-height: 1.5;">${escapeHtml(score.reviewer_comments)}</p>
                                             </div>
                                         ` : ''}
+                                        ${score.reviewer === currentReviewer ? `
+                                            <div class="score-actions" style="margin-top: 12px; display: flex; justify-content: flex-end;">
+                                                <button 
+                                                    class="btn-delete-score md-btn md-btn-text" 
+                                                    onclick="deleteScore('${review.pull_request_id}', '${review.project_key}', '${review.repository_slug}', '${score.reviewer}', '${score.source_filename || ''}')"
+                                                    title="Delete your score"
+                                                >
+                                                    🗑️ Delete
+                                                </button>
+                                            </div>
+                                        ` : ''}
                                     </div>
                                 </div>
                             `}).join('')}
@@ -3063,6 +3113,60 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Delete Score Function
+        async function deleteScore(pullRequestId, projectKey, repositorySlug, reviewer, sourceFilename) {
+            // Confirm deletion
+            const confirmed = confirm(
+                `⚠️ Confirm Deletion\n\n` +
+                `Are you sure you want to delete your score?\n\n` +
+                `Reviewer: ${reviewer}\n` +
+                `PR: ${pullRequestId}\n` +
+                `File: ${sourceFilename || 'PR-level'}\n\n` +
+                `This action will mark the score as inactive (soft delete).`
+            );
+            
+            if (!confirmed) {
+                return;
+            }
+            
+            try {
+                // Build query parameters
+                const params = new URLSearchParams({
+                    pull_request_id: pullRequestId,
+                    project_key: projectKey,
+                    repository_slug: repositorySlug,
+                    reviewer: reviewer,
+                });
+                
+                if (sourceFilename) {
+                    params.append('source_filename', sourceFilename);
+                }
+                
+                const response = await fetch(
+                    `${API_BASE_URL}/reviews/score/${reviewer}?${params}`,
+                    {
+                        method: 'DELETE',
+                    }
+                );
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail?.message || 'Failed to delete score');
+                }
+                
+                showSuccess('✅ Score deleted successfully');
+                
+                // Reload reviews to reflect changes
+                setTimeout(() => {
+                    loadAllReviews();
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Delete score error:', error);
+                showError(`Error: ${error.message}`);
+            }
         }
 
         // Back to Top functionality

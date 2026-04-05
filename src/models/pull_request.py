@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -299,6 +300,13 @@ class PullRequestScore(Base):
     score_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewer_comments: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Soft delete and audit fields
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1", index=True
+    )
+    deleted_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # Timestamps
     created_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
@@ -367,6 +375,13 @@ class PullRequestScore(Base):
             "score": self.score,
             "score_description": self.score_description,
             "reviewer_comments": self.reviewer_comments,
+            "active": self.active,
+            "deleted_by": self.deleted_by,
+            "deleted_at": (
+                self.deleted_at.isoformat()
+                if isinstance(self.deleted_at, datetime) and self.deleted_at
+                else None
+            ),
             "created_date": (
                 self.created_date.isoformat()
                 if isinstance(self.created_date, datetime)
