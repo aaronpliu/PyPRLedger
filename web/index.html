@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pull Request Review System - Material Design</title>
+    <!-- Diff2Html for professional code diff display (Local) -->
+    <link rel="stylesheet" href="lib/diff2html.min.css">
+    <script src="lib/diff2html-ui.min.js"></script>
     <!-- Material Design 3 Styles -->
     <link rel="stylesheet" href="css/main.css">
     <style>
@@ -1285,6 +1288,138 @@
             font-weight: 700;
         }
 
+        /* Diff View Controls */
+        .diff-view-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .view-toggle-btn {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            border: 1.5px solid var(--border-color);
+            background: transparent;
+            color: var(--text-secondary);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .view-toggle-btn:hover {
+            background: #f1f5f9;
+            color: var(--text-primary);
+            border-color: #cbd5e1;
+        }
+
+        [data-theme="dark"] .view-toggle-btn:hover {
+            background: #334155;
+            border-color: #475569;
+        }
+
+        .view-toggle-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .view-toggle-btn.active:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        /* Diff2Html Custom Styles */
+        .d2h-wrapper {
+            max-height: 600px;
+            overflow: auto;
+        }
+
+        .d2h-file-header {
+            background: #f8fafc !important;
+            border-bottom: 2px solid var(--border-color) !important;
+        }
+
+        [data-theme="dark"] .d2h-file-header {
+            background: #1e293b !important;
+            border-bottom-color: #334155 !important;
+        }
+
+        .d2h-file-name {
+            color: var(--text-primary) !important;
+            font-weight: 700 !important;
+        }
+
+        .d2h-file-stats {
+            color: var(--text-secondary) !important;
+        }
+
+        /* Line numbers styling */
+        .d2h-code-linenumber {
+            color: #94a3b8 !important;
+            background-color: #f8fafc !important;
+            border-right: 1px solid var(--border-color) !important;
+        }
+
+        [data-theme="dark"] .d2h-code-linenumber {
+            background-color: #0f172a !important;
+            border-right-color: #334155 !important;
+        }
+
+        /* Added lines */
+        .d2h-ins {
+            background-color: #dcfce7 !important;
+        }
+
+        [data-theme="dark"] .d2h-ins {
+            background-color: #064e3b !important;
+        }
+
+        .d2h-ins .d2h-code-line-ctn {
+            color: #166534 !important;
+        }
+
+        [data-theme="dark"] .d2h-ins .d2h-code-line-ctn {
+            color: #6ee7b7 !important;
+        }
+
+        /* Deleted lines */
+        .d2h-del {
+            background-color: #fee2e2 !important;
+        }
+
+        [data-theme="dark"] .d2h-del {
+            background-color: #7f1d1d !important;
+        }
+
+        .d2h-del .d2h-code-line-ctn {
+            color: #991b1b !important;
+        }
+
+        [data-theme="dark"] .d2h-del .d2h-code-line-ctn {
+            color: #fecaca !important;
+        }
+
+        /* Context lines */
+        .d2h-cntx .d2h-code-line-ctn {
+            color: var(--text-secondary) !important;
+        }
+
+        /* Code content */
+        .d2h-code-line-ctn {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace !important;
+            font-size: 0.85rem !important;
+        }
+
+        /* Side-by-side specific */
+        .d2h-files-diff.d2h-view-side-by-side .d2h-file-diff {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+
         .code-diff-toggle {
             font-size: 1.2rem;
             transition: transform 0.3s;
@@ -1570,63 +1705,7 @@
         }
 
         .diff-viewer {
-            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', 'Source Code Pro', monospace;
-            font-size: 0.85rem;
-            line-height: 1.5;
-            white-space: pre;
-        }
-
-        .diff-line {
-            padding: 4px 16px;
-            border-bottom: 1px solid var(--border-color);
-            transition: all 0.2s;
-        }
-
-        .diff-line:hover {
-            background-color: rgba(37, 99, 235, 0.05);
-        }
-
-        .diff-line:last-child {
-            border-bottom: none;
-        }
-
-        .diff-line-add {
-            background-color: #dcfce7;
-            color: #166534;
-        }
-
-        [data-theme="dark"] .diff-line-add {
-            background-color: #064e3b;
-            color: #6ee7b7;
-        }
-
-        .diff-line-del {
-            background-color: #fee2e2;
-            color: #991b1b;
-        }
-
-        [data-theme="dark"] .diff-line-del {
-            background-color: #7f1d1d;
-            color: #fecaca;
-        }
-
-        .diff-line-context {
-            background-color: #fafafa;
-            color: var(--text-secondary);
-        }
-
-        [data-theme="dark"] .diff-line-context {
-            background-color: #0f172a;
-            color: #94a3b8;
-        }
-
-        .diff-line-number {
-            display: inline-block;
-            width: 60px;
-            color: #94a3b8;
-            user-select: none;
-            text-align: right;
-            margin-right: 16px;
+            /* diff2html will handle all styling */
         }
 
         /* Score Display Slider */
@@ -2117,6 +2196,14 @@
         document.addEventListener('DOMContentLoaded', () => {
             initializePageSize();
             loadUsersForAutocomplete();
+            
+            // Initialize diff view mode from localStorage
+            const savedView = localStorage.getItem('diffViewMode');
+            if (savedView) {
+                currentDiffView = savedView;
+            } else {
+                currentDiffView = 'line-by-line'; // Default to unified view
+            }
         });
 
         // Auto-load reviews when reviewer is selected
@@ -2604,7 +2691,7 @@
             });
 
             return `
-                <div class="review-card md-card md-card-filled">
+                <div class="review-card md-card md-card-filled" data-review-id="${review.id}">
                     <div class="review-header">
                         <div class="review-meta">
                             <span class="badge badge-reviewer">👤 ${escapeHtml(review.reviewer_info?.display_name || review.reviewer)}</span>
@@ -2628,8 +2715,26 @@
                         <div class="review-analysis-container">
                             ${gitCodeDiff ? `
                                 <div class="analysis-column">
-                                    <div class="analysis-column-header">
-                                        📝 Code Changes
+                                    <div class="analysis-column-header" style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span>📝 Code Changes</span>
+                                        <div class="diff-view-controls">
+                                            <button 
+                                                class="view-toggle-btn ${currentDiffView === 'line-by-line' ? 'active' : ''}" 
+                                                data-view="line-by-line"
+                                                onclick="switchDiffView('line-by-line')"
+                                                title="Unified View"
+                                            >
+                                                📄 Unified
+                                            </button>
+                                            <button 
+                                                class="view-toggle-btn ${currentDiffView === 'side-by-side' ? 'active' : ''}" 
+                                                data-view="side-by-side"
+                                                onclick="switchDiffView('side-by-side')"
+                                                title="Side-by-Side View"
+                                            >
+                                                ↔️ Side by Side
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="analysis-column-body">
                                         <div class="diff-viewer">${renderCodeDiff(gitCodeDiff)}</div>
@@ -2760,53 +2865,78 @@
             section.classList.toggle('collapsed');
         }
 
+        // === Diff View Mode Management ===
+        let currentDiffView = localStorage.getItem('diffViewMode') || 'line-by-line';
+
+        function switchDiffView(viewMode) {
+            currentDiffView = viewMode;
+            localStorage.setItem('diffViewMode', viewMode);
+            
+            // Update button states
+            document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.view === viewMode);
+            });
+            
+            // Re-render all diffs
+            rerenderAllDiffs();
+        }
+
+        function rerenderAllDiffs() {
+            document.querySelectorAll('.diff-viewer').forEach(viewer => {
+                const reviewCard = viewer.closest('.review-card');
+                if (reviewCard) {
+                    const reviewId = reviewCard.dataset.reviewId;
+                    const reviewData = findReviewById(parseInt(reviewId));
+                    if (reviewData && reviewData.git_code_diff) {
+                        viewer.innerHTML = renderCodeDiff(reviewData.git_code_diff);
+                    }
+                }
+            });
+        }
+
+        /**
+         * Render code diff using diff2html library
+         */
         function renderCodeDiff(diff) {
             if (!diff) return '';
             
-            // Normalize line endings and ensure proper formatting
-            let normalizedDiff = diff;
-            
-            // If the diff doesn't contain newlines but has multiple sections,
-            // try to add newlines before common diff markers
-            if (!diff.includes('\n') && !diff.includes('\r')) {
-                // Add newlines before common diff patterns
-                normalizedDiff = diff
-                    .replace(/(@@)/g, '\n$1')
-                    .replace(/(\+[^+])/g, '\n$1')
-                    .replace(/(-[^-])/g, '\n$1')
-                    .replace(/(diff --git)/g, '\n$1')
-                    .trim();
-            }
-            
-            const lines = normalizedDiff.split('\n');
-            let renderedLines = [];
-            
-            for (const line of lines) {
-                if (!line.trim()) continue; // Skip empty lines
-                
-                let lineClass = 'diff-line-context';
-                let prefix = ' ';
-                let lineContent = escapeHtml(line);
-                
-                if (line.startsWith('+') && !line.startsWith('+++')) {
-                    lineClass = 'diff-line-add';
-                    prefix = '+';
-                } else if (line.startsWith('-') && !line.startsWith('---')) {
-                    lineClass = 'diff-line-del';
-                    prefix = '-';
-                } else if (line.startsWith('@@') || line.startsWith('diff --git') || line.startsWith('index')) {
-                    // Metadata lines - skip or style differently
-                    continue;
+            try {
+                // Normalize diff format if needed
+                let normalizedDiff = diff;
+                if (!diff.includes('\n') && !diff.includes('\r')) {
+                    normalizedDiff = diff
+                        .replace(/(@@)/g, '\n$1')
+                        .replace(/(\+[^+])/g, '\n$1')
+                        .replace(/(-[^-])/g, '\n$1')
+                        .replace(/(diff --git)/g, '\n$1')
+                        .trim();
                 }
                 
-                renderedLines.push(
-                    `<div class="diff-line ${lineClass}">` +
-                    `<span class="diff-line-number">&nbsp;</span>` +
-                    `<span>${prefix}${lineContent}</span></div>`
-                );
+                // Add proper file header if missing
+                if (!normalizedDiff.startsWith('diff --git')) {
+                    normalizedDiff = 'diff --git a/file b/file\n' + normalizedDiff;
+                }
+                
+                // Configure diff2html
+                const configuration = {
+                    drawFileList: false,
+                    matching: 'lines',
+                    outputFormat: currentDiffView, // 'line-by-line' or 'side-by-side'
+                    synchronisedScroll: true,
+                    highlight: true,
+                };
+                
+                // Create diff2html UI instance and render
+                const targetElement = document.createElement('div');
+                const diff2htmlUi = new Diff2HtmlUI(targetElement, normalizedDiff, configuration);
+                diff2htmlUi.draw();
+                
+                return targetElement.innerHTML;
+                
+            } catch (error) {
+                console.error('Error rendering diff:', error);
+                return `<div style="padding: 20px; color: #ef4444; text-align: center;">Failed to render diff: ${escapeHtml(error.message)}</div>`;
             }
-            
-            return renderedLines.join('');
         }
 
         function renderAIReviewResults(aiSuggestions) {
