@@ -39,20 +39,38 @@
             --bg-gradient: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
         }
 
+        [data-theme="dark"] {
+            --primary-gradient: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            --secondary-gradient: linear-gradient(135deg, #4b5563 0%, #374151 100%);
+            --success-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            --card-bg: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: var(--bg-gradient);
             min-height: 100vh;
             padding: 20px;
+            overflow-x: hidden;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 95%;
             margin: 0 auto;
             background: white;
             border-radius: 12px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
+            overflow: visible;
+            min-height: calc(100vh - 40px);
+        }
+
+        [data-theme="dark"] .container {
+            background: #1e293b;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
         }
 
         .header {
@@ -108,6 +126,12 @@
             animation: slideDown 0.3s ease;
         }
 
+        [data-theme="dark"] .theme-menu {
+            background: #1e293b;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid #334155;
+        }
+
         @keyframes slideDown {
             from {
                 opacity: 0;
@@ -142,10 +166,19 @@
             background: #f1f5f9;
         }
 
+        [data-theme="dark"] .theme-menu-item:hover {
+            background: #334155;
+        }
+
         .theme-menu-item.active {
             background: #eff6ff;
             color: #2563eb;
             font-weight: 600;
+        }
+
+        [data-theme="dark"] .theme-menu-item.active {
+            background: #1e40af;
+            color: #93c5fd;
         }
 
         .theme-icon {
@@ -156,6 +189,10 @@
             height: 1px;
             background: #e2e8f0;
             margin: 4px 0;
+        }
+
+        [data-theme="dark"] .theme-divider {
+            background: #334155;
         }
 
         .header h1 {
@@ -176,6 +213,14 @@
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
             box-shadow: var(--shadow-sm);
+        }
+
+        .filter-actions {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 5px;
         }
 
         .filter-group {
@@ -201,6 +246,12 @@
             background: white;
             width: 100%;
             box-sizing: border-box;
+        }
+
+        [data-theme="dark"] .filter-group input,
+        [data-theme="dark"] .filter-group select {
+            background: #0f172a;
+            color: var(--text-primary);
         }
 
         .filter-group input:focus,
@@ -253,6 +304,17 @@
             box-shadow: var(--shadow-lg);
         }
 
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
         .content {
             padding: 30px;
         }
@@ -274,8 +336,10 @@
             padding: 20px;
             border-radius: 8px;
             border-left: 4px solid #ef4444;
-            margin: 20px 0;
+            margin: 20px auto;
             box-shadow: var(--shadow-md);
+            max-width: 600px;
+            text-align: center;
         }
 
         .success-message {
@@ -314,6 +378,10 @@
             transform: translateX(5px);
         }
 
+        [data-theme="dark"] .pr-group-header:hover {
+            background: #334155;
+        }
+
         .pr-group-info {
             display: flex;
             gap: 15px;
@@ -332,6 +400,10 @@
             border: 1px solid var(--border-color);
         }
 
+        [data-theme="dark"] .pr-badge {
+            background: #334155;
+        }
+
         .pr-toggle {
             font-size: 1.5rem;
             transition: transform 0.3s;
@@ -345,6 +417,10 @@
             display: none;
             padding: 20px;
             background: #f8fafc;
+        }
+
+        [data-theme="dark"] .pr-group-body {
+            background: #0f172a;
         }
 
         .pr-group.expanded .pr-group-body {
@@ -454,6 +530,10 @@
             border: 1px solid var(--border-color);
         }
 
+        [data-theme="dark"] .scores-section {
+            background: #0f172a;
+        }
+
         .scores-section h4 {
             color: var(--text-primary);
             margin-bottom: 10px;
@@ -472,6 +552,10 @@
             border-left: 3px solid #2563eb;
             box-shadow: var(--shadow-sm);
             transition: all 0.3s;
+        }
+
+        [data-theme="dark"] .score-item {
+            background: #1e293b;
         }
 
         .score-item:hover {
@@ -537,6 +621,10 @@
             border-left: 3px solid #3b82f6;
         }
 
+        [data-theme="dark"] .score-comments {
+            background: #334155;
+        }
+
         .score-comments strong {
             color: var(--text-primary);
             font-size: 0.85rem;
@@ -556,6 +644,11 @@
             margin-top: 15px;
             border: 2px dashed #cbd5e1;
             box-shadow: var(--shadow-sm);
+        }
+
+        [data-theme="dark"] .scoring-form-container {
+            background: #0f172a;
+            border-color: #475569;
         }
 
         .scoring-form {
@@ -580,6 +673,11 @@
             transition: all 0.3s;
         }
 
+        [data-theme="dark"] .scoring-form input[type="number"] {
+            background: #0f172a;
+            color: var(--text-primary);
+        }
+
         .scoring-form input[type="number"]:focus {
             outline: none;
             border-color: #2563eb;
@@ -596,6 +694,10 @@
             background: #f8fafc;
             border-radius: 10px;
             border: 2px solid var(--border-color);
+        }
+
+        [data-theme="dark"] .score-range-guide {
+            background: #1e293b;
         }
 
         .range-item {
@@ -642,6 +744,11 @@
             min-height: 80px;
             grid-column: 2;
             transition: all 0.3s;
+        }
+
+        [data-theme="dark"] .scoring-form textarea {
+            background: #0f172a;
+            color: var(--text-primary);
         }
 
         .scoring-form textarea:focus {
@@ -745,9 +852,18 @@
             box-shadow: var(--shadow-sm);
         }
 
+        [data-theme="dark"] .manual-scoring-section {
+            background: #451a03;
+            border-left-color: #f59e0b;
+        }
+
         .manual-scoring-section p {
             color: #92400e;
             font-weight: 500;
+        }
+
+        [data-theme="dark"] .manual-scoring-section p {
+            color: #fbbf24;
         }
 
         .btn-small {
@@ -782,8 +898,16 @@
             transition: all 0.3s;
         }
 
+        [data-theme="dark"] .code-diff-header {
+            background: #1e293b;
+        }
+
         .code-diff-header:hover {
             background: #f1f5f9;
+        }
+
+        [data-theme="dark"] .code-diff-header:hover {
+            background: #334155;
         }
 
         .code-diff-header h4 {
@@ -811,6 +935,10 @@
             background: #fafafa;
         }
 
+        [data-theme="dark"] .code-diff-content {
+            background: #0f172a;
+        }
+
         .code-diff-section.collapsed .code-diff-content {
             display: none;
         }
@@ -829,6 +957,10 @@
             overflow: hidden;
             box-shadow: var(--shadow-sm);
             background: white;
+        }
+
+        [data-theme="dark"] .analysis-column {
+            background: #1e293b;
         }
 
         .analysis-column-header {
@@ -857,6 +989,10 @@
             border-left: 4px solid #3b82f6;
         }
 
+        [data-theme="dark"] .ai-review-summary {
+            background: #0f172a;
+        }
+
         .ai-summary-stats {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -871,6 +1007,10 @@
             text-align: center;
             box-shadow: var(--shadow-sm);
             border: 2px solid var(--border-color);
+        }
+
+        [data-theme="dark"] .ai-stat-card {
+            background: #1e293b;
         }
 
         .ai-stat-value {
@@ -901,6 +1041,10 @@
             color: var(--text-primary);
         }
 
+        [data-theme="dark"] .ai-overall-assessment {
+            background: #1e3a8a;
+        }
+
         .ai-issues-list {
             margin-top: 15px;
         }
@@ -912,6 +1056,10 @@
             padding: 12px;
             margin-bottom: 10px;
             transition: all 0.3s;
+        }
+
+        [data-theme="dark"] .ai-issue-item {
+            background: #1e293b;
         }
 
         .ai-issue-item:hover {
@@ -986,11 +1134,22 @@
         .severity-medium-badge { background: #fef9c3; color: #854d0e; }
         .severity-low-badge { background: #dbeafe; color: #1e40af; }
 
+        [data-theme="dark"] .severity-critical-badge { background: #7f1d1d; color: #fecaca; }
+        [data-theme="dark"] .severity-high-badge { background: #7c2d12; color: #fed7aa; }
+        [data-theme="dark"] .severity-medium-badge { background: #713f12; color: #fef08a; }
+        [data-theme="dark"] .severity-low-badge { background: #1e3a8a; color: #bfdbfe; }
+
         .issue-type-critical { background: #fee2e2; color: #991b1b; }
         .issue-type-performance { background: #fef3c7; color: #92400e; }
         .issue-type-style { background: #dbeafe; color: #1e40af; }
         .issue-type-security { background: #fce7f3; color: #9d174d; }
         .issue-type-bug { background: #fee2e2; color: #991b1b; }
+
+        [data-theme="dark"] .issue-type-critical { background: #7f1d1d; color: #fecaca; }
+        [data-theme="dark"] .issue-type-performance { background: #78350f; color: #fde68a; }
+        [data-theme="dark"] .issue-type-style { background: #1e3a8a; color: #bfdbfe; }
+        [data-theme="dark"] .issue-type-security { background: #831843; color: #fbcfe8; }
+        [data-theme="dark"] .issue-type-bug { background: #7f1d1d; color: #fecaca; }
 
         .ai-issue-description {
             color: var(--text-secondary);
@@ -1007,6 +1166,11 @@
             font-size: 0.85rem;
             color: #166534;
             margin-bottom: 8px;
+        }
+
+        [data-theme="dark"] .ai-issue-suggestion {
+            background: #064e3b;
+            color: #6ee7b7;
         }
 
         .ai-issue-code {
@@ -1047,14 +1211,29 @@
             color: #166534;
         }
 
+        [data-theme="dark"] .diff-line-add {
+            background-color: #064e3b;
+            color: #6ee7b7;
+        }
+
         .diff-line-del {
             background-color: #fee2e2;
             color: #991b1b;
         }
 
+        [data-theme="dark"] .diff-line-del {
+            background-color: #7f1d1d;
+            color: #fecaca;
+        }
+
         .diff-line-context {
             background-color: #fafafa;
             color: var(--text-secondary);
+        }
+
+        [data-theme="dark"] .diff-line-context {
+            background-color: #0f172a;
+            color: #94a3b8;
         }
 
         .diff-line-number {
@@ -1098,6 +1277,11 @@
             box-shadow: var(--shadow-md);
         }
 
+        [data-theme="dark"] .score-slider-input::-webkit-slider-thumb {
+            background: #1e293b;
+            border-color: #60a5fa;
+        }
+
         .score-slider-input::-moz-range-thumb {
             width: 24px;
             height: 24px;
@@ -1107,6 +1291,11 @@
             cursor: pointer;
             box-shadow: var(--shadow-md);
             border-image: none; /* Prevent double border in Firefox */
+        }
+
+        [data-theme="dark"] .score-slider-input::-moz-range-thumb {
+            background: #1e293b;
+            border-color: #60a5fa;
         }
         
         /* Remove default focus outline to prevent double ring */
@@ -1131,6 +1320,10 @@
             background: #f8fafc;
             padding: 20px;
             border-bottom: 2px solid var(--border-color);
+        }
+
+        [data-theme="dark"] .file-tree {
+            background: #0f172a;
         }
 
         .file-tree h3 {
@@ -1159,11 +1352,19 @@
             box-shadow: var(--shadow-sm);
         }
 
+        [data-theme="dark"] .file-chip {
+            background: #1e293b;
+        }
+
         .file-chip:hover {
             border-color: #2563eb;
             background: #eff6ff;
             transform: translateY(-2px);
             box-shadow: var(--shadow-md);
+        }
+
+        [data-theme="dark"] .file-chip:hover {
+            background: #1e40af;
         }
 
         .file-chip.active {
@@ -1264,6 +1465,11 @@
                             <span class="theme-icon">❄️</span>
                             <span>Cool (Tech Cyan)</span>
                         </button>
+                        <div class="theme-divider"></div>
+                        <button class="theme-menu-item" onclick="setTheme('dark')">
+                            <span class="theme-icon">🌙</span>
+                            <span>Dark (Night Mode)</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1296,9 +1502,11 @@
                 <label for="pullRequestId">Pull Request ID:</label>
                 <input type="text" id="pullRequestId" placeholder="Leave empty for all PRs">
             </div>
-            <div class="filter-group">
-                <button class="btn btn-primary" onclick="loadAllReviews()" style="width: 100%;">Load All Reviews</button>
-            </div>
+        </div>
+        
+        <div class="filter-actions">
+            <button class="btn btn-danger" onclick="clearAllFilters()">🗑️ Clear All Filters</button>
+            <button class="btn btn-primary" onclick="loadAllReviews()">🔄 Load All Reviews</button>
         </div>
 
         <div class="file-tree" id="fileTree" style="display: none;">
@@ -1491,6 +1699,25 @@
             console.log('Cleared all data');
         }
 
+        function clearAllFilters() {
+            // Clear ALL filter inputs including current reviewer
+            document.getElementById('currentReviewer').value = '';
+            document.getElementById('pullRequestUser').value = '';
+            document.getElementById('commitId').value = '';
+            document.getElementById('projectKey').value = '';
+            document.getElementById('repositorySlug').value = '';
+            document.getElementById('pullRequestId').value = '';
+            
+            // Reset currentReviewer variable
+            currentReviewer = '';
+            localStorage.removeItem('currentReviewer');
+            
+            // Clear data display
+            clearAllData();
+            
+            console.log('Cleared all filters including current reviewer');
+        }
+
         // Helper function to format dates
         function formatDate(dateString) {
             if (!dateString) return 'N/A';
@@ -1513,7 +1740,10 @@
 
             // Validate current reviewer
             if (!currentReviewerInput.value.trim()) {
-                clearAllData();
+                // Show alert message
+                errorEl.textContent = '⚠️ Please select a reviewer to load reviews';
+                errorEl.style.display = 'block';
+                loadingEl.style.display = 'none';
                 return;
             }
 
@@ -1615,13 +1845,21 @@
             });
 
             // Generate HTML for each group
-            const html = Object.values(grouped).map(group => `
+            const html = Object.values(grouped).map(group => {
+                // Get commit ID from the first review (all reviews in same PR should have same commit)
+                const commitId = group.reviews[0]?.pull_request_commit_id;
+                const commitBadge = commitId ? 
+                    `<span class="pr-badge" style="background: #f3e8ff; color: #7c3aed; border: 1px solid #c084fc;">🔖 ${escapeHtml(commitId.substring(0, 8))}</span>` : 
+                    '';
+                
+                return `
                 <div class="pr-group">
                     <div class="pr-group-header" onclick="toggleGroup(this)">
                         <div class="pr-group-info">
                             <span class="pr-badge">📋 ${escapeHtml(group.project_key)}</span>
                             <span class="pr-badge">📁 ${escapeHtml(group.repository_slug)}</span>
                             <span class="pr-badge">🔖 ${escapeHtml(group.pull_request_id)}</span>
+                            ${commitBadge}
                             <span class="pr-badge">👥 ${group.reviews.length} review(s)</span>
                         </div>
                         <span class="pr-toggle">▼</span>
@@ -1630,7 +1868,7 @@
                         ${group.reviews.map(review => createReviewCard(review)).join('')}
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
 
             container.innerHTML = html;
         }
