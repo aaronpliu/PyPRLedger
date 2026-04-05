@@ -212,6 +212,7 @@ class ReviewService:
         db.add(new_review)
         await db.flush()
         await db.refresh(new_review)
+        await db.commit()  # Commit the transaction to make data visible to other connections
 
         # Cache the new review using composite key
         review_dict = new_review.to_dict()
@@ -237,14 +238,6 @@ class ReviewService:
         self.metrics.increment_review(
             project=str(project.project_key), reviewer=str(reviewer.username)
         )
-
-        # Invalidate cache using composite key
-        await self._invalidate_review_cache(
-            project_key=str(project.project_key),
-            repository_slug=str(repository.repository_slug),
-            pull_request_id=str(new_review.pull_request_id),
-        )
-        await self._invalidate_list_cache()
 
         logger.info(f"Created new review: {new_review.pull_request_id}")
         return ReviewResponse(**new_review.to_dict())
@@ -302,6 +295,7 @@ class ReviewService:
             existing_review.updated_date = datetime.now(UTC)
             await db.flush()
             await db.refresh(existing_review)
+            await db.commit()  # Commit the transaction to make data visible to other connections
 
             # Cache the updated review
             review_dict = existing_review.to_dict()
@@ -326,14 +320,6 @@ class ReviewService:
             self.metrics.increment_review(
                 project=str(project.project_key), reviewer=str(reviewer.username)
             )
-
-            # Invalidate cache
-            await self._invalidate_review_cache(
-                project_key=str(project.project_key),
-                repository_slug=str(repository.repository_slug),
-                pull_request_id=str(existing_review.pull_request_id),
-            )
-            await self._invalidate_list_cache()
 
             logger.info(f"Updated review: {existing_review.pull_request_id}")
             return ReviewResponse(**existing_review.to_dict()), False

@@ -405,6 +405,170 @@
             }
         }
 
+        /* Pagination Styles */
+        .pagination-container {
+            margin-top: 30px;
+            padding: 20px;
+            background: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: var(--shadow-md);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .pagination-info {
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+
+        .pagination-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .pagination-btn {
+            padding: 8px 16px;
+            border: 1px solid var(--border-color);
+            background: var(--card-bg);
+            color: var(--text-primary);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .pagination-btn:hover:not(:disabled) {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        [data-theme="dark"] .pagination-btn:hover:not(:disabled) {
+            background: #334155;
+            border-color: #475569;
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination-page-info {
+            padding: 8px 16px;
+            background: #f1f5f9;
+            border-radius: 6px;
+            font-weight: 600;
+            color: var(--text-primary);
+            min-width: 120px;
+            text-align: center;
+        }
+
+        [data-theme="dark"] .pagination-page-info {
+            background: #334155;
+        }
+
+        /* Mobile responsive for pagination */
+        @media (max-width: 768px) {
+            .pagination-container {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .pagination-controls {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .pagination-btn {
+                padding: 6px 12px;
+                font-size: 0.85rem;
+            }
+        }
+
+        /* Back to Top Button - Modern Style */
+        .back-to-top-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.35);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(20px) scale(0.9);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .back-to-top-btn.visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0) scale(1);
+        }
+
+        .back-to-top-btn:hover {
+            transform: translateY(-8px) scale(1.05);
+            box-shadow: 0 12px 32px rgba(102, 126, 234, 0.5);
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        .back-to-top-btn:active {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .back-to-top-btn svg {
+            transition: transform 0.3s ease;
+        }
+
+        .back-to-top-btn:hover svg {
+            transform: translateY(-2px);
+        }
+
+        [data-theme="dark"] .back-to-top-btn {
+            background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+            box-shadow: 0 8px 24px rgba(139, 92, 246, 0.35);
+        }
+
+        [data-theme="dark"] .back-to-top-btn:hover {
+            background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+            box-shadow: 0 12px 32px rgba(139, 92, 246, 0.5);
+        }
+
+        /* Mobile responsive for back to top button */
+        @media (max-width: 768px) {
+            .back-to-top-btn {
+                bottom: 20px;
+                right: 20px;
+                width: 48px;
+                height: 48px;
+                border-radius: 14px;
+            }
+
+            .back-to-top-btn svg {
+                width: 20px;
+                height: 20px;
+            }
+        }
+
         .pr-group {
             margin-bottom: 30px;
             border: 2px solid var(--border-color);
@@ -841,6 +1005,20 @@
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
+        /* Reviewer readonly input styling */
+        .reviewer-input {
+            background: #f1f5f9;
+            color: var(--text-primary);
+            cursor: not-allowed;
+            font-weight: 600;
+        }
+
+        [data-theme="dark"] .reviewer-input {
+            background: #1e293b;
+            color: #f1f5f9;
+            border-color: #475569;
+        }
+
         .scoring-form textarea {
             resize: vertical;
             min-height: 80px;
@@ -1244,6 +1422,20 @@
             margin-bottom: 8px;
             flex-wrap: wrap;
             gap: 8px;
+        }
+
+        .ai-issue-number {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+        }
+
+        [data-theme="dark"] .ai-issue-number {
+            background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
         }
 
         .ai-issue-file {
@@ -1681,16 +1873,61 @@
             <div id="error" class="error" style="display: none;"></div>
             <div id="reviewsContainer">
                 <div class="loading" style="background: transparent; color: #94a3b8; font-size: 1rem;">
-                    👆 Please select a reviewer to load reviews
+                    👆 Please select a Current Reviewer to load reviews
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Back to Top Button -->
+    <button id="backToTop" class="back-to-top-btn" onclick="scrollToTop()" title="Back to Top">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </button>
+
     <script>
         const API_BASE_URL = 'http://localhost:8000/api/v1';
         let currentReviewer = ''; // Start with empty reviewer
         let allReviews = []; // Store loaded reviews for reference
+        let allUsers = []; // Store all users from API for validation
+        let prUsers = []; // Store PR users from reviews
+        
+        // Pagination state
+        let currentPage = 1;
+        let pageSize = 15; // Default to 2K resolution
+        let totalRecords = 0;
+        let totalPages = 0;
+
+        // Calculate page size based on screen resolution
+        function calculatePageSize() {
+            const width = window.screen.width;
+            const height = window.screen.height;
+            const resolution = width * height;
+            
+            // 1080p (1920x1080 = 2,073,600) or lower
+            if (resolution <= 2073600) {
+                return 10;
+            }
+            // 2K (2560x1440 = 3,686,400)
+            else if (resolution <= 3686400) {
+                return 15;
+            }
+            // 3K (2880x1800 = 5,184,000 or similar)
+            else if (resolution <= 5184000) {
+                return 20;
+            }
+            // 4K (3840x2160 = 8,294,400) or higher
+            else {
+                return 30;
+            }
+        }
+
+        // Initialize page size based on screen resolution
+        function initializePageSize() {
+            pageSize = calculatePageSize();
+            console.log(`Screen resolution: ${window.screen.width}x${window.screen.height}, Page size: ${pageSize}`);
+        }
 
         // Theme management
         function setTheme(themeName) {
@@ -1755,15 +1992,16 @@
                 const response = await fetch(`${API_BASE_URL}/users?page=1&page_size=100`);
                 if (!response.ok) {
                     console.warn('Failed to load users from API');
+                    showError('Failed to load user list. Please check your connection.');
                     return;
                 }
                 
                 const data = await response.json();
-                const users = data.items || [];
+                allUsers = data.items || [];
                 
                 // Populate datalist with usernames and display names
                 const datalist = document.getElementById('reviewerList');
-                datalist.innerHTML = users
+                datalist.innerHTML = allUsers
                     .map(user => {
                         const username = user.username || '';
                         const displayName = user.display_name || username;
@@ -1771,10 +2009,39 @@
                     })
                     .join('');
                 
-                console.log(`Loaded ${users.length} users for autocomplete`);
+                console.log(`Loaded ${allUsers.length} users for autocomplete`);
+                console.log('Available reviewers:', allUsers.map(u => u.username));
             } catch (error) {
-                console.warn('Error loading users:', error);
+                console.error('Error loading users:', error);
+                showError('Failed to load user list. Please check your connection.');
             }
+        }
+
+        // Validate if a username exists in the user list
+        function isValidUser(username) {
+            return allUsers.some(user => user.username === username);
+        }
+
+        // Filter users based on input (for autocomplete)
+        function filterUsers(inputValue) {
+            if (!inputValue) return allUsers;
+            const lowerInput = inputValue.toLowerCase();
+            return allUsers.filter(user => 
+                user.username.toLowerCase().includes(lowerInput) ||
+                (user.display_name && user.display_name.toLowerCase().includes(lowerInput))
+            );
+        }
+
+        // Update datalist with filtered users
+        function updateDatalist(filteredUsers, datalistId) {
+            const datalist = document.getElementById(datalistId);
+            datalist.innerHTML = filteredUsers
+                .map(user => {
+                    const username = user.username || '';
+                    const displayName = user.display_name || username;
+                    return `<option value="${escapeHtml(username)}">${escapeHtml(displayName)}`;
+                })
+                .join('');
         }
 
         // Helper function to show error messages with auto-hide
@@ -1808,53 +2075,65 @@
         }
 
         // Load users on page load
-        document.addEventListener('DOMContentLoaded', loadUsersForAutocomplete);
+        document.addEventListener('DOMContentLoaded', () => {
+            initializePageSize();
+            loadUsersForAutocomplete();
+        });
 
         // Auto-load reviews when reviewer is selected
         let reviewLoadTimeout = null;
         let prUserLoadTimeout = null;
+        let searchTimeout = null;
         
         document.addEventListener('DOMContentLoaded', () => {
             const reviewerInput = document.getElementById('currentReviewer');
             const prUserInput = document.getElementById('pullRequestUser');
             const reviewStatusSelect = document.getElementById('reviewStatus');
             
-            // Current Reviewer - Listen for changes (only from datalist selection)
-            reviewerInput.addEventListener('change', function() {
-                const value = this.value.trim();
-                
-                // Check if the value matches a valid user from the datalist
-                const datalist = document.getElementById('reviewerList');
-                const options = Array.from(datalist.options).map(opt => opt.value);
-                
-                if (value && options.includes(value)) {
-                    // Valid reviewer selected - load reviews
-                    currentReviewer = value;
-                    localStorage.setItem('currentReviewer', currentReviewer);
-                    loadAllReviews();
-                } else if (!value) {
-                    // Input cleared - clear all data
-                    currentReviewer = '';
-                    clearAllData();
-                } else {
-                    // Invalid input - show error and clear
-                    showError('⚠️ Please select a valid reviewer from the dropdown list');
-                    this.value = '';
-                    currentReviewer = '';
-                }
-            });
-            
-            // Prevent arbitrary input - only allow selecting from datalist
+            // Current Reviewer - Real-time search and validation
             reviewerInput.addEventListener('input', function() {
-                // Don't auto-load on typing, only on selection
                 const value = this.value.trim();
+                
+                // Clear previous timeout
+                if (searchTimeout) {
+                    clearTimeout(searchTimeout);
+                }
+                
+                // Real-time filtering for autocomplete
+                searchTimeout = setTimeout(() => {
+                    const filtered = filterUsers(value);
+                    updateDatalist(filtered, 'reviewerList');
+                }, 200);
+                
+                // Clear data if input is empty
                 if (!value) {
                     currentReviewer = '';
                     clearAllData();
                 }
             });
             
-            // Pull Request User - Listen for input changes with debounce
+            // Validate on blur (when user leaves the field)
+            reviewerInput.addEventListener('blur', function() {
+                const value = this.value.trim();
+                
+                if (value) {
+                    if (isValidUser(value)) {
+                        // Valid user - load reviews
+                        currentReviewer = value;
+                        localStorage.setItem('currentReviewer', currentReviewer);
+                        console.log('Current reviewer set to:', currentReviewer);
+                        loadAllReviews();
+                    } else {
+                        // Invalid user - show error
+                        showError(`⚠️ User "${value}" not found. Please select from the dropdown list.`);
+                        this.value = '';
+                        currentReviewer = '';
+                        clearAllData();
+                    }
+                }
+            });
+            
+            // Pull Request User - Real-time search and validation
             prUserInput.addEventListener('input', function() {
                 const value = this.value.trim();
                 
@@ -1862,19 +2141,43 @@
                 if (prUserLoadTimeout) {
                     clearTimeout(prUserLoadTimeout);
                 }
+                if (searchTimeout) {
+                    clearTimeout(searchTimeout);
+                }
+                
+                // Real-time filtering for autocomplete
+                searchTimeout = setTimeout(() => {
+                    const filtered = filterUsers(value);
+                    updateDatalist(filtered, 'prUserList');
+                }, 200);
                 
                 // Only auto-load if current reviewer is already set
-                if (currentReviewer) {
+                if (currentReviewer && value) {
                     prUserLoadTimeout = setTimeout(() => {
                         loadAllReviews();
                     }, 500);
+                } else if (value && !currentReviewer) {
+                    // PR User entered but no Current Reviewer selected
+                    showError('⚠️ Please select a Current Reviewer first before filtering by PR User');
+                }
+            });
+            
+            // Validate PR User on blur
+            prUserInput.addEventListener('blur', function() {
+                const value = this.value.trim();
+                
+                if (value && !isValidUser(value)) {
+                    showError(`⚠️ PR User "${value}" not found. Please select from the dropdown list.`);
+                    this.value = '';
                 }
             });
             
             // Review Status Filter - Listen for changes
             reviewStatusSelect.addEventListener('change', function() {
                 if (currentReviewer) {
-                    displayGroupedReviews(allReviews);
+                    // Reset to first page when filter changes
+                    currentPage = 1;
+                    loadAllReviews();
                 }
             });
         });
@@ -1887,9 +2190,13 @@
             
             // Clear all displays
             allReviews = [];
+            currentPage = 1;
+            totalRecords = 0;
+            totalPages = 0;
+            
             container.innerHTML = `
                 <div class="loading" style="background: transparent; color: #94a3b8; font-size: 1rem;">
-                    👆 Please select a reviewer to load reviews
+                    👆 Please select a Current Reviewer to load reviews
                 </div>
             `;
             loadingEl.style.display = 'none';
@@ -1912,6 +2219,15 @@
             // Reset currentReviewer variable
             currentReviewer = '';
             localStorage.removeItem('currentReviewer');
+            
+            // Reset pagination
+            currentPage = 1;
+            totalRecords = 0;
+            totalPages = 0;
+            
+            // Reset datalists to show all users
+            updateDatalist(allUsers, 'reviewerList');
+            updateDatalist(allUsers, 'prUserList');
             
             // Clear data display
             clearAllData();
@@ -1938,35 +2254,40 @@
             const container = document.getElementById('reviewsContainer');
             const successMsg = document.getElementById('successMessage');
             const currentReviewerInput = document.getElementById('currentReviewer');
+            const pullRequestUserInput = document.getElementById('pullRequestUser');
 
-            // Validate current reviewer - must be selected from the list
-            if (!currentReviewerInput.value.trim()) {
-                // Show alert message when no reviewer is selected
-                showError('⚠️ Please select a reviewer to load reviews');
+            // Validate current reviewer
+            const selectedReviewer = currentReviewerInput.value.trim();
+            if (!selectedReviewer) {
+                showError('⚠️ Please select a Current Reviewer to load reviews');
                 loadingEl.style.display = 'none';
                 container.innerHTML = `
                     <div class="loading" style="background: transparent; color: #94a3b8; font-size: 1rem;">
-                        👆 Please select a reviewer to load reviews
+                        👆 Please select a Current Reviewer to load reviews
                     </div>
                 `;
                 return;
             }
 
-            // Verify the reviewer is valid (exists in datalist)
-            const datalist = document.getElementById('reviewerList');
-            const validReviewers = Array.from(datalist.options).map(opt => opt.value);
-            const selectedReviewer = currentReviewerInput.value.trim();
-            
-            if (!validReviewers.includes(selectedReviewer)) {
-                showError('⚠️ Invalid reviewer. Please select a valid reviewer from the dropdown list.');
+            // Validate that the reviewer exists in user list
+            if (!isValidUser(selectedReviewer)) {
+                showError(`⚠️ Current Reviewer "${selectedReviewer}" is not a valid user. Please select from the dropdown.`);
                 loadingEl.style.display = 'none';
-                currentReviewerInput.value = '';
-                currentReviewer = '';
                 return;
             }
 
+            // Validate PR User if provided
+            const pullRequestUser = pullRequestUserInput.value.trim();
+            if (pullRequestUser && !isValidUser(pullRequestUser)) {
+                showError(`⚠️ Pull Request User "${pullRequestUser}" is not a valid user. Please select from the dropdown.`);
+                loadingEl.style.display = 'none';
+                return;
+            }
+
+            // Set the current reviewer
             currentReviewer = selectedReviewer;
             localStorage.setItem('currentReviewer', currentReviewer);
+            console.log('Loading reviews for reviewer:', currentReviewer);
 
             successMsg.style.display = 'none';
             errorEl.style.display = 'none';
@@ -1980,13 +2301,15 @@
                 const pullRequestUser = document.getElementById('pullRequestUser').value;
                 const commitId = document.getElementById('commitId').value;
 
-                // Build query parameters
+                // Build query parameters with pagination
                 const params = new URLSearchParams();
                 if (projectKey) params.append('project_key', projectKey);
                 if (repositorySlug) params.append('repository_slug', repositorySlug);
                 if (pullRequestId) params.append('pull_request_id', pullRequestId);
                 if (pullRequestUser) params.append('pull_request_user', pullRequestUser);
                 if (commitId) params.append('pull_request_commit_id', commitId);
+                params.append('page', currentPage.toString());
+                params.append('page_size', pageSize.toString());
 
                 const response = await fetch(`${API_BASE_URL}/reviews?${params}`);
                 
@@ -1996,6 +2319,10 @@
 
                 const data = await response.json();
                 allReviews = data.items || [];
+                totalRecords = data.total || 0;
+                totalPages = Math.ceil(totalRecords / pageSize);
+                
+                console.log(`Loaded page ${currentPage}/${totalPages}, ${allReviews.length} records (Total: ${totalRecords})`);
                 
                 // Populate reviewer datalist with unique reviewers from loaded reviews
                 populateReviewerList(allReviews);
@@ -2013,27 +2340,100 @@
             const datalist = document.getElementById('reviewerList');
             const prUserDatalist = document.getElementById('prUserList');
             const reviewers = new Set();
-            const prUsers = new Set();
+            const prUsersSet = new Set();
             
             // Collect all unique reviewers and PR users from the reviews
             reviews.forEach(review => {
                 if (review.reviewer) reviewers.add(review.reviewer);
                 if (review.reviewer_info?.username) reviewers.add(review.reviewer_info.username);
-                if (review.pull_request_user) prUsers.add(review.pull_request_user);
-                if (review.pull_request_user_info?.username) prUsers.add(review.pull_request_user_info.username);
+                if (review.pull_request_user) prUsersSet.add(review.pull_request_user);
+                if (review.pull_request_user_info?.username) prUsersSet.add(review.pull_request_user_info.username);
             });
             
-            // Add existing reviewers to datalist
+            // Store PR users for later use
+            prUsers = Array.from(prUsersSet);
+            console.log(`Found ${prUsers.length} unique PR users in reviews`);
+            
+            // Merge with existing options in datalist (from /users API)
+            const existingOptions = Array.from(datalist.options).map(opt => opt.value);
+            existingOptions.forEach(username => reviewers.add(username));
+            
+            // Update reviewer datalist with merged reviewers
             datalist.innerHTML = Array.from(reviewers)
                 .sort()
                 .map(r => `<option value="${escapeHtml(r)}">`)
                 .join('');
             
-            // Add PR users to datalist
-            prUserDatalist.innerHTML = Array.from(prUsers)
+            // Update PR user datalist - merge with all users
+            const allPrUsers = new Set([...prUsersSet, ...allUsers.map(u => u.username)]);
+            prUserDatalist.innerHTML = Array.from(allPrUsers)
                 .sort()
                 .map(u => `<option value="${escapeHtml(u)}">`)
                 .join('');
+            
+            console.log(`Updated reviewer list: ${reviewers.size} reviewers, ${allPrUsers.size} PR users`);
+        }
+
+        // Pagination functions
+        function goToPage(page) {
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            loadAllReviews();
+        }
+
+        function nextPage() {
+            if (currentPage < totalPages) {
+                goToPage(currentPage + 1);
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                goToPage(currentPage - 1);
+            }
+        }
+
+        function firstPage() {
+            goToPage(1);
+        }
+
+        function lastPage() {
+            goToPage(totalPages);
+        }
+
+        // Render pagination controls
+        function renderPagination() {
+            if (totalRecords === 0) return '';
+            
+            const startRecord = (currentPage - 1) * pageSize + 1;
+            const endRecord = Math.min(currentPage * pageSize, totalRecords);
+            
+            let html = `
+                <div class="pagination-container">
+                    <div class="pagination-info">
+                        Showing ${startRecord}-${endRecord} of ${totalRecords} records
+                    </div>
+                    <div class="pagination-controls">
+                        <button class="pagination-btn" onclick="firstPage()" ${currentPage === 1 ? 'disabled' : ''}>
+                            ⏮ First
+                        </button>
+                        <button class="pagination-btn" onclick="prevPage()" ${currentPage === 1 ? 'disabled' : ''}>
+                            ◀ Previous
+                        </button>
+                        <span class="pagination-page-info">
+                            Page ${currentPage} of ${totalPages}
+                        </span>
+                        <button class="pagination-btn" onclick="nextPage()" ${currentPage === totalPages ? 'disabled' : ''}>
+                            Next ▶
+                        </button>
+                        <button class="pagination-btn" onclick="lastPage()" ${currentPage === totalPages ? 'disabled' : ''}>
+                            Last ⏭
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            return html;
         }
 
         function displayGroupedReviews(reviews) {
@@ -2117,7 +2517,9 @@
                 </div>
             `}).join('');
 
-            container.innerHTML = html;
+            // Add pagination controls
+            const paginationHtml = renderPagination();
+            container.innerHTML = html + paginationHtml;
         }
 
         function createReviewCard(review) {
@@ -2258,7 +2660,7 @@
                         <div class="scoring-form">
                             <div>
                                 <label for="reviewer_${review.id}">👤 Reviewer:</label>
-                                <input type="text" id="reviewer_${review.id}" value="${escapeHtml(currentReviewer)}" readonly style="background: #f0f0f0; cursor: not-allowed;">
+                                <input type="text" id="reviewer_${review.id}" value="${escapeHtml(currentReviewer)}" readonly class="reviewer-input">
                             </div>
                             
                             <div style="grid-column: 1 / -1; padding: 10px; background: ${review.source_filename ? '#e3f2fd' : '#f3e5f5'}; border-radius: 6px; border-left: 4px solid ${review.source_filename ? '#2196f3' : '#7b1fa2'}; margin: 10px 0;">
@@ -2393,10 +2795,12 @@
                         const severity = issue.severity || 'low';
                         const severityClass = `severity-${severity}`;
                         const severityBadgeClass = `severity-${severity}-badge`;
+                        const issueNumber = index + 1;
                         
                         return `
                             <div class="ai-issue-item ${severityClass}">
                                 <div class="ai-issue-header">
+                                    <span class="ai-issue-number">#Issue ${issueNumber}</span>
                                     <span class="ai-issue-file">📄 ${escapeHtml(issue.file_name || 'Unknown file')}</span>
                                     <span class="ai-issue-line">Line ${issue.line_number || 'N/A'}</span>
                                 </div>
@@ -2660,6 +3064,27 @@
             div.textContent = text;
             return div.innerHTML;
         }
+
+        // Back to Top functionality
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        // Show/hide back to top button based on scroll position
+        function handleScroll() {
+            const backToTopBtn = document.getElementById('backToTop');
+            if (window.pageYOffset > 300) {
+                backToTopBtn.classList.add('visible');
+            } else {
+                backToTopBtn.classList.remove('visible');
+            }
+        }
+
+        // Add scroll event listener
+        window.addEventListener('scroll', handleScroll);
 
         // Load reviews on page load
         window.addEventListener('DOMContentLoaded', loadAllReviews);
