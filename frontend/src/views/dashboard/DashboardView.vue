@@ -143,7 +143,7 @@ const loadDashboardData = async () => {
   loading.value = true
   try {
     // Load recent reviews
-    const reviewsData = await reviewsApi.getReviews({ limit: 10, offset: 0 })
+    const reviewsData = await reviewsApi.getReviews({ page: 1, page_size: 10 })
     recentReviews.value = reviewsData.items
     stats.value.totalReviews = reviewsData.total
     stats.value.pendingReviews = reviewsData.items.filter(r => r.status === 'pending').length

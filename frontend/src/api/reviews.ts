@@ -6,9 +6,29 @@ export interface Review {
   reviewer_username: string
   status: string
   summary: string | null
-  diff_content?: string | null  // Unified diff from Bitbucket webhook
+  diff_content?: string | null  // Unified diff from Bitbucket webhook (alias for git_code_diff)
+  git_code_diff?: string | null  // Git code diff content
+  ai_suggestions?: AIReviewSuggestions | null  // AI review results
   created_at: string
   updated_at: string
+}
+
+export interface AIReviewSuggestions {
+  Reviewed_files?: number
+  Critical_issues?: number
+  Total_issues?: number
+  issues?: AIReviewIssue[]
+  overall_assessment?: string
+}
+
+export interface AIReviewIssue {
+  issue_type: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  file_name: string
+  line_number?: number
+  description: string
+  suggestion?: string
+  code_snippet?: string
 }
 
 export interface ReviewUpdate {
@@ -19,8 +39,8 @@ export interface ReviewUpdate {
 // Reviews API
 // NOTE: Reviews are created by Bitbucket webhook, not from UI
 export const reviewsApi = {
-  // Get all reviews with pagination
-  getReviews(params: { limit?: number; offset?: number }): Promise<{ total: number; items: Review[] }> {
+  // Get all reviews with pagination (using page/page_size to match backend API)
+  getReviews(params: { page?: number; page_size?: number }): Promise<{ total: number; items: Review[]; page: number; page_size: number }> {
     return request.get('/reviews', { params })
   },
 

@@ -283,8 +283,8 @@ const loadReviews = async () => {
   loading.value = true
   try {
     const data = await reviewsApi.getReviews({
-      limit: pageSize.value,
-      offset: (currentPage.value - 1) * pageSize.value,
+      page: currentPage.value,
+      page_size: pageSize.value,
     })
     reviews.value = data.items
     total.value = data.total

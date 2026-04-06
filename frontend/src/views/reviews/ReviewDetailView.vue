@@ -48,11 +48,21 @@
         <!-- Code Diff Viewer -->
         <el-card class="diff-card" style="margin-top: 20px">
           <CodeDiffViewer
-            v-if="review.diff_content"
-            :diff="review.diff_content"
+            v-if="review.diff_content || review.git_code_diff"
+            :diff="review.diff_content || review.git_code_diff || ''"
             v-model:output-format="diffFormat"
           />
           <el-empty v-else description="No diff content available" />
+        </el-card>
+
+        <!-- AI Review Results -->
+        <el-card v-if="review.ai_suggestions" class="ai-review-card" style="margin-top: 20px">
+          <template #header>
+            <div class="card-header">
+              <span>🤖 AI Review Results</span>
+            </div>
+          </template>
+          <AIReviewResults :suggestions="review.ai_suggestions" />
         </el-card>
 
         <!-- Scores Section -->
@@ -202,6 +212,7 @@ import dayjs from 'dayjs'
 import CodeDiffViewer from '@/components/review/CodeDiffViewer.vue'
 import QuickScoreButtons from '@/components/review/QuickScoreButtons.vue'
 import ScoreRangeGuide from '@/components/review/ScoreRangeGuide.vue'
+import AIReviewResults from '@/components/review/AIReviewResults.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -398,6 +409,10 @@ onMounted(() => {
 }
 
 .diff-card :deep(.el-card__body) {
+  padding: 0;
+}
+
+.ai-review-card :deep(.el-card__body) {
   padding: 0;
 }
 </style>
