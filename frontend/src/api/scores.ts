@@ -2,23 +2,32 @@ import request from '@/utils/request'
 
 export interface Score {
   id: number
-  review_id: number
-  category: string
-  score: number
-  max_score: number
-  weight: number
-  comment: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface ScoreCreate {
-  review_id: number
-  category: string
+  reviewer: string
+  reviewer_info?: Record<string, any> | null
   score: number
   max_score?: number
   weight?: number
   comment?: string | null
+  reviewer_comments?: string | null
+  source_filename?: string | null
+  pull_request_id: string
+  project_key: string
+  repository_slug: string
+  created_date: string
+  updated_date?: string
+}
+
+export interface ScoreCreate {
+  pull_request_id: string
+  project_key: string
+  repository_slug: string
+  reviewer: string
+  score: number
+  max_score?: number
+  weight?: number
+  comment?: string | null
+  reviewer_comments?: string | null
+  source_filename?: string | null  // null for PR-level score
 }
 
 export interface ScoreUpdate {
@@ -33,34 +42,52 @@ export interface ScoreStats {
 }
 
 // Scores API
+// NOTE: Backend uses composite key (project_key/repository_slug/pull_request_id) for score operations
 export const scoresApi = {
-  // Get scores for a review
-  getScoresByReview(reviewId: number): Promise<Score[]> {
-    return request.get(`/reviews/${reviewId}/scores`)
+  // Get all scores for a review target
+  getScoresByReview(
+    pullRequestId: string,
+    projectKey: string,
+    repositorySlug: string,
+    sourceFilename?: string | null
+  ): Promise<Score[]> {
+    const params: any = {
+      pull_request_id: pullRequestId,
+      project_key: projectKey,
+      repository_slug: repositorySlug,
+    }
+    if (sourceFilename !== undefined && sourceFilename !== null) {
+      params.source_filename = sourceFilename
+    }
+    return request.get('/reviews/scores', { params })
   },
 
-  // Create score
+  // Create or update score (upsert)
   createScore(data: ScoreCreate): Promise<Score> {
-    return request.post('/scores', data)
+    return request.put('/reviews/score', data)
   },
 
-  // Update score
-  updateScore(id: number, data: ScoreUpdate): Promise<Score> {
-    return request.put(`/scores/${id}`, data)
-  },
-
-  // Delete score
-  deleteScore(id: number): Promise<void> {
-    return request.delete(`/scores/${id}`)
+  // Delete score by reviewer
+  deleteScore(
+    reviewer: string,
+    pullRequestId: string,
+    projectKey: string,
+    repositorySlug: string,
+    sourceFilename?: string | null
+  ): Promise<void> {
+    const params: any = {
+      pull_request_id: pullRequestId,
+      project_key: projectKey,
+      repository_slug: repositorySlug,
+    }
+    if (sourceFilename !== undefined && sourceFilename !== null) {
+      params.source_filename = sourceFilename
+    }
+    return request.delete(`/reviews/score/${encodeURIComponent(reviewer)}`, { params })
   },
 
   // Get score statistics
-  getStats(params?: { project_id?: string; repository_id?: string }): Promise<ScoreStats> {
-    return request.get('/scores/stats', { params })
-  },
-
-  // Get scores by project
-  getScoresByProject(projectId: string): Promise<Score[]> {
-    return request.get(`/projects/${projectId}/scores`)
+  getStats(params?: { project_key?: string; repository_slug?: string }): Promise<any> {
+    return request.get('/reviews/statistics', { params })
   },
 }

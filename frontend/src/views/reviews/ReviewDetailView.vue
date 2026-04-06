@@ -81,22 +81,27 @@
           </template>
 
           <el-table :data="scores" stripe>
-            <el-table-column prop="category" label="Category" width="150" />
-            <el-table-column prop="score" label="Score" width="100">
+            <el-table-column prop="reviewer" label="Reviewer" width="150">
               <template #default="{ row }">
-                {{ row.score }} / {{ row.max_score }}
+                {{ row.reviewer_info?.display_name || row.reviewer }}
               </template>
             </el-table-column>
-            <el-table-column prop="weight" label="Weight" width="100" />
-            <el-table-column prop="comment" label="Comment" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="created_date" label="Created" width="180">
+            <el-table-column prop="score" label="Score" width="120">
+              <template #default="{ row }">
+                <span class="score-value">{{ row.score }}</span>
+                <span v-if="row.max_score" class="score-max"> / {{ row.max_score }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="weight" label="Weight" width="80" />
+            <el-table-column prop="reviewer_comments" label="Comments" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="created_date" label="Created" width="160">
               <template #default="{ row }">
                 {{ formatDate(row.created_date || '') }}
               </template>
             </el-table-column>
             <el-table-column label="Actions" width="100">
               <template #default="{ row }">
-                <el-button size="small" type="danger" @click="deleteScore(row.id)">
+                <el-button size="small" type="danger" @click="deleteScore(row)">
                   Delete
                 </el-button>
               </template>
@@ -167,8 +172,8 @@
       <ScoreRangeGuide />
       
       <el-form :model="scoreForm" :rules="scoreRules" ref="scoreFormRef" label-width="120px">
-        <el-form-item label="Category" prop="category">
-          <el-input v-model="scoreForm.category" placeholder="e.g., Code Quality" />
+        <el-form-item label="Reviewer" prop="reviewer">
+          <el-input v-model="scoreForm.reviewer" placeholder="Your username" />
         </el-form-item>
         
         <el-form-item label="Score" prop="score">
@@ -183,12 +188,12 @@
           <el-input-number v-model="scoreForm.weight" :min="0" :max="10" :precision="1" style="width: 100%" />
         </el-form-item>
         
-        <el-form-item label="Comment">
+        <el-form-item label="Comments">
           <el-input
-            v-model="scoreForm.comment"
+            v-model="scoreForm.reviewer_comments"
             type="textarea"
             :rows="3"
-            placeholder="Optional comment..."
+            placeholder="Optional comments..."
           />
         </el-form-item>
       </el-form>
@@ -237,17 +242,21 @@ const editForm = reactive<ReviewUpdate>({
 })
 
 const scoreForm = reactive<ScoreCreate>({
-  review_id: 0,
-  category: '',
+  pull_request_id: '',
+  project_key: '',
+  repository_slug: '',
+  reviewer: '',
   score: 0,
   max_score: 100,
   weight: 1.0,
   comment: null,
+  reviewer_comments: null,
+  source_filename: null,
 })
 
 const scoreRules: FormRules = {
-  category: [
-    { required: true, message: 'Please input category', trigger: 'blur' },
+  reviewer: [
+    { required: true, message: 'Please input reviewer', trigger: 'blur' },
   ],
   score: [
     { required: true, message: 'Please input score', trigger: 'blur' },
@@ -273,16 +282,33 @@ const loadReview = async () => {
 
   loading.value = true
   try {
+    // Get review by ID (fetches from list)
     review.value = await reviewsApi.getReviewById(id)
-    scores.value = await scoresApi.getScoresByReview(id)
     
-    // Populate edit form
-    editForm.status = review.value.status
-    editForm.summary = review.value.summary
+    if (!review.value) {
+      throw new Error('Review not found')
+    }
     
-    // Set review_id for score form
-    scoreForm.review_id = id
+    // Load scores using composite key
+    scores.value = await scoresApi.getScoresByReview(
+      review.value.pull_request_id,
+      review.value.project_key,
+      review.value.repository_slug,
+      review.value.source_filename || null
+    )
+    
+    // Populate edit form with correct field names
+    editForm.status = review.value.pull_request_status
+    editForm.summary = review.value.reviewer_comments
+    
+    // Set score form defaults
+    scoreForm.pull_request_id = review.value.pull_request_id
+    scoreForm.project_key = review.value.project_key
+    scoreForm.repository_slug = review.value.repository_slug
+    scoreForm.reviewer = 'current_user' // TODO: Get from auth
+    scoreForm.source_filename = review.value.source_filename || null
   } catch (error) {
+    console.error('Failed to load review:', error)
     ElMessage.error('Failed to load review')
     router.push('/reviews')
   } finally {
@@ -317,9 +343,9 @@ const handleAddScore = async () => {
         ElMessage.success('Score added successfully')
         showScoreDialog.value = false
         // Reset form
-        scoreForm.category = ''
         scoreForm.score = 0
         scoreForm.comment = null
+        scoreForm.reviewer_comments = null
         loadReview()
       } catch (error) {
         ElMessage.error('Failed to add score')
@@ -330,13 +356,21 @@ const handleAddScore = async () => {
   })
 }
 
-const deleteScore = async (scoreId: number) => {
+const deleteScore = async (score: Score) => {
+  if (!review.value) return
+  
   try {
     await ElMessageBox.confirm('Are you sure you want to delete this score?', 'Confirm', {
       type: 'warning',
     })
     
-    await scoresApi.deleteScore(scoreId)
+    await scoresApi.deleteScore(
+      score.reviewer,
+      review.value.pull_request_id,
+      review.value.project_key,
+      review.value.repository_slug,
+      score.source_filename || null
+    )
     ElMessage.success('Score deleted successfully')
     loadReview()
   } catch (error) {
@@ -370,16 +404,6 @@ const confirmDelete = async () => {
 
 const handleQuickScoreSelect = (value: number) => {
   scoreForm.score = value
-  // Auto-select category based on score
-  if (value >= 90) {
-    scoreForm.category = 'Overall Quality'
-  } else if (value >= 80) {
-    scoreForm.category = 'Code Quality'
-  } else if (value >= 70) {
-    scoreForm.category = 'Acceptability'
-  } else {
-    scoreForm.category = 'Needs Improvement'
-  }
 }
 
 onMounted(() => {
@@ -418,5 +442,16 @@ onMounted(() => {
 
 .ai-review-card :deep(.el-card__body) {
   padding: 0;
+}
+
+.score-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--el-color-success);
+}
+
+.score-max {
+  font-size: 0.9rem;
+  color: var(--el-text-color-secondary);
 }
 </style>

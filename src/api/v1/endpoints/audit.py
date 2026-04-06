@@ -17,7 +17,7 @@ from src.schemas.audit import (
 from src.services.audit_service import AuditService
 
 
-router = APIRouter(prefix="/audit", tags=["Audit Logs"])
+router = APIRouter(prefix="/audit")
 
 
 def get_audit_service(db: Annotated[AsyncSession, Depends(get_db_session)]) -> AuditService:

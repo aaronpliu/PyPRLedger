@@ -98,9 +98,25 @@ export const reviewsApi = {
     return request.get('/reviews', { params })
   },
 
-  // Get review by ID
-  getReviewById(id: number): Promise<Review> {
-    return request.get(`/reviews/${id}`)
+  // Get review by composite key (project_key/repository_slug/pull_request_id)
+  getReviewByCompositeKey(
+    projectKey: string,
+    repositorySlug: string,
+    pullRequestId: string
+  ): Promise<{ items: Review[]; total: number }> {
+    return request.get(`/reviews/${encodeURIComponent(projectKey)}/${encodeURIComponent(repositorySlug)}/${encodeURIComponent(pullRequestId)}`)
+  },
+
+  // Get review by ID - fetches from list and finds by ID
+  async getReviewById(id: number): Promise<Review> {
+    // First try to get all reviews and find by ID
+    const response = await request.get('/reviews', { params: { page: 1, page_size: 100 } })
+    const data = response.data || response
+    const review = data.items?.find((r: Review) => r.id === id)
+    if (!review) {
+      throw new Error(`Review with ID ${id} not found`)
+    }
+    return review
   },
 
   // Update review (status only - reviews are read-only except for status)

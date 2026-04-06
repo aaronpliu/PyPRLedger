@@ -115,7 +115,7 @@ const loadScores = async () => {
   try {
     // Load stats
     const statsData = await scoresApi.getStats(
-      projectFilter.value ? { project_id: projectFilter.value } : undefined
+      projectFilter.value ? { project_key: projectFilter.value } : undefined
     )
     stats.value = statsData
 
@@ -139,9 +139,10 @@ const confirmDelete = async (score: Score) => {
       }
     )
     
-    await scoresApi.deleteScore(score.id)
-    ElMessage.success('Score deleted successfully')
-    loadScores()
+    // TODO: Need composite key for deletion
+    ElMessage.warning('Delete not implemented - requires composite key')
+    // await scoresApi.deleteScore(score.reviewer, ...)
+    // loadScores()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('Failed to delete score')

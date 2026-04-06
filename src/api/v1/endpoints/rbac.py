@@ -20,7 +20,7 @@ from src.schemas.rbac import (
 from src.services.rbac_service import RBACService
 
 
-router = APIRouter(prefix="/rbac", tags=["RBAC Management"])
+router = APIRouter(prefix="/rbac")
 
 
 def get_rbac_service(db: Annotated[AsyncSession, Depends(get_db_session)]) -> RBACService:

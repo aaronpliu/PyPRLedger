@@ -18,7 +18,7 @@ from src.schemas.auth import (
 from src.services.auth_service import AuthService
 
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(prefix="/auth")
 
 
 def get_auth_service(db: Annotated[AsyncSession, Depends(get_db_session)]) -> AuthService:
