@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
 import type { User, LoginRequest, RegisterRequest } from '@/types'
 import router from '@/router'
+import { wsService } from '@/utils/websocket'
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -27,6 +28,11 @@ export const useAuthStore = defineStore('auth', () => {
 
       // Fetch user profile
       await fetchUserProfile()
+
+      // Connect WebSocket
+      if (user.value) {
+        wsService.connect(user.value.id)
+      }
 
       return true
     } catch (error) {
@@ -58,6 +64,8 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
+      // Disconnect WebSocket
+      wsService.disconnect()
       clearAuth()
       router.push('/login')
     }
@@ -89,7 +97,12 @@ export const useAuthStore = defineStore('auth', () => {
     if (token && refresh) {
       accessToken.value = token
       refreshTokenValue.value = refresh
-      fetchUserProfile().catch(() => {
+      fetchUserProfile().then(() => {
+        // Connect WebSocket after profile is loaded
+        if (user.value) {
+          wsService.connect(user.value.id)
+        }
+      }).catch(() => {
         // If fetch fails, tokens are invalid
         clearAuth()
       })

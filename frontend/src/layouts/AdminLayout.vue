@@ -31,6 +31,9 @@
     <el-container>
       <el-header class="admin-header">
         <div class="header-right">
+          <!-- Notification Bell -->
+          <NotificationBell />
+
           <el-dropdown @command="handleCommand">
             <span class="user-info">
               {{ authStore.user?.username }}
@@ -59,6 +62,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { User, Lock, Document, ArrowDown } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
+import NotificationBell from '@/components/common/NotificationBell.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()

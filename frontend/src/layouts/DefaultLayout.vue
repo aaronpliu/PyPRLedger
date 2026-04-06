@@ -19,6 +19,9 @@
           </el-menu>
         </div>
         <div class="header-actions">
+          <!-- Notification Bell -->
+          <NotificationBell />
+
           <!-- Language Switcher -->
           <el-dropdown @command="handleLanguageChange">
             <span class="language-switcher">
@@ -72,6 +75,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useLanguage } from '@/composables/useLanguage'
+import NotificationBell from '@/components/common/NotificationBell.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
