@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2026-04-06
+
+### Added
+- **Diff2HTML Integration** - Enhanced code diff visualization in the review UI
+  - Integrated diff2html library for syntax-highlighted, interactive diff display
+  - Added `web/lib/diff2html-ui.min.js` and `web/lib/diff2html.min.css`
+  - New `scripts/update_diff2html.sh` script for library updates
+  - Improved readability of code changes during code review
+
+- **Score Deletion Functionality** - Ability to delete review scores
+  - New endpoint for removing scores from reviews
+  - Database migration: `alembic/versions/005_add_active_and_deletion_tracking_to_score.py`
+  - Added `is_active` flag for soft deletion support
+
+### Changed
+- **UI Material Design Upgrade** - Complete visual overhaul with Material Design principles
+  - Refactored UI with material design styles (`web/css/material-design.css`)
+  - Enhanced component styles: buttons, cards, chips, forms, typography
+  - Added Ripple effect component (`web/js/components/Ripple.js`)
+  - Improved theme support for light/dark modes
+  - Enhanced visual hierarchy and spacing across all components
+
+- **Cache Enhancement** - Improved cache handling for different themes
+  - Cache now accounts for theme selection
+  - Better cache invalidation strategy for UI-related data
+
+### Fixed
+- **Score Logic Enhancement** - Corrected score behavior for first-time reviewer updates
+  - Fixed edge case when reviewer updates score for the first time
+  - Improved score calculation accuracy in multi-reviewer scenarios
+
+- **Cache Cleanup Script** - Enhanced `clear_cache.py` reliability
+  - Improved error handling and logging
+  - Better support for selective cache clearing patterns
+
+---
+
 ## [1.3.2] - 2026-04-05
 
 ### Added
@@ -386,6 +423,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
+| 1.4.0 | 2026-04-06 | Diff2HTML integration, score deletion, Material Design UI overhaul, cache enhancements |
 | 1.3.2 | 2026-04-05 | Score architecture refactoring, review UI testing page, cache management, schema unification |
 | 1.3.1 | 2026-03-31 | Multi-reviewer score support with UPSERT pattern, independent iteration tracking |
 | 1.3.0 | 2026-03-29 | Project registry system, multi-app query support, virtual app_name architecture |
