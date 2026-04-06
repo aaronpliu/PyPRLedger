@@ -1,29 +1,32 @@
 <template>
   <el-container class="layout-container">
     <!-- Header -->
-    <el-header class="layout-header">
+    <el-header class="layout-header" role="banner">
       <div class="header-content">
         <div class="header-left">
-          <h1 class="logo">PR Ledger</h1>
-          <el-menu
-            mode="horizontal"
-            :default-active="activeMenu"
-            router
-            background-color="#409eff"
-            text-color="#fff"
-            active-text-color="#ffd04b"
-            style="border: none"
-          >
-            <el-menu-item index="/">Dashboard</el-menu-item>
-            <el-menu-item index="/reviews">Reviews</el-menu-item>
-            <el-sub-menu index="/scores">
-              <template #title>Scores</template>
-              <el-menu-item index="/scores">Score List</el-menu-item>
-              <el-menu-item index="/scores/analytics">Analytics</el-menu-item>
-            </el-sub-menu>
-          </el-menu>
+          <h1 class="logo" role="heading" aria-level="1">PR Ledger</h1>
+          <nav role="navigation" aria-label="Main navigation">
+            <el-menu
+              mode="horizontal"
+              :default-active="activeMenu"
+              router
+              background-color="#409eff"
+              text-color="#fff"
+              active-text-color="#ffd04b"
+              style="border: none"
+              aria-label="Main menu"
+            >
+              <el-menu-item index="/">Dashboard</el-menu-item>
+              <el-menu-item index="/reviews">Reviews</el-menu-item>
+              <el-sub-menu index="/scores">
+                <template #title>Scores</template>
+                <el-menu-item index="/scores">Score List</el-menu-item>
+                <el-menu-item index="/scores/analytics">Analytics</el-menu-item>
+              </el-sub-menu>
+            </el-menu>
+          </nav>
         </div>
-        <div class="header-actions">
+        <div class="header-actions" role="toolbar" aria-label="User actions">
           <!-- Global Search -->
           <GlobalSearch />
 
@@ -32,16 +35,17 @@
 
           <!-- Language Switcher -->
           <el-dropdown @command="handleLanguageChange">
-            <span class="language-switcher">
+            <span class="language-switcher" role="button" tabindex="0" aria-label="Switch language">
               {{ languageStore.getLanguageFlag(languageStore.currentLanguage as any) }}
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
-              <el-dropdown-menu>
+              <el-dropdown-menu role="menu" aria-label="Language options">
                 <el-dropdown-item
                   v-for="lang in languageStore.availableLanguages"
                   :key="lang.code"
                   :command="lang.code"
+                  role="menuitem"
                 >
                   {{ lang.flag }} {{ lang.name }}
                 </el-dropdown-item>
@@ -51,15 +55,15 @@
 
           <!-- User Menu -->
           <el-dropdown @command="handleCommand">
-            <span class="user-info">
+            <span class="user-info" role="button" tabindex="0" :aria-label="`User menu for ${authStore.user?.username}`">
               <el-icon><User /></el-icon>
               {{ authStore.user?.username }}
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="profile">{{ t('common.profile') }}</el-dropdown-item>
-                <el-dropdown-item command="logout" divided>{{ t('common.logout') }}</el-dropdown-item>
+              <el-dropdown-menu role="menu" aria-label="User options">
+                <el-dropdown-item command="profile" role="menuitem">{{ t('common.profile') }}</el-dropdown-item>
+                <el-dropdown-item command="logout" divided role="menuitem">{{ t('common.logout') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -68,14 +72,14 @@
     </el-header>
 
     <!-- Main content -->
-    <el-main class="layout-main">
+    <el-main class="layout-main" role="main">
       <router-view />
     </el-main>
   </el-container>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { User, ArrowDown } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -83,6 +87,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useLanguage } from '@/composables/useLanguage'
+import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 
@@ -91,6 +96,23 @@ const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const languageStore = useLanguage()
+
+// Initialize keyboard shortcuts
+useKeyboardShortcuts()
+
+onMounted(() => {
+  // Show shortcut hint on first visit
+  if (!localStorage.getItem('shortcuts_hint_shown')) {
+    setTimeout(() => {
+      ElMessage({
+        message: 'Press ? to view keyboard shortcuts',
+        type: 'info',
+        duration: 3000,
+      })
+      localStorage.setItem('shortcuts_hint_shown', 'true')
+    }, 2000)
+  }
+})
 
 const activeMenu = computed(() => route.path)
 

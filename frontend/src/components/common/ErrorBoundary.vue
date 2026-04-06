@@ -1,16 +1,19 @@
 <template>
-  <div class="error-boundary">
+  <div class="error-boundary" role="alert" aria-live="assertive">
     <el-result
       icon="error"
       title="Oops! Something went wrong"
       sub-title="An unexpected error occurred. Please try refreshing the page."
     >
       <template #extra>
-        <el-button type="primary" @click="handleRefresh">
+        <el-button type="primary" @click="handleRefresh" aria-label="Refresh page">
           Refresh Page
         </el-button>
-        <el-button @click="handleGoHome">
+        <el-button @click="handleGoHome" aria-label="Go to homepage">
           Go to Home
+        </el-button>
+        <el-button @click="handleReportError" aria-label="Report this error">
+          Report Error
         </el-button>
       </template>
     </el-result>
@@ -28,13 +31,23 @@
 <script setup lang="ts">
 import { ref, onErrorCaptured } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElNotification } from 'element-plus'
 
 const router = useRouter()
 const error = ref<string | null>(null)
+const errorInfo = ref<any>(null)
 
-onErrorCaptured((err) => {
+onErrorCaptured((err, instance, info) => {
   error.value = err.message || String(err)
-  console.error('Error captured by boundary:', err)
+  errorInfo.value = { component: instance?.$options?.name, info }
+  console.error('Error captured by boundary:', err, info)
+  
+  // Log to error tracking service in production
+  if (import.meta.env.PROD) {
+    // TODO: Integrate with Sentry or similar
+    console.error('Production error:', { message: err.message, stack: err.stack })
+  }
+  
   return false // Prevent error from propagating further
 })
 
@@ -44,6 +57,25 @@ const handleRefresh = () => {
 
 const handleGoHome = () => {
   router.push('/')
+}
+
+const handleReportError = () => {
+  // Copy error details to clipboard
+  const errorText = `Error: ${error.value}\nComponent: ${errorInfo.value?.component}\nInfo: ${errorInfo.value?.info}`
+  navigator.clipboard.writeText(errorText).then(() => {
+    ElNotification({
+      title: 'Error Copied',
+      message: 'Error details have been copied to clipboard. Please report this to support.',
+      type: 'success',
+      duration: 5000,
+    })
+  }).catch(() => {
+    ElNotification({
+      title: 'Copy Failed',
+      message: 'Failed to copy error details. Please take a screenshot.',
+      type: 'warning',
+    })
+  })
 }
 </script>
 

@@ -1,0 +1,13 @@
+# PR Ledger - Robots.txt
+# Allow all search engines to index the application
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://prledger.example.com/sitemap.xml
+
+# Disallow admin and API routes (if exposed)
+Disallow: /api/
+Disallow: /admin/
+Disallow: /auth/
