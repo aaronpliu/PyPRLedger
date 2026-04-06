@@ -1,8 +1,12 @@
 <template>
-  <router-view />
+  <div id="app">
+    <router-view />
+    <PWAInstallPrompt />
+  </div>
 </template>
 
 <script setup lang="ts">
+import PWAInstallPrompt from '@/components/common/PWAInstallPrompt.vue'
 // Root component - just renders the router view
 </script>
 

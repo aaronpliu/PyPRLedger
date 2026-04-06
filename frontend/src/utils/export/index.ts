@@ -108,7 +108,8 @@ export function exportScoresToJSON(scores: any[], filename?: string) {
     data: scores,
   }
 
-  exportToJSON(exportData, finalFilename)
+  // Pass as array to match function signature
+  exportToJSON([exportData], finalFilename)
 }
 
 /**

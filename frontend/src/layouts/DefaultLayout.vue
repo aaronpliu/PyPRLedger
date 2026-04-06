@@ -33,7 +33,7 @@
           <!-- Language Switcher -->
           <el-dropdown @command="handleLanguageChange">
             <span class="language-switcher">
-              {{ languageStore.getLanguageFlag(languageStore.currentLanguage) }}
+              {{ languageStore.getLanguageFlag(languageStore.currentLanguage as any) }}
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
@@ -104,7 +104,7 @@ const handleCommand = (command: string) => {
 }
 
 const handleLanguageChange = (lang: string) => {
-  languageStore.setLanguage(lang)
+  languageStore.setLanguage(lang as any)
   ElMessage.success(`Language changed to ${languageStore.getLanguageName(lang)}`)
 }
 </script>
