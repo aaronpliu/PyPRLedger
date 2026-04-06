@@ -53,6 +53,9 @@
             </template>
           </el-dropdown>
 
+          <!-- Theme Switcher -->
+          <ThemeSwitcher />
+
           <!-- User Menu -->
           <el-dropdown @command="handleCommand">
             <span class="user-info" role="button" tabindex="0" :aria-label="`User menu for ${authStore.user?.username}`">
@@ -90,6 +93,7 @@ import { useLanguage } from '@/composables/useLanguage'
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
+import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()

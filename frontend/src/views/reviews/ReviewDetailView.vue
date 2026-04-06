@@ -45,6 +45,16 @@
           </el-descriptions>
         </el-card>
 
+        <!-- Code Diff Viewer -->
+        <el-card class="diff-card" style="margin-top: 20px">
+          <CodeDiffViewer
+            v-if="review.diff_content"
+            :diff="review.diff_content"
+            v-model:output-format="diffFormat"
+          />
+          <el-empty v-else description="No diff content available" />
+        </el-card>
+
         <!-- Scores Section -->
         <el-card class="scores-card" style="margin-top: 20px">
           <template #header>
@@ -135,7 +145,13 @@
     </el-dialog>
 
     <!-- Add Score Dialog -->
-    <el-dialog v-model="showScoreDialog" title="Add Score" width="600px">
+    <el-dialog v-model="showScoreDialog" title="Add Score" width="700px">
+      <!-- Quick Score Buttons -->
+      <QuickScoreButtons @select="handleQuickScoreSelect" />
+      
+      <!-- Score Range Guide -->
+      <ScoreRangeGuide />
+      
       <el-form :model="scoreForm" :rules="scoreRules" ref="scoreFormRef" label-width="120px">
         <el-form-item label="Category" prop="category">
           <el-input v-model="scoreForm.category" placeholder="e.g., Code Quality" />
@@ -183,6 +199,9 @@ import type { Score, ScoreCreate } from '@/api/scores'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
+import CodeDiffViewer from '@/components/review/CodeDiffViewer.vue'
+import QuickScoreButtons from '@/components/review/QuickScoreButtons.vue'
+import ScoreRangeGuide from '@/components/review/ScoreRangeGuide.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -195,6 +214,7 @@ const showEditDialog = ref(false)
 const showScoreDialog = ref(false)
 const editFormRef = ref<FormInstance>()
 const scoreFormRef = ref<FormInstance>()
+const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
 
 const editForm = reactive<ReviewUpdate>({
   status: '',
@@ -333,6 +353,20 @@ const confirmDelete = async () => {
   }
 }
 
+const handleQuickScoreSelect = (value: number) => {
+  scoreForm.score = value
+  // Auto-select category based on score
+  if (value >= 90) {
+    scoreForm.category = 'Overall Quality'
+  } else if (value >= 80) {
+    scoreForm.category = 'Code Quality'
+  } else if (value >= 70) {
+    scoreForm.category = 'Acceptability'
+  } else {
+    scoreForm.category = 'Needs Improvement'
+  }
+}
+
 onMounted(() => {
   loadReview()
 })
@@ -361,5 +395,9 @@ onMounted(() => {
 .actions-card {
   position: sticky;
   top: 20px;
+}
+
+.diff-card :deep(.el-card__body) {
+  padding: 0;
 }
 </style>

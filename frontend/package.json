@@ -19,6 +19,7 @@
     "@vueuse/core": "^14.2.1",
     "axios": "^1.14.0",
     "dayjs": "^1.11.20",
+    "diff2html": "^3.4.56",
     "echarts": "^6.0.0",
     "element-plus": "^2.13.6",
     "jspdf": "^4.2.1",

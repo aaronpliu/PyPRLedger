@@ -6,15 +6,9 @@ export interface Review {
   reviewer_username: string
   status: string
   summary: string | null
+  diff_content?: string | null  // Unified diff from Bitbucket webhook
   created_at: string
   updated_at: string
-}
-
-export interface ReviewCreate {
-  pr_url: string
-  reviewer_username: string
-  status?: string
-  summary?: string | null
 }
 
 export interface ReviewUpdate {
@@ -23,6 +17,7 @@ export interface ReviewUpdate {
 }
 
 // Reviews API
+// NOTE: Reviews are created by Bitbucket webhook, not from UI
 export const reviewsApi = {
   // Get all reviews with pagination
   getReviews(params: { limit?: number; offset?: number }): Promise<{ total: number; items: Review[] }> {
@@ -34,12 +29,7 @@ export const reviewsApi = {
     return request.get(`/reviews/${id}`)
   },
 
-  // Create new review
-  createReview(data: ReviewCreate): Promise<Review> {
-    return request.post('/reviews', data)
-  },
-
-  // Update review
+  // Update review (status only - reviews are read-only except for status)
   updateReview(id: number, data: ReviewUpdate): Promise<Review> {
     return request.put(`/reviews/${id}`, data)
   },

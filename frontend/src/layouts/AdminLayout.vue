@@ -37,6 +37,9 @@
           <!-- Notification Bell -->
           <NotificationBell />
 
+          <!-- Theme Switcher -->
+          <ThemeSwitcher />
+
           <el-dropdown @command="handleCommand">
             <span class="user-info">
               {{ authStore.user?.username }}
@@ -67,6 +70,7 @@ import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
+import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()

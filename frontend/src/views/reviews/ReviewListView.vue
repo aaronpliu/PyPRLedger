@@ -10,13 +10,27 @@
               :selected-ids="selectedReviews.map(r => r.id)"
               size="small"
             />
-            <el-button type="primary" @click="showCreateDialog = true">
-              <el-icon><Plus /></el-icon>
-              New Review
+            <el-button @click="loadReviews">
+              <el-icon><Refresh /></el-icon>
+              Refresh
             </el-button>
           </div>
         </div>
       </template>
+
+      <!-- Info Banner -->
+      <el-alert
+        title="PR Reviews are submitted by AI system"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 16px"
+      >
+        <template #default>
+          Pull request reviews are automatically collected from Bitbucket webhooks and AI analysis. 
+          You can view reviews and add/update scores based on your permissions.
+        </template>
+      </el-alert>
 
       <!-- Filters -->
       <FilterBuilder
@@ -142,47 +156,6 @@
       </div>
     </el-card>
 
-    <!-- Create Review Dialog -->
-    <el-dialog
-      v-model="showCreateDialog"
-      title="Create New Review"
-      width="600px"
-    >
-      <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="120px">
-        <el-form-item label="PR URL" prop="pr_url">
-          <el-input v-model="createForm.pr_url" placeholder="https://github.com/..." />
-        </el-form-item>
-        
-        <el-form-item label="Reviewer" prop="reviewer_username">
-          <el-input v-model="createForm.reviewer_username" placeholder="Username" />
-        </el-form-item>
-        
-        <el-form-item label="Status">
-          <el-select v-model="createForm.status" style="width: 100%">
-            <el-option label="Pending" value="pending" />
-            <el-option label="In Progress" value="in_progress" />
-            <el-option label="Completed" value="completed" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Summary">
-          <el-input
-            v-model="createForm.summary"
-            type="textarea"
-            :rows="4"
-            placeholder="Review summary..."
-          />
-        </el-form-item>
-      </el-form>
-      
-      <template #footer>
-        <el-button @click="showCreateDialog = false">Cancel</el-button>
-        <el-button type="primary" :loading="creating" @click="handleCreate">
-          Create
-        </el-button>
-      </template>
-    </el-dialog>
-
     <!-- Bulk Delete Confirmation Dialog -->
     <el-dialog
       v-model="showBulkDeleteDialogVisible"
@@ -248,28 +221,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document } from '@element-plus/icons-vue'
+import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
-import type { Review, ReviewCreate } from '@/api/reviews'
+import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
 import FilterBuilder from '@/components/common/FilterBuilder.vue'
 import ExportMenu from '@/components/common/ExportMenu.vue'
 
 const router = useRouter()
 const loading = ref(false)
-const creating = ref(false)
 const reviews = ref<Review[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
 const searchQuery = ref('')
 const statusFilter = ref('')
-const showCreateDialog = ref(false)
-const createFormRef = ref<FormInstance>()
 const tableRef = ref()
 
 // Bulk operation state
@@ -292,22 +261,6 @@ const filterFields = [
   { label: 'Created Date', value: 'created_at' },
   { label: 'Summary', value: 'summary' },
 ]
-
-const createForm = reactive<ReviewCreate>({
-  pr_url: '',
-  reviewer_username: '',
-  status: 'pending',
-  summary: null,
-})
-
-const createRules: FormRules = {
-  pr_url: [
-    { required: true, message: 'Please input PR URL', trigger: 'blur' },
-  ],
-  reviewer_username: [
-    { required: true, message: 'Please input reviewer username', trigger: 'blur' },
-  ],
-}
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
@@ -388,31 +341,6 @@ const confirmDelete = async (review: Review) => {
       ElMessage.error('Failed to delete review')
     }
   }
-}
-
-const handleCreate = async () => {
-  if (!createFormRef.value) return
-  
-  await createFormRef.value.validate(async (valid) => {
-    if (valid) {
-      creating.value = true
-      try {
-        await reviewsApi.createReview(createForm)
-        ElMessage.success('Review created successfully')
-        showCreateDialog.value = false
-        // Reset form
-        createForm.pr_url = ''
-        createForm.reviewer_username = ''
-        createForm.status = 'pending'
-        createForm.summary = null
-        loadReviews()
-      } catch (error) {
-        ElMessage.error('Failed to create review')
-      } finally {
-        creating.value = false
-      }
-    }
-  })
 }
 
 // Filter handlers
