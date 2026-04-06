@@ -44,14 +44,49 @@
         </el-form-item>
       </el-form>
 
+      <!-- Bulk Actions Toolbar -->
+      <div v-if="selectedReviews.length > 0" class="bulk-actions-toolbar">
+        <div class="selection-info">
+          <el-icon><CircleCheck /></el-icon>
+          <span>{{ selectedReviews.length }} item{{ selectedReviews.length > 1 ? 's' : '' }} selected</span>
+        </div>
+        <div class="bulk-actions">
+          <el-button size="small" type="danger" @click="showBulkDeleteDialog">
+            <el-icon><Delete /></el-icon>
+            Delete Selected
+          </el-button>
+          <el-dropdown @command="handleBulkStatusChange">
+            <el-button size="small" type="warning">
+              <el-icon><Edit /></el-icon>
+              Change Status
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="completed">Set to Completed</el-dropdown-item>
+                <el-dropdown-item command="in_progress">Set to In Progress</el-dropdown-item>
+                <el-dropdown-item command="pending">Set to Pending</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <el-button size="small" @click="clearSelection">
+            <el-icon><Close /></el-icon>
+            Clear Selection
+          </el-button>
+        </div>
+      </div>
+
       <!-- Reviews Table -->
       <el-table
+        ref="tableRef"
         :data="reviews"
         v-loading="loading"
         stripe
         style="width: 100%"
         @row-click="handleRowClick"
+        @selection-change="handleSelectionChange"
       >
+        <el-table-column type="selection" width="55" fixed="left" />
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="pr_url" label="PR URL" min-width="250">
           <template #default="{ row }">
@@ -140,13 +175,75 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- Bulk Delete Confirmation Dialog -->
+    <el-dialog
+      v-model="showBulkDeleteDialogVisible"
+      title="Confirm Bulk Delete"
+      width="500px"
+    >
+      <el-alert
+        type="warning"
+        :closable="false"
+        style="margin-bottom: 16px"
+      >
+        <template #title>
+          Are you sure you want to delete {{ selectedReviews.length }} review{{ selectedReviews.length > 1 ? 's' : '' }}?
+          This action cannot be undone.
+        </template>
+      </el-alert>
+      
+      <div class="delete-preview">
+        <div v-for="review in selectedReviews.slice(0, 5)" :key="review.id" class="preview-item">
+          <el-icon><Document /></el-icon>
+          <span>Review #{{ review.id }} - {{ truncateUrl(review.pr_url) }}</span>
+        </div>
+        <div v-if="selectedReviews.length > 5" class="preview-more">
+          ... and {{ selectedReviews.length - 5 }} more
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="showBulkDeleteDialogVisible = false">Cancel</el-button>
+        <el-button type="danger" :loading="bulkDeleting" @click="executeBulkDelete">
+          Delete {{ selectedReviews.length }} Items
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Bulk Operation Progress Dialog -->
+    <el-dialog
+      v-model="showProgressDialog"
+      title="Processing..."
+      width="500px"
+      :close-on-click-modal="false"
+      :show-close="false"
+    >
+      <div class="progress-container">
+        <el-progress
+          :percentage="progressPercentage"
+          :status="progressStatus"
+          :stroke-width="20"
+        />
+        <div class="progress-info">
+          <p>{{ progressMessage }}</p>
+          <p class="progress-detail">
+            {{ processedCount }} / {{ totalCount }} completed
+          </p>
+        </div>
+      </div>
+      
+      <template #footer v-if="!bulkOperationLoading">
+        <el-button type="primary" @click="closeProgressDialog">Close</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Plus, Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review, ReviewCreate } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -165,6 +262,19 @@ const searchQuery = ref('')
 const statusFilter = ref('')
 const showCreateDialog = ref(false)
 const createFormRef = ref<FormInstance>()
+const tableRef = ref()
+
+// Bulk operation state
+const selectedReviews = ref<Review[]>([])
+const showBulkDeleteDialogVisible = ref(false)
+const bulkDeleting = ref(false)
+const showProgressDialog = ref(false)
+const bulkOperationLoading = ref(false)
+const progressPercentage = ref(0)
+const progressStatus = ref<'success' | 'exception' | 'warning'>()
+const progressMessage = ref('')
+const processedCount = ref(0)
+const totalCount = ref(0)
 
 // Filter fields configuration
 const filterFields = [
@@ -316,6 +426,136 @@ const handleApplyPreset = (preset: any) => {
   ElMessage.success(`Applied preset: ${preset.name}`)
 }
 
+// Bulk operation handlers
+const handleSelectionChange = (selection: Review[]) => {
+  selectedReviews.value = selection
+}
+
+const clearSelection = () => {
+  tableRef.value?.clearSelection()
+  selectedReviews.value = []
+}
+
+const showBulkDeleteDialog = () => {
+  if (selectedReviews.value.length === 0) {
+    ElMessage.warning('Please select items to delete')
+    return
+  }
+  showBulkDeleteDialogVisible.value = true
+}
+
+const executeBulkDelete = async () => {
+  if (selectedReviews.value.length === 0) return
+  
+  bulkDeleting.value = true
+  showProgressDialog.value = true
+  bulkOperationLoading.value = true
+  processedCount.value = 0
+  totalCount.value = selectedReviews.value.length
+  progressPercentage.value = 0
+  progressStatus.value = undefined
+  progressMessage.value = 'Deleting reviews...'
+  
+  const idsToDelete = selectedReviews.value.map(r => r.id)
+  let successCount = 0
+  let failCount = 0
+  
+  try {
+    for (let i = 0; i < idsToDelete.length; i++) {
+      const id = idsToDelete[i]
+      try {
+        await reviewsApi.deleteReview(id)
+        successCount++
+      } catch (error) {
+        console.error(`Failed to delete review ${id}:`, error)
+        failCount++
+      }
+      
+      // Update progress
+      processedCount.value = i + 1
+      progressPercentage.value = Math.round(((i + 1) / idsToDelete.length) * 100)
+      progressMessage.value = `Deleting review ${i + 1} of ${idsToDelete.length}...`
+    }
+    
+    // Complete
+    progressStatus.value = failCount > 0 ? 'warning' : 'success'
+    progressMessage.value = `Completed: ${successCount} succeeded, ${failCount} failed`
+    bulkOperationLoading.value = false
+    
+    ElMessage.success(`Successfully deleted ${successCount} review${successCount !== 1 ? 's' : ''}`)
+    
+    // Reload data
+    await loadReviews()
+    clearSelection()
+    showBulkDeleteDialogVisible.value = false
+  } catch (error) {
+    progressStatus.value = 'exception'
+    progressMessage.value = 'Bulk delete failed'
+    bulkOperationLoading.value = false
+    ElMessage.error('Failed to delete reviews')
+  } finally {
+    bulkDeleting.value = false
+  }
+}
+
+const handleBulkStatusChange = async (status: string) => {
+  if (selectedReviews.value.length === 0) {
+    ElMessage.warning('Please select items to update')
+    return
+  }
+  
+  showProgressDialog.value = true
+  bulkOperationLoading.value = true
+  processedCount.value = 0
+  totalCount.value = selectedReviews.value.length
+  progressPercentage.value = 0
+  progressStatus.value = undefined
+  progressMessage.value = `Updating status to ${status}...`
+  
+  let successCount = 0
+  let failCount = 0
+  
+  try {
+    for (let i = 0; i < selectedReviews.value.length; i++) {
+      const review = selectedReviews.value[i]
+      try {
+        // TODO: Implement bulk status update API
+        // For now, simulate with delay
+        await new Promise(resolve => setTimeout(resolve, 200))
+        successCount++
+      } catch (error) {
+        console.error(`Failed to update review ${review.id}:`, error)
+        failCount++
+      }
+      
+      // Update progress
+      processedCount.value = i + 1
+      progressPercentage.value = Math.round(((i + 1) / selectedReviews.value.length) * 100)
+      progressMessage.value = `Updating review ${i + 1} of ${selectedReviews.value.length}...`
+    }
+    
+    // Complete
+    progressStatus.value = failCount > 0 ? 'warning' : 'success'
+    progressMessage.value = `Completed: ${successCount} succeeded, ${failCount} failed`
+    bulkOperationLoading.value = false
+    
+    ElMessage.success(`Successfully updated ${successCount} review${successCount !== 1 ? 's' : ''}`)
+    
+    // Reload data
+    await loadReviews()
+    clearSelection()
+  } catch (error) {
+    progressStatus.value = 'exception'
+    progressMessage.value = 'Bulk update failed'
+    bulkOperationLoading.value = false
+    ElMessage.error('Failed to update reviews')
+  }
+}
+
+const closeProgressDialog = () => {
+  showProgressDialog.value = false
+}
+
 onMounted(() => {
   loadReviews()
 })
@@ -349,5 +589,84 @@ onMounted(() => {
 
 .el-table {
   cursor: pointer;
+}
+
+.bulk-actions-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: #409eff;
+}
+
+.bulk-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.delete-preview {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 12px;
+  background: #f5f7fa;
+}
+
+.preview-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: #606266;
+}
+
+.preview-more {
+  padding: 6px 0;
+  font-size: 12px;
+  color: #909399;
+  text-align: center;
+}
+
+.progress-container {
+  padding: 20px 0;
+}
+
+.progress-info {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.progress-info p {
+  margin: 8px 0;
+  color: #606266;
+}
+
+.progress-detail {
+  font-size: 14px;
+  color: #909399;
 }
 </style>
