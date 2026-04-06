@@ -2,7 +2,7 @@
   <div class="review-detail" v-loading="loading">
     <el-page-header @back="$router.back()" title="Back">
       <template #content>
-        <span class="page-title">Review #{{ review?.id }}</span>
+        <span class="page-title">Review Details</span>
       </template>
     </el-page-header>
 
@@ -15,10 +15,6 @@
             <div class="card-header">
               <span class="card-title">📋 Review Information</span>
               <el-space>
-                <el-button type="primary" size="small" @click="showEditDialog = true">
-                  <el-icon><Edit /></el-icon>
-                  Edit
-                </el-button>
                 <el-button type="success" size="small" @click="showScoreDialog = true">
                   <el-icon><Plus /></el-icon>
                   Add Score
@@ -147,35 +143,6 @@
       </el-col>
     </el-row>
 
-    <!-- Edit Review Dialog -->
-    <el-dialog v-model="showEditDialog" title="Edit Review" width="600px">
-      <el-form :model="editForm" ref="editFormRef" label-width="120px">
-        <el-form-item label="Status">
-          <el-select v-model="editForm.status" style="width: 100%">
-            <el-option label="Pending" value="pending" />
-            <el-option label="In Progress" value="in_progress" />
-            <el-option label="Completed" value="completed" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Summary">
-          <el-input
-            v-model="editForm.summary"
-            type="textarea"
-            :rows="4"
-            placeholder="Review summary..."
-          />
-        </el-form-item>
-      </el-form>
-      
-      <template #footer>
-        <el-button @click="showEditDialog = false">Cancel</el-button>
-        <el-button type="primary" :loading="updating" @click="handleUpdate">
-          Update
-        </el-button>
-      </template>
-    </el-dialog>
-
     <!-- Add Score Dialog -->
     <el-dialog v-model="showScoreDialog" title="Add Score" width="700px">
       <!-- Quick Score Buttons -->
@@ -238,10 +205,10 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Edit, Clock, Plus, Delete, User } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import { scoresApi } from '@/api/scores'
-import type { Review, ReviewUpdate } from '@/api/reviews'
+import type { Review } from '@/api/reviews'
 import type { Score, ScoreCreate } from '@/api/scores'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -256,20 +223,12 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const loading = ref(false)
-const updating = ref(false)
 const addingScore = ref(false)
 const review = ref<Review | null>(null)
 const scores = ref<Score[]>([])
-const showEditDialog = ref(false)
 const showScoreDialog = ref(false)
-const editFormRef = ref<FormInstance>()
 const scoreFormRef = ref<FormInstance>()
 const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
-
-const editForm = reactive<ReviewUpdate>({
-  status: '',
-  summary: null,
-})
 
 const scoreForm = reactive<ScoreCreate>({
   pull_request_id: '',
@@ -336,10 +295,6 @@ const loadReview = async () => {
       review.value.source_filename || null
     )
     
-    // Populate edit form with correct field names
-    editForm.status = review.value.pull_request_status
-    editForm.summary = review.value.reviewer_comments
-    
     // Set score form defaults
     scoreForm.pull_request_id = review.value.pull_request_id
     scoreForm.pull_request_commit_id = review.value.pull_request_commit_id || ''
@@ -353,22 +308,6 @@ const loadReview = async () => {
     router.push('/reviews')
   } finally {
     loading.value = false
-  }
-}
-
-const handleUpdate = async () => {
-  if (!review.value) return
-  
-  updating.value = true
-  try {
-    await reviewsApi.updateReview(review.value.id, editForm)
-    ElMessage.success('Review updated successfully')
-    showEditDialog.value = false
-    loadReview()
-  } catch (error) {
-    ElMessage.error('Failed to update review')
-  } finally {
-    updating.value = false
   }
 }
 

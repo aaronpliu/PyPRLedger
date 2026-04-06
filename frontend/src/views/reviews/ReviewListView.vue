@@ -106,7 +106,11 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55" fixed="left" />
-        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column label="Seq#" width="80">
+          <template #default="{ $index }">
+            {{ (currentPage - 1) * pageSize + $index + 1 }}
+          </template>
+        </el-table-column>
         
         <!-- PR Info Group -->
         <el-table-column label="PR Info" min-width="200">
