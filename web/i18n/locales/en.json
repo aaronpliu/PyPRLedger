@@ -1,0 +1,124 @@
+{
+  "app": {
+    "title": "Pull Request Review System",
+    "subtitle": "View and score all reviews with AI suggestion"
+  },
+  "filters": {
+    "currentReviewer": "Current Reviewer (Required)",
+    "currentReviewerPlaceholder": "Select from list",
+    "pullRequestUser": "Pull Request User",
+    "pullRequestUserPlaceholder": "Enter PR user to filter",
+    "commitId": "Pull Request Commit ID",
+    "commitIdPlaceholder": "Full or short commit ID",
+    "projectKey": "Project Key",
+    "projectKeyPlaceholder": "Leave empty for all projects",
+    "repository": "Repository",
+    "repositoryPlaceholder": "Leave empty for all repositories",
+    "pullRequestId": "Pull Request ID",
+    "pullRequestIdPlaceholder": "Leave empty for all PRs",
+    "reviewStatus": "Review Status",
+    "allReviews": "All Reviews",
+    "reviewed": "Reviewed (Has Scores)",
+    "notReviewed": "Not Reviewed (No Scores)"
+  },
+  "buttons": {
+    "clearFilters": "Clear All Filters",
+    "loadReviews": "Load All Reviews",
+    "backToTop": "Back to Top",
+    "changeTheme": "Change Theme"
+  },
+  "themes": {
+    "default": "Default (Professional Blue)",
+    "warm": "Warm (Energetic)",
+    "cool": "Cool (Tech Cyan)",
+    "dark": "Dark (Night Mode)"
+  },
+  "files": {
+    "title": "Files Reviewed"
+  },
+  "messages": {
+    "loading": "Loading all reviews...",
+    "selectReviewer": "Please select a Current Reviewer to load reviews",
+    "noReviewsFound": "No reviews found",
+    "noReviewedReviews": "No reviewed reviews found",
+    "noNotReviewedReviews": "No not reviewed reviews found",
+    "error": "Error",
+    "success": "Success"
+  },
+  "pagination": {
+    "showing": "Showing {{start}}-{{end}} of {{total}} records",
+    "first": "First",
+    "previous": "Previous",
+    "next": "Next",
+    "last": "Last",
+    "pageInfo": "Page {{current}} of {{total}}"
+  },
+  "reviews": {
+    "reviewCount": "{{count}} review(s)",
+    "prLevel": "PR-Level",
+    "fileLevel": "File-Level",
+    "reviewedBy": "Reviewed by",
+    "scores": "Scores",
+    "noScores": "No scores yet",
+    "addScore": "Add Score",
+    "editScore": "Edit Score",
+    "deleteScore": "Delete Score",
+    "confirmDelete": "Are you sure you want to delete this score?"
+  },
+  "scores": {
+    "excellent": "Excellent",
+    "good": "Good",
+    "average": "Average",
+    "poor": "Poor",
+    "scoreValue": "Score: {{value}}",
+    "reviewerComments": "Reviewer Comments",
+    "noComments": "No comments",
+    "lastUpdated": "Last updated",
+    "rangeGuide": "Score Range Guide",
+    "rangeExcellent": "90-100: Excellent - Outstanding quality",
+    "rangeGood": "75-89: Good - Above average quality",
+    "rangeAverage": "60-74: Average - Meets expectations",
+    "rangePoor": "0-59: Poor - Needs improvement"
+  },
+  "ai": {
+    "suggestions": "AI Suggestions",
+    "analyzing": "Analyzing code changes...",
+    "analysisComplete": "Analysis Complete",
+    "overallAssessment": "Overall Assessment",
+    "criticalIssues": "Critical Issues",
+    "highIssues": "High Priority",
+    "mediumIssues": "Medium Priority",
+    "lowIssues": "Low Priority",
+    "totalIssues": "Total Issues",
+    "filesAnalyzed": "Files Analyzed",
+    "description": "Description",
+    "suggestion": "Suggestion",
+    "codeSnippet": "Code Snippet",
+    "severity": "Severity",
+    "issueType": "Issue Type",
+    "applySuggestion": "Apply Suggestion",
+    "dismiss": "Dismiss"
+  },
+  "validation": {
+    "invalidReviewer": "Current Reviewer \"{{reviewer}}\" is not a valid user. Please select from the dropdown.",
+    "invalidPrUser": "Pull Request User \"{{user}}\" is not a valid user. Please select from the dropdown."
+  },
+  "tooltips": {
+    "projectKey": "Project Key",
+    "repository": "Repository",
+    "pullRequestId": "Pull Request ID",
+    "commitId": "Full Commit ID",
+    "reviewCount": "Total number of reviews in this PR",
+    "reviewedStatus": "This PR has been reviewed and has scores",
+    "notReviewedStatus": "This PR has not been reviewed yet - no scores"
+  },
+  "common": {
+    "yes": "Yes",
+    "no": "No",
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close",
+    "loading": "Loading...",
+    "unknown": "Unknown"
+  }
+}

@@ -9,6 +9,8 @@
     <script src="lib/diff2html-ui.min.js"></script>
     <!-- Material Design 3 Styles -->
     <link rel="stylesheet" href="css/main.css">
+    <!-- I18n Support -->
+    <script src="i18n/index.js"></script>
     <style>
         * {
             margin: 0;
@@ -1905,33 +1907,42 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📝 Pull Request Review System</h1>
-            <p>View and score all reviews with AI suggestion</p>
+            <h1 data-i18n="app.title">📝 Pull Request Review System</h1>
+            <p data-i18n="app.subtitle">View and score all reviews with AI suggestion</p>
             
             <div class="theme-switcher">
+                <!-- Language Switcher -->
+                <div class="language-switcher" style="display: inline-block; margin-right: 15px;">
+                    <select id="languageSelector" onchange="changeLanguage(this.value)" style="padding: 8px 12px; border-radius: 6px; border: 2px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.2); color: white; font-size: 0.9rem; cursor: pointer; backdrop-filter: blur(10px);">
+                        <option value="en">English</option>
+                        <option value="zh-CN">简体中文</option>
+                        <option value="zh-TW">繁體中文</option>
+                    </select>
+                </div>
+                
                 <div class="theme-dropdown">
-                    <button class="theme-btn md-btn-icon" onclick="toggleThemeMenu()" title="Change Theme">
+                    <button class="theme-btn md-btn-icon" onclick="toggleThemeMenu()" data-i18n-title="buttons.changeTheme" title="Change Theme">
                         🎨
                     </button>
                     <div class="theme-menu" id="themeMenu">
                         <button class="theme-menu-item active" onclick="setTheme('default')">
                             <span class="theme-icon">💼</span>
-                            <span>Default (Professional Blue)</span>
+                            <span data-i18n="themes.default">Default (Professional Blue)</span>
                         </button>
                         <div class="theme-divider"></div>
                         <button class="theme-menu-item" onclick="setTheme('warm')">
                             <span class="theme-icon">🔥</span>
-                            <span>Warm (Energetic)</span>
+                            <span data-i18n="themes.warm">Warm (Energetic)</span>
                         </button>
                         <div class="theme-divider"></div>
                         <button class="theme-menu-item" onclick="setTheme('cool')">
                             <span class="theme-icon">❄️</span>
-                            <span>Cool (Tech Cyan)</span>
+                            <span data-i18n="themes.cool">Cool (Tech Cyan)</span>
                         </button>
                         <div class="theme-divider"></div>
                         <button class="theme-menu-item" onclick="setTheme('dark')">
                             <span class="theme-icon">🌙</span>
-                            <span>Dark (Night Mode)</span>
+                            <span data-i18n="themes.dark">Dark (Night Mode)</span>
                         </button>
                     </div>
                 </div>
@@ -1940,65 +1951,65 @@
 
         <div class="filters">
             <div class="filter-group md-text-field-outlined">
-                <label for="currentReviewer">👤 Current Reviewer (Required):</label>
-                <input type="text" id="currentReviewer" placeholder="Select from list" list="reviewerList" autocomplete="off">
+                <label for="currentReviewer" data-i18n="filters.currentReviewer">👤 Current Reviewer (Required):</label>
+                <input type="text" id="currentReviewer" data-i18n-placeholder="filters.currentReviewerPlaceholder" placeholder="Select from list" list="reviewerList" autocomplete="off">
                 <datalist id="reviewerList"></datalist>
             </div>
             <div class="filter-group md-text-field-outlined">
-                <label for="pullRequestUser">🔧 Pull Request User:</label>
-                <input type="text" id="pullRequestUser" placeholder="Enter PR user to filter" list="prUserList">
+                <label for="pullRequestUser" data-i18n="filters.pullRequestUser">🔧 Pull Request User:</label>
+                <input type="text" id="pullRequestUser" data-i18n-placeholder="filters.pullRequestUserPlaceholder" placeholder="Enter PR user to filter" list="prUserList">
                 <datalist id="prUserList"></datalist>
             </div>
             <div class="filter-group md-text-field-outlined">
-                <label for="commitId">🔖 Pull Request Commit ID:</label>
-                <input type="text" id="commitId" placeholder="Full or short commit ID">
+                <label for="commitId" data-i18n="filters.commitId">🔖 Pull Request Commit ID:</label>
+                <input type="text" id="commitId" data-i18n-placeholder="filters.commitIdPlaceholder" placeholder="Full or short commit ID">
             </div>
             <div class="filter-group md-text-field-outlined">
-                <label for="projectKey">Project Key:</label>
-                <input type="text" id="projectKey" placeholder="Leave empty for all projects">
+                <label for="projectKey" data-i18n="filters.projectKey">Project Key:</label>
+                <input type="text" id="projectKey" data-i18n-placeholder="filters.projectKeyPlaceholder" placeholder="Leave empty for all projects">
             </div>
             <div class="filter-group md-text-field-outlined">
-                <label for="repositorySlug">Repository:</label>
-                <input type="text" id="repositorySlug" placeholder="Leave empty for all repositories">
+                <label for="repositorySlug" data-i18n="filters.repository">Repository:</label>
+                <input type="text" id="repositorySlug" data-i18n-placeholder="filters.repositoryPlaceholder" placeholder="Leave empty for all repositories">
             </div>
             <div class="filter-group md-text-field-outlined">
-                <label for="pullRequestId">Pull Request ID:</label>
-                <input type="text" id="pullRequestId" placeholder="Leave empty for all PRs">
+                <label for="pullRequestId" data-i18n="filters.pullRequestId">Pull Request ID:</label>
+                <input type="text" id="pullRequestId" data-i18n-placeholder="filters.pullRequestIdPlaceholder" placeholder="Leave empty for all PRs">
             </div>
             <div class="filter-group md-text-field-outlined">
-                <label for="reviewStatus">📊 Review Status:</label>
+                <label for="reviewStatus" data-i18n="filters.reviewStatus">📊 Review Status:</label>
                 <select id="reviewStatus">
-                    <option value="all">All Reviews</option>
-                    <option value="reviewed">✅ Reviewed (Has Scores)</option>
-                    <option value="not-reviewed">❌ Not Reviewed (No Scores)</option>
+                    <option value="all" data-i18n-option="filters.allReviews">All Reviews</option>
+                    <option value="reviewed" data-i18n-option="filters.reviewed">✅ Reviewed (Has Scores)</option>
+                    <option value="not-reviewed" data-i18n-option="filters.notReviewed">❌ Not Reviewed (No Scores)</option>
                 </select>
             </div>
         </div>
         
         <div class="filter-actions">
-            <button class="btn btn-danger md-btn md-btn-filled" onclick="clearAllFilters()" style="background-color: var(--md-error);">🗑️ Clear All Filters</button>
-            <button class="btn btn-primary md-btn md-btn-filled" onclick="loadAllReviews()">🔄 Load All Reviews</button>
+            <button class="btn btn-danger md-btn md-btn-filled" onclick="clearAllFilters()" style="background-color: var(--md-error);" data-i18n="buttons.clearFilters">🗑️ Clear All Filters</button>
+            <button class="btn btn-primary md-btn md-btn-filled" onclick="loadAllReviews()" data-i18n="buttons.loadReviews">🔄 Load All Reviews</button>
         </div>
 
         <div class="file-tree" id="fileTree" style="display: none;">
-            <h3>📁 Files Reviewed</h3>
+            <h3 data-i18n="files.title">📁 Files Reviewed</h3>
             <div class="file-list" id="fileList"></div>
         </div>
 
         <div class="content">
             <div id="successMessage" class="success-message"></div>
-            <div id="loading" class="loading" style="display: none;">Loading all reviews...</div>
+            <div id="loading" class="loading" style="display: none;" data-i18n="messages.loading">Loading all reviews...</div>
             <div id="error" class="error" style="display: none;"></div>
             <div id="reviewsContainer">
                 <div class="loading" style="background: transparent; color: #94a3b8; font-size: 1rem;">
-                    👆 Please select a Current Reviewer to load reviews
+                    👆 <span data-i18n="messages.selectReviewer">Please select a Current Reviewer to load reviews</span>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Back to Top Button -->
-    <button id="backToTop" class="back-to-top-btn" onclick="scrollToTop()" title="Back to Top">
+    <button id="backToTop" class="back-to-top-btn" onclick="scrollToTop()" data-i18n-title="buttons.backToTop" title="Back to Top">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -2193,7 +2204,18 @@
         }
 
         // Load users on page load
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Initialize i18n first
+            if (window.i18n) {
+                await window.i18n.init();
+                
+                // Set language selector to current locale
+                const langSelector = document.getElementById('languageSelector');
+                if (langSelector) {
+                    langSelector.value = window.i18n.getLocale();
+                }
+            }
+            
             initializePageSize();
             loadUsersForAutocomplete();
             
@@ -2204,12 +2226,53 @@
             } else {
                 currentDiffView = 'line-by-line'; // Default to unified view
             }
+            
+            // Mark initialization as complete after a short delay
+            // This allows any pending blur events during init to be skipped
+            setTimeout(() => {
+                isPageInitializing = false;
+                console.log('[I18n] Page initialization complete');
+            }, 500);
+        });
+
+        // Language switcher function
+        function changeLanguage(locale) {
+            if (window.i18n) {
+                // Temporarily set initialization flag to prevent validation during language switch
+                const wasInitializing = isPageInitializing;
+                isPageInitializing = true;
+                
+                window.i18n.setLocale(locale);
+                
+                // Restore the flag after a short delay
+                setTimeout(() => {
+                    isPageInitializing = wasInitializing;
+                }, 300);
+            }
+        }
+
+        // Listen for language change events to re-render dynamic content
+        window.addEventListener('languageChanged', (event) => {
+            console.log('[I18n] Language changed event received:', event.detail.locale);
+            
+            // Re-render reviews if they are loaded
+            if (allReviews && allReviews.length > 0) {
+                displayGroupedReviews(allReviews);
+            }
+            
+            // Update the "select reviewer" message if no reviews are loaded
+            const container = document.getElementById('reviewsContainer');
+            const reviewerInput = document.getElementById('currentReviewer');
+            if (!reviewerInput.value.trim() && (!allReviews || allReviews.length === 0)) {
+                clearAllData();
+            }
         });
 
         // Auto-load reviews when reviewer is selected
         let reviewLoadTimeout = null;
         let prUserLoadTimeout = null;
         let searchTimeout = null;
+        let isPageInitializing = true; // Flag to track if page is still initializing
         
         document.addEventListener('DOMContentLoaded', () => {
             const reviewerInput = document.getElementById('currentReviewer');
@@ -2240,6 +2303,11 @@
             
             // Validate on blur (when user leaves the field)
             reviewerInput.addEventListener('blur', function() {
+                // Skip validation during page initialization
+                if (isPageInitializing) {
+                    return;
+                }
+                
                 const value = this.value.trim();
                 
                 if (value) {
@@ -2320,9 +2388,11 @@
             totalRecords = 0;
             totalPages = 0;
             
+            // Use i18n for the message if available
+            const message = window.i18n ? window.i18n.t('messages.selectReviewer') : 'Please select a Current Reviewer to load reviews';
             container.innerHTML = `
                 <div class="loading" style="background: transparent; color: #94a3b8; font-size: 1rem;">
-                    👆 Please select a Current Reviewer to load reviews
+                    👆 <span data-i18n="messages.selectReviewer">${message}</span>
                 </div>
             `;
             loadingEl.style.display = 'none';
@@ -2397,7 +2467,8 @@
 
             // Validate that the reviewer exists in user list
             if (!isValidUser(selectedReviewer)) {
-                showError(`⚠️ Current Reviewer "${selectedReviewer}" is not a valid user. Please select from the dropdown.`);
+                const errorMsg = window.i18n ? window.i18n.t('validation.invalidReviewer', { reviewer: selectedReviewer }) : `Current Reviewer "${selectedReviewer}" is not a valid user. Please select from the dropdown.`;
+                showError(`⚠️ ${errorMsg}`);
                 loadingEl.style.display = 'none';
                 return;
             }
@@ -2405,7 +2476,8 @@
             // Validate PR User if provided
             const pullRequestUser = pullRequestUserInput.value.trim();
             if (pullRequestUser && !isValidUser(pullRequestUser)) {
-                showError(`⚠️ Pull Request User "${pullRequestUser}" is not a valid user. Please select from the dropdown.`);
+                const errorMsg = window.i18n ? window.i18n.t('validation.invalidPrUser', { user: pullRequestUser }) : `Pull Request User "${pullRequestUser}" is not a valid user. Please select from the dropdown.`;
+                showError(`⚠️ ${errorMsg}`);
                 loadingEl.style.display = 'none';
                 return;
             }
@@ -2537,23 +2609,23 @@
             let html = `
                 <div class="pagination-container">
                     <div class="pagination-info">
-                        Showing ${startRecord}-${endRecord} of ${totalRecords} records
+                        ${window.i18n ? window.i18n.t('pagination.showing', { start: startRecord, end: endRecord, total: totalRecords }) : `Showing ${startRecord}-${endRecord} of ${totalRecords} records`}
                     </div>
                     <div class="pagination-controls">
                         <button class="pagination-btn" onclick="firstPage()" ${currentPage === 1 ? 'disabled' : ''}>
-                            ⏮ First
+                            ⏮ ${window.i18n ? window.i18n.t('pagination.first') : 'First'}
                         </button>
                         <button class="pagination-btn" onclick="prevPage()" ${currentPage === 1 ? 'disabled' : ''}>
-                            ◀ Previous
+                            ◀ ${window.i18n ? window.i18n.t('pagination.previous') : 'Previous'}
                         </button>
                         <span class="pagination-page-info">
-                            Page ${currentPage} of ${totalPages}
+                            ${window.i18n ? window.i18n.t('pagination.pageInfo', { current: currentPage, total: totalPages }) : `Page ${currentPage} of ${totalPages}`}
                         </span>
                         <button class="pagination-btn" onclick="nextPage()" ${currentPage === totalPages ? 'disabled' : ''}>
-                            Next ▶
+                            ${window.i18n ? window.i18n.t('pagination.next') : 'Next'} ▶
                         </button>
                         <button class="pagination-btn" onclick="lastPage()" ${currentPage === totalPages ? 'disabled' : ''}>
-                            Last ⏭
+                            ${window.i18n ? window.i18n.t('pagination.last') : 'Last'} ⏭
                         </button>
                     </div>
                 </div>
@@ -2583,9 +2655,15 @@
             }
 
             if (filteredReviews.length === 0) {
-                const statusText = reviewStatusFilter === 'reviewed' ? 'reviewed' : 
-                                   reviewStatusFilter === 'not-reviewed' ? 'not reviewed' : '';
-                container.innerHTML = `<div class="loading">No ${statusText} reviews found</div>`;
+                let message;
+                if (reviewStatusFilter === 'reviewed') {
+                    message = window.i18n ? window.i18n.t('messages.noReviewedReviews') : 'No reviewed reviews found';
+                } else if (reviewStatusFilter === 'not-reviewed') {
+                    message = window.i18n ? window.i18n.t('messages.noNotReviewedReviews') : 'No not reviewed reviews found';
+                } else {
+                    message = window.i18n ? window.i18n.t('messages.noReviewsFound') : 'No reviews found';
+                }
+                container.innerHTML = `<div class="loading">${message}</div>`;
                 return;
             }
 

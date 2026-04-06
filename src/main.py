@@ -81,7 +81,15 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
-    """Custom application exception handler"""
+    """Custom application exception handler with i18n support"""
+    # Detect language from request
+    from src.utils.i18n import i18n
+
+    lang = i18n.get_language_from_request(request)
+
+    # Get translated message
+    message = exc.get_message(lang)
+
     # Log detailed error information
     severity = "🔴 ERROR" if exc.status_code >= 500 else "🟠 CLIENT ERROR"
 
@@ -91,9 +99,10 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
         f"{'=' * 80}\n"
         f"  Request:     {request.method} {request.url.path}\n"
         f"  Client IP:   {request.client.host if request.client else 'unknown'}\n"
+        f"  Language:    {lang}\n"
         f"  Status Code: {exc.status_code}\n"
         f"  Error Code:  {exc.code}\n"
-        f"  Message:     {exc.message}"
+        f"  Message:     {message}"
     )
 
     if exc.detail:
@@ -109,7 +118,7 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
 
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": exc.code, "message": exc.message, "detail": exc.detail},
+        content={"error": exc.code, "message": message, "detail": exc.detail},
     )
 
 

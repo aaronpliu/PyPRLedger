@@ -1,0 +1,124 @@
+{
+  "app": {
+    "title": "Pull Request 评审系统",
+    "subtitle": "查看和评分所有评审，支持AI建议"
+  },
+  "filters": {
+    "currentReviewer": "当前评审人（必填）",
+    "currentReviewerPlaceholder": "从列表中选择",
+    "pullRequestUser": "PR 提交者",
+    "pullRequestUserPlaceholder": "输入PR提交者进行筛选",
+    "commitId": "PR Commit ID",
+    "commitIdPlaceholder": "完整或简短的 commit ID",
+    "projectKey": "项目标识",
+    "projectKeyPlaceholder": "留空显示所有项目",
+    "repository": "代码仓库",
+    "repositoryPlaceholder": "留空显示所有仓库",
+    "pullRequestId": "PR ID",
+    "pullRequestIdPlaceholder": "留空显示所有PR",
+    "reviewStatus": "评审状态",
+    "allReviews": "全部评审",
+    "reviewed": "已评审（有评分）",
+    "notReviewed": "未评审（无评分）"
+  },
+  "buttons": {
+    "clearFilters": "清除所有筛选",
+    "loadReviews": "加载所有评审",
+    "backToTop": "回到顶部",
+    "changeTheme": "切换主题"
+  },
+  "themes": {
+    "default": "默认（专业蓝）",
+    "warm": "温暖（活力橙）",
+    "cool": "清爽（科技青）",
+    "dark": "深色（夜间模式）"
+  },
+  "files": {
+    "title": "已评审的文件"
+  },
+  "messages": {
+    "loading": "正在加载所有评审...",
+    "selectReviewer": "请选择当前评审人以加载评审",
+    "noReviewsFound": "未找到评审",
+    "noReviewedReviews": "未找到已评审的记录",
+    "noNotReviewedReviews": "未找到未评审的记录",
+    "error": "错误",
+    "success": "成功"
+  },
+  "pagination": {
+    "showing": "显示第 {{start}}-{{end}} 条，共 {{total}} 条记录",
+    "first": "首页",
+    "previous": "上一页",
+    "next": "下一页",
+    "last": "末页",
+    "pageInfo": "第 {{current}} / {{total}} 页"
+  },
+  "reviews": {
+    "reviewCount": "{{count}} 个评审",
+    "prLevel": "PR级别",
+    "fileLevel": "文件级别",
+    "reviewedBy": "评审人",
+    "scores": "评分",
+    "noScores": "暂无评分",
+    "addScore": "添加评分",
+    "editScore": "编辑评分",
+    "deleteScore": "删除评分",
+    "confirmDelete": "确定要删除此评分吗？"
+  },
+  "scores": {
+    "excellent": "优秀",
+    "good": "良好",
+    "average": "一般",
+    "poor": "待改进",
+    "scoreValue": "分数：{{value}}",
+    "reviewerComments": "评审意见",
+    "noComments": "无评论",
+    "lastUpdated": "最后更新",
+    "rangeGuide": "评分范围说明",
+    "rangeExcellent": "90-100：优秀 - 卓越的质量",
+    "rangeGood": "75-89：良好 - 高于平均水平",
+    "rangeAverage": "60-74：一般 - 符合预期",
+    "rangePoor": "0-59：待改进 - 需要提升"
+  },
+  "ai": {
+    "suggestions": "AI 建议",
+    "analyzing": "正在分析代码变更...",
+    "analysisComplete": "分析完成",
+    "overallAssessment": "总体评估",
+    "criticalIssues": "严重问题",
+    "highIssues": "高优先级",
+    "mediumIssues": "中优先级",
+    "lowIssues": "低优先级",
+    "totalIssues": "问题总数",
+    "filesAnalyzed": "已分析文件",
+    "description": "问题描述",
+    "suggestion": "改进建议",
+    "codeSnippet": "代码片段",
+    "severity": "严重程度",
+    "issueType": "问题类型",
+    "applySuggestion": "应用建议",
+    "dismiss": "忽略"
+  },
+  "validation": {
+    "invalidReviewer": "当前评审人 \"{{reviewer}}\" 不是有效用户。请从下拉列表中选择。",
+    "invalidPrUser": "PR 提交者 \"{{user}}\" 不是有效用户。请从下拉列表中选择。"
+  },
+  "tooltips": {
+    "projectKey": "项目标识",
+    "repository": "代码仓库",
+    "pullRequestId": "PR ID",
+    "commitId": "完整 Commit ID",
+    "reviewCount": "此PR中的评审总数",
+    "reviewedStatus": "此PR已评审并有评分",
+    "notReviewedStatus": "此PR尚未评审 - 无评分"
+  },
+  "common": {
+    "yes": "是",
+    "no": "否",
+    "cancel": "取消",
+    "save": "保存",
+    "close": "关闭",
+    "loading": "加载中...",
+    "unknown": "未知"
+  }
+}

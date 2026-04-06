@@ -56,19 +56,36 @@ class ErrorCode:
 
 
 class AppException(HTTPException):
-    """应用程序基础异常类"""
+    """应用程序基础异常类
+
+    Supports i18n by accepting a message_key instead of hardcoded message.
+    The actual message will be translated based on the request's Accept-Language header.
+    """
 
     def __init__(
         self,
         code: str,
-        message: str,
+        message: str | None = None,
         status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail: Any | None = None,
+        message_key: str | None = None,
+        message_params: dict[str, Any] | None = None,
     ):
         self.code = code
-        self.message = message
+        self._message = message
+        self.message_key = message_key
+        self.message_params = message_params or {}
         self.detail = detail
-        super().__init__(status_code=status_code, detail=message)
+        # Initial message (will be updated when get_message is called)
+        super().__init__(status_code=status_code, detail=message or "")
+
+    def get_message(self, lang: str = "en") -> str:
+        """Get translated message based on language"""
+        if self.message_key:
+            from src.utils.i18n import i18n
+
+            return i18n.t(self.message_key, lang, **self.message_params)
+        return self._message or "An error occurred"
 
 
 class BadRequestException(AppException):

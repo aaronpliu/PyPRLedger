@@ -1,0 +1,43 @@
+{
+  "errors": {
+    "user_not_found_by_id": "未找到ID為 {user_id} 的使用者",
+    "user_not_found_by_username": "未找到使用者名稱為 '{username}' 的使用者",
+    "user_not_found": "未找到使用者",
+    "user_already_exists_by_username": "使用者名稱 '{username}' 已存在",
+    "user_already_exists_by_email": "電子郵件 '{email}' 已被註冊",
+    "user_already_exists": "使用者已存在",
+    "project_not_found_by_id": "未找到ID為 {project_id} 的專案",
+    "project_not_found_by_key": "未找到標識為 '{project_key}' 的專案",
+    "project_not_found": "未找到專案",
+    "repository_not_found_by_id": "未找到ID為 {repository_id} 的倉庫",
+    "repository_not_found_by_slug": "未找到標識為 '{repository_slug}' 的倉庫",
+    "repository_not_found": "未找到倉庫",
+    "pull_request_not_found": "未找到ID為 {pull_request_id} 的Pull Request",
+    "review_not_found": "未找到ID為 {pull_request_id} 的評審",
+    "review_already_exists": "ID為 {pull_request_id} 的評審已存在",
+    "invalid_review_data": "無效的評審資料",
+    "invalid_credentials": "憑證無效",
+    "token_expired": "權杖已過期",
+    "token_invalid": "權杖無效",
+    "operation_not_allowed": "不允許執行操作 '{operation}'",
+    "operation_not_allowed_with_reason": "不允許執行操作 '{operation}': {reason}",
+    "git_service_error": "Git服務錯誤",
+    "bad_request": "請求無效",
+    "validation_failed": "驗證失敗",
+    "unauthorized": "未授權",
+    "access_forbidden": "禁止存取",
+    "resource_not_found": "資源未找到",
+    "resource_already_exists": "資源已存在",
+    "internal_server_error": "伺服器內部錯誤",
+    "database_error": "資料庫錯誤",
+    "database_connection_error": "資料庫連線錯誤",
+    "cache_error": "快取錯誤",
+    "rate_limit_exceeded": "超過速率限制",
+    "status_transition_not_allowed": "無法將評審狀態從 {current_status} 轉換為 {target_status}"
+  },
+  "success": {
+    "created": "資源建立成功",
+    "updated": "資源更新成功",
+    "deleted": "資源刪除成功"
+  }
+}

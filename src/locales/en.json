@@ -1,0 +1,43 @@
+{
+  "errors": {
+    "user_not_found_by_id": "User with ID {user_id} not found",
+    "user_not_found_by_username": "User with username '{username}' not found",
+    "user_not_found": "User not found",
+    "user_already_exists_by_username": "User with username '{username}' already exists",
+    "user_already_exists_by_email": "User with email '{email}' already exists",
+    "user_already_exists": "User already exists",
+    "project_not_found_by_id": "Project with ID {project_id} not found",
+    "project_not_found_by_key": "Project with key '{project_key}' not found",
+    "project_not_found": "Project not found",
+    "repository_not_found_by_id": "Repository with ID {repository_id} not found",
+    "repository_not_found_by_slug": "Repository with slug '{repository_slug}' not found",
+    "repository_not_found": "Repository not found",
+    "pull_request_not_found": "Pull request with ID {pull_request_id} not found",
+    "review_not_found": "Review with ID {pull_request_id} not found",
+    "review_already_exists": "Review with ID {pull_request_id} already exists",
+    "invalid_review_data": "Invalid review data",
+    "invalid_credentials": "Invalid credentials",
+    "token_expired": "Token expired",
+    "token_invalid": "Invalid token",
+    "operation_not_allowed": "Operation '{operation}' is not allowed",
+    "operation_not_allowed_with_reason": "Operation '{operation}' is not allowed: {reason}",
+    "git_service_error": "Git service error",
+    "bad_request": "Bad request",
+    "validation_failed": "Validation failed",
+    "unauthorized": "Unauthorized",
+    "access_forbidden": "Access forbidden",
+    "resource_not_found": "Resource not found",
+    "resource_already_exists": "Resource already exists",
+    "internal_server_error": "Internal server error",
+    "database_error": "Database error",
+    "database_connection_error": "Database connection error",
+    "cache_error": "Cache error",
+    "rate_limit_exceeded": "Rate limit exceeded",
+    "status_transition_not_allowed": "Cannot transition review from {current_status} to {target_status}"
+  },
+  "success": {
+    "created": "Resource created successfully",
+    "updated": "Resource updated successfully",
+    "deleted": "Resource deleted successfully"
+  }
+}

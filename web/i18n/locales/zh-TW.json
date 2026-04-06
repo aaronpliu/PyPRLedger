@@ -1,0 +1,124 @@
+{
+  "app": {
+    "title": "Pull Request 評審系統",
+    "subtitle": "查看和評分所有評審，支援AI建議"
+  },
+  "filters": {
+    "currentReviewer": "當前評審人（必填）",
+    "currentReviewerPlaceholder": "從列表中選擇",
+    "pullRequestUser": "PR 提交者",
+    "pullRequestUserPlaceholder": "輸入PR提交者進行篩選",
+    "commitId": "PR Commit ID",
+    "commitIdPlaceholder": "完整或簡短的 commit ID",
+    "projectKey": "專案標識",
+    "projectKeyPlaceholder": "留空顯示所有專案",
+    "repository": "程式碼倉庫",
+    "repositoryPlaceholder": "留空顯示所有倉庫",
+    "pullRequestId": "PR ID",
+    "pullRequestIdPlaceholder": "留空顯示所有PR",
+    "reviewStatus": "評審狀態",
+    "allReviews": "全部評審",
+    "reviewed": "已評審（有評分）",
+    "notReviewed": "未評審（無評分）"
+  },
+  "buttons": {
+    "clearFilters": "清除所有篩選",
+    "loadReviews": "載入所有評審",
+    "backToTop": "回到頂部",
+    "changeTheme": "切換主題"
+  },
+  "themes": {
+    "default": "預設（專業藍）",
+    "warm": "溫暖（活力橙）",
+    "cool": "清爽（科技青）",
+    "dark": "深色（夜間模式）"
+  },
+  "files": {
+    "title": "已評審的檔案"
+  },
+  "messages": {
+    "loading": "正在載入所有評審...",
+    "selectReviewer": "請選擇當前評審人以載入評審",
+    "noReviewsFound": "未找到評審",
+    "noReviewedReviews": "未找到已評審的記錄",
+    "noNotReviewedReviews": "未找到未評審的記錄",
+    "error": "錯誤",
+    "success": "成功"
+  },
+  "pagination": {
+    "showing": "顯示第 {{start}}-{{end}} 筆，共 {{total}} 筆記錄",
+    "first": "首頁",
+    "previous": "上一頁",
+    "next": "下一頁",
+    "last": "末頁",
+    "pageInfo": "第 {{current}} / {{total}} 頁"
+  },
+  "reviews": {
+    "reviewCount": "{{count}} 個評審",
+    "prLevel": "PR級別",
+    "fileLevel": "檔案級別",
+    "reviewedBy": "評審人",
+    "scores": "評分",
+    "noScores": "暫無評分",
+    "addScore": "新增評分",
+    "editScore": "編輯評分",
+    "deleteScore": "刪除評分",
+    "confirmDelete": "確定要刪除此評分嗎？"
+  },
+  "scores": {
+    "excellent": "優秀",
+    "good": "良好",
+    "average": "一般",
+    "poor": "待改進",
+    "scoreValue": "分數：{{value}}",
+    "reviewerComments": "評審意見",
+    "noComments": "無評論",
+    "lastUpdated": "最後更新",
+    "rangeGuide": "評分範圍說明",
+    "rangeExcellent": "90-100：優秀 - 卓越的品質",
+    "rangeGood": "75-89：良好 - 高於平均水準",
+    "rangeAverage": "60-74：一般 - 符合預期",
+    "rangePoor": "0-59：待改進 - 需要提升"
+  },
+  "ai": {
+    "suggestions": "AI 建議",
+    "analyzing": "正在分析程式碼變更...",
+    "analysisComplete": "分析完成",
+    "overallAssessment": "總體評估",
+    "criticalIssues": "嚴重問題",
+    "highIssues": "高優先順序",
+    "mediumIssues": "中優先順序",
+    "lowIssues": "低優先順序",
+    "totalIssues": "問題總數",
+    "filesAnalyzed": "已分析檔案",
+    "description": "問題描述",
+    "suggestion": "改進建議",
+    "codeSnippet": "程式碼片段",
+    "severity": "嚴重程度",
+    "issueType": "問題類型",
+    "applySuggestion": "套用建議",
+    "dismiss": "忽略"
+  },
+  "validation": {
+    "invalidReviewer": "當前評審人 \"{{reviewer}}\" 不是有效使用者。請從下拉清單中選擇。",
+    "invalidPrUser": "PR 提交者 \"{{user}}\" 不是有效使用者。請從下拉清單中選擇。"
+  },
+  "tooltips": {
+    "projectKey": "專案標識",
+    "repository": "程式碼倉庫",
+    "pullRequestId": "PR ID",
+    "commitId": "完整 Commit ID",
+    "reviewCount": "此PR中的評審總數",
+    "reviewedStatus": "此PR已評審並有評分",
+    "notReviewedStatus": "此PR尚未評審 - 無評分"
+  },
+  "common": {
+    "yes": "是",
+    "no": "否",
+    "cancel": "取消",
+    "save": "儲存",
+    "close": "關閉",
+    "loading": "載入中...",
+    "unknown": "未知"
+  }
+}
