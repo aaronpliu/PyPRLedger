@@ -109,34 +109,82 @@
       >
         <el-table-column type="selection" width="55" fixed="left" />
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="pr_url" label="PR URL" min-width="250">
+        
+        <!-- PR Info Group -->
+        <el-table-column label="PR Info" min-width="200">
           <template #default="{ row }">
-            <el-link :href="row.pr_url" target="_blank" type="primary">
-              {{ truncateUrl(row.pr_url) }}
-            </el-link>
+            <div class="pr-info-cell">
+              <div class="pr-id">
+                <el-tag size="small" type="info">{{ row.pull_request_id }}</el-tag>
+                <span v-if="row.pull_request_commit_id" class="commit-id">
+                  🔖 {{ row.pull_request_commit_id.substring(0, 8) }}
+                </span>
+              </div>
+              <div class="pr-branches">
+                <span class="branch">{{ row.source_branch }}</span>
+                <span class="arrow">→</span>
+                <span class="branch">{{ row.target_branch }}</span>
+              </div>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column prop="reviewer_username" label="Reviewer" width="150" />
-        <el-table-column prop="status" label="Status" width="120">
+        
+        <!-- Project/Repo -->
+        <el-table-column label="Project/Repo" width="180">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
-              {{ row.status }}
+            <div>
+              <div><strong>{{ row.project_key }}</strong></div>
+              <div class="text-secondary">{{ row.repository_slug }}</div>
+            </div>
+          </template>
+        </el-table-column>
+        
+        <!-- Reviewer -->
+        <el-table-column label="Reviewer" width="150">
+          <template #default="{ row }">
+            <div>
+              <div>{{ row.reviewer_info?.display_name || row.reviewer }}</div>
+              <div class="text-secondary" style="font-size: 0.8rem;">
+                {{ row.source_filename ? '📄 File-level' : '📋 PR-level' }}
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        
+        <!-- Status -->
+        <el-table-column prop="pull_request_status" label="Status" width="120">
+          <template #default="{ row }">
+            <el-tag :type="getStatusType(row.pull_request_status)">
+              {{ row.pull_request_status }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="summary" label="Summary" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="created_at" label="Created" width="180">
+        
+        <!-- Scores Summary -->
+        <el-table-column label="Scores" width="120">
           <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
+            <div v-if="row.score_summary && row.score_summary.total_scores > 0">
+              <div class="score-summary">
+                <span class="avg-score">{{ row.score_summary.average_score?.toFixed(1) }}</span>
+                <span class="score-count">({{ row.score_summary.total_scores }})</span>
+              </div>
+            </div>
+            <span v-else class="text-secondary">No scores</span>
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="150" fixed="right">
+        
+        <!-- Created Date -->
+        <el-table-column prop="created_date" label="Created" width="160">
+          <template #default="{ row }">
+            {{ formatDate(row.created_date || '') }}
+          </template>
+        </el-table-column>
+        
+        <!-- Actions -->
+        <el-table-column label="Actions" width="120" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" @click.stop="viewReview(row.id)">
               View
-            </el-button>
-            <el-button size="small" type="danger" @click.stop="confirmDelete(row)">
-              Delete
             </el-button>
           </template>
         </el-table-column>
@@ -176,7 +224,7 @@
       <div class="delete-preview">
         <div v-for="review in selectedReviews.slice(0, 5)" :key="review.id" class="preview-item">
           <el-icon><Document /></el-icon>
-          <span>Review #{{ review.id }} - {{ truncateUrl(review.pr_url) }}</span>
+          <span>Review #{{ review.id }} - {{ truncateUrl(review.pull_request_id) }}</span>
         </div>
         <div v-if="selectedReviews.length > 5" class="preview-more">
           ... and {{ selectedReviews.length - 5 }} more
@@ -255,11 +303,12 @@ const totalCount = ref(0)
 
 // Filter fields configuration
 const filterFields = [
-  { label: 'PR URL', value: 'pr_url' },
-  { label: 'Reviewer', value: 'reviewer_username' },
-  { label: 'Status', value: 'status' },
-  { label: 'Created Date', value: 'created_at' },
-  { label: 'Summary', value: 'summary' },
+  { label: 'PR ID', value: 'pull_request_id' },
+  { label: 'Project Key', value: 'project_key' },
+  { label: 'Reviewer', value: 'reviewer' },
+  { label: 'Status', value: 'pull_request_status' },
+  { label: 'Created Date', value: 'created_date' },
+  { label: 'Summary', value: 'reviewer_comments' },
 ]
 
 const formatDate = (dateStr: string) => {
@@ -609,5 +658,63 @@ onMounted(() => {
 .progress-detail {
   font-size: 14px;
   color: #909399;
+}
+
+/* PR Info Cell Styles */
+.pr-info-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pr-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.commit-id {
+  font-size: 0.75rem;
+  color: var(--el-text-color-secondary);
+  font-family: monospace;
+}
+
+.pr-branches {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.branch {
+  color: var(--el-text-color-primary);
+  font-weight: 500;
+}
+
+.arrow {
+  color: var(--el-text-color-secondary);
+}
+
+.text-secondary {
+  color: var(--el-text-color-secondary);
+  font-size: 0.85rem;
+}
+
+.score-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.avg-score {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--el-color-success);
+}
+
+.score-count {
+  font-size: 0.85rem;
+  color: var(--el-text-color-secondary);
 }
 </style>

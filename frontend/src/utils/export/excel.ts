@@ -21,22 +21,26 @@ export function exportReviewsToExcel(
   // Prepare data
   const headers = includeHeaders ? [
     'ID',
-    'PR URL',
-    'Reviewer Username',
+    'PR ID',
+    'Project Key',
+    'Repository Slug',
+    'Reviewer',
     'Status',
     'Summary',
-    'Created At',
-    'Updated At',
+    'Created Date',
+    'Updated Date',
   ] : []
 
   const data = reviews.map(review => [
     review.id,
-    review.pr_url,
-    review.reviewer_username,
-    review.status,
-    review.summary || '',
-    dayjs(review.created_at).format('YYYY-MM-DD HH:mm:ss'),
-    dayjs(review.updated_at).format('YYYY-MM-DD HH:mm:ss'),
+    review.pull_request_id,
+    review.project_key,
+    review.repository_slug,
+    review.reviewer_info?.display_name || review.reviewer,
+    review.pull_request_status,
+    review.reviewer_comments || '',
+    dayjs(review.created_date).format('YYYY-MM-DD HH:mm:ss'),
+    dayjs(review.updated_date).format('YYYY-MM-DD HH:mm:ss'),
   ])
 
   // Combine headers and data
@@ -84,7 +88,8 @@ export function exportReviewsToExcel(
   ]
 
   const statusCounts = reviews.reduce((acc, review) => {
-    acc[review.status] = (acc[review.status] || 0) + 1
+    const status = review.pull_request_status || 'unknown'
+    acc[status] = (acc[status] || 0) + 1
     return acc
   }, {} as Record<string, number>)
 

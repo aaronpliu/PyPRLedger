@@ -50,15 +50,15 @@ export function exportReviewsToPDF(
   yPos += 15
 
   // Prepare table data
-  const headers = includeHeaders ? [['ID', 'PR URL', 'Reviewer', 'Status', 'Summary', 'Created']] : []
+  const headers = includeHeaders ? [['ID', 'PR ID', 'Reviewer', 'Status', 'Summary', 'Created']] : []
   
   const data = reviews.map(review => [
     review.id.toString(),
-    truncateText(review.pr_url, 50),
-    review.reviewer_username,
-    review.status,
-    truncateText(review.summary || '-', 40),
-    dayjs(review.created_at).format('YYYY-MM-DD HH:mm'),
+    truncateText(review.pull_request_id, 30),
+    review.reviewer_info?.display_name || review.reviewer,
+    review.pull_request_status,
+    truncateText(review.reviewer_comments || '-', 40),
+    dayjs(review.created_date).format('YYYY-MM-DD HH:mm'),
   ])
 
   // Add table
@@ -113,7 +113,8 @@ export function exportReviewsToPDF(
     doc.setTextColor(64, 64, 64)
     
     const statusCounts = reviews.reduce((acc, review) => {
-      acc[review.status] = (acc[review.status] || 0) + 1
+      const status = review.pull_request_status || 'unknown'
+      acc[status] = (acc[status] || 0) + 1
       return acc
     }, {} as Record<string, number>)
     

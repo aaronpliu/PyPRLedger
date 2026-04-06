@@ -20,27 +20,31 @@
           </template>
 
           <el-descriptions :column="1" border>
-            <el-descriptions-item label="PR URL">
-              <el-link :href="review.pr_url" target="_blank" type="primary">
-                {{ review.pr_url }}
-              </el-link>
+            <el-descriptions-item label="PR ID">
+              {{ review.pull_request_id }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Commit ID" v-if="review.pull_request_commit_id">
+              {{ review.pull_request_commit_id.substring(0, 8) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Project">
+              {{ review.project_key }} / {{ review.repository_slug }}
             </el-descriptions-item>
             <el-descriptions-item label="Reviewer">
-              {{ review.reviewer_username }}
+              {{ review.reviewer_info?.display_name || review.reviewer }}
             </el-descriptions-item>
             <el-descriptions-item label="Status">
-              <el-tag :type="getStatusType(review.status)">
-                {{ review.status }}
+              <el-tag :type="getStatusType(review.pull_request_status)">
+                {{ review.pull_request_status }}
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="Summary">
-              {{ review.summary || 'No summary provided' }}
+              {{ review.reviewer_comments || 'No summary provided' }}
             </el-descriptions-item>
             <el-descriptions-item label="Created At">
-              {{ formatDate(review.created_at) }}
+              {{ formatDate(review.created_date || '') }}
             </el-descriptions-item>
             <el-descriptions-item label="Updated At">
-              {{ formatDate(review.updated_at) }}
+              {{ formatDate(review.updated_date || '') }}
             </el-descriptions-item>
           </el-descriptions>
         </el-card>
@@ -85,9 +89,9 @@
             </el-table-column>
             <el-table-column prop="weight" label="Weight" width="100" />
             <el-table-column prop="comment" label="Comment" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="created_at" label="Created" width="180">
+            <el-table-column prop="created_date" label="Created" width="180">
               <template #default="{ row }">
-                {{ formatDate(row.created_at) }}
+                {{ formatDate(row.created_date || '') }}
               </template>
             </el-table-column>
             <el-table-column label="Actions" width="100">
