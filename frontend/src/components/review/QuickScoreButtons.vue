@@ -28,11 +28,11 @@ defineEmits<{
 }>()
 
 const scorePresets = [
-  { value: 95, label: 'Excellent', type: 'success' },
-  { value: 85, label: 'Good', type: 'primary' },
-  { value: 75, label: 'Average', type: '' },
-  { value: 65, label: 'Below Avg', type: 'warning' },
-  { value: 50, label: 'Poor', type: 'danger' },
+  { value: 9.5, label: 'Excellent', type: 'success' },
+  { value: 8.5, label: 'Good', type: 'primary' },
+  { value: 7.5, label: 'Average', type: '' },
+  { value: 6.5, label: 'Below Avg', type: 'warning' },
+  { value: 5.0, label: 'Poor', type: 'danger' },
 ]
 </script>
 

@@ -5,7 +5,7 @@
       type="warning"
       :closable="false"
       show-icon
-      style="margin-bottom: 16px"
+      style="margin-bottom: 15px"
     >
       <template #title>
         ⚠️ AI-Generated Review - Please verify independently
@@ -13,36 +13,35 @@
     </el-alert>
 
     <!-- Summary Stats -->
-    <div class="stats-grid">
-      <el-card class="stat-card files">
-        <div class="stat-value">{{ suggestions.Reviewed_files || 0 }}</div>
-        <div class="stat-label">Files Reviewed</div>
-      </el-card>
-      <el-card class="stat-card critical">
-        <div class="stat-value">{{ suggestions.Critical_issues || 0 }}</div>
-        <div class="stat-label">Critical Issues</div>
-      </el-card>
-      <el-card class="stat-card total">
-        <div class="stat-value">{{ suggestions.Total_issues || 0 }}</div>
-        <div class="stat-label">Total Issues</div>
-      </el-card>
+    <div class="ai-summary-stats">
+      <div class="ai-stat-card">
+        <div class="ai-stat-value ai-stat-files">{{ suggestions.Reviewed_files || 0 }}</div>
+        <div class="ai-stat-label">Files Reviewed</div>
+      </div>
+      <div class="ai-stat-card">
+        <div class="ai-stat-value ai-stat-critical">{{ suggestions.Critical_issues || 0 }}</div>
+        <div class="ai-stat-label">Critical Issues</div>
+      </div>
+      <div class="ai-stat-card">
+        <div class="ai-stat-value ai-stat-total">{{ suggestions.Total_issues || 0 }}</div>
+        <div class="ai-stat-label">Total Issues</div>
+      </div>
     </div>
 
     <!-- Issues List -->
-    <div v-if="issues.length > 0" class="issues-section">
-      <h4>🔍 Detailed Issues ({{ issues.length }})</h4>
-      <el-card
+    <div v-if="issues.length > 0" class="ai-issues-list">
+      <div
         v-for="(issue, index) in issues"
         :key="index"
-        class="issue-card"
+        class="ai-issue-item"
         :class="`severity-${issue.severity}`"
       >
-        <div class="issue-header">
-          <span class="issue-number">#Issue {{ index + 1 }}</span>
-          <el-tag size="small">📄 {{ issue.file_name }}</el-tag>
-          <el-tag v-if="issue.line_number" size="small" type="info">
+        <div class="ai-issue-header">
+          <span class="ai-issue-number">#Issue {{ index + 1 }}</span>
+          <span class="ai-issue-file">📄 {{ issue.file_name }}</span>
+          <span v-if="issue.line_number" class="ai-issue-line">
             Line {{ issue.line_number }}
-          </el-tag>
+          </span>
         </div>
         
         <div class="issue-badges">
@@ -54,27 +53,27 @@
           </el-tag>
         </div>
 
-        <div v-if="issue.description" class="issue-description">
+        <div v-if="issue.description" class="ai-issue-description">
           <strong>📝 Description:</strong>
           <p>{{ issue.description }}</p>
         </div>
 
-        <div v-if="issue.suggestion" class="issue-suggestion">
+        <div v-if="issue.suggestion" class="ai-issue-suggestion">
           <strong>💡 Suggestion:</strong>
           <p>{{ issue.suggestion }}</p>
         </div>
 
-        <div v-if="issue.code_snippet" class="issue-code">
+        <div v-if="issue.code_snippet" class="ai-issue-code">
           <strong>💻 Code Snippet:</strong>
           <pre><code>{{ issue.code_snippet }}</code></pre>
         </div>
-      </el-card>
+      </div>
     </div>
 
     <el-empty v-else description="✅ No issues found! Great code!" />
 
     <!-- Overall Assessment -->
-    <div v-if="suggestions.overall_assessment" class="overall-assessment">
+    <div v-if="suggestions.overall_assessment" class="ai-overall-assessment">
       <h4>📊 Overall Assessment</h4>
       <p>{{ suggestions.overall_assessment }}</p>
     </div>
@@ -115,104 +114,132 @@ const getIssueTypeColor = (type: string) => {
 
 <style scoped>
 .ai-review-results {
-  padding: 16px;
+  padding: 15px;
 }
 
-.stats-grid {
+.ai-summary-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 15px;
 }
 
-.stat-card {
+.ai-stat-card {
+  background: white;
+  padding: 12px;
+  border-radius: 6px;
   text-align: center;
-  padding: 16px;
-  border-left: 4px solid;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 2px solid var(--el-border-color);
 }
 
-.stat-card.files {
-  border-left-color: #3b82f6;
+[data-theme='dark'] .ai-stat-card {
+  background: #1e293b;
+  border-color: #334155;
 }
 
-.stat-card.critical {
-  border-left-color: #ef4444;
+.ai-stat-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 4px;
 }
 
-.stat-card.total {
-  border-left-color: #f59e0b;
-}
+.ai-stat-critical { color: #ef4444; }
+.ai-stat-total { color: #f59e0b; }
+.ai-stat-files { color: #3b82f6; }
 
-.stat-value {
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1;
-  margin-bottom: 8px;
-}
+[data-theme='dark'] .ai-stat-critical { color: #fca5a5; }
+[data-theme='dark'] .ai-stat-total { color: #fbbf24; }
+[data-theme='dark'] .ai-stat-files { color: #60a5fa; }
 
-.stat-card.files .stat-value {
-  color: #3b82f6;
-}
-
-.stat-card.critical .stat-value {
-  color: #ef4444;
-}
-
-.stat-card.total .stat-value {
-  color: #f59e0b;
-}
-
-.stat-label {
-  font-size: 0.85rem;
+.ai-stat-label {
+  font-size: 0.75rem;
   color: var(--el-text-color-secondary);
   font-weight: 600;
+  text-transform: uppercase;
 }
 
-.issues-section h4 {
-  margin: 0 0 16px 0;
-  font-size: 1rem;
-  color: var(--el-text-color-primary);
+.ai-issues-list {
+  margin-top: 15px;
 }
 
-.issue-card {
-  margin-bottom: 12px;
-  border-left: 4px solid;
-  transition: all 0.3s ease;
+.ai-issue-item {
+  background: white;
+  border: 2px solid var(--el-border-color);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  transition: all 0.3s;
 }
 
-.issue-card:hover {
-  transform: translateX(4px);
+[data-theme='dark'] .ai-issue-item {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.ai-issue-item:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateX(3px);
 }
 
-.issue-card.severity-critical {
-  border-left-color: #ef4444;
+/* Severity-based border colors */
+.ai-issue-item.severity-critical {
+  border-left: 4px solid #ef4444;
 }
 
-.issue-card.severity-high {
-  border-left-color: #f97316;
+.ai-issue-item.severity-high {
+  border-left: 4px solid #f97316;
 }
 
-.issue-card.severity-medium {
-  border-left-color: #f59e0b;
+.ai-issue-item.severity-medium {
+  border-left: 4px solid #eab308;
 }
 
-.issue-card.severity-low {
-  border-left-color: #22c55e;
+.ai-issue-item.severity-low {
+  border-left: 4px solid #3b82f6;
 }
 
-.issue-header {
+.ai-issue-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
   margin-bottom: 8px;
   flex-wrap: wrap;
+  gap: 8px;
 }
 
-.issue-number {
+.ai-issue-number {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+[data-theme='dark'] .ai-issue-number {
+  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+}
+
+.ai-issue-file {
   font-weight: 700;
   color: var(--el-text-color-primary);
   font-size: 0.9rem;
+}
+
+.ai-issue-line {
+  background: #f1f5f9;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+
+[data-theme='dark'] .ai-issue-line {
+  background: #334155;
+  color: #cbd5e1;
 }
 
 .issue-badges {
@@ -221,82 +248,104 @@ const getIssueTypeColor = (type: string) => {
   margin-bottom: 12px;
 }
 
-.issue-description,
-.issue-suggestion {
+.ai-issue-description,
+.ai-issue-suggestion {
   margin-bottom: 12px;
   padding: 10px;
-  background: #f8fafc;
   border-radius: 6px;
+  font-size: 0.9rem;
+  line-height: 1.6;
 }
 
-[data-theme='dark'] .issue-description,
-[data-theme='dark'] .issue-suggestion {
-  background: #1e293b;
+.ai-issue-description {
+  background: #f8fafc;
+  border-left: 3px solid #3b82f6;
+  color: var(--text-secondary);
 }
 
-.issue-description strong,
-.issue-suggestion strong {
+[data-theme='dark'] .ai-issue-description {
+  background: #0f172a;
+  border-left-color: #60a5fa;
+  color: #cbd5e1;
+}
+
+.ai-issue-suggestion {
+  background: #f0fdf4;
+  border-left: 3px solid #22c55e;
+  color: #166534;
+}
+
+[data-theme='dark'] .ai-issue-suggestion {
+  background: #064e3b;
+  border-left-color: #6ee7b7;
+  color: #6ee7b7;
+}
+
+.ai-issue-description strong,
+.ai-issue-suggestion strong {
   display: block;
   margin-bottom: 4px;
   font-size: 0.85rem;
   color: var(--el-text-color-primary);
 }
 
-.issue-description p,
-.issue-suggestion p {
+.ai-issue-description p,
+.ai-issue-suggestion p {
   margin: 0;
-  color: var(--el-text-color-secondary);
-  line-height: 1.6;
-  font-size: 0.9rem;
+  color: inherit;
 }
 
-.issue-code {
+.ai-issue-code {
   margin-top: 12px;
 }
 
-.issue-code strong {
+.ai-issue-code strong {
   display: block;
   margin-bottom: 8px;
   font-size: 0.85rem;
   color: var(--el-text-color-primary);
 }
 
-.issue-code pre {
+.ai-issue-code pre {
   background: #1e293b;
   color: #e2e8f0;
-  padding: 12px;
+  padding: 10px;
   border-radius: 6px;
   overflow-x: auto;
   margin: 0;
-}
-
-.issue-code code {
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
   font-size: 0.85rem;
   line-height: 1.5;
 }
 
-.overall-assessment {
-  margin-top: 20px;
-  padding: 16px;
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-  border-radius: 8px;
-  border-left: 4px solid #0ea5e9;
+.ai-issue-code code {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
 }
 
-[data-theme='dark'] .overall-assessment {
-  background: linear-gradient(135deg, #0c4a6e 0%, #075985 100%);
+.ai-overall-assessment {
+  background: #eff6ff;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 4px solid #2563eb;
+  margin-top: 15px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--el-text-color-primary);
 }
 
-.overall-assessment h4 {
+[data-theme='dark'] .ai-overall-assessment {
+  background: #1e3a8a;
+  border-left-color: #3b82f6;
+  color: #bfdbfe;
+}
+
+.ai-overall-assessment h4 {
   margin: 0 0 8px 0;
   font-size: 1rem;
   color: var(--el-text-color-primary);
 }
 
-.overall-assessment p {
+.ai-overall-assessment p {
   margin: 0;
-  color: var(--el-text-color-secondary);
-  line-height: 1.7;
+  color: inherit;
 }
 </style>

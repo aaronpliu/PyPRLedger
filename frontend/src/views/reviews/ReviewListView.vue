@@ -43,15 +43,13 @@
         <el-form-item label="Search">
           <el-input
             v-model="searchQuery"
-            placeholder="Search by PR URL or reviewer"
+            placeholder="Filter by PR ID, reviewer, or project"
             clearable
             style="width: 300px"
-            @clear="loadReviews"
+            @input="handleSearch"
           >
-            <template #append>
-              <el-button @click="handleSearch">
-                <el-icon><Search /></el-icon>
-              </el-button>
+            <template #prefix>
+              <el-icon><Search /></el-icon>
             </template>
           </el-input>
         </el-form-item>
@@ -335,8 +333,9 @@ const loadReviews = async () => {
       page: currentPage.value,
       page_size: pageSize.value,
     })
-    reviews.value = data.items
+    allReviews.value = data.items
     total.value = data.total
+    applyFilters()
   } catch (error) {
     ElMessage.error('Failed to load reviews')
   } finally {
@@ -344,22 +343,39 @@ const loadReviews = async () => {
   }
 }
 
-const handleSearch = async () => {
-  if (!searchQuery.value) {
-    loadReviews()
-    return
+// Store all reviews for client-side filtering
+const allReviews = ref<Review[]>([])
+const filteredReviews = ref<Review[]>([])
+
+const handleSearch = () => {
+  applyFilters()
+}
+
+const applyFilters = () => {
+  let result = [...allReviews.value]
+  
+  // Apply search filter
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    result = result.filter(review => {
+      return (
+        review.pull_request_id?.toLowerCase().includes(query) ||
+        review.reviewer?.toLowerCase().includes(query) ||
+        review.project_key?.toLowerCase().includes(query) ||
+        review.repository_slug?.toLowerCase().includes(query) ||
+        review.reviewer_comments?.toLowerCase().includes(query)
+      )
+    })
   }
   
-  loading.value = true
-  try {
-    const data = await reviewsApi.searchReviews(searchQuery.value)
-    reviews.value = data
-    total.value = data.length
-  } catch (error) {
-    ElMessage.error('Search failed')
-  } finally {
-    loading.value = false
+  // Apply status filter
+  if (statusFilter.value) {
+    result = result.filter(review => review.pull_request_status === statusFilter.value)
   }
+  
+  filteredReviews.value = result
+  reviews.value = result
+  total.value = result.length
 }
 
 const viewReview = (id: number) => {

@@ -7,74 +7,108 @@
     </el-page-header>
 
     <el-row :gutter="20" class="content-row" v-if="review">
-      <!-- Review Info -->
-      <el-col :span="16">
-        <el-card class="info-card">
+      <!-- Main Content -->
+      <el-col :span="24">
+        <!-- Review Info Card -->
+        <el-card class="info-card" shadow="hover">
           <template #header>
             <div class="card-header">
-              <span>Review Information</span>
-              <el-button type="primary" size="small" @click="showEditDialog = true">
-                Edit
-              </el-button>
+              <span class="card-title">📋 Review Information</span>
+              <el-space>
+                <el-button type="primary" size="small" @click="showEditDialog = true">
+                  <el-icon><Edit /></el-icon>
+                  Edit
+                </el-button>
+                <el-button type="success" size="small" @click="showScoreDialog = true">
+                  <el-icon><Plus /></el-icon>
+                  Add Score
+                </el-button>
+                <el-button type="danger" size="small" @click="confirmDelete">
+                  <el-icon><Delete /></el-icon>
+                  Delete
+                </el-button>
+              </el-space>
             </div>
           </template>
 
-          <el-descriptions :column="1" border>
-            <el-descriptions-item label="PR ID">
-              {{ review.pull_request_id }}
+          <el-descriptions :column="3" border size="default">
+            <el-descriptions-item label="PR ID" label-align="right">
+              <el-tag type="info" size="small">{{ review.pull_request_id }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="Commit ID" v-if="review.pull_request_commit_id">
-              {{ review.pull_request_commit_id.substring(0, 8) }}
+            <el-descriptions-item label="Commit ID" v-if="review.pull_request_commit_id" label-align="right">
+              <el-tag type="success" size="small">{{ review.pull_request_commit_id.substring(0, 8) }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="Project">
-              {{ review.project_key }} / {{ review.repository_slug }}
+            <el-descriptions-item label="Project" label-align="right">
+              <strong>{{ review.project_key }}</strong> / {{ review.repository_slug }}
             </el-descriptions-item>
-            <el-descriptions-item label="Reviewer">
+            <el-descriptions-item label="Reviewer" label-align="right">
+              <el-avatar :size="24" style="vertical-align: middle; margin-right: 8px;">{{ getInitials(review.reviewer_info?.display_name || review.reviewer) }}</el-avatar>
               {{ review.reviewer_info?.display_name || review.reviewer }}
             </el-descriptions-item>
-            <el-descriptions-item label="Status">
-              <el-tag :type="getStatusType(review.pull_request_status)">
+            <el-descriptions-item label="Status" label-align="right">
+              <el-tag :type="getStatusType(review.pull_request_status)" effect="dark">
                 {{ review.pull_request_status }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="Summary">
-              {{ review.reviewer_comments || 'No summary provided' }}
+            <el-descriptions-item label="Level" label-align="right">
+              <el-tag :type="review.source_filename ? 'warning' : 'success'" size="small">
+                {{ review.source_filename ? '📄 File-Level' : '📋 PR-Level' }}
+              </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="Created At">
-              {{ formatDate(review.created_date || '') }}
+            <el-descriptions-item label="Summary" :span="3" label-align="right">
+              <div class="summary-text">{{ review.reviewer_comments || 'No summary provided' }}</div>
             </el-descriptions-item>
-            <el-descriptions-item label="Updated At">
-              {{ formatDate(review.updated_date || '') }}
+            <el-descriptions-item label="Created" label-align="right">
+              <el-icon><Clock /></el-icon> {{ formatDate(review.created_date || '') }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Updated" label-align="right">
+              <el-icon><Clock /></el-icon> {{ formatDate(review.updated_date || '') }}
             </el-descriptions-item>
           </el-descriptions>
         </el-card>
 
-        <!-- Code Diff Viewer -->
-        <el-card class="diff-card" style="margin-top: 20px">
-          <CodeDiffViewer
-            v-if="review.diff_content || review.git_code_diff"
-            :diff="review.diff_content || review.git_code_diff || ''"
-            v-model:output-format="diffFormat"
-          />
-          <el-empty v-else description="No diff content available" />
-        </el-card>
-
-        <!-- AI Review Results -->
-        <el-card v-if="review.ai_suggestions" class="ai-review-card" style="margin-top: 20px">
-          <template #header>
-            <div class="card-header">
-              <span>🤖 AI Review Results</span>
+        <!-- Dual Column Layout: Code Diff + AI Review -->
+        <el-row :gutter="16" style="margin-top: 16px" v-if="review.git_code_diff || review.ai_suggestions">
+          <!-- Code Diff Column -->
+          <el-col :span="review.ai_suggestions ? 12 : 24">
+            <div class="analysis-column">
+              <div class="analysis-column-header">
+                <span>📝 Code Changes</span>
+                <el-radio-group v-model="diffFormat" size="small">
+                  <el-radio-button value="line-by-line">📄 Unified</el-radio-button>
+                  <el-radio-button value="side-by-side">↔️ Side by Side</el-radio-button>
+                </el-radio-group>
+              </div>
+              <div class="analysis-column-body">
+                <CodeDiffViewer
+                  v-if="review.diff_content || review.git_code_diff"
+                  :diff="review.diff_content || review.git_code_diff || ''"
+                  v-model:output-format="diffFormat"
+                />
+              </div>
             </div>
-          </template>
-          <AIReviewResults :suggestions="review.ai_suggestions" />
-        </el-card>
+          </el-col>
+
+          <!-- AI Review Column -->
+          <el-col :span="review.ai_suggestions ? 12 : 0" v-if="review.ai_suggestions">
+            <div class="analysis-column">
+              <div class="analysis-column-header">
+                🤖 AI Review Results
+              </div>
+              <div class="analysis-column-body">
+                <AIReviewResults :suggestions="review.ai_suggestions" />
+              </div>
+            </div>
+          </el-col>
+        </el-row>
 
         <!-- Scores Section -->
         <el-card class="scores-card" style="margin-top: 20px">
           <template #header>
             <div class="card-header">
-              <span>Scores</span>
+              <span class="card-title">📊 Scores ({{ scores.length }})</span>
               <el-button type="primary" size="small" @click="showScoreDialog = true">
+                <el-icon><Plus /></el-icon>
                 Add Score
               </el-button>
             </div>
@@ -109,27 +143,6 @@
           </el-table>
 
           <el-empty v-if="scores.length === 0" description="No scores yet" />
-        </el-card>
-      </el-col>
-
-      <!-- Actions Sidebar -->
-      <el-col :span="8">
-        <el-card class="actions-card">
-          <template #header>
-            <span>Actions</span>
-          </template>
-
-          <el-space direction="vertical" style="width: 100%">
-            <el-button type="primary" style="width: 100%" @click="showEditDialog = true">
-              Edit Review
-            </el-button>
-            <el-button type="success" style="width: 100%" @click="showScoreDialog = true">
-              Add Score
-            </el-button>
-            <el-button type="danger" style="width: 100%" @click="confirmDelete">
-              Delete Review
-            </el-button>
-          </el-space>
         </el-card>
       </el-col>
     </el-row>
@@ -172,20 +185,34 @@
       <ScoreRangeGuide />
       
       <el-form :model="scoreForm" :rules="scoreRules" ref="scoreFormRef" label-width="120px">
-        <el-form-item label="Reviewer" prop="reviewer">
-          <el-input v-model="scoreForm.reviewer" placeholder="Your username" />
+        <el-form-item label="Reviewer">
+          <el-input 
+            v-model="scoreForm.reviewer" 
+            disabled
+            placeholder="Current user"
+          >
+            <template #prefix>
+              <el-icon><User /></el-icon>
+            </template>
+          </el-input>
+          <div style="font-size: 0.8rem; color: var(--el-text-color-secondary); margin-top: 4px;">
+            Score will be attributed to your account
+          </div>
         </el-form-item>
         
         <el-form-item label="Score" prop="score">
-          <el-input-number v-model="scoreForm.score" :min="0" :max="100" style="width: 100%" />
-        </el-form-item>
-        
-        <el-form-item label="Max Score">
-          <el-input-number v-model="scoreForm.max_score" :min="1" :max="100" style="width: 100%" />
-        </el-form-item>
-        
-        <el-form-item label="Weight">
-          <el-input-number v-model="scoreForm.weight" :min="0" :max="10" :precision="1" style="width: 100%" />
+          <div class="score-input-container">
+            <el-slider 
+              v-model="scoreForm.score" 
+              :min="0" 
+              :max="10" 
+              :step="0.5"
+              :marks="{ 0: '0', 2: '2', 4: '4', 6: '6', 8: '8', 10: '10' }"
+              show-input
+              style="width: 100%"
+            />
+            <div class="score-value-display">{{ scoreForm.score.toFixed(1) }}</div>
+          </div>
         </el-form-item>
         
         <el-form-item label="Comments">
@@ -211,6 +238,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Edit, Clock, Plus, Delete, User } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import { scoresApi } from '@/api/scores'
 import type { Review, ReviewUpdate } from '@/api/reviews'
@@ -222,9 +250,11 @@ import CodeDiffViewer from '@/components/review/CodeDiffViewer.vue'
 import QuickScoreButtons from '@/components/review/QuickScoreButtons.vue'
 import ScoreRangeGuide from '@/components/review/ScoreRangeGuide.vue'
 import AIReviewResults from '@/components/review/AIReviewResults.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 const loading = ref(false)
 const updating = ref(false)
 const addingScore = ref(false)
@@ -243,21 +273,16 @@ const editForm = reactive<ReviewUpdate>({
 
 const scoreForm = reactive<ScoreCreate>({
   pull_request_id: '',
+  pull_request_commit_id: '',
   project_key: '',
   repository_slug: '',
   reviewer: '',
   score: 0,
-  max_score: 100,
-  weight: 1.0,
-  comment: null,
   reviewer_comments: null,
   source_filename: null,
 })
 
 const scoreRules: FormRules = {
-  reviewer: [
-    { required: true, message: 'Please input reviewer', trigger: 'blur' },
-  ],
   score: [
     { required: true, message: 'Please input score', trigger: 'blur' },
   ],
@@ -269,11 +294,25 @@ const formatDate = (dateStr: string) => {
 
 const getStatusType = (status: string) => {
   const types: Record<string, any> = {
+    open: 'success',
+    merged: 'primary',
+    closed: 'info',
+    draft: 'warning',
     completed: 'success',
     in_progress: 'warning',
     pending: 'info',
   }
   return types[status] || 'info'
+}
+
+const getInitials = (name: string) => {
+  if (!name) return '?'
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2)
 }
 
 const loadReview = async () => {
@@ -303,9 +342,10 @@ const loadReview = async () => {
     
     // Set score form defaults
     scoreForm.pull_request_id = review.value.pull_request_id
+    scoreForm.pull_request_commit_id = review.value.pull_request_commit_id || ''
     scoreForm.project_key = review.value.project_key
     scoreForm.repository_slug = review.value.repository_slug
-    scoreForm.reviewer = 'current_user' // TODO: Get from auth
+    scoreForm.reviewer = authStore.currentUser?.username || ''
     scoreForm.source_filename = review.value.source_filename || null
   } catch (error) {
     console.error('Failed to load review:', error)
@@ -344,7 +384,6 @@ const handleAddScore = async () => {
         showScoreDialog.value = false
         // Reset form
         scoreForm.score = 0
-        scoreForm.comment = null
         scoreForm.reviewer_comments = null
         loadReview()
       } catch (error) {
@@ -414,11 +453,14 @@ onMounted(() => {
 <style scoped>
 .review-detail {
   padding: 20px;
+  background: var(--el-bg-color-page);
+  min-height: calc(100vh - 60px);
 }
 
 .page-title {
   font-size: 18px;
-  font-weight: bold;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
 }
 
 .content-row {
@@ -431,21 +473,69 @@ onMounted(() => {
   align-items: center;
 }
 
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.summary-text {
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .actions-card {
   position: sticky;
   top: 20px;
 }
 
-.diff-card :deep(.el-card__body) {
-  padding: 0;
+/* Analysis Column - Match web/index.html */
+.analysis-column {
+  border: 2px solid var(--el-border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+  background: white;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
+[data-theme='dark'] .analysis-column {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.analysis-column-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 12px 16px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.analysis-column-body {
+  padding: 0;
+  max-height: 600px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.diff-card :deep(.el-card__body),
 .ai-review-card :deep(.el-card__body) {
   padding: 0;
+  max-height: 600px;
+  overflow-y: auto;
 }
 
 .score-value {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: var(--el-color-success);
 }
@@ -453,5 +543,54 @@ onMounted(() => {
 .score-max {
   font-size: 0.9rem;
   color: var(--el-text-color-secondary);
+}
+
+.score-input-container {
+  width: 100%;
+}
+
+.score-value-display {
+  text-align: center;
+  font-size: 2rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-top: 12px;
+  text-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+/* Element Plus enhancements */
+:deep(.el-descriptions__label) {
+  font-weight: 500;
+  width: 120px;
+}
+
+:deep(.el-descriptions__content) {
+  color: var(--el-text-color-regular);
+}
+
+:deep(.el-table) {
+  --el-table-border-color: var(--el-border-color-lighter);
+}
+
+:deep(.el-button) {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-button:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+:deep(.el-card) {
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+:deep(.el-card:hover) {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 </style>

@@ -1,34 +1,11 @@
 <template>
   <div class="code-diff-viewer">
-    <div class="diff-header">
-      <h4>
-        <el-icon><Document /></el-icon>
-        Code Changes
-      </h4>
-      <div class="diff-controls">
-        <el-button-group size="small">
-          <el-button
-            :type="outputFormat === 'line-by-line' ? 'primary' : ''"
-            @click="toggleView('line-by-line')"
-          >
-            Line-by-Line
-          </el-button>
-          <el-button
-            :type="outputFormat === 'side-by-side' ? 'primary' : ''"
-            @click="toggleView('side-by-side')"
-          >
-            Side-by-Side
-          </el-button>
-        </el-button-group>
-      </div>
-    </div>
     <div ref="diffContainer" class="diff-container"></div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { Document } from '@element-plus/icons-vue'
 import { Diff2HtmlUI } from 'diff2html/lib/ui/js/diff2html-ui-slim.js'
 import 'diff2html/bundles/css/diff2html.min.css'
 
@@ -91,37 +68,8 @@ const renderDiff = () => {
 
 <style scoped>
 .code-diff-viewer {
-  border: 2px solid var(--el-border-color);
   border-radius: 8px;
   overflow: hidden;
-  background: white;
-}
-
-[data-theme='dark'] .code-diff-viewer {
-  background: var(--el-bg-color);
-}
-
-.diff-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 12px 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.diff-header h4 {
-  margin: 0;
-  font-size: 0.95rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-}
-
-.diff-controls {
-  display: flex;
-  gap: 8px;
 }
 
 .diff-container {
@@ -134,14 +82,7 @@ const renderDiff = () => {
   background: #0f172a;
 }
 
-.diff-error {
-  padding: 20px;
-  text-align: center;
-  color: var(--el-color-danger);
-  font-weight: 600;
-}
-
-/* Diff2Html Custom Styles */
+/* Diff2Html Custom Styles - Match web/index.html exactly */
 :deep(.d2h-wrapper) {
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
 }
@@ -149,6 +90,7 @@ const renderDiff = () => {
 :deep(.d2h-file-header) {
   background: #f8fafc !important;
   border-bottom: 2px solid var(--el-border-color) !important;
+  padding: 12px 16px !important;
 }
 
 [data-theme='dark'] :deep(.d2h-file-header) {
@@ -159,10 +101,12 @@ const renderDiff = () => {
 :deep(.d2h-file-name) {
   color: var(--el-text-color-primary) !important;
   font-weight: 700 !important;
+  font-size: 0.95rem !important;
 }
 
 :deep(.d2h-file-stats) {
   color: var(--el-text-color-secondary) !important;
+  font-size: 0.85rem !important;
 }
 
 /* Line numbers */
@@ -170,6 +114,8 @@ const renderDiff = () => {
   color: #94a3b8 !important;
   background-color: #f8fafc !important;
   border-right: 1px solid var(--el-border-color) !important;
+  font-size: 0.8rem !important;
+  padding: 0 8px !important;
 }
 
 [data-theme='dark'] :deep(.d2h-code-linenumber) {
@@ -220,11 +166,40 @@ const renderDiff = () => {
 :deep(.d2h-code-line-ctn) {
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace !important;
   font-size: 0.85rem !important;
+  line-height: 1.6 !important;
+  padding: 2px 8px !important;
 }
 
 /* Side-by-side layout */
 :deep(.d2h-files-diff.d2h-view-side-by-side .d2h-file-diff) {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+/* File list toggle */
+:deep(.d2h-file-list-wrapper) {
+  background: #f8fafc !important;
+  border-bottom: 2px solid var(--el-border-color) !important;
+}
+
+[data-theme='dark'] :deep(.d2h-file-list-wrapper) {
+  background: #1e293b !important;
+  border-bottom-color: #334155 !important;
+}
+
+:deep(.d2h-file-list) {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+:deep(.d2h-file-switch) {
+  cursor: pointer;
+  padding: 8px 12px !important;
+  transition: background 0.2s ease;
+}
+
+:deep(.d2h-file-switch:hover) {
+  background: rgba(102, 126, 234, 0.1) !important;
 }
 </style>

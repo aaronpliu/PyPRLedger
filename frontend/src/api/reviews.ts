@@ -128,9 +128,4 @@ export const reviewsApi = {
   deleteReview(id: number): Promise<void> {
     return request.delete(`/reviews/${id}`)
   },
-
-  // Search reviews
-  searchReviews(query: string): Promise<Review[]> {
-    return request.get('/reviews/search', { params: { q: query } })
-  },
 }

@@ -19,13 +19,11 @@ export interface Score {
 
 export interface ScoreCreate {
   pull_request_id: string
+  pull_request_commit_id: string
   project_key: string
   repository_slug: string
   reviewer: string
   score: number
-  max_score?: number
-  weight?: number
-  comment?: string | null
   reviewer_comments?: string | null
   source_filename?: string | null  // null for PR-level score
 }

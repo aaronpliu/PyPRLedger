@@ -21,26 +21,14 @@ export default defineConfig({
         scope: '/',
         start_url: '/',
         categories: ['productivity', 'utilities'],
+        // Icons will be generated when you add icon files to public directory
+        // For now, using a simple SVG favicon
         icons: [
           {
-            src: '/icon-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any maskable',
-          },
-          {
-            src: '/icon-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable',
-          },
-        ],
-        screenshots: [
-          {
-            src: '/screenshot-desktop.png',
-            sizes: '1920x1080',
-            type: 'image/png',
-            form_factor: 'wide',
+            src: '/favicon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any',
           },
         ],
       },
@@ -89,7 +77,7 @@ export default defineConfig({
         clientsClaim: true,
       },
       devOptions: {
-        enabled: false, // Enable only in production
+        enabled: true, // Enable PWA in development for testing
         type: 'module',
       },
     }),
