@@ -16,6 +16,11 @@
           >
             <el-menu-item index="/">Dashboard</el-menu-item>
             <el-menu-item index="/reviews">Reviews</el-menu-item>
+            <el-sub-menu index="/scores">
+              <template #title>Scores</template>
+              <el-menu-item index="/scores">Score List</el-menu-item>
+              <el-menu-item index="/scores/analytics">Analytics</el-menu-item>
+            </el-sub-menu>
           </el-menu>
         </div>
         <div class="header-actions">

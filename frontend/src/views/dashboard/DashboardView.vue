@@ -66,9 +66,15 @@
       <template #header>
         <div class="card-header">
           <span>Recent Reviews</span>
-          <el-button type="primary" size="small" @click="$router.push('/reviews')">
-            View All
-          </el-button>
+          <div class="header-actions">
+            <el-button type="success" size="small" @click="$router.push('/scores/analytics')">
+              <el-icon><TrendCharts /></el-icon>
+              View Analytics
+            </el-button>
+            <el-button type="primary" size="small" @click="$router.push('/reviews')">
+              View All
+            </el-button>
+          </div>
         </div>
       </template>
       
@@ -219,5 +225,10 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 </style>

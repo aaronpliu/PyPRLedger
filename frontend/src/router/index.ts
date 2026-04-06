@@ -43,6 +43,16 @@ const routes: RouteRecordRaw[] = [
         name: 'Profile',
         component: () => import('@/views/auth/ProfileView.vue'),
       },
+      {
+        path: 'scores',
+        name: 'ScoreList',
+        component: () => import('@/views/scores/ScoreListView.vue'),
+      },
+      {
+        path: 'scores/analytics',
+        name: 'ScoreAnalytics',
+        component: () => import('@/views/scores/ScoreAnalyticsView.vue'),
+      },
     ],
   },
 
