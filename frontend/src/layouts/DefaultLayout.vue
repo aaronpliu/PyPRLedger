@@ -3,8 +3,42 @@
     <!-- Header -->
     <el-header class="layout-header">
       <div class="header-content">
-        <h1 class="logo">PR Ledger</h1>
+        <div class="header-left">
+          <h1 class="logo">PR Ledger</h1>
+          <el-menu
+            mode="horizontal"
+            :default-active="activeMenu"
+            router
+            background-color="#409eff"
+            text-color="#fff"
+            active-text-color="#ffd04b"
+            style="border: none"
+          >
+            <el-menu-item index="/">Dashboard</el-menu-item>
+            <el-menu-item index="/reviews">Reviews</el-menu-item>
+          </el-menu>
+        </div>
         <div class="header-actions">
+          <!-- Language Switcher -->
+          <el-dropdown @command="handleLanguageChange">
+            <span class="language-switcher">
+              {{ languageStore.getLanguageFlag(languageStore.currentLanguage) }}
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="lang in languageStore.availableLanguages"
+                  :key="lang.code"
+                  :command="lang.code"
+                >
+                  {{ lang.flag }} {{ lang.name }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+
+          <!-- User Menu -->
           <el-dropdown @command="handleCommand">
             <span class="user-info">
               <el-icon><User /></el-icon>
@@ -13,8 +47,8 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="profile">Profile</el-dropdown-item>
-                <el-dropdown-item command="logout" divided>Logout</el-dropdown-item>
+                <el-dropdown-item command="profile">{{ t('common.profile') }}</el-dropdown-item>
+                <el-dropdown-item command="logout" divided>{{ t('common.logout') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -30,21 +64,35 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { User, ArrowDown } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
+import { useLanguage } from '@/composables/useLanguage'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+const { t } = useI18n()
+const languageStore = useLanguage()
+
+const activeMenu = computed(() => route.path)
 
 const handleCommand = (command: string) => {
   if (command === 'logout') {
     authStore.logout()
-    ElMessage.success('Logged out successfully')
+    ElMessage.success(t('auth.login_success'))
   } else if (command === 'profile') {
     router.push('/profile')
   }
+}
+
+const handleLanguageChange = (lang: string) => {
+  languageStore.setLanguage(lang)
+  ElMessage.success(`Language changed to ${languageStore.getLanguageName(lang)}`)
 }
 </script>
 
@@ -66,6 +114,12 @@ const handleCommand = (command: string) => {
   height: 100%;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
 .logo {
   font-size: 20px;
   font-weight: bold;
@@ -75,6 +129,21 @@ const handleCommand = (command: string) => {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.language-switcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.language-switcher:hover {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .user-info {

@@ -6,6 +6,7 @@ import 'element-plus/dist/index.css'
 
 import App from './App.vue'
 import router from './router'
+import i18n from './i18n'
 import { useAuthStore } from './stores/auth'
 
 const app = createApp(App)
@@ -16,6 +17,9 @@ app.use(pinia)
 
 // Router
 app.use(router)
+
+// i18n
+app.use(i18n)
 
 // Element Plus
 app.use(ElementPlus)
