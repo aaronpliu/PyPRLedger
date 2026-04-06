@@ -10,6 +10,7 @@ from src.core.database import Base
 
 
 if TYPE_CHECKING:
+    from src.models.auth_user import AuthUser
     from src.models.pull_request import PullRequestReview, PullRequestScore
 
 
@@ -49,6 +50,11 @@ class User(Base):
     )
 
     # Relationships
+    # Link to authentication user (one-to-one, optional)
+    auth_user: Mapped[AuthUser | None] = relationship(
+        "AuthUser", back_populates="bitbucket_user", foreign_keys="AuthUser.user_id"
+    )
+
     authored_reviews: Mapped[list[PullRequestReview]] = relationship(
         foreign_keys="PullRequestReview.pull_request_user", back_populates="pull_request_user_rel"
     )
