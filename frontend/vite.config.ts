@@ -21,15 +21,45 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: false,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'vendor': ['vue', 'vue-router', 'pinia'],
-          'element-plus': ['element-plus'],
-          'echarts': ['echarts'],
-        },
+    sourcemap: false, // Disable sourcemap in production for security
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove console.log in production
+        drop_debugger: true,
       },
     },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('vue') || id.includes('vue-router') || id.includes('pinia')) {
+              return 'vendor'
+            }
+            if (id.includes('element-plus')) {
+              return 'element-plus'
+            }
+            if (id.includes('echarts')) {
+              return 'echarts'
+            }
+            if (id.includes('vue-i18n')) {
+              return 'i18n'
+            }
+            if (id.includes('axios') || id.includes('dayjs')) {
+              return 'utils'
+            }
+          }
+        },
+        chunkFileNames: 'assets/js/[name]-[hash].js',
+        entryFileNames: 'assets/js/[name]-[hash].js',
+        assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
+      },
+    },
+    // Chunk size warning limit
+    chunkSizeWarningLimit: 1000,
+  },
+  // Optimize dependencies
+  optimizeDeps: {
+    include: ['vue', 'vue-router', 'pinia', 'axios', 'element-plus', 'dayjs'],
   },
 })

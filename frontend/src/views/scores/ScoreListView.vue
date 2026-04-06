@@ -61,15 +61,15 @@
 
       <!-- Statistics -->
       <el-divider />
-      <el-row :gutter="20" class=\"stats-row\">
-        <el-col :span=\"8\">
-          <el-statistic title=\"Average Score\" :value=\"stats.average_score\" :precision=\"1\" />
+      <el-row :gutter="20" class="stats-row">
+        <el-col :span="8">
+          <el-statistic title="Average Score" :value="stats.average_score" :precision="1" />
         </el-col>
-        <el-col :span=\"8\">
-          <el-statistic title=\"Total Reviews\" :value=\"stats.total_reviews\" />
+        <el-col :span="8">
+          <el-statistic title="Total Reviews" :value="stats.total_reviews" />
         </el-col>
-        <el-col :span=\"8\">
-          <el-statistic title=\"Total Scores\" :value=\"scores.length\" />
+        <el-col :span="8">
+          <el-statistic title="Total Scores" :value="scores.length" />
         </el-col>
       </el-row>
     </el-card>
