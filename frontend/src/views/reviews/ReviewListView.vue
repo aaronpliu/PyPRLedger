@@ -4,10 +4,17 @@
       <template #header>
         <div class="card-header">
           <h2>Code Reviews</h2>
-          <el-button type="primary" @click="showCreateDialog = true">
-            <el-icon><Plus /></el-icon>
-            New Review
-          </el-button>
+          <div class="header-actions">
+            <ExportMenu
+              :data="reviews"
+              :selected-ids="selectedReviews.map(r => r.id)"
+              size="small"
+            />
+            <el-button type="primary" @click="showCreateDialog = true">
+              <el-icon><Plus /></el-icon>
+              New Review
+            </el-button>
+          </div>
         </div>
       </template>
 
@@ -250,6 +257,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
 import FilterBuilder from '@/components/common/FilterBuilder.vue'
+import ExportMenu from '@/components/common/ExportMenu.vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -575,6 +583,11 @@ onMounted(() => {
 .card-header h2 {
   margin: 0;
   font-size: 20px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .filter-form {
