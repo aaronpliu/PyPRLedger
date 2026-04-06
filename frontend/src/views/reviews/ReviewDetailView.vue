@@ -287,13 +287,16 @@ const loadReview = async () => {
       throw new Error('Review not found')
     }
     
-    // Load scores using composite key
+    // Load scores using composite key (match the review's level)
     scores.value = await scoresApi.getScoresByReview(
       review.value.pull_request_id,
       review.value.project_key,
       review.value.repository_slug,
-      review.value.source_filename || null
+      review.value.source_filename || null  // null for PR-level, filename for file-level
     )
+    
+    // Debug info
+    ElMessage.info(`Loaded ${scores.value.length} score(s) for ${review.value.source_filename ? 'file-level' : 'PR-level'} review`)
     
     // Set score form defaults
     scoreForm.pull_request_id = review.value.pull_request_id
