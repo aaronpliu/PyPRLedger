@@ -24,6 +24,9 @@
           </el-menu>
         </div>
         <div class="header-actions">
+          <!-- Global Search -->
+          <GlobalSearch />
+
           <!-- Notification Bell -->
           <NotificationBell />
 
@@ -81,6 +84,7 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useLanguage } from '@/composables/useLanguage'
 import NotificationBell from '@/components/common/NotificationBell.vue'
+import GlobalSearch from '@/components/common/GlobalSearch.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()

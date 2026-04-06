@@ -12,6 +12,12 @@
       </template>
 
       <!-- Filters -->
+      <FilterBuilder
+        :available-fields="filterFields"
+        @filters-change="handleFiltersChange"
+        @apply-preset="handleApplyPreset"
+      />
+
       <el-form :inline="true" class="filter-form">
         <el-form-item label="Search">
           <el-input
@@ -146,6 +152,7 @@ import type { Review, ReviewCreate } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
+import FilterBuilder from '@/components/common/FilterBuilder.vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -158,6 +165,15 @@ const searchQuery = ref('')
 const statusFilter = ref('')
 const showCreateDialog = ref(false)
 const createFormRef = ref<FormInstance>()
+
+// Filter fields configuration
+const filterFields = [
+  { label: 'PR URL', value: 'pr_url' },
+  { label: 'Reviewer', value: 'reviewer_username' },
+  { label: 'Status', value: 'status' },
+  { label: 'Created Date', value: 'created_at' },
+  { label: 'Summary', value: 'summary' },
+]
 
 const createForm = reactive<ReviewCreate>({
   pr_url: '',
@@ -279,6 +295,25 @@ const handleCreate = async () => {
       }
     }
   })
+}
+
+// Filter handlers
+interface Filter {
+  field: string
+  operator: string
+  value: string
+}
+
+const handleFiltersChange = (filters: Filter[]) => {
+  console.log('Filters changed:', filters)
+  // TODO: Apply filters to API request
+  // For now, just reload with current pagination
+  loadReviews()
+}
+
+const handleApplyPreset = (preset: any) => {
+  console.log('Applied preset:', preset)
+  ElMessage.success(`Applied preset: ${preset.name}`)
 }
 
 onMounted(() => {

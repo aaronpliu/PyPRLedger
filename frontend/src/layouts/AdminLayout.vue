@@ -31,6 +31,9 @@
     <el-container>
       <el-header class="admin-header">
         <div class="header-right">
+          <!-- Global Search -->
+          <GlobalSearch />
+
           <!-- Notification Bell -->
           <NotificationBell />
 
@@ -63,6 +66,7 @@ import { User, Lock, Document, ArrowDown } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import NotificationBell from '@/components/common/NotificationBell.vue'
+import GlobalSearch from '@/components/common/GlobalSearch.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
