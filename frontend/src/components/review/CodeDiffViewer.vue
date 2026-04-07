@@ -27,6 +27,14 @@ onMounted(() => {
   renderDiff()
 })
 
+// Watch for prop changes from parent
+watch(() => props.outputFormat, (newFormat) => {
+  if (newFormat && newFormat !== currentFormat.value) {
+    currentFormat.value = newFormat
+    renderDiff()
+  }
+})
+
 watch(() => [props.diff, currentFormat.value], () => {
   renderDiff()
 })
@@ -95,8 +103,6 @@ const renderDiff = () => {
     console.log('Normalizing diff format (adding newlines)')
     // More comprehensive normalization
     processedDiff = processedDiff
-      // Add newline before file headers
-      .replace(/(diff --git)/g, '\n$1')
       // Add newline before hunk headers (@@ ... @@)
       .replace(/(@@[^@]*@@)/g, '\n$1')
       // Add newline before added lines (+ at start, but not +++ )
@@ -107,19 +113,25 @@ const renderDiff = () => {
       .replace(/(@@[^@]*@@)( )/g, '$1\n ')
       .trim()
     
+    // Ensure "diff --git" is at the very beginning (no leading whitespace/newlines)
+    if (processedDiff.startsWith('\n') || processedDiff.startsWith('\r')) {
+      processedDiff = processedDiff.trimStart()
+    }
+    
     console.log('Normalized diff preview:', processedDiff.substring(0, 300))
   }
 
   const configuration = {
-    drawFileList: true,
-    fileListToggle: true,
+    drawFileList: false,
+    fileListToggle: false,
     fileListStartVisible: false,
-    fileContentToggle: true,
+    fileContentToggle: false,
     matching: 'lines' as const,
     outputFormat: currentFormat.value,
-    synchronisedScroll: true,
+    synchronisedScroll: true, // Enable synchronized scroll for side-by-side
     highlight: true,
     renderNothingWhenEmpty: false,
+    stickyFileHeaders: false, // Disable sticky headers to prevent positioning issues
   }
 
   try {
@@ -141,8 +153,7 @@ const renderDiff = () => {
 }
 
 .diff-container {
-  max-height: 600px;
-  overflow: auto;
+  /* Let diff2html handle its own scrolling */
   background: #fafafa;
 }
 
@@ -153,6 +164,30 @@ const renderDiff = () => {
 /* Diff2Html Custom Styles - Match web/index.html exactly */
 :deep(.d2h-wrapper) {
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+}
+
+/* Dark theme for entire diff2html container */
+[data-theme='dark'] :deep(.d2h-wrapper) {
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
+}
+
+[data-theme='dark'] :deep(.d2h-file-diff) {
+  background-color: #0f172a !important;
+}
+
+/* Ensure diff2html doesn't create internal scroll containers */
+:deep(.d2h-file-diff),
+:deep(.d2h-files-diff) {
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+/* Prevent any sticky/fixed positioning in diff2html */
+:deep([class*="line-numbers"]),
+:deep(.d2h-code-line-prefix),
+:deep(.d2h-gutter) {
+  position: static !important;
 }
 
 :deep(.d2h-file-header) {
@@ -230,12 +265,26 @@ const renderDiff = () => {
   color: var(--el-text-color-secondary) !important;
 }
 
+[data-theme='dark'] :deep(.d2h-cntx .d2h-code-line-ctn) {
+  color: #94a3b8 !important;
+}
+
+/* Dark theme for code content */
+[data-theme='dark'] :deep(.d2h-code-line-ctn) {
+  color: #e2e8f0 !important;
+}
+
 /* Code content */
 :deep(.d2h-code-line-ctn) {
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace !important;
   font-size: 0.85rem !important;
   line-height: 1.6 !important;
   padding: 2px 8px !important;
+}
+
+/* Dark theme for code content */
+[data-theme='dark'] :deep(.d2h-code-line-ctn) {
+  color: #e2e8f0 !important;
 }
 
 /* Side-by-side layout */

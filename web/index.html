@@ -1336,8 +1336,9 @@
 
         /* Diff2Html Custom Styles */
         .d2h-wrapper {
-            max-height: 600px;
-            overflow: auto;
+            /* Let parent container handle scrolling */
+            max-height: none !important;
+            overflow: visible !important;
         }
 
         .d2h-file-header {
@@ -1410,16 +1411,62 @@
             color: var(--text-secondary) !important;
         }
 
+        [data-theme="dark"] .d2h-cntx .d2h-code-line-ctn {
+            color: #94a3b8 !important;
+        }
+
         /* Code content */
         .d2h-code-line-ctn {
             font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace !important;
             font-size: 0.85rem !important;
         }
 
+        [data-theme="dark"] .d2h-code-line-ctn {
+            color: #e2e8f0 !important;
+        }
+
         /* Side-by-side specific */
         .d2h-files-diff.d2h-view-side-by-side .d2h-file-diff {
             display: grid;
             grid-template-columns: 1fr 1fr;
+        }
+
+        /* Fix side-by-side mode - ensure all elements stay in container */
+        .d2h-view-side-by-side,
+        .d2h-view-side-by-side .d2h-file-diff,
+        .d2h-view-side-by-side .d2h-code-wrapper,
+        .d2h-view-side-by-side .d2h-code-side-line {
+            overflow: visible !important;
+            position: relative !important;
+        }
+
+        /* Fix line numbers in side-by-side mode */
+        .d2h-view-side-by-side .d2h-gutter,
+        .d2h-view-side-by-side .d2h-code-line-prefix,
+        .d2h-view-side-by-side .d2h-code-linenumber,
+        .d2h-view-side-by-side [class*="line-numbers"],
+        .d2h-view-side-by-side .d2h-ins,
+        .d2h-view-side-by-side .d2h-del,
+        .d2h-view-side-by-side .d2h-cntx {
+            position: relative !important;
+            top: auto !important;
+            left: auto !important;
+            right: auto !important;
+        }
+
+        /* Ensure diff2html doesn't create internal scroll containers */
+        .d2h-file-diff,
+        .d2h-files-diff {
+            overflow: visible !important;
+            max-height: none !important;
+        }
+
+        /* Prevent any sticky/fixed positioning in diff2html */
+        [class*="line-numbers"],
+        .d2h-code-line-prefix,
+        .d2h-gutter,
+        .d2h-code-linenumber {
+            position: static !important;
         }
 
         .code-diff-toggle {
@@ -1433,7 +1480,7 @@
 
         .code-diff-content {
             padding: 0;
-            overflow-x: auto;
+            overflow: visible; /* Let parent container handle scrolling */
             background: #fafafa;
         }
 
@@ -1459,6 +1506,9 @@
             overflow: hidden;
             box-shadow: var(--shadow-sm);
             background: white;
+            height: 600px; /* Fixed height for the entire column */
+            display: flex;
+            flex-direction: column;
         }
 
         [data-theme="dark"] .analysis-column {
@@ -1474,12 +1524,43 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            flex-shrink: 0; /* Prevent header from shrinking */
+            overflow: hidden; /* Ensure no scrollbar in header */
         }
 
         .analysis-column-body {
-            padding: 15px;
-            max-height: 500px;
+            padding: 0;
+            flex: 1;
             overflow-y: auto;
+            overflow-x: hidden;
+            overflow-x: hidden;
+            overflow-x: hidden;            min-height: 0;
+        }
+        
+        /* Hide scrollbar when content doesn't overflow */
+        .analysis-column-body::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .analysis-column-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .analysis-column-body::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        
+        .analysis-column-body::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        [data-theme="dark"] .analysis-column-body::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+        
+        [data-theme="dark"] .analysis-column-body::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
         }
 
         /* AI Review Results Styling */
@@ -1745,6 +1826,8 @@
 
         .diff-viewer {
             /* diff2html will handle all styling */
+            overflow: visible; /* Let parent container handle scrolling */
+            padding: 15px; /* Add padding here instead of parent */
         }
 
         /* Score Display Slider */
@@ -3086,8 +3169,6 @@
                     console.log('Normalizing diff format (adding newlines)');
                     // More comprehensive normalization
                     normalizedDiff = normalizedDiff
-                        // Add newline before file headers
-                        .replace(/(diff --git)/g, '\n$1')
                         // Add newline before hunk headers (@@ ... @@)
                         .replace(/(@@[^@]*@@)/g, '\n$1')
                         // Add newline before added lines (+ at start, but not +++ )
@@ -3097,6 +3178,11 @@
                         // Add newline before context lines (space at start after @@)
                         .replace(/(@@[^@]*@@)( )/g, '$1\n ')
                         .trim();
+                    
+                    // Ensure "diff --git" is at the very beginning (no leading whitespace/newlines)
+                    if (normalizedDiff.startsWith('\n') || normalizedDiff.startsWith('\r')) {
+                        normalizedDiff = normalizedDiff.trimStart();
+                    }
                     
                     console.log('Normalized diff preview:', normalizedDiff.substring(0, 300));
                 }
@@ -3117,6 +3203,7 @@
                     outputFormat: currentDiffView, // 'line-by-line' or 'side-by-side'
                     synchronisedScroll: true,
                     highlight: true,
+                    stickyFileHeaders: false, // Disable sticky headers to prevent positioning issues
                 };
                 
                 // Create diff2html UI instance and render

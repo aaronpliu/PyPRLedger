@@ -440,7 +440,7 @@ onMounted(() => {
   overflow: hidden;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
   background: white;
-  height: 100%;
+  height: 600px; /* Fixed height for the entire column */
   display: flex;
   flex-direction: column;
 }
@@ -460,13 +460,42 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-shrink: 0; /* Prevent header from shrinking */
+  overflow: hidden; /* Ensure no scrollbar in header */
 }
 
 .analysis-column-body {
   padding: 0;
-  max-height: 600px;
-  overflow-y: auto;
   flex: 1;
+  overflow-y: auto; /* Enable scrolling */
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+/* Custom scrollbar styling */
+.analysis-column-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.analysis-column-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.analysis-column-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.analysis-column-body::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+[data-theme='dark'] .analysis-column-body::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+[data-theme='dark'] .analysis-column-body::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
 .diff-card :deep(.el-card__body),
