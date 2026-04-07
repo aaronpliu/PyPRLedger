@@ -122,16 +122,28 @@
                 <span v-if="row.max_score" class="score-max"> / {{ row.max_score }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="weight" label="Weight" width="80" />
             <el-table-column prop="reviewer_comments" label="Comments" min-width="200" show-overflow-tooltip />
             <el-table-column prop="created_date" label="Created" width="160">
               <template #default="{ row }">
                 {{ formatDate(row.created_date || '') }}
               </template>
             </el-table-column>
-            <el-table-column label="Actions" width="100">
+            <el-table-column label="Actions" width="180">
               <template #default="{ row }">
-                <el-button size="small" type="danger" @click="deleteScore(row)">
+                <el-button 
+                  size="small" 
+                  type="primary" 
+                  @click="editScore(row)"
+                  :disabled="!canEditScore(row)"
+                >
+                  Update
+                </el-button>
+                <el-button 
+                  size="small" 
+                  type="danger" 
+                  @click="deleteScore(row)"
+                  :disabled="!canDeleteScore(row)"
+                >
                   Delete
                 </el-button>
               </template>
@@ -144,7 +156,7 @@
     </el-row>
 
     <!-- Add Score Dialog -->
-    <el-dialog v-model="showScoreDialog" title="Add Score" width="700px">
+    <el-dialog v-model="showScoreDialog" :title="editingScore ? 'Update Score' : 'Add Score'" width="700px">
       <!-- Quick Score Buttons -->
       <QuickScoreButtons @select="handleQuickScoreSelect" />
       
@@ -195,7 +207,7 @@
       <template #footer>
         <el-button @click="showScoreDialog = false">Cancel</el-button>
         <el-button type="primary" :loading="addingScore" @click="handleAddScore">
-          Add Score
+          {{ editingScore ? 'Update' : 'Add' }} Score
         </el-button>
       </template>
     </el-dialog>
@@ -203,7 +215,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Clock, Plus, Delete, User } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
@@ -227,6 +239,7 @@ const addingScore = ref(false)
 const review = ref<Review | null>(null)
 const scores = ref<Score[]>([])
 const showScoreDialog = ref(false)
+const editingScore = ref<Score | null>(null)
 const scoreFormRef = ref<FormInstance>()
 const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
 
@@ -322,19 +335,37 @@ const handleAddScore = async () => {
       addingScore.value = true
       try {
         await scoresApi.createScore(scoreForm)
-        ElMessage.success('Score added successfully')
+        ElMessage.success(editingScore.value ? 'Score updated successfully' : 'Score added successfully')
         showScoreDialog.value = false
+        editingScore.value = null
         // Reset form
         scoreForm.score = 0
         scoreForm.reviewer_comments = null
         loadReview()
       } catch (error) {
-        ElMessage.error('Failed to add score')
+        ElMessage.error(editingScore.value ? 'Failed to update score' : 'Failed to add score')
       } finally {
         addingScore.value = false
       }
     }
   })
+}
+
+const editScore = (score: Score) => {
+  editingScore.value = score
+  scoreForm.score = score.score
+  scoreForm.reviewer_comments = score.reviewer_comments || null
+  showScoreDialog.value = true
+}
+
+const canEditScore = (score: Score): boolean => {
+  const currentUsername = authStore.currentUser?.username
+  return currentUsername === score.reviewer
+}
+
+const canDeleteScore = (score: Score): boolean => {
+  const currentUsername = authStore.currentUser?.username
+  return currentUsername === score.reviewer
 }
 
 const deleteScore = async (score: Score) => {
@@ -386,6 +417,20 @@ const confirmDelete = async () => {
 const handleQuickScoreSelect = (value: number) => {
   scoreForm.score = value
 }
+
+// Watch for dialog open to set reviewer
+watch(showScoreDialog, (isOpen) => {
+  if (isOpen && review.value) {
+    // Always set reviewer to current user
+    scoreForm.reviewer = authStore.currentUser?.username || ''
+    
+    // If not editing, reset other fields
+    if (!editingScore.value) {
+      scoreForm.score = 0
+      scoreForm.reviewer_comments = null
+    }
+  }
+})
 
 onMounted(() => {
   loadReview()
