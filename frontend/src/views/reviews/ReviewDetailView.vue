@@ -128,6 +128,11 @@
                 {{ formatDate(row.created_date || '') }}
               </template>
             </el-table-column>
+            <el-table-column prop="updated_date" label="Updated" width="160">
+              <template #default="{ row }">
+                {{ row.updated_date ? formatDate(row.updated_date) : '-' }}
+              </template>
+            </el-table-column>
             <el-table-column label="Actions" width="180">
               <template #default="{ row }">
                 <el-button 
@@ -573,10 +578,34 @@ onMounted(() => {
 :deep(.el-descriptions__label) {
   font-weight: 500;
   width: 120px;
+  color: var(--el-text-color-primary);
 }
 
 :deep(.el-descriptions__content) {
   color: var(--el-text-color-regular);
+}
+
+/* Dark theme for descriptions */
+[data-theme='dark'] :deep(.el-descriptions) {
+  --el-descriptions-bg-color: #1e293b;
+  --el-descriptions-border-color: #334155;
+}
+
+[data-theme='dark'] :deep(.el-descriptions__label) {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+[data-theme='dark'] :deep(.el-descriptions__content) {
+  background-color: #0f172a !important;
+  color: #cbd5e1 !important;
+  border-color: #334155 !important;
+}
+
+/* Force text nodes and all child elements to use correct color */
+[data-theme='dark'] :deep(.el-descriptions__cell.is-bordered-content) {
+  color: #cbd5e1 !important;
 }
 
 :deep(.el-table) {
@@ -600,5 +629,37 @@ onMounted(() => {
 
 :deep(.el-card:hover) {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+</style>
+
+<style>
+/* Global styles for dark mode descriptions - must be non-scoped */
+[data-theme='dark'] .el-descriptions__cell.is-bordered-content {
+  color: #cbd5e1 !important;
+}
+
+[data-theme='dark'] .el-descriptions__cell.is-bordered-content strong,
+[data-theme='dark'] .el-descriptions__cell.is-bordered-content span:not(.el-tag):not(.el-avatar),
+[data-theme='dark'] .el-descriptions__cell.is-bordered-content div:not([class*="el-"]) {
+  color: #cbd5e1 !important;
+}
+
+[data-theme='dark'] .summary-text {
+  color: #cbd5e1 !important;
+}
+
+/* Force all text nodes to be visible */
+[data-theme='dark'] td.el-descriptions__content {
+  color: #cbd5e1 !important;
+}
+
+/* Ultimate fallback - target everything */
+[data-theme='dark'] .el-descriptions table tbody tr td {
+  color: #cbd5e1 !important;
+  background-color: #0f172a !important;
+}
+
+[data-theme='dark'] .el-descriptions table tbody tr td * {
+  color: inherit !important;
 }
 </style>
