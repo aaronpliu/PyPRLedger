@@ -13,17 +13,17 @@
     </el-alert>
 
     <!-- Summary Stats -->
-    <div class="ai-summary-stats">
+    <div v-if="suggestions.summary" class="ai-summary-stats">
       <div class="ai-stat-card">
-        <div class="ai-stat-value ai-stat-files">{{ suggestions.Reviewed_files || 0 }}</div>
+        <div class="ai-stat-value ai-stat-files">{{ suggestions.summary.files_reviewed || 0 }}</div>
         <div class="ai-stat-label">Files Reviewed</div>
       </div>
       <div class="ai-stat-card">
-        <div class="ai-stat-value ai-stat-critical">{{ suggestions.Critical_issues || 0 }}</div>
+        <div class="ai-stat-value ai-stat-critical">{{ suggestions.summary.critical_count || 0 }}</div>
         <div class="ai-stat-label">Critical Issues</div>
       </div>
       <div class="ai-stat-card">
-        <div class="ai-stat-value ai-stat-total">{{ suggestions.Total_issues || 0 }}</div>
+        <div class="ai-stat-value ai-stat-total">{{ suggestions.summary.total_issues || 0 }}</div>
         <div class="ai-stat-label">Total Issues</div>
       </div>
     </div>
@@ -38,15 +38,15 @@
       >
         <div class="ai-issue-header">
           <span class="ai-issue-number">#Issue {{ index + 1 }}</span>
-          <span class="ai-issue-file">📄 {{ issue.file_name }}</span>
-          <span v-if="issue.line_number" class="ai-issue-line">
-            Line {{ issue.line_number }}
+          <span class="ai-issue-file">📄 {{ issue.file }}</span>
+          <span v-if="issue.line" class="ai-issue-line">
+            Line {{ issue.line }}
           </span>
         </div>
         
         <div class="issue-badges">
-          <el-tag :type="getIssueTypeColor(issue.issue_type)" size="small">
-            {{ issue.issue_type }}
+          <el-tag :type="getCategoryColor(issue.category)" size="small">
+            {{ issue.category }}
           </el-tag>
           <el-tag :type="getSeverityColor(issue.severity)" size="small">
             {{ issue.severity.toUpperCase() }}
@@ -71,6 +71,16 @@
     </div>
 
     <el-empty v-else description="✅ No issues found! Great code!" />
+
+    <!-- Positive Feedback -->
+    <div v-if="suggestions.positive_feedback && suggestions.positive_feedback.length > 0" class="ai-positive-feedback">
+      <h4>✅ Positive Feedback</h4>
+      <ul>
+        <li v-for="(feedback, index) in suggestions.positive_feedback" :key="index">
+          {{ feedback }}
+        </li>
+      </ul>
+    </div>
 
     <!-- Overall Assessment -->
     <div v-if="suggestions.overall_assessment" class="ai-overall-assessment">
@@ -100,7 +110,7 @@ const getSeverityColor = (severity: string) => {
   return colors[severity] || ''
 }
 
-const getIssueTypeColor = (type: string) => {
+const getCategoryColor = (category: string) => {
   const colors: Record<string, any> = {
     bug: 'danger',
     security: 'danger',
@@ -108,7 +118,7 @@ const getIssueTypeColor = (type: string) => {
     style: 'info',
     maintainability: '',
   }
-  return colors[type.toLowerCase()] || ''
+  return colors[category.toLowerCase()] || ''
 }
 </script>
 
@@ -347,5 +357,36 @@ const getIssueTypeColor = (type: string) => {
 .ai-overall-assessment p {
   margin: 0;
   color: inherit;
+}
+
+.ai-positive-feedback {
+  background: #f0fdf4;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 4px solid #22c55e;
+  margin-top: 15px;
+}
+
+[data-theme='dark'] .ai-positive-feedback {
+  background: #064e3b;
+  border-left-color: #6ee7b7;
+}
+
+.ai-positive-feedback h4 {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+  color: var(--el-text-color-primary);
+}
+
+.ai-positive-feedback ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.ai-positive-feedback li {
+  margin: 4px 0;
+  line-height: 1.6;
+  color: var(--el-text-color-primary);
+  font-size: 0.9rem;
 }
 </style>

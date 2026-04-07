@@ -2016,7 +2016,7 @@
     </button>
 
     <script>
-        const API_BASE_URL = 'http://localhost:8000/api/v1';
+        const API_BASE_URL = 'http://127.0.0.1:9097/api/v1';
         let currentReviewer = ''; // Start with empty reviewer
         let allReviews = []; // Store loaded reviews for reference
         let allUsers = []; // Store all users from API for validation
@@ -3020,10 +3020,12 @@
         function renderAIReviewResults(aiSuggestions) {
             if (!aiSuggestions || Object.keys(aiSuggestions).length === 0) return '';
             
-            const reviewedFiles = aiSuggestions.Reviewed_files || 0;
-            const criticalIssues = aiSuggestions.Critical_issues || 0;
-            const totalIssues = aiSuggestions.Total_issues || 0;
+            const summary = aiSuggestions.summary || {};
+            const reviewedFiles = summary.files_reviewed || 0;
+            const criticalIssues = summary.critical_count || 0;
+            const totalIssues = summary.total_issues || 0;
             const issues = aiSuggestions.issues || [];
+            const positiveFeedback = aiSuggestions.positive_feedback || [];
             const overallAssessment = aiSuggestions.overall_assessment || '';
             
             // Render summary stats
@@ -3059,11 +3061,11 @@
                             <div class="ai-issue-item ${severityClass}">
                                 <div class="ai-issue-header">
                                     <span class="ai-issue-number">#Issue ${issueNumber}</span>
-                                    <span class="ai-issue-file">📄 ${escapeHtml(issue.file_name || 'Unknown file')}</span>
-                                    <span class="ai-issue-line">Line ${issue.line_number || 'N/A'}</span>
+                                    <span class="ai-issue-file">📄 ${escapeHtml(issue.file || 'Unknown file')}</span>
+                                    <span class="ai-issue-line">Line ${issue.line || 'N/A'}</span>
                                 </div>
                                 <div style="margin-bottom: 8px;">
-                                    <span class="ai-issue-type ${issueTypeClass}">${escapeHtml(issue.issue_type || 'general')}</span>
+                                    <span class="ai-issue-type ${issueTypeClass}">${escapeHtml(issue.category || 'general')}</span>
                                     <span class="severity-badge ${severityBadgeClass}">${severity.toUpperCase()}</span>
                                 </div>
                                 ${issue.description ? `
@@ -3090,6 +3092,16 @@
                 </div>
             ` : '<p style="color: #6c757d; text-align: center; padding: 20px;">✅ No issues found! Great code!</p>';
             
+            // Render positive feedback
+            const positiveFeedbackHtml = positiveFeedback.length > 0 ? `
+                <div class="ai-positive-feedback" style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 12px; border-radius: 6px; margin-top: 15px;">
+                    <strong style="font-size: 1rem; color: var(--text-primary); display: block; margin-bottom: 8px;">✅ Positive Feedback:</strong>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        ${positiveFeedback.map(feedback => `<li style="margin: 4px 0; line-height: 1.6; color: var(--text-primary); font-size: 0.9rem;">${escapeHtml(feedback)}</li>`).join('')}
+                    </ul>
+                </div>
+            ` : '';
+            
             // Render overall assessment at the bottom
             const assessmentHtml = overallAssessment ? `
                 <div class="ai-overall-assessment" style="margin-top: 20px;">
@@ -3105,6 +3117,7 @@
                     </div>
                     ${statsHtml}
                     ${issuesHtml}
+                    ${positiveFeedbackHtml}
                     ${assessmentHtml}
                 </div>
             `;

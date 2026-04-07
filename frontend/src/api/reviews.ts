@@ -67,19 +67,24 @@ export interface ReviewScoreResponse {
   updated_date?: string
 }
 
+export interface AIReviewSummary {
+  total_issues: number
+  files_reviewed: number
+  critical_count: number
+}
+
 export interface AIReviewSuggestions {
-  Reviewed_files?: number
-  Critical_issues?: number
-  Total_issues?: number
+  summary?: AIReviewSummary
   issues?: AIReviewIssue[]
+  positive_feedback?: string[]
   overall_assessment?: string
 }
 
 export interface AIReviewIssue {
-  issue_type: string
+  category: string
   severity: 'low' | 'medium' | 'high' | 'critical'
-  file_name: string
-  line_number?: number
+  file: string
+  line?: number
   description: string
   suggestion?: string
   code_snippet?: string
