@@ -1539,10 +1539,7 @@
 
         .ai-overall-assessment {
             background: #eff6ff;
-            padding: 12px;
-            border-radius: 6px;
-            border-left: 4px solid #2563eb;
-            margin-bottom: 15px;
+            border-left: 3px solid #2563eb;
             font-size: 0.9rem;
             line-height: 1.6;
             color: var(--text-primary);
@@ -1550,6 +1547,18 @@
 
         [data-theme="dark"] .ai-overall-assessment {
             background: #1e3a8a;
+            border-left-color: #3b82f6;
+            color: #bfdbfe;
+        }
+
+        .ai-positive-feedback {
+            background: #f0fdf4;
+            border-left: 3px solid #22c55e;
+        }
+
+        [data-theme="dark"] .ai-positive-feedback {
+            background: #064e3b;
+            border-left-color: #6ee7b7;
         }
 
         .ai-issues-list {
@@ -1639,6 +1648,27 @@
             margin-bottom: 8px;
         }
 
+        /* Issue Section - Title and Content Separation */
+        .ai-issue-section {
+            margin-bottom: 15px;
+        }
+
+        .ai-section-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 8px 0;
+            padding-bottom: 6px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .ai-section-content {
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
         /* Severity badges */
         .severity-badge {
             display: inline-block;
@@ -1676,7 +1706,14 @@
             color: var(--text-secondary);
             font-size: 0.9rem;
             line-height: 1.6;
-            margin-bottom: 8px;
+            background: #f8fafc;
+            border-left: 3px solid #3b82f6;
+        }
+
+        [data-theme="dark"] .ai-issue-description {
+            background: #0f172a;
+            border-left-color: #60a5fa;
+            color: #cbd5e1;
         }
 
         .ai-issue-suggestion {
@@ -1686,7 +1723,6 @@
             border-left: 3px solid #22c55e;
             font-size: 0.85rem;
             color: #166534;
-            margin-bottom: 8px;
         }
 
         [data-theme="dark"] .ai-issue-suggestion {
@@ -1704,6 +1740,7 @@
             overflow-x: auto;
             white-space: pre-wrap;
             word-break: break-all;
+            margin: 0;
         }
 
         .diff-viewer {
@@ -3069,21 +3106,21 @@
                                     <span class="severity-badge ${severityBadgeClass}">${severity.toUpperCase()}</span>
                                 </div>
                                 ${issue.description ? `
-                                    <div style="margin-bottom: 10px;">
-                                        <strong style="color: var(--text-primary); font-size: 0.85rem; display: block; margin-bottom: 4px;">📝 Description:</strong>
-                                        <div class="ai-issue-description">${escapeHtml(issue.description)}</div>
+                                    <div class="ai-issue-section">
+                                        <h5 class="ai-section-title">📝 Description</h5>
+                                        <div class="ai-section-content ai-issue-description">${escapeHtml(issue.description)}</div>
                                     </div>
                                 ` : ''}
                                 ${issue.suggestion ? `
-                                    <div class="ai-issue-suggestion">
-                                        <strong style="display: block; margin-bottom: 4px;">💡 Suggestion:</strong>
-                                        ${escapeHtml(issue.suggestion)}
+                                    <div class="ai-issue-section">
+                                        <h5 class="ai-section-title">💡 Suggestion</h5>
+                                        <div class="ai-section-content ai-issue-suggestion">${escapeHtml(issue.suggestion)}</div>
                                     </div>
                                 ` : ''}
                                 ${issue.code_snippet ? `
-                                    <div style="margin-top: 8px;">
-                                        <strong style="color: var(--text-primary); font-size: 0.85rem; display: block; margin-bottom: 4px;">💻 Code Snippet:</strong>
-                                        <div class="ai-issue-code">${escapeHtml(issue.code_snippet)}</div>
+                                    <div class="ai-issue-section">
+                                        <h5 class="ai-section-title">💻 Code Snippet</h5>
+                                        <div class="ai-section-content ai-issue-code">${escapeHtml(issue.code_snippet)}</div>
                                     </div>
                                 ` : ''}
                             </div>
@@ -3094,19 +3131,23 @@
             
             // Render positive feedback
             const positiveFeedbackHtml = positiveFeedback.length > 0 ? `
-                <div class="ai-positive-feedback" style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 12px; border-radius: 6px; margin-top: 15px;">
-                    <strong style="font-size: 1rem; color: var(--text-primary); display: block; margin-bottom: 8px;">✅ Positive Feedback:</strong>
-                    <ul style="margin: 0; padding-left: 20px;">
-                        ${positiveFeedback.map(feedback => `<li style="margin: 4px 0; line-height: 1.6; color: var(--text-primary); font-size: 0.9rem;">${escapeHtml(feedback)}</li>`).join('')}
-                    </ul>
+                <div class="ai-issue-section">
+                    <h5 class="ai-section-title">✅ Positive Feedback</h5>
+                    <div class="ai-section-content ai-positive-feedback">
+                        <ul style="margin: 0; padding-left: 20px;">
+                            ${positiveFeedback.map(feedback => `<li style="margin: 4px 0; line-height: 1.6; font-size: 0.9rem;">${escapeHtml(feedback)}</li>`).join('')}
+                        </ul>
+                    </div>
                 </div>
             ` : '';
             
             // Render overall assessment at the bottom
             const assessmentHtml = overallAssessment ? `
-                <div class="ai-overall-assessment" style="margin-top: 20px;">
-                    <strong style="font-size: 1rem;">📊 Overall Assessment:</strong>
-                    <p style="margin: 8px 0 0 0; line-height: 1.6;">${escapeHtml(overallAssessment)}</p>
+                <div class="ai-issue-section">
+                    <h5 class="ai-section-title">📊 Overall Assessment</h5>
+                    <div class="ai-section-content ai-overall-assessment">
+                        <p style="margin: 0; line-height: 1.6;">${escapeHtml(overallAssessment)}</p>
+                    </div>
                 </div>
             ` : '';
             
