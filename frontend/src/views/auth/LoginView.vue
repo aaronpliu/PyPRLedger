@@ -114,10 +114,18 @@ const handleLogin = async () => {
   color: #303133;
 }
 
+[data-theme='dark'] .login-title {
+  color: #f1f5f9 !important;
+}
+
 .register-link {
   text-align: center;
   margin-top: 16px;
   color: #606266;
+}
+
+[data-theme='dark'] .register-link {
+  color: #cbd5e1 !important;
 }
 
 .register-link a {
