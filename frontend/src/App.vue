@@ -60,6 +60,11 @@ html, body, #app {
   --el-table-border-color: #475569;
 }
 
+/* Fix striped table rows in dark mode */
+[data-theme='dark'] .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background-color: #263347 !important;
+}
+
 [data-theme='dark'] .el-input__wrapper,
 [data-theme='dark'] .el-textarea__inner {
   background-color: #334155;
@@ -73,5 +78,45 @@ html, body, #app {
 
 [data-theme='dark'] .el-dialog {
   background-color: #1e293b;
+}
+
+/* Fix Notification in dark mode */
+[data-theme='dark'] .el-notification {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme='dark'] .el-notification__title {
+  color: #f1f5f9 !important;
+}
+
+[data-theme='dark'] .el-notification__content {
+  color: #cbd5e1 !important;
+}
+
+/* Fix Message in dark mode */
+[data-theme='dark'] .el-message {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme='dark'] .el-message__content {
+  color: #f1f5f9 !important;
+}
+
+/* Fix MessageBox in dark mode */
+[data-theme='dark'] .el-message-box {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+[data-theme='dark'] .el-message-box__title {
+  color: #f1f5f9 !important;
+}
+
+[data-theme='dark'] .el-message-box__content {
+  color: #cbd5e1 !important;
 }
 </style>

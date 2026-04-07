@@ -220,7 +220,7 @@ onMounted(() => {
   padding: 20px;
 }
 
-h1 {
+.dashboard h1 {
   margin-bottom: 24px;
   color: var(--el-text-color-primary);
 }

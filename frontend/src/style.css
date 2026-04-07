@@ -80,6 +80,17 @@ h2 {
   color: var(--text-h);
 }
 
+/* Ensure h1 is visible in dark mode with data-theme attribute */
+[data-theme='dark'] h1,
+[data-theme='dark'] h2 {
+  color: #f3f4f6 !important;
+}
+
+/* Specific fix for Dashboard page */
+[data-theme='dark'] .dashboard h1 {
+  color: #f1f5f9 !important;
+}
+
 h1 {
   font-size: 56px;
   letter-spacing: -1.68px;
