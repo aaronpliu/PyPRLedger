@@ -146,11 +146,16 @@ const renderDiff = () => {
 .code-diff-viewer {
   border-radius: 8px;
   overflow: hidden;
+  height: 100%; /* Fill parent container */
+  display: flex;
+  flex-direction: column;
 }
 
 .diff-container {
   /* Let diff2html handle its own scrolling */
   background: #fafafa;
+  flex: 1; /* Fill available space */
+  overflow: auto; /* Enable scrolling */
 }
 
 [data-theme='dark'] .diff-container {

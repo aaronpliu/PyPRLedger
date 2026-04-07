@@ -497,13 +497,6 @@ onMounted(() => {
   background: #64748b;
 }
 
-.diff-card :deep(.el-card__body),
-.ai-review-card :deep(.el-card__body) {
-  padding: 0;
-  max-height: 600px;
-  overflow-y: auto;
-}
-
 .score-value {
   font-size: 1.2rem;
   font-weight: 700;
