@@ -8,7 +8,6 @@
             <ExportMenu
               :data="reviews"
               :selected-ids="selectedReviews.map(r => r.id)"
-              size="small"
             />
             <el-button @click="loadReviews">
               <el-icon><Refresh /></el-icon>

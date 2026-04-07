@@ -45,19 +45,25 @@ export function exportReviewsToCSV(reviews: Review[], filename?: string) {
   const finalFilename = filename || `reviews_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}.csv`
   
   const columns = [
-    'id',
-    'pr_url',
-    'reviewer_username',
-    'status',
-    'summary',
-    'created_at',
-    'updated_at',
+    'seq#',
+    'pull_request_id',
+    'project_key',
+    'repository_slug',
+    'reviewer',
+    'source_branch',
+    'target_branch',
+    'pull_request_status',
+    'source_filename',
+    'reviewer_comments',
+    'created_date',
+    'updated_date',
   ]
 
-  const data = reviews.map(review => ({
+  const data = reviews.map((review, index) => ({
     ...review,
-    created_at: dayjs(review.created_at).format('YYYY-MM-DD HH:mm:ss'),
-    updated_at: dayjs(review.updated_at).format('YYYY-MM-DD HH:mm:ss'),
+    'seq#': index + 1,
+    created_date: review.created_date ? dayjs(review.created_date).format('YYYY-MM-DD HH:mm:ss') : '',
+    updated_date: review.updated_date ? dayjs(review.updated_date).format('YYYY-MM-DD HH:mm:ss') : '',
   }))
 
   exportToCSV(data, finalFilename, columns)
