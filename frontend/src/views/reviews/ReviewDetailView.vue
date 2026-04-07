@@ -467,8 +467,7 @@ onMounted(() => {
 .analysis-column-body {
   padding: 0;
   flex: 1;
-  overflow-y: auto; /* Enable scrolling */
-  overflow-x: hidden;
+  overflow: auto; /* Enable both vertical and horizontal scrolling */
   min-height: 0;
 }
 

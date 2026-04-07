@@ -6,7 +6,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { Diff2HtmlUI } from 'diff2html/lib/ui/js/diff2html-ui-slim.js'
+import * as Diff2Html from 'diff2html'
 import 'diff2html/bundles/css/diff2html.min.css'
 
 const props = withDefaults(defineProps<{
@@ -123,21 +123,17 @@ const renderDiff = () => {
 
   const configuration = {
     drawFileList: false,
-    fileListToggle: false,
-    fileListStartVisible: false,
-    fileContentToggle: false,
     matching: 'lines' as const,
     outputFormat: currentFormat.value,
-    synchronisedScroll: true, // Enable synchronized scroll for side-by-side
+    synchronisedScroll: true,
     highlight: true,
     renderNothingWhenEmpty: false,
-    stickyFileHeaders: false, // Disable sticky headers to prevent positioning issues
   }
 
   try {
-    const diff2htmlUi = new Diff2HtmlUI(diffContainer.value, processedDiff, configuration)
-    diff2htmlUi.draw()
-    diff2htmlUi.highlightCode()
+    // Use Diff2Html.html() instead of Diff2HtmlUI
+    const html = Diff2Html.html(processedDiff, configuration)
+    diffContainer.value.innerHTML = html
   } catch (error) {
     console.error('Failed to render diff:', error)
     console.error('Diff that caused error:', props.diff.substring(0, 500))
@@ -174,20 +170,6 @@ const renderDiff = () => {
 
 [data-theme='dark'] :deep(.d2h-file-diff) {
   background-color: #0f172a !important;
-}
-
-/* Ensure diff2html doesn't create internal scroll containers */
-:deep(.d2h-file-diff),
-:deep(.d2h-files-diff) {
-  overflow: visible !important;
-  max-height: none !important;
-}
-
-/* Prevent any sticky/fixed positioning in diff2html */
-:deep([class*="line-numbers"]),
-:deep(.d2h-code-line-prefix),
-:deep(.d2h-gutter) {
-  position: static !important;
 }
 
 :deep(.d2h-file-header) {
@@ -292,6 +274,20 @@ const renderDiff = () => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
+}
+
+/* Disable ALL sticky/fixed positioning in diff2html */
+:deep(.d2h-gutter),
+:deep(.d2h-code-linenumber),
+:deep(.d2h-code-line-prefix),
+:deep([class*="line-numbers"]) {
+  position: static !important;
+}
+
+/* Fix side-by-side mode specifically */
+:deep(.d2h-view-side-by-side .d2h-code-side-line),
+:deep(.d2h-view-side-by-side .d2h-code-wrapper) {
+  position: static !important;
 }
 
 /* File list toggle */

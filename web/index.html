@@ -6,7 +6,7 @@
     <title>Pull Request Review System - Material Design</title>
     <!-- Diff2Html for professional code diff display (Local) -->
     <link rel="stylesheet" href="lib/diff2html.min.css">
-    <script src="lib/diff2html-ui.min.js"></script>
+    <script src="lib/diff2html.min.js"></script>
     <!-- Material Design 3 Styles -->
     <link rel="stylesheet" href="css/main.css">
     <!-- I18n Support -->
@@ -1431,43 +1431,23 @@
             grid-template-columns: 1fr 1fr;
         }
 
-        /* Fix side-by-side mode - ensure all elements stay in container */
-        .d2h-view-side-by-side,
-        .d2h-view-side-by-side .d2h-file-diff,
-        .d2h-view-side-by-side .d2h-code-wrapper,
-        .d2h-view-side-by-side .d2h-code-side-line {
-            overflow: visible !important;
-            position: relative !important;
-        }
-
-        /* Fix line numbers in side-by-side mode */
-        .d2h-view-side-by-side .d2h-gutter,
-        .d2h-view-side-by-side .d2h-code-line-prefix,
-        .d2h-view-side-by-side .d2h-code-linenumber,
-        .d2h-view-side-by-side [class*="line-numbers"],
-        .d2h-view-side-by-side .d2h-ins,
-        .d2h-view-side-by-side .d2h-del,
-        .d2h-view-side-by-side .d2h-cntx {
-            position: relative !important;
-            top: auto !important;
-            left: auto !important;
-            right: auto !important;
-        }
-
-        /* Ensure diff2html doesn't create internal scroll containers */
-        .d2h-file-diff,
-        .d2h-files-diff {
-            overflow: visible !important;
-            max-height: none !important;
-        }
-
-        /* Prevent any sticky/fixed positioning in diff2html */
-        [class*="line-numbers"],
-        .d2h-code-line-prefix,
+        /* Disable ALL sticky/fixed positioning in diff2html */
         .d2h-gutter,
-        .d2h-code-linenumber {
+        .d2h-code-linenumber,
+        .d2h-code-line-prefix,
+        [class*="line-numbers"] {
             position: static !important;
         }
+
+        /* Fix side-by-side mode specifically */
+        .d2h-view-side-by-side .d2h-code-side-line {
+            position: static !important;
+        }
+        
+        .d2h-view-side-by-side .d2h-code-wrapper {
+            position: static !important;
+        }
+
 
         .code-diff-toggle {
             font-size: 1.2rem;
@@ -1531,10 +1511,8 @@
         .analysis-column-body {
             padding: 0;
             flex: 1;
-            overflow-y: auto;
-            overflow-x: hidden;
-            overflow-x: hidden;
-            overflow-x: hidden;            min-height: 0;
+            overflow: auto;
+            min-height: 0;
         }
         
         /* Hide scrollbar when content doesn't overflow */
@@ -3203,16 +3181,14 @@
                     outputFormat: currentDiffView, // 'line-by-line' or 'side-by-side'
                     synchronisedScroll: true,
                     highlight: true,
-                    stickyFileHeaders: false, // Disable sticky headers to prevent positioning issues
+                    renderNothingWhenEmpty: false,
                 };
                 
-                // Create diff2html UI instance and render
-                const targetElement = document.createElement('div');
-                const diff2htmlUi = new Diff2HtmlUI(targetElement, normalizedDiff, configuration);
-                diff2htmlUi.draw();
+                // Use Diff2Html.html() instead of Diff2HtmlUI
+                const html = Diff2Html.html(normalizedDiff, configuration);
                 
                 console.log('Diff rendered successfully');
-                return targetElement.innerHTML;
+                return html;
                 
             } catch (error) {
                 console.error('Error rendering diff:', error);
