@@ -37,11 +37,78 @@ const toggleView = (format: 'line-by-line' | 'side-by-side') => {
   renderDiff()
 }
 
+/**
+ * Check if a string is base64 encoded
+ */
+const isBase64 = (str: string): boolean => {
+  if (!str || typeof str !== 'string') return false
+  
+  // Base64 regex pattern
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/
+  
+  // Check if it matches base64 pattern and length is multiple of 4
+  return base64Regex.test(str) && str.length % 4 === 0 && str.length > 0
+}
+
+/**
+ * Decode base64 string to UTF-8
+ */
+const decodeBase64 = (base64Str: string): string => {
+  try {
+    // Browser environment - use atob
+    const binaryString = atob(base64Str)
+    const bytes = new Uint8Array(binaryString.length)
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i)
+    }
+    return new TextDecoder('utf-8').decode(bytes)
+  } catch (error) {
+    console.error('Failed to decode base64:', error)
+    throw error
+  }
+}
+
 const renderDiff = () => {
   if (!diffContainer.value || !props.diff) return
 
   // Clear previous content
   diffContainer.value.innerHTML = ''
+
+  let processedDiff = props.diff
+  
+  // Check if diff is base64 encoded
+  if (isBase64(props.diff)) {
+    console.log('Detected base64 encoded diff, decoding...')
+    try {
+      processedDiff = decodeBase64(props.diff)
+      console.log('Successfully decoded base64 diff')
+    } catch (decodeError) {
+      console.warn('Failed to decode as base64, treating as plain text:', decodeError)
+      // If decoding fails, continue with original diff
+    }
+  }
+  
+  // Normalize diff format - ensure proper line breaks
+  const hasNewlines = processedDiff.includes('\n') || processedDiff.includes('\r')
+  
+  if (!hasNewlines) {
+    console.log('Normalizing diff format (adding newlines)')
+    // More comprehensive normalization
+    processedDiff = processedDiff
+      // Add newline before file headers
+      .replace(/(diff --git)/g, '\n$1')
+      // Add newline before hunk headers (@@ ... @@)
+      .replace(/(@@[^@]*@@)/g, '\n$1')
+      // Add newline before added lines (+ at start, but not +++ )
+      .replace(/(^|\n)(\+[^+])/g, '$1\n$2')
+      // Add newline before removed lines (- at start, but not --- )
+      .replace(/(^|\n)(-[^-])/g, '$1\n$2')
+      // Add newline before context lines (space at start after @@)
+      .replace(/(@@[^@]*@@)( )/g, '$1\n ')
+      .trim()
+    
+    console.log('Normalized diff preview:', processedDiff.substring(0, 300))
+  }
 
   const configuration = {
     drawFileList: true,
@@ -56,11 +123,12 @@ const renderDiff = () => {
   }
 
   try {
-    const diff2htmlUi = new Diff2HtmlUI(diffContainer.value, props.diff, configuration)
+    const diff2htmlUi = new Diff2HtmlUI(diffContainer.value, processedDiff, configuration)
     diff2htmlUi.draw()
     diff2htmlUi.highlightCode()
   } catch (error) {
     console.error('Failed to render diff:', error)
+    console.error('Diff that caused error:', props.diff.substring(0, 500))
     diffContainer.value.innerHTML = '<div class="diff-error">Failed to render code diff</div>'
   }
 }

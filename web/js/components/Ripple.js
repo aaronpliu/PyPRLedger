@@ -57,4 +57,7 @@ if (typeof document !== 'undefined') {
   });
 }
 
-export default RippleEffect;
+// Make available globally for potential external use
+if (typeof window !== 'undefined') {
+  window.RippleEffect = RippleEffect;
+}

@@ -3010,27 +3010,105 @@
         }
 
         /**
+         * Check if a string is base64 encoded
+         */
+        function isBase64(str) {
+            if (!str || typeof str !== 'string') return false;
+            
+            // Base64 regex pattern
+            const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+            
+            // Check if it matches base64 pattern and length is multiple of 4
+            return base64Regex.test(str) && str.length % 4 === 0 && str.length > 0;
+        }
+
+        /**
+         * Decode base64 string to UTF-8
+         */
+        function decodeBase64(base64Str) {
+            try {
+                // Handle both browser and Node.js environments
+                if (typeof atob !== 'undefined') {
+                    // Browser environment
+                    const binaryString = atob(base64Str);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    return new TextDecoder('utf-8').decode(bytes);
+                } else {
+                    // Node.js environment (fallback)
+                    return Buffer.from(base64Str, 'base64').toString('utf-8');
+                }
+            } catch (error) {
+                console.error('Failed to decode base64:', error);
+                throw error;
+            }
+        }
+
+        /**
          * Render code diff using diff2html library
          */
         function renderCodeDiff(diff) {
             if (!diff) return '';
             
             try {
-                // Normalize diff format if needed
                 let normalizedDiff = diff;
-                if (!diff.includes('\n') && !diff.includes('\r')) {
-                    normalizedDiff = diff
-                        .replace(/(@@)/g, '\n$1')
-                        .replace(/(\+[^+])/g, '\n$1')
-                        .replace(/(-[^-])/g, '\n$1')
+                
+                // Check if diff is base64 encoded
+                if (isBase64(diff)) {
+                    console.log('Detected base64 encoded diff, decoding...');
+                    console.log('Base64 length:', diff.length);
+                    try {
+                        normalizedDiff = decodeBase64(diff);
+                        console.log('Successfully decoded base64 diff');
+                        console.log('Decoded diff preview:', normalizedDiff.substring(0, 200));
+                    } catch (decodeError) {
+                        console.warn('Failed to decode as base64, treating as plain text:', decodeError);
+                        // If decoding fails, continue with original diff
+                    }
+                } else {
+                    console.log('Diff is not base64 encoded, using as-is');
+                    console.log('Diff preview:', normalizedDiff.substring(0, 200));
+                }
+                
+                // Validate diff content
+                if (!normalizedDiff || normalizedDiff.trim().length === 0) {
+                    console.warn('Empty diff content after processing');
+                    return '<div style="padding: 20px; color: #6c757d; text-align: center;">No diff content available</div>';
+                }
+                
+                // Normalize diff format - ensure proper line breaks
+                // Check if diff has any newlines
+                const hasNewlines = normalizedDiff.includes('\n') || normalizedDiff.includes('\r');
+                
+                if (!hasNewlines) {
+                    console.log('Normalizing diff format (adding newlines)');
+                    // More comprehensive normalization
+                    normalizedDiff = normalizedDiff
+                        // Add newline before file headers
                         .replace(/(diff --git)/g, '\n$1')
+                        // Add newline before hunk headers (@@ ... @@)
+                        .replace(/(@@[^@]*@@)/g, '\n$1')
+                        // Add newline before added lines (+ at start, but not +++ )
+                        .replace(/(^|\n)(\+[^+])/g, '$1\n$2')
+                        // Add newline before removed lines (- at start, but not --- )
+                        .replace(/(^|\n)(-[^-])/g, '$1\n$2')
+                        // Add newline before context lines (space at start after @@)
+                        .replace(/(@@[^@]*@@)( )/g, '$1\n ')
                         .trim();
+                    
+                    console.log('Normalized diff preview:', normalizedDiff.substring(0, 300));
                 }
                 
                 // Add proper file header if missing
                 if (!normalizedDiff.startsWith('diff --git')) {
+                    console.log('Adding default file header');
                     normalizedDiff = 'diff --git a/file b/file\n' + normalizedDiff;
                 }
+                
+                console.log('Final diff length:', normalizedDiff.length);
+                console.log('Diff starts with:', normalizedDiff.substring(0, 50));
                 
                 // Configure diff2html
                 const configuration = {
@@ -3046,10 +3124,12 @@
                 const diff2htmlUi = new Diff2HtmlUI(targetElement, normalizedDiff, configuration);
                 diff2htmlUi.draw();
                 
+                console.log('Diff rendered successfully');
                 return targetElement.innerHTML;
                 
             } catch (error) {
                 console.error('Error rendering diff:', error);
+                console.error('Diff that caused error:', diff.substring(0, 500));
                 return `<div style="padding: 20px; color: #ef4444; text-align: center;">Failed to render diff: ${escapeHtml(error.message)}</div>`;
             }
         }
