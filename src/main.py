@@ -62,7 +62,7 @@ app = FastAPIOffline(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development - including file:// and null
+    allow_origins=settings.backend_cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

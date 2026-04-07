@@ -123,7 +123,7 @@ const activeMenu = computed(() => route.path)
 const handleCommand = (command: string) => {
   if (command === 'logout') {
     authStore.logout()
-    ElMessage.success(t('auth.login_success'))
+    ElMessage.success(t('auth.logout_success'))
   } else if (command === 'profile') {
     router.push('/profile')
   }

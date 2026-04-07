@@ -33,6 +33,7 @@
     "current_password": "Current Password",
     "new_password": "New Password",
     "login_success": "Login successful",
+    "logout_success": "Logged out successfully",
     "login_failed": "Login failed. Please check your credentials.",
     "register_success": "Registration successful",
     "register_failed": "Registration failed. Please try again.",

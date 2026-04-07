@@ -33,6 +33,7 @@
     "current_password": "当前密码",
     "new_password": "新密码",
     "login_success": "登录成功",
+    "logout_success": "登出成功",
     "login_failed": "登录失败，请检查您的凭据。",
     "register_success": "注册成功",
     "register_failed": "注册失败，请重试。",
