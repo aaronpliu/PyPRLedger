@@ -49,6 +49,19 @@ const showInstallPrompt = ref(false)
 const isOffline = ref(false)
 let deferredPrompt: any = null
 
+// Check if user has dismissed the prompt before
+const hasDismissedPrompt = () => {
+  const dismissed = localStorage.getItem('pwa-prompt-dismissed')
+  if (dismissed) {
+    const dismissedTime = parseInt(dismissed, 10)
+    const now = Date.now()
+    const daysSinceDismissed = (now - dismissedTime) / (1000 * 60 * 60 * 24)
+    // Only show again after 30 days
+    return daysSinceDismissed < 30
+  }
+  return false
+}
+
 onMounted(() => {
   // Listen for beforeinstallprompt event
   window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
@@ -72,6 +85,12 @@ onUnmounted(() => {
 })
 
 const handleBeforeInstallPrompt = (e: Event) => {
+  // Don't show if user has dismissed before
+  if (hasDismissedPrompt()) {
+    console.log('User previously dismissed PWA prompt, not showing again')
+    return
+  }
+  
   e.preventDefault()
   deferredPrompt = e
   showInstallPrompt.value = true
@@ -140,6 +159,8 @@ const installApp = async () => {
 
 const dismissPrompt = () => {
   showInstallPrompt.value = false
+  // Save dismissal time to localStorage
+  localStorage.setItem('pwa-prompt-dismissed', Date.now().toString())
   // Don't clear deferredPrompt - user can still install from browser menu
 }
 </script>

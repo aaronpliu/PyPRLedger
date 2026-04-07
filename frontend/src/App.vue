@@ -1,22 +1,14 @@
 <template>
-  <div id="app" :data-theme="currentTheme">
+  <div id="app">
     <router-view />
     <PWAInstallPrompt />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
 import PWAInstallPrompt from '@/components/common/PWAInstallPrompt.vue'
-
-const currentTheme = ref('light')
-
-onMounted(() => {
-  // Check for saved theme preference or default to light
-  const savedTheme = localStorage.getItem('theme') || 'light'
-  currentTheme.value = savedTheme
-  document.documentElement.setAttribute('data-theme', savedTheme)
-})
+// Theme is now managed globally by useTheme composable
+// The composable auto-initializes on import
 </script>
 
 <style>

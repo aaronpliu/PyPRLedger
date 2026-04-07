@@ -222,7 +222,7 @@ onMounted(() => {
 
 h1 {
   margin-bottom: 24px;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .stats-row {
@@ -256,13 +256,13 @@ h1 {
 .stat-value {
   font-size: 28px;
   font-weight: bold;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin-bottom: 4px;
 }
 
 .stat-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .recent-reviews {
