@@ -18,25 +18,45 @@
       </template>
 
       <!-- Info Banner -->
-      <el-alert
-        title="PR Reviews are submitted by AI system"
-        type="info"
-        :closable="false"
-        show-icon
-        style="margin-bottom: 16px"
-      >
-        <template #default>
-          Pull request reviews are automatically collected from Bitbucket webhooks and AI analysis. 
-          You can view reviews and add/update scores based on your permissions.
-        </template>
-      </el-alert>
+      <div class="info-banner">
+        <div class="banner-icon">
+          <el-icon :size="24"><Cpu /></el-icon>
+        </div>
+        <div class="banner-content">
+          <div class="banner-title">AI-Powered PR Reviews</div>
+          <div class="banner-description">
+            Pull request reviews are automatically collected from Bitbucket webhooks and analyzed by AI. 
+            You can view reviews and add/update scores based on your permissions.
+          </div>
+        </div>
+        <div class="banner-badge">
+          <el-tag type="success" effect="dark" size="small">Automated</el-tag>
+        </div>
+      </div>
 
       <!-- Filters -->
       <FilterBuilder
+        v-show="showAdvancedFilters"
         :available-fields="filterFields"
         @filters-change="handleFiltersChange"
         @apply-preset="handleApplyPreset"
       />
+      
+      <!-- Toggle Advanced Filters Button -->
+      <div style="margin-bottom: 16px;">
+        <el-button 
+          size="small" 
+          @click="showAdvancedFilters = !showAdvancedFilters"
+          :type="showAdvancedFilters ? 'primary' : ''"
+        >
+          <el-icon><Search /></el-icon>
+          {{ showAdvancedFilters ? 'Hide' : 'Show' }} Advanced Filters
+          <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+        </el-button>
+        <el-tag v-if="advancedFilters.length > 0" type="success" style="margin-left: 8px;">
+          {{ advancedFilters.length }} filter{{ advancedFilters.length > 1 ? 's' : '' }} active
+        </el-tag>
+      </div>
 
       <el-form :inline="true" class="filter-form">
         <el-form-item label="Search">
@@ -53,11 +73,48 @@
           </el-input>
         </el-form-item>
         
+        <el-form-item label="PR User">
+          <el-input
+            v-model="prUserFilter"
+            placeholder="Filter by PR user"
+            clearable
+            style="width: 180px"
+            @input="applyFilters"
+          />
+        </el-form-item>
+        
+        <el-form-item label="Reviewer">
+          <el-input
+            v-model="reviewerFilter"
+            placeholder="Filter by reviewer"
+            clearable
+            style="width: 180px"
+            @input="applyFilters"
+          />
+        </el-form-item>
+        
+        <el-form-item label="Scored">
+          <el-select v-model="scoredFilter" placeholder="All" clearable style="width: 120px" @change="applyFilters">
+            <el-option label="Scored" value="yes" />
+            <el-option label="Not Scored" value="no" />
+          </el-select>
+        </el-form-item>
+        
+        <el-form-item label="Severity">
+          <el-select v-model="severityFilter" placeholder="All" clearable style="width: 140px" @change="applyFilters">
+            <el-option label="Critical" value="critical" />
+            <el-option label="High" value="high" />
+            <el-option label="Medium" value="medium" />
+            <el-option label="Low" value="low" />
+          </el-select>
+        </el-form-item>
+        
         <el-form-item label="Status">
           <el-select v-model="statusFilter" placeholder="All Status" clearable style="width: 150px" @change="loadReviews">
-            <el-option label="Completed" value="completed" />
-            <el-option label="In Progress" value="in_progress" />
-            <el-option label="Pending" value="pending" />
+            <el-option label="Open" value="open" />
+            <el-option label="Merged" value="merged" />
+            <el-option label="Closed" value="closed" />
+            <el-option label="Draft" value="draft" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -81,9 +138,10 @@
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="completed">Set to Completed</el-dropdown-item>
-                <el-dropdown-item command="in_progress">Set to In Progress</el-dropdown-item>
-                <el-dropdown-item command="pending">Set to Pending</el-dropdown-item>
+                <el-dropdown-item command="open">Set to Open</el-dropdown-item>
+                <el-dropdown-item command="merged">Set to Merged</el-dropdown-item>
+                <el-dropdown-item command="closed">Set to Closed</el-dropdown-item>
+                <el-dropdown-item command="draft">Set to Draft</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -140,6 +198,16 @@
           </template>
         </el-table-column>
         
+        <!-- PR User -->
+        <el-table-column label="PR User" width="150">
+          <template #default="{ row }">
+            <div>
+              <div>{{ row.pull_request_user_info?.display_name || row.pull_request_user }}</div>
+              <div class="text-secondary" style="font-size: 0.8rem;">{{ row.pull_request_user }}</div>
+            </div>
+          </template>
+        </el-table-column>
+        
         <!-- Reviewer -->
         <el-table-column label="Reviewer" width="150">
           <template #default="{ row }">
@@ -178,6 +246,13 @@
         <el-table-column prop="created_date" label="Created" width="160">
           <template #default="{ row }">
             {{ formatDate(row.created_date || '') }}
+          </template>
+        </el-table-column>
+        
+        <!-- Updated Date -->
+        <el-table-column prop="updated_date" label="Updated" width="160">
+          <template #default="{ row }">
+            {{ formatDate(row.updated_date || '') }}
           </template>
         </el-table-column>
         
@@ -272,7 +347,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh } from '@element-plus/icons-vue'
+import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -288,6 +363,12 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const searchQuery = ref('')
 const statusFilter = ref('')
+const prUserFilter = ref('')
+const reviewerFilter = ref('')
+const scoredFilter = ref('')
+const severityFilter = ref('')
+const advancedFilters = ref<Filter[]>([])
+const showAdvancedFilters = ref(false)
 const tableRef = ref()
 
 // Bulk operation state
@@ -305,10 +386,12 @@ const totalCount = ref(0)
 // Filter fields configuration
 const filterFields = [
   { label: 'PR ID', value: 'pull_request_id' },
+  { label: 'PR User', value: 'pull_request_user' },
   { label: 'Project Key', value: 'project_key' },
   { label: 'Reviewer', value: 'reviewer' },
   { label: 'Status', value: 'pull_request_status' },
   { label: 'Created Date', value: 'created_date' },
+  { label: 'Updated Date', value: 'updated_date' },
   { label: 'Summary', value: 'reviewer_comments' },
 ]
 
@@ -371,9 +454,86 @@ const applyFilters = () => {
     })
   }
   
+  // Apply PR user filter
+  if (prUserFilter.value) {
+    const prUser = prUserFilter.value.toLowerCase()
+    result = result.filter(review => 
+      review.pull_request_user?.toLowerCase().includes(prUser) ||
+      review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
+    )
+  }
+  
+  // Apply reviewer filter
+  if (reviewerFilter.value) {
+    const reviewer = reviewerFilter.value.toLowerCase()
+    result = result.filter(review => 
+      review.reviewer?.toLowerCase().includes(reviewer) ||
+      review.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
+    )
+  }
+  
+  // Apply scored filter
+  if (scoredFilter.value === 'yes') {
+    result = result.filter(review => 
+      review.score_summary && review.score_summary.total_scores > 0
+    )
+  } else if (scoredFilter.value === 'no') {
+    result = result.filter(review => 
+      !review.score_summary || review.score_summary.total_scores === 0
+    )
+  }
+  
+  // Apply severity filter (check AI review issues)
+  if (severityFilter.value) {
+    const targetSeverity = severityFilter.value
+    result = result.filter(review => {
+      // Check if review has AI suggestions with issues
+      if (!review.ai_suggestions?.issues || review.ai_suggestions.issues.length === 0) {
+        return false
+      }
+      // Check if any issue matches the selected severity
+      return review.ai_suggestions.issues.some(
+        issue => issue.severity === targetSeverity
+      )
+    })
+  }
+  
   // Apply status filter
   if (statusFilter.value) {
     result = result.filter(review => review.pull_request_status === statusFilter.value)
+  }
+  
+  // Apply advanced filters
+  if (advancedFilters.value.length > 0) {
+    result = result.filter(review => {
+      // All advanced filters must match (AND logic)
+      return advancedFilters.value.every(filter => {
+        const fieldValue = (review as any)[filter.field]
+        if (!fieldValue) return false
+        
+        const value = String(fieldValue).toLowerCase()
+        const filterValue = filter.value.toLowerCase()
+        
+        switch (filter.operator) {
+          case 'eq':
+            return value === filterValue
+          case 'neq':
+            return value !== filterValue
+          case 'contains':
+            return value.includes(filterValue)
+          case 'gt':
+            return parseFloat(value) > parseFloat(filter.value)
+          case 'lt':
+            return parseFloat(value) < parseFloat(filter.value)
+          case 'in':
+            // Support comma-separated values
+            const values = filter.value.split(',').map(v => v.trim().toLowerCase())
+            return values.includes(value)
+          default:
+            return true
+        }
+      })
+    })
   }
   
   filteredReviews.value = result
@@ -419,10 +579,9 @@ interface Filter {
 }
 
 const handleFiltersChange = (filters: Filter[]) => {
-  console.log('Filters changed:', filters)
-  // TODO: Apply filters to API request
-  // For now, just reload with current pagination
-  loadReviews()
+  console.log('Advanced filters changed:', filters)
+  advancedFilters.value = filters
+  applyFilters()
 }
 
 const handleApplyPreset = (preset: any) => {
@@ -735,5 +894,68 @@ onMounted(() => {
 .score-count {
   font-size: 0.85rem;
   color: var(--el-text-color-secondary);
+}
+
+/* Info Banner Styles */
+.info-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  background: var(--el-color-info-light-9);
+  border: 1px solid var(--el-color-info-light-7);
+  border-radius: 8px;
+  color: var(--el-text-color-primary);
+  transition: all 0.3s ease;
+}
+
+[data-theme="dark"] .info-banner {
+  background: rgba(64, 158, 255, 0.1);
+  border-color: rgba(64, 158, 255, 0.3);
+}
+
+.info-banner:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] .info-banner:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.banner-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: var(--el-color-info);
+  border-radius: 50%;
+  color: white;
+}
+
+.banner-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.banner-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--el-text-color-primary);
+}
+
+.banner-description {
+  font-size: 0.9rem;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
+
+.banner-badge {
+  flex-shrink: 0;
 }
 </style>

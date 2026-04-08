@@ -101,6 +101,14 @@
             {{ row.reviewer_info?.display_name || row.reviewer }}
           </template>
         </el-table-column>
+        <el-table-column label="PR User" width="150">
+          <template #default="{ row }">
+            <div>
+              <div>{{ row.pull_request_user_info?.display_name || row.pull_request_user }}</div>
+              <div class="text-secondary" style="font-size: 0.8rem;">{{ row.pull_request_user }}</div>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="Status" width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.pull_request_status)">
@@ -120,6 +128,11 @@
         <el-table-column label="Created" width="160">
           <template #default="{ row }">
             {{ formatDate(row.created_date) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="Updated" width="160">
+          <template #default="{ row }">
+            {{ formatDate(row.updated_date || '') }}
           </template>
         </el-table-column>
       </el-table>

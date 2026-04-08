@@ -24,14 +24,14 @@
           {{ authStore.user?.last_login_at ? formatDate(authStore.user.last_login_at) : 'Never' }}
         </el-descriptions-item>
         <el-descriptions-item label="Member Since">
-          {{ formatDate(authStore.user?.created_at || '') }}
+          {{ authStore.user?.created_at ? formatDate(authStore.user.created_at) : 'N/A' }}
         </el-descriptions-item>
       </el-descriptions>
 
       <!-- Change Password Section -->
       <el-divider />
       <h3>Change Password</h3>
-      <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="120px">
+      <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="140px" class="password-form">
         <el-form-item label="Current Password" prop="old_password">
           <el-input
             v-model="passwordForm.old_password"
@@ -171,6 +171,32 @@ const handleChangePassword = async () => {
 
 h3 {
   margin: 20px 0 16px 0;
-  color: #303133;
+  color: var(--el-text-color-primary);
+}
+
+/* Fix el-descriptions theme compatibility */
+:deep(.el-descriptions__label) {
+  color: var(--el-text-color-regular);
+  background-color: var(--el-fill-color-light);
+}
+
+:deep(.el-descriptions__content) {
+  color: var(--el-text-color-primary);
+  background-color: var(--el-bg-color);
+}
+
+:deep(.el-descriptions__body) {
+  background-color: transparent;
+}
+
+/* Ensure form label alignment */
+.password-form :deep(.el-form-item__label) {
+  text-align: right;
+  padding-right: 12px;
+}
+
+/* Ensure consistent label width for all password fields */
+.password-form :deep(.el-form-item) {
+  margin-bottom: 20px;
 }
 </style>
