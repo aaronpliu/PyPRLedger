@@ -274,25 +274,15 @@ const renderDiff = () => {
   color: #e2e8f0 !important;
 }
 
-/* Side-by-side layout */
-:deep(.d2h-files-diff.d2h-view-side-by-side .d2h-file-diff) {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
-}
-
-/* Disable ALL sticky/fixed positioning in diff2html */
-:deep(.d2h-gutter),
+/* CRITICAL FIX: Override Diff2Html's absolute positioning */
 :deep(.d2h-code-linenumber),
-:deep(.d2h-code-line-prefix),
-:deep([class*="line-numbers"]) {
-  position: static !important;
+:deep(.d2h-code-side-linenumber) {
+  position: relative !important; /* Change from absolute to relative */
 }
 
-/* Fix side-by-side mode specifically */
-:deep(.d2h-view-side-by-side .d2h-code-side-line),
-:deep(.d2h-view-side-by-side .d2h-code-wrapper) {
-  position: static !important;
+/* Ensure gutter and content are in the same flow */
+:deep(.d2h-gutter) {
+  position: relative !important;
 }
 
 /* File list toggle */

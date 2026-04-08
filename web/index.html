@@ -3052,10 +3052,6 @@
         // Check Diff2Html version on load
         document.addEventListener('DOMContentLoaded', () => {
             console.log('Diff2Html loaded:', typeof Diff2Html !== 'undefined');
-            console.log('Diff2Html version:', Diff2Html.version || 'unknown');
-            if (typeof Diff2HtmlUI !== 'undefined') {
-                console.log('Diff2HtmlUI also available');
-            }
         });
 
         // === Diff View Mode Management ===
