@@ -1425,29 +1425,6 @@
             color: #e2e8f0 !important;
         }
 
-        /* Side-by-side specific */
-        .d2h-files-diff.d2h-view-side-by-side .d2h-file-diff {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-        }
-
-        /* Disable ALL sticky/fixed positioning in diff2html */
-        .d2h-gutter,
-        .d2h-code-linenumber,
-        .d2h-code-line-prefix,
-        [class*="line-numbers"] {
-            position: static !important;
-        }
-
-        /* Fix side-by-side mode specifically */
-        .d2h-view-side-by-side .d2h-code-side-line {
-            position: static !important;
-        }
-        
-        .d2h-view-side-by-side .d2h-code-wrapper {
-            position: static !important;
-        }
-
 
         .code-diff-toggle {
             font-size: 1.2rem;
@@ -1486,7 +1463,7 @@
             overflow: hidden;
             box-shadow: var(--shadow-sm);
             background: white;
-            height: 600px; /* Fixed height for the entire column */
+            height: 800px; /* Increased fixed height for better viewing */
             display: flex;
             flex-direction: column;
         }
@@ -1803,9 +1780,8 @@
         }
 
         .diff-viewer {
-            /* diff2html will handle all styling */
-            overflow: visible; /* Let parent container handle scrolling */
-            padding: 15px; /* Add padding here instead of parent */
+            /* Let diff2html handle all styling and scrolling */
+            padding: 0;
         }
 
         /* Score Display Slider */
@@ -3179,9 +3155,14 @@
                     drawFileList: false,
                     matching: 'lines',
                     outputFormat: currentDiffView, // 'line-by-line' or 'side-by-side'
-                    synchronisedScroll: true,
+                    synchronisedScroll: true,  // Enable synchronized scrolling for side-by-side
                     highlight: true,
                     renderNothingWhenEmpty: false,
+                    matchWordsThreshold: 0.25,
+                    maxLineLengthHighlight: 10000,
+                    maxLineSizeInBlockForComparison: 200,
+                    useOriginalRaw: true,
+                    formatType: 'diff',
                 };
                 
                 // Use Diff2Html.html() instead of Diff2HtmlUI
