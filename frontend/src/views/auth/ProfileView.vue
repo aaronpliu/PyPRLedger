@@ -71,12 +71,14 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/auth'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
 
+const router = useRouter()
 const authStore = useAuthStore()
 const passwordFormRef = ref<FormInstance>()
 const changingPassword = ref(false)
@@ -136,11 +138,13 @@ const handleChangePassword = async () => {
           old_password: passwordForm.old_password,
           new_password: passwordForm.new_password,
         })
-        ElMessage.success('Password changed successfully')
-        // Clear form
-        passwordForm.old_password = ''
-        passwordForm.new_password = ''
-        passwordForm.confirm_password = ''
+        ElMessage.success('Password changed successfully. Please login with your new password.')
+        
+        // Logout and redirect to login page
+        setTimeout(async () => {
+          await authStore.logout()
+          router.push('/login')
+        }, 1500)
       } catch (error) {
         ElMessage.error('Failed to change password')
       } finally {
