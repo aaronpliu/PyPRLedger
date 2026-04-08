@@ -36,6 +36,6 @@ export const authApi = {
 
   // Change password
   changePassword(data: PasswordChangeRequest): Promise<void> {
-    return request.put('/auth/password', data)
+    return request.post('/auth/change-password', data)
   },
 }

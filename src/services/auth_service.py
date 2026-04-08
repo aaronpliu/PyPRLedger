@@ -182,6 +182,8 @@ class AuthService:
             email=auth_user.email,
             is_active=auth_user.is_active,
             bitbucket_user_id=auth_user.user_id,
+            last_login_at=auth_user.last_login_at,
+            created_at=auth_user.created_at,
         )
 
     async def change_password(

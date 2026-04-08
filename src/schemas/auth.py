@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -28,6 +30,8 @@ class UserinfoResponse(BaseModel):
     email: str | None = None
     is_active: bool
     bitbucket_user_id: int | None = None
+    last_login_at: datetime | None = None
+    created_at: datetime
 
 
 class RegisterRequest(BaseModel):
