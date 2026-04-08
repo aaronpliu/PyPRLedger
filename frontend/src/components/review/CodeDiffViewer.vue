@@ -195,4 +195,11 @@ const renderDiff = () => {
 :deep(.d2h-gutter) {
   position: relative !important;
 }
+
+/* Ensure diff2html uses its own theme, not affected by global dark mode */
+:deep(.d2h-wrapper),
+:deep(.d2h-file-header),
+:deep(.d2h-file-wrapper) {
+  background-color: inherit;
+}
 </style>

@@ -8,9 +8,9 @@
       <el-menu
         :default-active="activeMenu"
         router
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#409eff"
+        background-color="var(--el-bg-color)"
+        text-color="var(--el-text-color-regular)"
+        active-text-color="var(--el-color-primary)"
       >
         <el-menu-item index="/admin/users">
           <el-icon><User /></el-icon>
@@ -94,14 +94,14 @@ const handleCommand = (command: string) => {
 }
 
 .admin-sidebar {
-  background: #304156;
+  background: var(--el-bg-color);
   overflow-y: auto;
 }
 
 .sidebar-header {
   padding: 20px;
-  color: white;
-  border-bottom: 1px solid #1f2d3d;
+  color: var(--el-text-color-primary);
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 .sidebar-header h2 {
@@ -110,8 +110,8 @@ const handleCommand = (command: string) => {
 }
 
 .admin-header {
-  background: white;
-  border-bottom: 1px solid #e6e6e6;
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-lighter);
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -128,10 +128,11 @@ const handleCommand = (command: string) => {
   display: flex;
   align-items: center;
   gap: 4px;
+  color: var(--el-text-color-primary);
 }
 
 .admin-main {
-  background: #f0f2f5;
+  background: var(--el-bg-color-page);
   padding: 20px;
 }
 </style>

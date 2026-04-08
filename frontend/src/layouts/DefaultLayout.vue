@@ -10,9 +10,9 @@
               mode="horizontal"
               :default-active="activeMenu"
               router
-              background-color="#409eff"
-              text-color="#fff"
-              active-text-color="#ffd04b"
+              background-color="var(--el-color-primary)"
+              text-color="var(--el-menu-text-color, #fff)"
+              active-text-color="var(--el-menu-active-color, #ffd04b)"
               style="border: none"
               aria-label="Main menu"
             >
@@ -141,7 +141,7 @@ const handleLanguageChange = (lang: string) => {
 }
 
 .layout-header {
-  background: #409eff;
+  background: var(--el-color-primary);
   color: white;
   padding: 0 20px;
 }
@@ -199,6 +199,6 @@ const handleLanguageChange = (lang: string) => {
 
 .layout-main {
   padding: 20px;
-  background: #f5f7fa;
+  background: var(--el-bg-color-page);
 }
 </style>

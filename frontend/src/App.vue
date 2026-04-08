@@ -35,6 +35,8 @@ html, body, #app {
   --el-border-color-lighter: #475569;
   --el-fill-color: #334155;
   --el-fill-color-light: #1e293b;
+  --el-menu-text-color: #cbd5e1;
+  --el-menu-active-color: #409eff;
 }
 
 [data-theme='dark'] body {
