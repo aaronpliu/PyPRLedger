@@ -3187,20 +3187,31 @@
                 console.log('Final diff length:', normalizedDiff.length);
                 console.log('Diff starts with:', normalizedDiff.substring(0, 50));
                 
-                // Configure diff2html
+                // Configure diff2html with built-in features
                 const configuration = {
-                    drawFileList: false,
+                    drawFileList: true,              // Enable file list with show/hide toggle
+                    fileListToggle: true,            // Enable file list toggle buttons
+                    fileListStartVisible: true,      // Start with file list visible
+                    fileContentToggle: true,         // Enable "viewed" checkbox to collapse/expand files
                     matching: 'lines',
-                    outputFormat: currentDiffView, // 'line-by-line' or 'side-by-side'
+                    outputFormat: currentDiffView,   // 'line-by-line' or 'side-by-side'
                     synchronisedScroll: true,
                     highlight: true,
                     renderNothingWhenEmpty: false,
+                    stickyFileHeaders: true,         // Keep file headers visible when scrolling
                 };
                 
-                // Use Diff2Html.html() to generate HTML string
-                const html = Diff2Html.html(normalizedDiff, configuration);
+                // Use Diff2HtmlUI to enable interactive features (show/hide, viewed checkbox)
+                const containerId = `diff-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                const tempDiv = document.createElement('div');
+                tempDiv.id = containerId;
+                
+                // Create UI instance and render
+                const diff2htmlUi = new Diff2HtmlUI(tempDiv, normalizedDiff, configuration);
+                diff2htmlUi.draw();
+                
                 console.log('Diff rendered with format:', currentDiffView);
-                return html;
+                return tempDiv.innerHTML;
                 
             } catch (error) {
                 console.error('Error rendering diff:', error);

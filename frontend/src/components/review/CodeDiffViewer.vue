@@ -5,8 +5,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
-import * as Diff2Html from 'diff2html'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { Diff2HtmlUI } from 'diff2html/lib/ui/js/diff2html-ui-base.js'
+import hljs from 'highlight.js'
 import 'diff2html/bundles/css/diff2html.min.css'
 
 const props = withDefaults(defineProps<{
@@ -22,9 +23,28 @@ const emit = defineEmits<{
 
 const diffContainer = ref<HTMLElement | null>(null)
 const currentFormat = ref(props.outputFormat)
+let diff2htmlUi: any = null
+let processedDiffCache: string = ''
 
 onMounted(() => {
   renderDiff()
+  
+  // Watch for theme changes and re-render
+  const observer = new MutationObserver(() => {
+    // Re-render with new theme
+    if (processedDiffCache) {
+      renderDiff()
+    }
+  })
+  
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme']
+  })
+  
+  onUnmounted(() => {
+    observer.disconnect()
+  })
 })
 
 // Watch for prop changes from parent
@@ -96,6 +116,9 @@ const renderDiff = () => {
     }
   }
   
+  // Cache the processed diff for theme switching
+  processedDiffCache = processedDiff
+  
   // Normalize diff format - ensure proper line breaks
   const hasNewlines = processedDiff.includes('\n') || processedDiff.includes('\r')
   
@@ -121,19 +144,26 @@ const renderDiff = () => {
     console.log('Normalized diff preview:', processedDiff.substring(0, 300))
   }
 
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+  
   const configuration = {
-    drawFileList: false,
+    drawFileList: true,
+    fileListToggle: true,
+    fileListStartVisible: true,
+    fileContentToggle: true,
     matching: 'lines' as const,
     outputFormat: currentFormat.value,
     synchronisedScroll: true,
     highlight: true,
     renderNothingWhenEmpty: false,
+    stickyFileHeaders: true,
+    colorScheme: isDark ? ('dark' as const) : ('light' as const),
   }
 
   try {
-    // Use Diff2Html.html() instead of Diff2HtmlUI
-    const html = Diff2Html.html(processedDiff, configuration)
-    diffContainer.value.innerHTML = html
+    diffContainer.value.innerHTML = ''
+    diff2htmlUi = new Diff2HtmlUI(diffContainer.value, processedDiff, configuration, hljs)
+    diff2htmlUi.draw()
   } catch (error) {
     console.error('Failed to render diff:', error)
     console.error('Diff that caused error:', props.diff.substring(0, 500))
@@ -146,168 +176,23 @@ const renderDiff = () => {
 .code-diff-viewer {
   border-radius: 8px;
   overflow: hidden;
-  height: 100%; /* Fill parent container */
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
 
 .diff-container {
-  /* Let diff2html handle its own scrolling */
-  background: #fafafa;
-  flex: 1; /* Fill available space */
-  overflow: auto; /* Enable scrolling */
+  flex: 1;
+  overflow: auto;
 }
 
-[data-theme='dark'] .diff-container {
-  background: #0f172a;
-}
-
-/* Diff2Html Custom Styles - Match web/index.html exactly */
-:deep(.d2h-wrapper) {
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
-}
-
-/* Dark theme for entire diff2html container */
-[data-theme='dark'] :deep(.d2h-wrapper) {
-  background-color: #0f172a !important;
-  color: #e2e8f0 !important;
-}
-
-[data-theme='dark'] :deep(.d2h-file-diff) {
-  background-color: #0f172a !important;
-}
-
-:deep(.d2h-file-header) {
-  background: #f8fafc !important;
-  border-bottom: 2px solid var(--el-border-color) !important;
-  padding: 12px 16px !important;
-}
-
-[data-theme='dark'] :deep(.d2h-file-header) {
-  background: #1e293b !important;
-  border-bottom-color: #334155 !important;
-}
-
-:deep(.d2h-file-name) {
-  color: var(--el-text-color-primary) !important;
-  font-weight: 700 !important;
-  font-size: 0.95rem !important;
-}
-
-:deep(.d2h-file-stats) {
-  color: var(--el-text-color-secondary) !important;
-  font-size: 0.85rem !important;
-}
-
-/* Line numbers */
-:deep(.d2h-code-linenumber) {
-  color: #94a3b8 !important;
-  background-color: #f8fafc !important;
-  border-right: 1px solid var(--el-border-color) !important;
-  font-size: 0.8rem !important;
-  padding: 0 8px !important;
-}
-
-[data-theme='dark'] :deep(.d2h-code-linenumber) {
-  background-color: #0f172a !important;
-  border-right-color: #334155 !important;
-}
-
-/* Added lines */
-:deep(.d2h-ins) {
-  background-color: #dcfce7 !important;
-}
-
-[data-theme='dark'] :deep(.d2h-ins) {
-  background-color: #064e3b !important;
-}
-
-:deep(.d2h-ins .d2h-code-line-ctn) {
-  color: #166534 !important;
-}
-
-[data-theme='dark'] :deep(.d2h-ins .d2h-code-line-ctn) {
-  color: #6ee7b7 !important;
-}
-
-/* Deleted lines */
-:deep(.d2h-del) {
-  background-color: #fee2e2 !important;
-}
-
-[data-theme='dark'] :deep(.d2h-del) {
-  background-color: #7f1d1d !important;
-}
-
-:deep(.d2h-del .d2h-code-line-ctn) {
-  color: #991b1b !important;
-}
-
-[data-theme='dark'] :deep(.d2h-del .d2h-code-line-ctn) {
-  color: #fecaca !important;
-}
-
-/* Context lines */
-:deep(.d2h-cntx .d2h-code-line-ctn) {
-  color: var(--el-text-color-secondary) !important;
-}
-
-[data-theme='dark'] :deep(.d2h-cntx .d2h-code-line-ctn) {
-  color: #94a3b8 !important;
-}
-
-/* Dark theme for code content */
-[data-theme='dark'] :deep(.d2h-code-line-ctn) {
-  color: #e2e8f0 !important;
-}
-
-/* Code content */
-:deep(.d2h-code-line-ctn) {
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace !important;
-  font-size: 0.85rem !important;
-  line-height: 1.6 !important;
-  padding: 2px 8px !important;
-}
-
-/* Dark theme for code content */
-[data-theme='dark'] :deep(.d2h-code-line-ctn) {
-  color: #e2e8f0 !important;
-}
-
-/* CRITICAL FIX: Override Diff2Html's absolute positioning */
+/* Fix line number positioning */
 :deep(.d2h-code-linenumber),
 :deep(.d2h-code-side-linenumber) {
-  position: relative !important; /* Change from absolute to relative */
-}
-
-/* Ensure gutter and content are in the same flow */
-:deep(.d2h-gutter) {
   position: relative !important;
 }
 
-/* File list toggle */
-:deep(.d2h-file-list-wrapper) {
-  background: #f8fafc !important;
-  border-bottom: 2px solid var(--el-border-color) !important;
-}
-
-[data-theme='dark'] :deep(.d2h-file-list-wrapper) {
-  background: #1e293b !important;
-  border-bottom-color: #334155 !important;
-}
-
-:deep(.d2h-file-list) {
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-:deep(.d2h-file-switch) {
-  cursor: pointer;
-  padding: 8px 12px !important;
-  transition: background 0.2s ease;
-}
-
-:deep(.d2h-file-switch:hover) {
-  background: rgba(102, 126, 234, 0.1) !important;
+:deep(.d2h-gutter) {
+  position: relative !important;
 }
 </style>
