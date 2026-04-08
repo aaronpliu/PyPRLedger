@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pull Request Review System - Material Design</title>
     <!-- Diff2Html for professional code diff display (Local) -->
-    <link rel="stylesheet" href="lib/diff2html.min.css">
-    <script src="lib/diff2html.min.js"></script>
+    <link rel="stylesheet" href="lib/diff2html.min.css?v=3.4.48">
+    <script src="lib/diff2html.min.js?v=3.4.48"></script>
+    <script src="lib/diff2html-ui.min.js?v=3.4.48"></script>
     <!-- Material Design 3 Styles -->
     <link rel="stylesheet" href="css/main.css">
     <!-- I18n Support -->
@@ -1334,13 +1335,7 @@
             background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
         }
 
-        /* Diff2Html Custom Styles */
-        .d2h-wrapper {
-            /* Let parent container handle scrolling */
-            max-height: none !important;
-            overflow: visible !important;
-        }
-
+        /* Diff2Html Custom Styles - Minimal overrides for theming only */
         .d2h-file-header {
             background: #f8fafc !important;
             border-bottom: 2px solid var(--border-color) !important;
@@ -1424,6 +1419,17 @@
         [data-theme="dark"] .d2h-code-line-ctn {
             color: #e2e8f0 !important;
         }
+        
+        /* CRITICAL FIX: Override Diff2Html's absolute positioning */
+        .d2h-code-linenumber,
+        .d2h-code-side-linenumber {
+            position: relative !important; /* Change from absolute to relative */
+        }
+        
+        /* Ensure gutter and content are in the same flow */
+        .d2h-gutter {
+            position: relative !important;
+        }
 
 
         .code-diff-toggle {
@@ -1488,13 +1494,14 @@
         .analysis-column-body {
             padding: 0;
             flex: 1;
-            overflow: auto;
+            overflow: auto; /* Enable scrolling for content */
             min-height: 0;
         }
         
-        /* Hide scrollbar when content doesn't overflow */
+        /* Custom scrollbar for analysis columns */
         .analysis-column-body::-webkit-scrollbar {
             width: 8px;
+            height: 8px;
         }
         
         .analysis-column-body::-webkit-scrollbar-track {
@@ -1780,8 +1787,33 @@
         }
 
         .diff-viewer {
-            /* Let diff2html handle all styling and scrolling */
-            padding: 0;
+            /* Let diff2html completely control its own layout */
+            width: 100%;
+        }
+        
+        /* Ensure diff2html containers don't break layout */
+        .diff-viewer .d2h-wrapper {
+            width: 100%;
+        }
+        
+        .diff-viewer .d2h-files-diff {
+            width: 100%;
+        }
+        
+        /* Side-by-side specific fixes */
+        .diff-viewer .d2h-view-side-by-side {
+            display: flex;
+            width: 100%;
+        }
+        
+        .diff-viewer .d2h-view-side-by-side .d2h-file-diff {
+            display: flex;
+            width: 100%;
+        }
+        
+        .diff-viewer .d2h-view-side-by-side .d2h-code-side-wrapper {
+            width: 50%;
+            min-width: 0; /* Allow shrinking */
         }
 
         /* Score Display Slider */
@@ -3017,6 +3049,15 @@
             section.classList.toggle('collapsed');
         }
 
+        // Check Diff2Html version on load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Diff2Html loaded:', typeof Diff2Html !== 'undefined');
+            console.log('Diff2Html version:', Diff2Html.version || 'unknown');
+            if (typeof Diff2HtmlUI !== 'undefined') {
+                console.log('Diff2HtmlUI also available');
+            }
+        });
+
         // === Diff View Mode Management ===
         let currentDiffView = localStorage.getItem('diffViewMode') || 'line-by-line';
 
@@ -3155,20 +3196,14 @@
                     drawFileList: false,
                     matching: 'lines',
                     outputFormat: currentDiffView, // 'line-by-line' or 'side-by-side'
-                    synchronisedScroll: true,  // Enable synchronized scrolling for side-by-side
+                    synchronisedScroll: true,
                     highlight: true,
                     renderNothingWhenEmpty: false,
-                    matchWordsThreshold: 0.25,
-                    maxLineLengthHighlight: 10000,
-                    maxLineSizeInBlockForComparison: 200,
-                    useOriginalRaw: true,
-                    formatType: 'diff',
                 };
                 
-                // Use Diff2Html.html() instead of Diff2HtmlUI
+                // Use Diff2Html.html() to generate HTML string
                 const html = Diff2Html.html(normalizedDiff, configuration);
-                
-                console.log('Diff rendered successfully');
+                console.log('Diff rendered with format:', currentDiffView);
                 return html;
                 
             } catch (error) {
