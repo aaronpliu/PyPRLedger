@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="lib/diff2html.min.css?v=3.4.48">
     <script src="lib/diff2html.min.js?v=3.4.48"></script>
     <script src="lib/diff2html-ui.min.js?v=3.4.48"></script>
+    <!-- Highlight.js for syntax highlighting -->
+    <script src="lib/highlight.min.js"></script>
     <!-- Material Design 3 Styles -->
     <link rel="stylesheet" href="css/main.css">
     <!-- I18n Support -->
@@ -2178,6 +2180,11 @@
             
             // Close menu after selection
             closeThemeMenu();
+            
+            // Re-render all diffs with new theme
+            setTimeout(() => {
+                rerenderAllDiffs();
+            }, 100);
         }
 
         function updateThemeMenuActiveState(themeName) {
@@ -3188,17 +3195,19 @@
                 console.log('Diff starts with:', normalizedDiff.substring(0, 50));
                 
                 // Configure diff2html with built-in features
+                const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
                 const configuration = {
-                    drawFileList: true,              // Enable file list with show/hide toggle
-                    fileListToggle: true,            // Enable file list toggle buttons
-                    fileListStartVisible: true,      // Start with file list visible
-                    fileContentToggle: true,         // Enable "viewed" checkbox to collapse/expand files
+                    drawFileList: true,
+                    fileListToggle: true,
+                    fileListStartVisible: true,
+                    fileContentToggle: true,
                     matching: 'lines',
-                    outputFormat: currentDiffView,   // 'line-by-line' or 'side-by-side'
+                    outputFormat: currentDiffView,
                     synchronisedScroll: true,
                     highlight: true,
                     renderNothingWhenEmpty: false,
-                    stickyFileHeaders: true,         // Keep file headers visible when scrolling
+                    stickyFileHeaders: true,
+                    colorScheme: isDark ? 'dark' : 'light',
                 };
                 
                 // Use Diff2HtmlUI to enable interactive features (show/hide, viewed checkbox)
@@ -3206,8 +3215,8 @@
                 const tempDiv = document.createElement('div');
                 tempDiv.id = containerId;
                 
-                // Create UI instance and render
-                const diff2htmlUi = new Diff2HtmlUI(tempDiv, normalizedDiff, configuration);
+                // Create UI instance and render with highlight.js
+                const diff2htmlUi = new Diff2HtmlUI(tempDiv, normalizedDiff, configuration, hljs);
                 diff2htmlUi.draw();
                 
                 console.log('Diff rendered with format:', currentDiffView);
