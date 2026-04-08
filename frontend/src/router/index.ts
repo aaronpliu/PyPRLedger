@@ -99,13 +99,12 @@ const router = createRouter({
 })
 
 // Navigation guard
-router.beforeEach((to, _from, next) => {
+router.beforeEach((to, _from) => {
   const authStore = useAuthStore()
 
   // Check if route requires authentication
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next('/login')
-    return
+    return '/login'
   }
 
   // Check if route requires admin
@@ -113,18 +112,17 @@ router.beforeEach((to, _from, next) => {
     // TODO: Implement admin check based on user roles
     // For now, allow access if authenticated
     if (!authStore.isAuthenticated) {
-      next('/login')
-      return
+      return '/login'
     }
   }
 
   // Redirect to dashboard if already logged in and trying to access auth pages
   if ((to.path === '/login' || to.path === '/register') && authStore.isAuthenticated) {
-    next('/')
-    return
+    return '/'
   }
 
-  next()
+  // Return true to proceed normally
+  return true
 })
 
 export default router
