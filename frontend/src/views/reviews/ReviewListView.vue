@@ -874,7 +874,7 @@ const closeProgressDialog = () => {
 watch(showAssignDialog, async (visible) => {
   if (visible) {
     try {
-      const response = await usersApi.getReviewers(1000)
+      const response = await usersApi.getReviewers(100)
       reviewers.value = response.items
     } catch (error) {
       ElMessage.error('Failed to load reviewers')

@@ -234,7 +234,11 @@ async def get_reviewers(
             page=1,
             page_size=limit,
         )
-    except Exception:
+    except Exception as e:
+        import traceback
+
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to get reviewers: {str(e)}\n{error_traceback}")
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/users/reviewers"
         )
