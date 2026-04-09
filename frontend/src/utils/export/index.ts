@@ -47,13 +47,11 @@ export function exportReviewsToCSV(reviews: Review[], filename?: string) {
   const columns = [
     'seq#',
     'pull_request_id',
-    'project_key',
-    'repository_slug',
+    'project_repo',
+    'pr_user',
     'reviewer',
-    'source_branch',
-    'target_branch',
     'pull_request_status',
-    'source_filename',
+    'scores',
     'reviewer_comments',
     'created_date',
     'updated_date',
@@ -62,6 +60,12 @@ export function exportReviewsToCSV(reviews: Review[], filename?: string) {
   const data = reviews.map((review, index) => ({
     ...review,
     'seq#': index + 1,
+    'project_repo': `${review.project_key} / ${review.repository_slug}`,
+    'pr_user': review.pull_request_user_info?.display_name || review.pull_request_user,
+    'reviewer': review.reviewer_info?.display_name || review.reviewer,
+    'scores': review.score_summary && review.score_summary.total_scores > 0
+      ? `${review.score_summary.average_score?.toFixed(1)} (${review.score_summary.total_scores})`
+      : 'No scores',
     created_date: review.created_date ? dayjs(review.created_date).format('YYYY-MM-DD HH:mm:ss') : '',
     updated_date: review.updated_date ? dayjs(review.updated_date).format('YYYY-MM-DD HH:mm:ss') : '',
   }))
