@@ -917,20 +917,23 @@ class ReviewService:
         try:
             score_service = ReviewScoreService()
 
-            # Get ALL scores for this PR, including both PR-level and file-level scores
-            # This provides complete scoring information for the review
+            # Get scores matching the review's level (PR-level or file-level)
+            # If review is PR-level (source_filename is None), get only PR-level scores
+            # If review is file-level, get only scores for that specific file
+            review_source_filename = review_dict.get("source_filename")
+
             scores = await score_service.get_scores_by_review_target(
                 pull_request_id=review_dict.get("pull_request_id"),
                 project_key=review_dict.get("project_key"),
                 repository_slug=review_dict.get("repository_slug"),
-                source_filename=None,  # Pass None to get ALL scores (both PR-level and file-level)
+                source_filename=review_source_filename,  # Match review's level
                 db=db,
                 use_cache=True,
             )
 
             logger.info(
                 f"Loaded {len(scores)} score(s) for review {review_dict.get('pull_request_id')} "
-                f"(includes both PR-level and file-level scores)"
+                f"(level: {'file' if review_source_filename else 'PR'})"
             )
 
             # Calculate and add score summary with simplified score list

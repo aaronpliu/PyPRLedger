@@ -63,7 +63,7 @@ class Settings(BaseSettings):
 
     # CORS configuration
     BACKEND_CORS_ORIGINS: str = Field(
-        default="*",  # Allow all origins for development - restrict in production
+        default="http://localhost:63342,http://127.0.0.1:63342",  # Allow JetBrains IDE preview and development origins
     )
 
     @computed_field
@@ -75,7 +75,8 @@ class Settings(BaseSettings):
             if self.BACKEND_CORS_ORIGINS == "*":
                 return ["*"]
             return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",")]
-        return self.BACKEND_CORS_ORIGINS
+        # Fallback: should not happen given the field type, but handle gracefully
+        return []
 
     # API rate limiting configuration
     RATE_LIMIT_ENABLED: bool = Field(default=True)

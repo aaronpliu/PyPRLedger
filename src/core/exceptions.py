@@ -277,15 +277,35 @@ class UserAlreadyExistsException(ResourceAlreadyExistsException):
 
     def __init__(self, username: str | None = None, email: str | None = None):
         if username:
-            message = f"User with username '{username}' already exists"
+            message = f"Username '{username}' already exists"
             detail = {"username": username}
         elif email:
-            message = f"User with email '{email}' already exists"
+            message = f"Email '{email}' already registered"
             detail = {"email": email}
         else:
             message = "User already exists"
             detail = None
         super().__init__(message=message, detail=detail)
+
+
+class InvalidCredentialsException(UnauthorizedException):
+    """Invalid login credentials"""
+
+    def __init__(self):
+        super().__init__(
+            message="Invalid username or password",
+            detail={"error": "invalid_credentials"},
+        )
+
+
+class UserInactiveException(UnauthorizedException):
+    """User account is inactive"""
+
+    def __init__(self, username: str):
+        super().__init__(
+            message=f"User account '{username}' is inactive",
+            detail={"username": username, "error": "account_inactive"},
+        )
 
 
 class ProjectNotFoundException(NotFoundException):
@@ -328,13 +348,6 @@ class PullRequestNotFoundException(NotFoundException):
             message=f"Pull request with ID {pull_request_id} not found",
             detail={"pull_request_id": pull_request_id},
         )
-
-
-class InvalidCredentialsException(UnauthorizedException):
-    """Invalid credentials"""
-
-    def __init__(self, message: str = "Invalid credentials"):
-        super().__init__(message=message)
 
 
 class TokenExpiredException(UnauthorizedException):

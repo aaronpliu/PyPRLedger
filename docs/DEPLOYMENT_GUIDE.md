@@ -38,28 +38,44 @@ git clone <repository-url>
 cd PRLedger
 ```
 
-### 2. Create Virtual Environment
+### 2. Install uv
 
 ```bash
-python3.12 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-### 3. Install Dependencies
+### 3. Create Virtual Environment
 
 ```bash
-pip install --upgrade pip
-pip install -r requirements/dev.txt
+uv venv
 ```
 
-### 4. Configure Environment
+### 4. Activate Virtual Environment
+
+```bash
+source .venv/bin/activate  # On macOS/Linux
+# Or on Windows:
+# .venv\Scripts\activate
+```
+
+### 5. Install Dependencies
+
+```bash
+uv sync --all-extras
+```
+
+### 6. Configure Environment
 
 ```bash
 cp .env.example .env
 # Edit .env file with your configuration
 ```
 
-### 5. Setup Database
+### 7. Setup Database
 
 If using MySQL locally:
 
@@ -69,23 +85,23 @@ CREATE DATABASE code_review CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 EXIT;
 ```
 
-### 6. Run Migrations
+### 8. Run Migrations
 
 ```bash
 alembic upgrade head
 ```
 
-### 7. Start Application
+### 9. Start Application
 
 ```bash
 # Development mode with auto-reload
-uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
 # Production mode
-uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
+uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-### 8. Access Application
+### 10. Access Application
 
 - **API**: http://localhost:8000
 - **Documentation**: http://localhost:8000/api/docs

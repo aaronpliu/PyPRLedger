@@ -9,6 +9,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.0] - 2026-04-08
+
+### Added
+- **Vue.js Frontend Application** - Complete rewrite using modern Vue 3 framework
+  - Full TypeScript support with Vue 3 Composition API
+  - Element Plus UI component library integration
+  - Vue Router for SPA navigation
+  - Pinia state management
+  - Internationalization (i18n) support
+  - Responsive design for all screen sizes
+  
+- **Enhanced Code Diff Viewer** - Professional diff visualization with Diff2Html
+  - Side-by-side and unified view modes
+  - Syntax highlighting for multiple languages
+  - Line number synchronization
+  - Sticky line numbers during horizontal scroll
+  - Dark theme support
+  
+- **Advanced Review Management**
+  - Multi-reviewer score tracking
+  - Real-time review status updates
+  - Comprehensive filtering and search
+  - Export capabilities (PDF, Excel)
+  
+- **Analytics Dashboard**
+  - Interactive charts with ECharts
+  - Score distribution analysis
+  - Review trends over time
+  - Performance metrics
+
+### Changed
+- **Frontend Architecture** - Migrated from vanilla JS to Vue 3
+  - Modern build system with Vite 7.x
+  - Component-based architecture
+  - Type-safe development with TypeScript
+  - Improved code organization and maintainability
+  
+- **API Integration** - Enhanced backend communication
+  - Axios for HTTP requests with interceptors
+  - Automatic token refresh
+  - Better error handling and user feedback
+  - WebSocket support for real-time updates
+
+### Fixed
+- **Diff Rendering Issues** - Resolved line number scrolling problems
+  - Fixed `position: absolute` causing line numbers to detach
+  - Implemented `position: relative` for proper document flow
+  - Synchronized scrolling in side-by-side mode
+  
+- **Router Deprecation Warnings** - Updated to Vue Router 5 best practices
+  - Replaced deprecated `next()` calls with return values
+  - Cleaner navigation guard implementation
+
+### Removed
+- **PWA Support** - Removed vite-plugin-pwa and related configurations
+  - Simplified build configuration
+  - Reduced bundle size
+  - Focused on core functionality
+
+### Technical Details
+- **Backend Version**: 1.5.0 (FastAPI service)
+- **Frontend Version**: 1.0.0 (Vue 3 application)
+- **Build Tools**: Vite 7.3.2, TypeScript 6.0.2
+- **UI Framework**: Element Plus 2.13.6
+- **State Management**: Pinia 3.0.4
+- **Routing**: Vue Router 5.0.4
+
+---
+
 ## [1.4.0] - 2026-04-06
 
 ### Added

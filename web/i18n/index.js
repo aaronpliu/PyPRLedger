@@ -39,7 +39,8 @@ class I18nManager {
   getStoredLocale() {
     try {
       const stored = localStorage.getItem('locale');
-      if (stored && this.supportedLocales.includes(stored)) {
+      // Ensure stored value is a string before checking
+      if (stored && typeof stored === 'string' && this.supportedLocales.includes(stored)) {
         return stored;
       }
     } catch (e) {
@@ -162,6 +163,12 @@ class I18nManager {
    * Change the current locale without reloading the page
    */
   setLocale(locale) {
+    // Ensure locale is a string
+    if (typeof locale !== 'string') {
+      console.warn(`[I18n] Invalid locale type: ${typeof locale}`);
+      return;
+    }
+    
     if (!this.supportedLocales.includes(locale)) {
       console.warn(`[I18n] Unsupported locale: ${locale}`);
       return;

@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pull Request Review System - Material Design</title>
     <!-- Diff2Html for professional code diff display (Local) -->
-    <link rel="stylesheet" href="lib/diff2html.min.css">
-    <script src="lib/diff2html-ui.min.js"></script>
+    <link rel="stylesheet" href="lib/diff2html.min.css?v=3.4.48">
+    <script src="lib/diff2html.min.js?v=3.4.48"></script>
+    <script src="lib/diff2html-ui.min.js?v=3.4.48"></script>
+    <!-- Highlight.js for syntax highlighting -->
+    <script src="lib/highlight.min.js"></script>
     <!-- Material Design 3 Styles -->
     <link rel="stylesheet" href="css/main.css">
     <!-- I18n Support -->
@@ -1334,12 +1337,7 @@
             background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
         }
 
-        /* Diff2Html Custom Styles */
-        .d2h-wrapper {
-            max-height: 600px;
-            overflow: auto;
-        }
-
+        /* Diff2Html Custom Styles - Minimal overrides for theming only */
         .d2h-file-header {
             background: #f8fafc !important;
             border-bottom: 2px solid var(--border-color) !important;
@@ -1410,17 +1408,31 @@
             color: var(--text-secondary) !important;
         }
 
+        [data-theme="dark"] .d2h-cntx .d2h-code-line-ctn {
+            color: #94a3b8 !important;
+        }
+
         /* Code content */
         .d2h-code-line-ctn {
             font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace !important;
             font-size: 0.85rem !important;
         }
 
-        /* Side-by-side specific */
-        .d2h-files-diff.d2h-view-side-by-side .d2h-file-diff {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+        [data-theme="dark"] .d2h-code-line-ctn {
+            color: #e2e8f0 !important;
         }
+        
+        /* CRITICAL FIX: Override Diff2Html's absolute positioning */
+        .d2h-code-linenumber,
+        .d2h-code-side-linenumber {
+            position: relative !important; /* Change from absolute to relative */
+        }
+        
+        /* Ensure gutter and content are in the same flow */
+        .d2h-gutter {
+            position: relative !important;
+        }
+
 
         .code-diff-toggle {
             font-size: 1.2rem;
@@ -1433,7 +1445,7 @@
 
         .code-diff-content {
             padding: 0;
-            overflow-x: auto;
+            overflow: visible; /* Let parent container handle scrolling */
             background: #fafafa;
         }
 
@@ -1459,6 +1471,9 @@
             overflow: hidden;
             box-shadow: var(--shadow-sm);
             background: white;
+            height: 800px; /* Increased fixed height for better viewing */
+            display: flex;
+            flex-direction: column;
         }
 
         [data-theme="dark"] .analysis-column {
@@ -1474,12 +1489,42 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            flex-shrink: 0; /* Prevent header from shrinking */
+            overflow: hidden; /* Ensure no scrollbar in header */
         }
 
         .analysis-column-body {
-            padding: 15px;
-            max-height: 500px;
-            overflow-y: auto;
+            padding: 0;
+            flex: 1;
+            overflow: auto; /* Enable scrolling for content */
+            min-height: 0;
+        }
+        
+        /* Custom scrollbar for analysis columns */
+        .analysis-column-body::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        .analysis-column-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .analysis-column-body::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        
+        .analysis-column-body::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        [data-theme="dark"] .analysis-column-body::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+        
+        [data-theme="dark"] .analysis-column-body::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
         }
 
         /* AI Review Results Styling */
@@ -1539,10 +1584,7 @@
 
         .ai-overall-assessment {
             background: #eff6ff;
-            padding: 12px;
-            border-radius: 6px;
-            border-left: 4px solid #2563eb;
-            margin-bottom: 15px;
+            border-left: 3px solid #2563eb;
             font-size: 0.9rem;
             line-height: 1.6;
             color: var(--text-primary);
@@ -1550,6 +1592,18 @@
 
         [data-theme="dark"] .ai-overall-assessment {
             background: #1e3a8a;
+            border-left-color: #3b82f6;
+            color: #bfdbfe;
+        }
+
+        .ai-positive-feedback {
+            background: #f0fdf4;
+            border-left: 3px solid #22c55e;
+        }
+
+        [data-theme="dark"] .ai-positive-feedback {
+            background: #064e3b;
+            border-left-color: #6ee7b7;
         }
 
         .ai-issues-list {
@@ -1639,6 +1693,27 @@
             margin-bottom: 8px;
         }
 
+        /* Issue Section - Title and Content Separation */
+        .ai-issue-section {
+            margin-bottom: 15px;
+        }
+
+        .ai-section-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 8px 0;
+            padding-bottom: 6px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .ai-section-content {
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
         /* Severity badges */
         .severity-badge {
             display: inline-block;
@@ -1676,7 +1751,14 @@
             color: var(--text-secondary);
             font-size: 0.9rem;
             line-height: 1.6;
-            margin-bottom: 8px;
+            background: #f8fafc;
+            border-left: 3px solid #3b82f6;
+        }
+
+        [data-theme="dark"] .ai-issue-description {
+            background: #0f172a;
+            border-left-color: #60a5fa;
+            color: #cbd5e1;
         }
 
         .ai-issue-suggestion {
@@ -1686,7 +1768,6 @@
             border-left: 3px solid #22c55e;
             font-size: 0.85rem;
             color: #166534;
-            margin-bottom: 8px;
         }
 
         [data-theme="dark"] .ai-issue-suggestion {
@@ -1704,10 +1785,37 @@
             overflow-x: auto;
             white-space: pre-wrap;
             word-break: break-all;
+            margin: 0;
         }
 
         .diff-viewer {
-            /* diff2html will handle all styling */
+            /* Let diff2html completely control its own layout */
+            width: 100%;
+        }
+        
+        /* Ensure diff2html containers don't break layout */
+        .diff-viewer .d2h-wrapper {
+            width: 100%;
+        }
+        
+        .diff-viewer .d2h-files-diff {
+            width: 100%;
+        }
+        
+        /* Side-by-side specific fixes */
+        .diff-viewer .d2h-view-side-by-side {
+            display: flex;
+            width: 100%;
+        }
+        
+        .diff-viewer .d2h-view-side-by-side .d2h-file-diff {
+            display: flex;
+            width: 100%;
+        }
+        
+        .diff-viewer .d2h-view-side-by-side .d2h-code-side-wrapper {
+            width: 50%;
+            min-width: 0; /* Allow shrinking */
         }
 
         /* Score Display Slider */
@@ -2016,7 +2124,7 @@
     </button>
 
     <script>
-        const API_BASE_URL = 'http://localhost:8000/api/v1';
+        const API_BASE_URL = 'http://127.0.0.1:9097/api/v1';
         let currentReviewer = ''; // Start with empty reviewer
         let allReviews = []; // Store loaded reviews for reference
         let allUsers = []; // Store all users from API for validation
@@ -2072,6 +2180,11 @@
             
             // Close menu after selection
             closeThemeMenu();
+            
+            // Re-render all diffs with new theme
+            setTimeout(() => {
+                rerenderAllDiffs();
+            }, 100);
         }
 
         function updateThemeMenuActiveState(themeName) {
@@ -2943,6 +3056,11 @@
             section.classList.toggle('collapsed');
         }
 
+        // Check Diff2Html version on load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Diff2Html loaded:', typeof Diff2Html !== 'undefined');
+        });
+
         // === Diff View Mode Management ===
         let currentDiffView = localStorage.getItem('diffViewMode') || 'line-by-line';
 
@@ -2973,46 +3091,140 @@
         }
 
         /**
+         * Check if a string is base64 encoded
+         */
+        function isBase64(str) {
+            if (!str || typeof str !== 'string') return false;
+            
+            // Base64 regex pattern
+            const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+            
+            // Check if it matches base64 pattern and length is multiple of 4
+            return base64Regex.test(str) && str.length % 4 === 0 && str.length > 0;
+        }
+
+        /**
+         * Decode base64 string to UTF-8
+         */
+        function decodeBase64(base64Str) {
+            try {
+                // Handle both browser and Node.js environments
+                if (typeof atob !== 'undefined') {
+                    // Browser environment
+                    const binaryString = atob(base64Str);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    return new TextDecoder('utf-8').decode(bytes);
+                } else {
+                    // Node.js environment (fallback)
+                    return Buffer.from(base64Str, 'base64').toString('utf-8');
+                }
+            } catch (error) {
+                console.error('Failed to decode base64:', error);
+                throw error;
+            }
+        }
+
+        /**
          * Render code diff using diff2html library
          */
         function renderCodeDiff(diff) {
             if (!diff) return '';
             
             try {
-                // Normalize diff format if needed
                 let normalizedDiff = diff;
-                if (!diff.includes('\n') && !diff.includes('\r')) {
-                    normalizedDiff = diff
-                        .replace(/(@@)/g, '\n$1')
-                        .replace(/(\+[^+])/g, '\n$1')
-                        .replace(/(-[^-])/g, '\n$1')
-                        .replace(/(diff --git)/g, '\n$1')
+                
+                // Check if diff is base64 encoded
+                if (isBase64(diff)) {
+                    console.log('Detected base64 encoded diff, decoding...');
+                    console.log('Base64 length:', diff.length);
+                    try {
+                        normalizedDiff = decodeBase64(diff);
+                        console.log('Successfully decoded base64 diff');
+                        console.log('Decoded diff preview:', normalizedDiff.substring(0, 200));
+                    } catch (decodeError) {
+                        console.warn('Failed to decode as base64, treating as plain text:', decodeError);
+                        // If decoding fails, continue with original diff
+                    }
+                } else {
+                    console.log('Diff is not base64 encoded, using as-is');
+                    console.log('Diff preview:', normalizedDiff.substring(0, 200));
+                }
+                
+                // Validate diff content
+                if (!normalizedDiff || normalizedDiff.trim().length === 0) {
+                    console.warn('Empty diff content after processing');
+                    return '<div style="padding: 20px; color: #6c757d; text-align: center;">No diff content available</div>';
+                }
+                
+                // Normalize diff format - ensure proper line breaks
+                // Check if diff has any newlines
+                const hasNewlines = normalizedDiff.includes('\n') || normalizedDiff.includes('\r');
+                
+                if (!hasNewlines) {
+                    console.log('Normalizing diff format (adding newlines)');
+                    // More comprehensive normalization
+                    normalizedDiff = normalizedDiff
+                        // Add newline before hunk headers (@@ ... @@)
+                        .replace(/(@@[^@]*@@)/g, '\n$1')
+                        // Add newline before added lines (+ at start, but not +++ )
+                        .replace(/(^|\n)(\+[^+])/g, '$1\n$2')
+                        // Add newline before removed lines (- at start, but not --- )
+                        .replace(/(^|\n)(-[^-])/g, '$1\n$2')
+                        // Add newline before context lines (space at start after @@)
+                        .replace(/(@@[^@]*@@)( )/g, '$1\n ')
                         .trim();
+                    
+                    // Ensure "diff --git" is at the very beginning (no leading whitespace/newlines)
+                    if (normalizedDiff.startsWith('\n') || normalizedDiff.startsWith('\r')) {
+                        normalizedDiff = normalizedDiff.trimStart();
+                    }
+                    
+                    console.log('Normalized diff preview:', normalizedDiff.substring(0, 300));
                 }
                 
                 // Add proper file header if missing
                 if (!normalizedDiff.startsWith('diff --git')) {
+                    console.log('Adding default file header');
                     normalizedDiff = 'diff --git a/file b/file\n' + normalizedDiff;
                 }
                 
-                // Configure diff2html
+                console.log('Final diff length:', normalizedDiff.length);
+                console.log('Diff starts with:', normalizedDiff.substring(0, 50));
+                
+                // Configure diff2html with built-in features
+                const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
                 const configuration = {
-                    drawFileList: false,
+                    drawFileList: true,
+                    fileListToggle: true,
+                    fileListStartVisible: true,
+                    fileContentToggle: true,
                     matching: 'lines',
-                    outputFormat: currentDiffView, // 'line-by-line' or 'side-by-side'
+                    outputFormat: currentDiffView,
                     synchronisedScroll: true,
                     highlight: true,
+                    renderNothingWhenEmpty: false,
+                    stickyFileHeaders: true,
+                    colorScheme: isDark ? 'dark' : 'light',
                 };
                 
-                // Create diff2html UI instance and render
-                const targetElement = document.createElement('div');
-                const diff2htmlUi = new Diff2HtmlUI(targetElement, normalizedDiff, configuration);
+                // Use Diff2HtmlUI to enable interactive features (show/hide, viewed checkbox)
+                const containerId = `diff-container-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                const tempDiv = document.createElement('div');
+                tempDiv.id = containerId;
+                
+                // Create UI instance and render with highlight.js
+                const diff2htmlUi = new Diff2HtmlUI(tempDiv, normalizedDiff, configuration, hljs);
                 diff2htmlUi.draw();
                 
-                return targetElement.innerHTML;
+                console.log('Diff rendered with format:', currentDiffView);
+                return tempDiv.innerHTML;
                 
             } catch (error) {
                 console.error('Error rendering diff:', error);
+                console.error('Diff that caused error:', diff.substring(0, 500));
                 return `<div style="padding: 20px; color: #ef4444; text-align: center;">Failed to render diff: ${escapeHtml(error.message)}</div>`;
             }
         }
@@ -3020,10 +3232,12 @@
         function renderAIReviewResults(aiSuggestions) {
             if (!aiSuggestions || Object.keys(aiSuggestions).length === 0) return '';
             
-            const reviewedFiles = aiSuggestions.Reviewed_files || 0;
-            const criticalIssues = aiSuggestions.Critical_issues || 0;
-            const totalIssues = aiSuggestions.Total_issues || 0;
+            const summary = aiSuggestions.summary || {};
+            const reviewedFiles = summary.files_reviewed || 0;
+            const criticalIssues = summary.critical_count || 0;
+            const totalIssues = summary.total_issues || 0;
             const issues = aiSuggestions.issues || [];
+            const positiveFeedback = aiSuggestions.positive_feedback || [];
             const overallAssessment = aiSuggestions.overall_assessment || '';
             
             // Render summary stats
@@ -3059,29 +3273,29 @@
                             <div class="ai-issue-item ${severityClass}">
                                 <div class="ai-issue-header">
                                     <span class="ai-issue-number">#Issue ${issueNumber}</span>
-                                    <span class="ai-issue-file">📄 ${escapeHtml(issue.file_name || 'Unknown file')}</span>
-                                    <span class="ai-issue-line">Line ${issue.line_number || 'N/A'}</span>
+                                    <span class="ai-issue-file">📄 ${escapeHtml(issue.file || 'Unknown file')}</span>
+                                    <span class="ai-issue-line">Line ${issue.line || 'N/A'}</span>
                                 </div>
                                 <div style="margin-bottom: 8px;">
-                                    <span class="ai-issue-type ${issueTypeClass}">${escapeHtml(issue.issue_type || 'general')}</span>
+                                    <span class="ai-issue-type ${issueTypeClass}">${escapeHtml(issue.category || 'general')}</span>
                                     <span class="severity-badge ${severityBadgeClass}">${severity.toUpperCase()}</span>
                                 </div>
                                 ${issue.description ? `
-                                    <div style="margin-bottom: 10px;">
-                                        <strong style="color: var(--text-primary); font-size: 0.85rem; display: block; margin-bottom: 4px;">📝 Description:</strong>
-                                        <div class="ai-issue-description">${escapeHtml(issue.description)}</div>
+                                    <div class="ai-issue-section">
+                                        <h5 class="ai-section-title">📝 Description</h5>
+                                        <div class="ai-section-content ai-issue-description">${escapeHtml(issue.description)}</div>
                                     </div>
                                 ` : ''}
                                 ${issue.suggestion ? `
-                                    <div class="ai-issue-suggestion">
-                                        <strong style="display: block; margin-bottom: 4px;">💡 Suggestion:</strong>
-                                        ${escapeHtml(issue.suggestion)}
+                                    <div class="ai-issue-section">
+                                        <h5 class="ai-section-title">💡 Suggestion</h5>
+                                        <div class="ai-section-content ai-issue-suggestion">${escapeHtml(issue.suggestion)}</div>
                                     </div>
                                 ` : ''}
                                 ${issue.code_snippet ? `
-                                    <div style="margin-top: 8px;">
-                                        <strong style="color: var(--text-primary); font-size: 0.85rem; display: block; margin-bottom: 4px;">💻 Code Snippet:</strong>
-                                        <div class="ai-issue-code">${escapeHtml(issue.code_snippet)}</div>
+                                    <div class="ai-issue-section">
+                                        <h5 class="ai-section-title">💻 Code Snippet</h5>
+                                        <div class="ai-section-content ai-issue-code">${escapeHtml(issue.code_snippet)}</div>
                                     </div>
                                 ` : ''}
                             </div>
@@ -3090,11 +3304,25 @@
                 </div>
             ` : '<p style="color: #6c757d; text-align: center; padding: 20px;">✅ No issues found! Great code!</p>';
             
+            // Render positive feedback
+            const positiveFeedbackHtml = positiveFeedback.length > 0 ? `
+                <div class="ai-issue-section">
+                    <h5 class="ai-section-title">✅ Positive Feedback</h5>
+                    <div class="ai-section-content ai-positive-feedback">
+                        <ul style="margin: 0; padding-left: 20px;">
+                            ${positiveFeedback.map(feedback => `<li style="margin: 4px 0; line-height: 1.6; font-size: 0.9rem;">${escapeHtml(feedback)}</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>
+            ` : '';
+            
             // Render overall assessment at the bottom
             const assessmentHtml = overallAssessment ? `
-                <div class="ai-overall-assessment" style="margin-top: 20px;">
-                    <strong style="font-size: 1rem;">📊 Overall Assessment:</strong>
-                    <p style="margin: 8px 0 0 0; line-height: 1.6;">${escapeHtml(overallAssessment)}</p>
+                <div class="ai-issue-section">
+                    <h5 class="ai-section-title">📊 Overall Assessment</h5>
+                    <div class="ai-section-content ai-overall-assessment">
+                        <p style="margin: 0; line-height: 1.6;">${escapeHtml(overallAssessment)}</p>
+                    </div>
                 </div>
             ` : '';
             
@@ -3105,6 +3333,7 @@
                     </div>
                     ${statsHtml}
                     ${issuesHtml}
+                    ${positiveFeedbackHtml}
                     ${assessmentHtml}
                 </div>
             `;

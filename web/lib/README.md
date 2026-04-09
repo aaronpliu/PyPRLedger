@@ -4,8 +4,8 @@ This directory contains third-party JavaScript/CSS libraries used by the web int
 
 ## diff2html
 
-- **Version**: 3.4.45
-- **Source**: https://cdn.jsdelivr.net/npm/diff2html@3.4.45/
+- **Version**: 3.4.48
+- **Source**: https://cdn.jsdelivr.net/npm/diff2html@3.4.48/
 - **License**: MIT
 - **Purpose**: Professional Git diff rendering (GitHub/GitLab style)
 
