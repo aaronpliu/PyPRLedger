@@ -7,7 +7,7 @@ This project supports multiple environments for different deployment scenarios.
 | File | Mode | Description | API Endpoint |
 |------|------|-------------|--------------|
 | `.env` | (default) | Local development | `http://127.0.0.1:9097/api/v1` |
-| `.env.test` | test | Test/Staging environment | `https://test-api.prledger.com/api/v1` |
+| `.env.test` | test | Test/Staging environment | `http://127.0.0.1:3000/api/v1` |
 | `.env.prod` | prod | Production environment | `https://api.prledger.com/api/v1` |
 
 ## Available Commands
@@ -55,7 +55,10 @@ npm run preview:prod
 
 ### Required Variables
 
-- `VITE_API_BASE_URL`: Backend API base URL
+- `VITE_API_DOMAIN`: Backend API domain URL
+- `VITE_API_BASE_PATH`: API base path (default: `/api/v1`)
+- `VITE_API_BASE_URL`: Full backend API base URL
+- `VITE_DEV_PORT`: Development server port
 - `VITE_APP_TITLE`: Application title
 - `VITE_APP_VERSION`: Application version
 - `VITE_JWT_STORAGE_KEY`: LocalStorage key for JWT tokens
@@ -72,15 +75,24 @@ Access environment variables in your code:
 
 ```typescript
 // API configuration
+const apiDomain = import.meta.env.VITE_API_DOMAIN
+const apiBasePath = import.meta.env.VITE_API_BASE_PATH
 const apiBase = import.meta.env.VITE_API_BASE_URL
+
+// Dev server
+const devPort = import.meta.env.VITE_DEV_PORT
 
 // Feature flags
 const enableAnalytics = import.meta.env.VITE_ENABLE_ANALYTICS === 'true'
 const enableDebug = import.meta.env.VITE_ENABLE_DEBUG === 'true'
+const enableHttps = import.meta.env.VITE_ENABLE_HTTPS === 'true'
 
 // App info
 const appTitle = import.meta.env.VITE_APP_TITLE
 const appVersion = import.meta.env.VITE_APP_VERSION
+
+// Auth
+const jwtStorageKey = import.meta.env.VITE_JWT_STORAGE_KEY
 ```
 
 ## Deployment Workflow

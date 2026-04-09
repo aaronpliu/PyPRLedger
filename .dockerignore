@@ -107,3 +107,6 @@ prometheus.yml
 seed_*.py
 mock_data/
 fake_reviews/
+
+# frontend
+frontend/
