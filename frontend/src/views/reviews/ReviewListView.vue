@@ -5,6 +5,16 @@
         <div class="card-header">
           <h2>Code Reviews</h2>
           <div class="header-actions">
+            <!-- Assign Task Button (Review Admin Only) -->
+            <el-button 
+              v-if="isReviewAdmin" 
+              type="primary" 
+              @click="showAssignDialog = true"
+            >
+              <el-icon><Plus /></el-icon>
+              Assign Review Task
+            </el-button>
+            
             <ExportMenu
               :data="reviews"
               :selected-ids="selectedReviews.map(r => r.id)"
@@ -342,21 +352,119 @@
         <el-button type="primary" @click="closeProgressDialog">Close</el-button>
       </template>
     </el-dialog>
+
+    <!-- Assign Review Task Dialog -->
+    <el-dialog 
+      v-model="showAssignDialog" 
+      title="Assign Review Task" 
+      width="600px"
+      :close-on-click-modal="false"
+    >
+      <el-form 
+        :model="assignForm" 
+        :rules="assignRules" 
+        ref="assignFormRef" 
+        label-width="140px"
+      >
+        <el-form-item label="PR ID" prop="pull_request_id">
+          <el-input 
+            v-model="assignForm.pull_request_id" 
+            placeholder="e.g., 123" 
+          />
+        </el-form-item>
+        
+        <el-form-item label="Project Key" prop="project_key">
+          <el-input 
+            v-model="assignForm.project_key" 
+            placeholder="e.g., PROJ" 
+          />
+        </el-form-item>
+        
+        <el-form-item label="Repository" prop="repository_slug">
+          <el-input 
+            v-model="assignForm.repository_slug" 
+            placeholder="e.g., my-repo" 
+          />
+        </el-form-item>
+        
+        <el-form-item label="Assign To" prop="assignee_username">
+          <el-select 
+            v-model="assignForm.assignee_username" 
+            placeholder="Select reviewer"
+            filterable
+            style="width: 100%"
+          >
+            <el-option 
+              v-for="reviewer in reviewers" 
+              :key="reviewer.username"
+              :label="`${reviewer.display_name} (${reviewer.username})`"
+              :value="reviewer.username"
+            />
+          </el-select>
+        </el-form-item>
+        
+        <el-form-item label="PR Author" prop="pull_request_user">
+          <el-input 
+            v-model="assignForm.pull_request_user" 
+            placeholder="PR author username" 
+          />
+        </el-form-item>
+        
+        <el-form-item label="Source Branch" prop="source_branch">
+          <el-input 
+            v-model="assignForm.source_branch" 
+            placeholder="e.g., feature/new-feature" 
+          />
+        </el-form-item>
+        
+        <el-form-item label="Target Branch" prop="target_branch">
+          <el-input 
+            v-model="assignForm.target_branch" 
+            placeholder="e.g., main" 
+          />
+        </el-form-item>
+        
+        <el-form-item label="Commit ID">
+          <el-input 
+            v-model="assignForm.pull_request_commit_id" 
+            placeholder="Optional - leave empty for PR-level score" 
+          />
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <el-button @click="showAssignDialog = false">Cancel</el-button>
+        <el-button 
+          type="primary" 
+          :loading="assigning" 
+          @click="handleAssign"
+        >
+          Assign Task
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu } from '@element-plus/icons-vue'
+import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu, Plus } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
-import type { Review } from '@/api/reviews'
+import type { Review, ReviewAssignmentRequest } from '@/api/reviews'
+import { usersApi } from '@/api/users'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
 import FilterBuilder from '@/components/common/FilterBuilder.vue'
 import ExportMenu from '@/components/common/ExportMenu.vue'
+import { usePermission } from '@/composables/usePermission'
 
 const router = useRouter()
+const { hasPermission } = usePermission()
+
+// Check if user is review admin
+const isReviewAdmin = computed(() => hasPermission('assign', 'reviews'))
 const loading = ref(false)
 const reviews = ref<Review[]>([])
 const total = ref(0)
@@ -383,6 +491,47 @@ const progressStatus = ref<'success' | 'exception' | 'warning'>()
 const progressMessage = ref('')
 const processedCount = ref(0)
 const totalCount = ref(0)
+
+// Task assignment state
+const showAssignDialog = ref(false)
+const assigning = ref(false)
+const reviewers = ref<any[]>([])
+const assignFormRef = ref<FormInstance>()
+
+const assignForm = reactive({
+  pull_request_id: '',
+  project_key: '',
+  repository_slug: '',
+  assignee_username: '',
+  pull_request_user: '',
+  source_branch: '',
+  target_branch: '',
+  pull_request_commit_id: '',
+})
+
+const assignRules: FormRules = {
+  pull_request_id: [
+    { required: true, message: 'PR ID is required', trigger: 'blur' },
+  ],
+  project_key: [
+    { required: true, message: 'Project key is required', trigger: 'blur' },
+  ],
+  repository_slug: [
+    { required: true, message: 'Repository is required', trigger: 'blur' },
+  ],
+  assignee_username: [
+    { required: true, message: 'Please select a reviewer', trigger: 'change' },
+  ],
+  pull_request_user: [
+    { required: true, message: 'PR author is required', trigger: 'blur' },
+  ],
+  source_branch: [
+    { required: true, message: 'Source branch is required', trigger: 'blur' },
+  ],
+  target_branch: [
+    { required: true, message: 'Target branch is required', trigger: 'blur' },
+  ],
+}
 
 // Filter fields configuration
 const filterFields = [
@@ -718,6 +867,54 @@ const handleBulkStatusChange = async (status: string) => {
 
 const closeProgressDialog = () => {
   showProgressDialog.value = false
+}
+
+// Task assignment handlers
+// Load reviewers when dialog opens
+watch(showAssignDialog, async (visible) => {
+  if (visible) {
+    try {
+      const response = await usersApi.getReviewers(1000)
+      reviewers.value = response.items
+    } catch (error) {
+      ElMessage.error('Failed to load reviewers')
+    }
+  }
+})
+
+const handleAssign = async () => {
+  if (!assignFormRef.value) return
+  
+  await assignFormRef.value.validate(async (valid) => {
+    if (!valid) return
+    
+    assigning.value = true
+    try {
+      await reviewsApi.assignTask(assignForm)
+      
+      ElMessage.success('Review task assigned successfully')
+      showAssignDialog.value = false
+      
+      // Reset form
+      Object.assign(assignForm, {
+        pull_request_id: '',
+        project_key: '',
+        repository_slug: '',
+        assignee_username: '',
+        pull_request_user: '',
+        source_branch: '',
+        target_branch: '',
+        pull_request_commit_id: '',
+      })
+      
+      // Reload reviews to show the new assignment
+      loadReviews()
+    } catch (error: any) {
+      ElMessage.error(error.response?.data?.detail || 'Failed to assign task')
+    } finally {
+      assigning.value = false
+    }
+  })
 }
 
 onMounted(() => {

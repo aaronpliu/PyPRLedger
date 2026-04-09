@@ -14,7 +14,7 @@ from src.services.auth_service import AuthService
 from src.services.rbac_service import RBACService
 
 
-def get_current_user_with_token(
+async def get_current_user_with_token(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> AuthUser:
@@ -46,7 +46,7 @@ def get_current_user_with_token(
     auth_service = AuthService(db)
 
     try:
-        return auth_service.get_current_user(token)
+        return await auth_service.get_current_user(token)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

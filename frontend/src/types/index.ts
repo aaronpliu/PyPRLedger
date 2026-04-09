@@ -46,6 +46,7 @@ export interface RoleAssignment {
   id: number
   auth_user_id: number
   role_id: number
+  role_name?: string  // Added for display purposes
   resource_type: 'global' | 'project' | 'repository'
   resource_id: string | null
   granted_by: number | null
