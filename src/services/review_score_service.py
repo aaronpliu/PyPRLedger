@@ -301,10 +301,12 @@ class ReviewScoreService:
                 source_filename=source_filename,
                 total_scores=0,
                 average_score=0.0,
+                max_score=None,
                 scores=[],
             )
 
         avg_score = sum(s.score for s in scores) / len(scores)
+        max_score = max(s.score for s in scores) if len(scores) > 1 else None
 
         return ReviewScoreSummary(
             pull_request_id=pull_request_id,
@@ -313,6 +315,7 @@ class ReviewScoreService:
             source_filename=source_filename,
             total_scores=len(scores),
             average_score=round(avg_score, 2),
+            max_score=round(max_score, 2) if max_score is not None else None,
             scores=scores,
         )
 

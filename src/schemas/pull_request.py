@@ -197,6 +197,7 @@ class ReviewScoreSummary(BaseModel):
     repository_slug: str
     total_scores: int
     average_score: float
+    max_score: float | None = Field(None, description="Maximum score when multiple scores exist")
     scores: list[ReviewScoreResponse]
 
 

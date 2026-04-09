@@ -116,11 +116,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Scores" width="100">
+        <el-table-column label="Scores" width="120">
           <template #default="{ row }">
             <div v-if="row.score_summary && row.score_summary.total_scores > 0">
-              <span class="avg-score">{{ row.score_summary.average_score?.toFixed(1) }}</span>
+              <span class="avg-score">{{ row.score_summary.max_score?.toFixed(1) || row.score_summary.average_score?.toFixed(1) }}</span>
               <span class="score-count">({{ row.score_summary.total_scores }})</span>
+              <el-tag v-if="row.score_summary.max_score" size="small" type="warning" style="margin-left: 4px; font-size: 0.7rem;">max</el-tag>
             </div>
             <span v-else class="text-secondary">No scores</span>
           </template>

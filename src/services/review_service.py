@@ -939,6 +939,7 @@ class ReviewService:
             # Calculate and add score summary with simplified score list
             if scores:
                 avg_score = sum(s.score for s in scores) / len(scores)
+                max_score = max(s.score for s in scores) if len(scores) > 1 else None
 
                 # Build simplified score list - handle both ORM objects and dicts
                 simplified_scores = []
@@ -991,6 +992,7 @@ class ReviewService:
                     "repository_slug": review_dict.get("repository_slug"),
                     "total_scores": len(scores),
                     "average_score": round(avg_score, 2),
+                    "max_score": round(max_score, 2) if max_score is not None else None,
                     "scores": simplified_scores,
                 }
             else:

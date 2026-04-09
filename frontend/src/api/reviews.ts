@@ -50,6 +50,7 @@ export interface ReviewScoreSummary {
   source_filename?: string | null
   total_scores: number
   average_score?: number
+  max_score?: number | null
   scores: ReviewScoreResponse[]
 }
 
