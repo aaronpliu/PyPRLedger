@@ -5,16 +5,6 @@
         <div class="card-header">
           <h2>Code Reviews</h2>
           <div class="header-actions">
-            <!-- Assign Task Button (Review Admin Only) -->
-            <el-button 
-              v-if="isReviewAdmin" 
-              type="primary" 
-              @click="showAssignDialog = true"
-            >
-              <el-icon><Plus /></el-icon>
-              Assign Review Task
-            </el-button>
-            
             <ExportMenu
               :data="reviews"
               :selected-ids="selectedReviews.map(r => r.id)"
@@ -136,6 +126,47 @@
           <span>{{ selectedReviews.length }} item{{ selectedReviews.length > 1 ? 's' : '' }} selected</span>
         </div>
         <div class="bulk-actions">
+          <!-- Batch Assign Reviewer (Review Admin Only) -->
+          <el-dropdown 
+            v-if="isReviewAdmin"
+            @command="handleBatchAssignReviewer" 
+            trigger="click"
+          >
+            <el-button size="small" type="primary">
+              <el-icon><User /></el-icon>
+              Assign Reviewer
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu style="min-width: 250px; padding: 8px;">
+                <div style="padding: 8px 0;">
+                  <el-select 
+                    v-model="batchReviewerUsername" 
+                    placeholder="Select reviewer"
+                    filterable
+                    size="small"
+                    style="width: 100%"
+                  >
+                    <el-option 
+                      v-for="reviewer in reviewers" 
+                      :key="reviewer.username"
+                      :label="`${reviewer.display_name} (${reviewer.username})`"
+                      :value="reviewer.username"
+                    />
+                  </el-select>
+                  <el-button 
+                    type="primary" 
+                    size="small" 
+                    style="width: 100%; margin-top: 8px;"
+                    @click="executeBatchAssignReviewer"
+                  >
+                    Confirm Assignment
+                  </el-button>
+                </div>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          
           <el-button size="small" type="danger" @click="showBulkDeleteDialog">
             <el-icon><Delete /></el-icon>
             Delete Selected
@@ -219,9 +250,29 @@
         </el-table-column>
         
         <!-- Reviewer -->
-        <el-table-column label="Reviewer" width="150">
+        <el-table-column label="Reviewer" width="200">
           <template #default="{ row }">
-            <div>
+            <div v-if="isReviewAdmin">
+              <el-select 
+                v-model="row.reviewer" 
+                placeholder="Select reviewer"
+                filterable
+                size="small"
+                style="width: 100%"
+                @change="handleReviewerChange(row)"
+              >
+                <el-option 
+                  v-for="reviewer in reviewers" 
+                  :key="reviewer.username"
+                  :label="`${reviewer.display_name} (${reviewer.username})`"
+                  :value="reviewer.username"
+                />
+              </el-select>
+              <div class="text-secondary" style="font-size: 0.75rem; margin-top: 4px;">
+                {{ row.source_filename ? '📄 File-level' : '📋 PR-level' }}
+              </div>
+            </div>
+            <div v-else>
               <div>{{ row.reviewer_info?.display_name || row.reviewer }}</div>
               <div class="text-secondary" style="font-size: 0.8rem;">
                 {{ row.source_filename ? '📄 File-level' : '📋 PR-level' }}
@@ -352,104 +403,13 @@
         <el-button type="primary" @click="closeProgressDialog">Close</el-button>
       </template>
     </el-dialog>
-
-    <!-- Assign Review Task Dialog -->
-    <el-dialog 
-      v-model="showAssignDialog" 
-      title="Assign Review Task" 
-      width="600px"
-      :close-on-click-modal="false"
-    >
-      <el-form 
-        :model="assignForm" 
-        :rules="assignRules" 
-        ref="assignFormRef" 
-        label-width="140px"
-      >
-        <el-form-item label="PR ID" prop="pull_request_id">
-          <el-input 
-            v-model="assignForm.pull_request_id" 
-            placeholder="e.g., 123" 
-          />
-        </el-form-item>
-        
-        <el-form-item label="Project Key" prop="project_key">
-          <el-input 
-            v-model="assignForm.project_key" 
-            placeholder="e.g., PROJ" 
-          />
-        </el-form-item>
-        
-        <el-form-item label="Repository" prop="repository_slug">
-          <el-input 
-            v-model="assignForm.repository_slug" 
-            placeholder="e.g., my-repo" 
-          />
-        </el-form-item>
-        
-        <el-form-item label="Assign To" prop="assignee_username">
-          <el-select 
-            v-model="assignForm.assignee_username" 
-            placeholder="Select reviewer"
-            filterable
-            style="width: 100%"
-          >
-            <el-option 
-              v-for="reviewer in reviewers" 
-              :key="reviewer.username"
-              :label="`${reviewer.display_name} (${reviewer.username})`"
-              :value="reviewer.username"
-            />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="PR Author" prop="pull_request_user">
-          <el-input 
-            v-model="assignForm.pull_request_user" 
-            placeholder="PR author username" 
-          />
-        </el-form-item>
-        
-        <el-form-item label="Source Branch" prop="source_branch">
-          <el-input 
-            v-model="assignForm.source_branch" 
-            placeholder="e.g., feature/new-feature" 
-          />
-        </el-form-item>
-        
-        <el-form-item label="Target Branch" prop="target_branch">
-          <el-input 
-            v-model="assignForm.target_branch" 
-            placeholder="e.g., main" 
-          />
-        </el-form-item>
-        
-        <el-form-item label="Commit ID">
-          <el-input 
-            v-model="assignForm.pull_request_commit_id" 
-            placeholder="Optional - leave empty for PR-level score" 
-          />
-        </el-form-item>
-      </el-form>
-      
-      <template #footer>
-        <el-button @click="showAssignDialog = false">Cancel</el-button>
-        <el-button 
-          type="primary" 
-          :loading="assigning" 
-          @click="handleAssign"
-        >
-          Assign Task
-        </el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu, Plus } from '@element-plus/icons-vue'
+import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu, User } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review, ReviewAssignmentRequest } from '@/api/reviews'
 import { usersApi } from '@/api/users'
@@ -493,45 +453,8 @@ const processedCount = ref(0)
 const totalCount = ref(0)
 
 // Task assignment state
-const showAssignDialog = ref(false)
-const assigning = ref(false)
 const reviewers = ref<any[]>([])
-const assignFormRef = ref<FormInstance>()
-
-const assignForm = reactive({
-  pull_request_id: '',
-  project_key: '',
-  repository_slug: '',
-  assignee_username: '',
-  pull_request_user: '',
-  source_branch: '',
-  target_branch: '',
-  pull_request_commit_id: '',
-})
-
-const assignRules: FormRules = {
-  pull_request_id: [
-    { required: true, message: 'PR ID is required', trigger: 'blur' },
-  ],
-  project_key: [
-    { required: true, message: 'Project key is required', trigger: 'blur' },
-  ],
-  repository_slug: [
-    { required: true, message: 'Repository is required', trigger: 'blur' },
-  ],
-  assignee_username: [
-    { required: true, message: 'Please select a reviewer', trigger: 'change' },
-  ],
-  pull_request_user: [
-    { required: true, message: 'PR author is required', trigger: 'blur' },
-  ],
-  source_branch: [
-    { required: true, message: 'Source branch is required', trigger: 'blur' },
-  ],
-  target_branch: [
-    { required: true, message: 'Target branch is required', trigger: 'blur' },
-  ],
-}
+const batchReviewerUsername = ref('')
 
 // Filter fields configuration
 const filterFields = [
@@ -870,55 +793,106 @@ const closeProgressDialog = () => {
 }
 
 // Task assignment handlers
-// Load reviewers when dialog opens
-watch(showAssignDialog, async (visible) => {
-  if (visible) {
-    try {
-      const response = await usersApi.getReviewers(100)
-      reviewers.value = response.items
-    } catch (error) {
-      ElMessage.error('Failed to load reviewers')
+// Handle single reviewer change
+const handleReviewerChange = async (row: Review) => {
+  try {
+    const assignmentData: ReviewAssignmentRequest = {
+      pull_request_id: row.pull_request_id,
+      project_key: row.project_key,
+      repository_slug: row.repository_slug,
+      assignee_username: row.reviewer,
+      pull_request_user: row.pull_request_user,
+      source_branch: row.source_branch,
+      target_branch: row.target_branch,
+      pull_request_commit_id: row.pull_request_commit_id || undefined,
     }
-  }
-})
-
-const handleAssign = async () => {
-  if (!assignFormRef.value) return
-  
-  await assignFormRef.value.validate(async (valid) => {
-    if (!valid) return
     
-    assigning.value = true
-    try {
-      await reviewsApi.assignTask(assignForm)
-      
-      ElMessage.success('Review task assigned successfully')
-      showAssignDialog.value = false
-      
-      // Reset form
-      Object.assign(assignForm, {
-        pull_request_id: '',
-        project_key: '',
-        repository_slug: '',
-        assignee_username: '',
-        pull_request_user: '',
-        source_branch: '',
-        target_branch: '',
-        pull_request_commit_id: '',
-      })
-      
-      // Reload reviews to show the new assignment
-      loadReviews()
-    } catch (error: any) {
-      ElMessage.error(error.response?.data?.detail || 'Failed to assign task')
-    } finally {
-      assigning.value = false
-    }
-  })
+    await reviewsApi.assignTask(assignmentData)
+    ElMessage.success(`Assigned to ${row.reviewer}`)
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail || 'Failed to update reviewer')
+    loadReviews()
+  }
 }
 
-onMounted(() => {
+// Batch assign reviewer
+const executeBatchAssignReviewer = async () => {
+  if (!batchReviewerUsername.value) {
+    ElMessage.warning('Please select a reviewer')
+    return
+  }
+  
+  if (selectedReviews.value.length === 0) {
+    ElMessage.warning('No items selected')
+    return
+  }
+  
+  showProgressDialog.value = true
+  bulkOperationLoading.value = true
+  processedCount.value = 0
+  totalCount.value = selectedReviews.value.length
+  progressPercentage.value = 0
+  progressStatus.value = undefined
+  progressMessage.value = `Assigning reviewer ${batchReviewerUsername.value}...`
+  
+  let successCount = 0
+  let failCount = 0
+  
+  try {
+    for (let i = 0; i < selectedReviews.value.length; i++) {
+      const review = selectedReviews.value[i]
+      try {
+        const assignmentData: ReviewAssignmentRequest = {
+          pull_request_id: review.pull_request_id,
+          project_key: review.project_key,
+          repository_slug: review.repository_slug,
+          assignee_username: batchReviewerUsername.value,
+          pull_request_user: review.pull_request_user,
+          source_branch: review.source_branch,
+          target_branch: review.target_branch,
+          pull_request_commit_id: review.pull_request_commit_id || undefined,
+        }
+        
+        await reviewsApi.assignTask(assignmentData)
+        successCount++
+      } catch (error) {
+        console.error(`Failed to assign review ${review.id}:`, error)
+        failCount++
+      }
+      
+      processedCount.value = i + 1
+      progressPercentage.value = Math.round(((i + 1) / selectedReviews.value.length) * 100)
+      progressMessage.value = `Assigning review ${i + 1} of ${selectedReviews.value.length}...`
+    }
+    
+    progressStatus.value = failCount > 0 ? 'warning' : 'success'
+    progressMessage.value = `Completed: ${successCount} succeeded, ${failCount} failed`
+    bulkOperationLoading.value = false
+    
+    ElMessage.success(`Successfully assigned ${successCount} review${successCount !== 1 ? 's' : ''} to ${batchReviewerUsername.value}`)
+    
+    await loadReviews()
+    clearSelection()
+    batchReviewerUsername.value = ''
+  } catch (error) {
+    progressStatus.value = 'exception'
+    progressMessage.value = 'Batch assignment failed'
+    bulkOperationLoading.value = false
+    ElMessage.error('Failed to assign reviewers')
+  }
+}
+
+// Load reviewers when component mounts
+onMounted(async () => {
   loadReviews()
+  
+  // Load reviewers for dropdown
+  try {
+    const response = await usersApi.getReviewers(100)
+    reviewers.value = response.items
+  } catch (error) {
+    console.error('Failed to load reviewers:', error)
+  }
 })
 </script>
 
