@@ -96,6 +96,17 @@ export interface ReviewUpdate {
   summary?: string | null
 }
 
+export interface ReviewAssignmentRequest {
+  pull_request_id: string
+  project_key: string
+  repository_slug: string
+  assignee_username: string
+  pull_request_user: string
+  source_branch: string
+  target_branch: string
+  pull_request_commit_id?: string | null
+}
+
 // Reviews API
 // NOTE: Reviews are created by Bitbucket webhook, not from UI
 export const reviewsApi = {
@@ -133,5 +144,12 @@ export const reviewsApi = {
   // Delete review
   deleteReview(id: number): Promise<void> {
     return request.delete(`/reviews/${id}`)
+  },
+
+  /**
+   * Assign a review task to a reviewer (requires review_admin role)
+   */
+  assignTask(data: ReviewAssignmentRequest): Promise<Review> {
+    return request.post('/reviews/assign', data)
   },
 }

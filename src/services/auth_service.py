@@ -122,6 +122,9 @@ class AuthService:
         await self.db.commit()
         await self.db.refresh(new_auth_user)
 
+        # Auto-assign reviewer role to newly registered user
+        await self._assign_default_role(new_auth_user.id)
+
         # Create JWT token
         access_token = create_access_token(
             subject=new_auth_user.id,
@@ -228,3 +231,39 @@ class AuthService:
         if bitbucket_user:
             auth_user.user_id = bitbucket_user.id
             await self.db.commit()
+
+    async def _assign_default_role(self, auth_user_id: int) -> None:
+        """Assign default 'reviewer' role to newly registered user
+
+        Args:
+            auth_user_id: The newly created auth user ID
+        """
+        import logging
+
+        from src.models.role import Role
+        from src.services.rbac_service import RBACService
+
+        logger = logging.getLogger(__name__)
+        rbac_service = RBACService(self.db)
+
+        # Get reviewer role by name
+        stmt = select(Role).where(Role.name == "reviewer")
+        result = await self.db.execute(stmt)
+        reviewer_role = result.scalar_one_or_none()
+
+        if not reviewer_role:
+            logger.warning("Reviewer role not found, skipping auto-assignment")
+            return
+
+        try:
+            await rbac_service.assign_role(
+                auth_user_id=auth_user_id,
+                role_id=reviewer_role.id,
+                resource_type="global",
+                resource_id=None,
+                granted_by=None,  # System assigned
+            )
+            logger.info(f"Auto-assigned reviewer role to user {auth_user_id}")
+        except Exception as e:
+            logger.error(f"Failed to assign default role to user {auth_user_id}: {e}")
+            # Don't fail registration if role assignment fails

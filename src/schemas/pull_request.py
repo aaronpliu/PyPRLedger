@@ -554,3 +554,37 @@ class ReviewTransition(BaseModel):
         "from_attributes": True,
         "json_schema_extra": {"example": {"current_status": "open", "new_status": "merged"}},
     }
+
+
+class ReviewAssignmentRequest(BaseModel):
+    """Schema for assigning review task to a reviewer"""
+
+    pull_request_id: str = Field(..., description="Pull request ID")
+    project_key: str = Field(..., min_length=1, max_length=32, description="Project key")
+    repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
+    assignee_username: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="Reviewer username to assign",
+    )
+    pull_request_user: str = Field(
+        ..., min_length=1, max_length=64, description="PR author username"
+    )
+    source_branch: str = Field(..., min_length=1, description="Source branch")
+    target_branch: str = Field(..., min_length=1, description="Target branch")
+    pull_request_commit_id: str | None = Field(None, description="Commit ID (optional)")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "pull_request_id": "123",
+                "project_key": "PROJ",
+                "repository_slug": "my-repo",
+                "assignee_username": "john_doe",
+                "pull_request_user": "jane_smith",
+                "source_branch": "feature/new-feature",
+                "target_branch": "main",
+            }
+        }
+    }

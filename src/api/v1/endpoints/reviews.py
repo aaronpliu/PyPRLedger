@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
@@ -14,7 +15,11 @@ from src.core.exceptions import (
     ReviewStatusException,
     UserNotFoundException,
 )
+from src.core.permissions import get_current_user_with_token
+from src.models.auth_user import AuthUser
+from src.models.user import User
 from src.schemas.pull_request import (
+    ReviewAssignmentRequest,
     ReviewCreate,
     ReviewFilter,
     ReviewListResponse,
@@ -117,6 +122,7 @@ async def upsert_review(
 async def list_reviews(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     pull_request_id: str | None = Query(None, description="Filter by pull request ID"),
     project_key: str | None = Query(
         None, min_length=1, max_length=32, description="Filter by project key"
@@ -150,6 +156,10 @@ async def list_reviews(
     """
     List pull request reviews with filtering and pagination
 
+    Access Control:
+    - review_admin: Can view ALL reviews
+    - reviewer: Can only view reviews where reviewer field matches their username
+
     Response includes full entity information for project, repository, and users,
     plus the virtual app_name field resolved from project registry.
 
@@ -170,11 +180,23 @@ async def list_reviews(
         page_size: Number of items per page
         db: Database session
         review_service: Review service instance
+        current_user: Authenticated user
 
     Returns:
         ReviewListResponse: List of reviews with full entity information, app_name, and pagination info
     """
     try:
+        from src.services.rbac_service import RBACService
+
+        rbac_service = RBACService(db)
+
+        # Check if user has review_admin role (by checking 'assign' permission)
+        is_review_admin = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="assign",
+            resource_type="reviews",
+        )
+
         filters = ReviewFilter(
             pull_request_id=pull_request_id,
             project_key=project_key,
@@ -188,6 +210,24 @@ async def list_reviews(
             date_from=date_from,
             date_to=date_to,
         )
+
+        # Apply role-based filtering
+        if not is_review_admin:
+            # Regular user - filter by their bitbucket username
+            bitbucket_username = await _get_bitbucket_username(current_user.id, db)
+
+            if bitbucket_username:
+                # Only allow viewing own reviews
+                filters.reviewer = bitbucket_username
+                logger.info(
+                    f"Regular user {current_user.username} filtered by reviewer={bitbucket_username}"
+                )
+            else:
+                # No linked bitbucket user - return empty list
+                logger.warning(f"User {current_user.username} has no linked Bitbucket account")
+                return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
+        else:
+            logger.info(f"Review admin {current_user.username} accessing all reviews")
 
         # Parse app_names from comma-separated string
         app_names_list = None
@@ -1163,3 +1203,125 @@ async def batch_delete_scores(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to batch delete scores"},
         )
+
+
+@router.post("/assign", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
+async def assign_review_task(
+    assignment_data: ReviewAssignmentRequest,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+) -> ReviewResponse:
+    """
+    Assign a review task to a reviewer (requires review_admin role)
+
+    Creates a new review record with the specified reviewer.
+    Only users with 'assign' permission on 'reviews' can use this endpoint.
+
+    Args:
+        assignment_data: Assignment details
+        db: Database session
+        current_user: Authenticated user (must be review_admin)
+        review_service: Review service instance
+
+    Returns:
+        ReviewResponse: The created review
+
+    Raises:
+        ForbiddenException: If user lacks assign permission
+        NotFoundException: If assignee not found
+        HTTPException: 400 if assignee is not a reviewer
+    """
+    from src.services.rbac_service import RBACService
+
+    # Check permission - must have 'assign' permission (review_admin)
+    rbac_service = RBACService(db)
+    await rbac_service.require_permission(
+        auth_user_id=current_user.id,
+        action="assign",
+        resource_type="reviews",
+    )
+
+    # Verify assignee exists
+    stmt = select(User).where(User.username == assignment_data.assignee_username)
+    result = await db.execute(stmt)
+    assignee = result.scalar_one_or_none()
+
+    if not assignee:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reviewer '{assignment_data.assignee_username}' not found",
+        )
+
+    # Verify assignee is a reviewer
+    if not assignee.is_reviewer:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User '{assignment_data.assignee_username}' is not marked as a reviewer",
+        )
+
+    # Create review with assigned reviewer
+    review_data = ReviewCreate(
+        pull_request_id=assignment_data.pull_request_id,
+        project_key=assignment_data.project_key,
+        repository_slug=assignment_data.repository_slug,
+        reviewer=assignment_data.assignee_username,
+        pull_request_user=assignment_data.pull_request_user,
+        source_branch=assignment_data.source_branch,
+        target_branch=assignment_data.target_branch,
+        pull_request_status="open",
+        pull_request_commit_id=assignment_data.pull_request_commit_id,
+    )
+
+    review, is_created = await review_service.upsert_review(review_data, db)
+
+    # Log audit trail
+    try:
+        from src.services.audit_service import AuditService
+
+        audit_service = AuditService(db)
+        await audit_service.log_action(
+            auth_user_id=current_user.id,
+            action="assign_review",
+            resource_type="reviews",
+            resource_id=f"{assignment_data.project_key}/{assignment_data.repository_slug}/{assignment_data.pull_request_id}",
+            new_values={
+                "assigned_to": assignment_data.assignee_username,
+                "assigned_by": current_user.username,
+            },
+        )
+    except Exception as e:
+        logger.warning(f"Failed to log audit for task assignment: {e}")
+
+    logger.info(
+        f"Review task assigned: PR {assignment_data.pull_request_id} "
+        f"to {assignment_data.assignee_username} by {current_user.username}"
+    )
+
+    return ReviewResponse(**review.to_dict())
+
+
+async def _get_bitbucket_username(auth_user_id: int, db: AsyncSession) -> str | None:
+    """Get bitbucket username linked to auth user
+
+    Args:
+        auth_user_id: Auth user ID
+        db: Database session
+
+    Returns:
+        Bitbucket username or None if not linked
+    """
+    # Get auth user
+    stmt = select(AuthUser).where(AuthUser.id == auth_user_id)
+    result = await db.execute(stmt)
+    auth_user = result.scalar_one_or_none()
+
+    if not auth_user or not auth_user.user_id:
+        return None
+
+    # Get linked bitbucket user
+    stmt = select(User).where(User.id == auth_user.user_id)
+    result = await db.execute(stmt)
+    bitbucket_user = result.scalar_one_or_none()
+
+    return bitbucket_user.username if bitbucket_user else None
