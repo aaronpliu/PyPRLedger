@@ -9,6 +9,7 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { Diff2HtmlUI } from 'diff2html/lib/ui/js/diff2html-ui-base.js'
 import hljs from 'highlight.js'
 import 'diff2html/bundles/css/diff2html.min.css'
+import type { ColorSchemeType } from 'diff2html/lib/types.js'
 
 const props = withDefaults(defineProps<{
   diff: string
@@ -157,7 +158,7 @@ const renderDiff = () => {
     highlight: true,
     renderNothingWhenEmpty: false,
     stickyFileHeaders: true,
-    colorScheme: isDark ? ('dark' as const) : ('light' as const),
+    colorScheme: isDark ? ('dark' as ColorSchemeType) : ('light' as ColorSchemeType),
   }
 
   try {
