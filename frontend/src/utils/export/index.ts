@@ -44,13 +44,14 @@ export function exportToCSV(
 export function exportReviewsToCSV(reviews: Review[], filename?: string) {
   const finalFilename = filename || `reviews_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}.csv`
   
+  // Map internal field names to display names
   const columns = [
     'seq#',
     'pull_request_id',
     'project_repo',
     'pr_user',
     'reviewer',
-    'pull_request_status',
+    'pr_status',
     'scores',
     'reviewer_comments',
     'created_date',
@@ -63,8 +64,9 @@ export function exportReviewsToCSV(reviews: Review[], filename?: string) {
     'project_repo': `${review.project_key} / ${review.repository_slug}`,
     'pr_user': review.pull_request_user_info?.display_name || review.pull_request_user,
     'reviewer': review.reviewer_info?.display_name || review.reviewer,
+    'pr_status': review.pull_request_status,
     'scores': review.score_summary && review.score_summary.total_scores > 0
-      ? `${review.score_summary.average_score?.toFixed(1)} (${review.score_summary.total_scores})`
+      ? `${review.score_summary.max_score?.toFixed(1) || review.score_summary.average_score?.toFixed(1)} (${review.score_summary.total_scores})${review.score_summary.max_score ? ' [max]' : ''}`
       : 'No scores',
     created_date: review.created_date ? dayjs(review.created_date).format('YYYY-MM-DD HH:mm:ss') : '',
     updated_date: review.updated_date ? dayjs(review.updated_date).format('YYYY-MM-DD HH:mm:ss') : '',

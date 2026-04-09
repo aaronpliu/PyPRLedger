@@ -109,7 +109,7 @@
           </el-select>
         </el-form-item>
         
-        <el-form-item label="Status">
+        <el-form-item label="PR Status">
           <el-select v-model="statusFilter" placeholder="All Status" clearable style="width: 150px" @change="loadReviews">
             <el-option label="Open" value="open" />
             <el-option label="Merged" value="merged" />
@@ -133,7 +133,7 @@
           <el-dropdown @command="handleBulkStatusChange">
             <el-button size="small" type="warning">
               <el-icon><Edit /></el-icon>
-              Change Status
+              Change PR Status
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </el-button>
             <template #dropdown>
@@ -221,7 +221,7 @@
         </el-table-column>
         
         <!-- Status -->
-        <el-table-column prop="pull_request_status" label="Status" width="120">
+        <el-table-column prop="pull_request_status" label="PR Status" width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.pull_request_status)">
               {{ row.pull_request_status }}
@@ -390,7 +390,7 @@ const filterFields = [
   { label: 'PR User', value: 'pull_request_user' },
   { label: 'Project Key', value: 'project_key' },
   { label: 'Reviewer', value: 'reviewer' },
-  { label: 'Status', value: 'pull_request_status' },
+  { label: 'PR Status', value: 'pull_request_status' },
   { label: 'Created Date', value: 'created_date' },
   { label: 'Updated Date', value: 'updated_date' },
   { label: 'Summary', value: 'reviewer_comments' },

@@ -50,7 +50,7 @@ export function exportReviewsToPDF(
   yPos += 15
 
   // Prepare table data
-  const headers = includeHeaders ? [['Seq#', 'PR ID', 'Project/Repo', 'PR User', 'Reviewer', 'Status', 'Scores', 'Comments', 'Created', 'Updated']] : []
+  const headers = includeHeaders ? [['Seq#', 'PR ID', 'Project/Repo', 'PR User', 'Reviewer', 'PR Status', 'Scores', 'Comments', 'Created', 'Updated']] : []
   
   const data = reviews.map((review, index) => [
     (index + 1).toString(),

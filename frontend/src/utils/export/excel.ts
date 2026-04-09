@@ -25,7 +25,7 @@ export function exportReviewsToExcel(
     'Project/Repo',
     'PR User',
     'Reviewer',
-    'Status',
+    'PR Status',
     'Scores',
     'Comments',
     'Created',

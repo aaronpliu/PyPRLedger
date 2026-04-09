@@ -109,7 +109,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="Status" width="120">
+        <el-table-column label="PR Status" width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.pull_request_status)">
               {{ row.pull_request_status }}
