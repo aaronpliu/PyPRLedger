@@ -804,6 +804,9 @@ const handleReviewerChange = async (row: Review) => {
       source_branch: row.source_branch,
       target_branch: row.target_branch,
       pull_request_commit_id: row.pull_request_commit_id || undefined,
+      git_code_diff: row.git_code_diff ?? "",
+      ai_suggestions: row.ai_suggestions || {},
+      reviewer_comments: row.reviewer_comments ?? undefined,
     }
     
     await reviewsApi.assignTask(assignmentData)
