@@ -1298,7 +1298,18 @@ async def assign_review_task(
         f"to {assignment_data.assignee_username} by {current_user.username}"
     )
 
-    return ReviewResponse(**review.to_dict())
+    # Handle both ORM object and Pydantic model
+    if hasattr(review, "to_dict"):
+        # ORM object (PullRequestReview)
+        review_data_dict = review.to_dict()
+    elif hasattr(review, "model_dump"):
+        # Pydantic model (ReviewResponse)
+        review_data_dict = review.model_dump(mode="json")
+    else:
+        # Fallback to dict() method
+        review_data_dict = dict(review)
+
+    return ReviewResponse(**review_data_dict)
 
 
 async def _get_bitbucket_username(auth_user_id: int, db: AsyncSession) -> str | None:

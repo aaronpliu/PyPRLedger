@@ -633,7 +633,11 @@ const confirmDelete = async (review: Review) => {
       }
     )
     
-    await reviewsApi.deleteReview(review.id)
+    await reviewsApi.deleteReview(
+      review.project_key,
+      review.repository_slug,
+      review.pull_request_id
+    )
     ElMessage.success('Review deleted successfully')
     loadReviews()
   } catch (error) {
@@ -697,12 +701,16 @@ const executeBulkDelete = async () => {
   
   try {
     for (let i = 0; i < idsToDelete.length; i++) {
-      const id = idsToDelete[i]
+      const review = selectedReviews.value[i]
       try {
-        await reviewsApi.deleteReview(id)
+        await reviewsApi.deleteReview(
+          review.project_key,
+          review.repository_slug,
+          review.pull_request_id
+        )
         successCount++
       } catch (error) {
-        console.error(`Failed to delete review ${id}:`, error)
+        console.error(`Failed to delete review ${review.id}:`, error)
         failCount++
       }
       

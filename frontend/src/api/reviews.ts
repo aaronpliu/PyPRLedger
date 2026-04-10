@@ -144,9 +144,9 @@ export const reviewsApi = {
     return request.put(`/reviews/${id}`, data)
   },
 
-  // Delete review
-  deleteReview(id: number): Promise<void> {
-    return request.delete(`/reviews/${id}`)
+  // Delete review using composite key
+  deleteReview(projectKey: string, repositorySlug: string, pullRequestId: string): Promise<void> {
+    return request.delete(`/reviews/${encodeURIComponent(projectKey)}/${encodeURIComponent(repositorySlug)}/${encodeURIComponent(pullRequestId)}`)
   },
 
   /**

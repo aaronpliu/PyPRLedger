@@ -409,7 +409,11 @@ const confirmDelete = async () => {
       }
     )
     
-    await reviewsApi.deleteReview(review.value.id)
+    await reviewsApi.deleteReview(
+      review.value.project_key,
+      review.value.repository_slug,
+      review.value.pull_request_id
+    )
     ElMessage.success('Review deleted successfully')
     router.push('/reviews')
   } catch (error) {
