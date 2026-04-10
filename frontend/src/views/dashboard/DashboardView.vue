@@ -78,7 +78,7 @@
         </div>
       </template>
       
-      <el-table :data="recentReviews" stripe style="width: 100%">
+      <el-table :data="recentReviews" style="width: 100%">
         <el-table-column label="Seq#" width="80">
           <template #default="{ $index }">
             {{ $index + 1 }}
