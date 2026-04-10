@@ -200,7 +200,6 @@
         v-loading="loading"
         stripe
         style="width: 100%"
-        @row-click="handleRowClick"
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55" fixed="left" />
@@ -841,6 +840,13 @@ const executeBatchAssignReviewer = async () => {
   try {
     for (let i = 0; i < selectedReviews.value.length; i++) {
       const review = selectedReviews.value[i]
+
+      // Skip API call if the reviewer is the same
+      if (review.reviewer === batchReviewerUsername.value) {
+        console.log(`Reviewer for review ID ${review.id} is already assigned. Skipping.`)
+        continue
+      }
+
       try {
         await reviewsApi.assignTask({
           pull_request_id: review.pull_request_id,
@@ -851,11 +857,14 @@ const executeBatchAssignReviewer = async () => {
           source_branch: review.source_branch,
           target_branch: review.target_branch,
           pull_request_commit_id: review.pull_request_commit_id,
-        });
-        processedCount.value++;
-        progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100);
+          git_code_diff: review.git_code_diff ?? "",
+          ai_suggestions: review.ai_suggestions || {},
+          reviewer_comments: review.reviewer_comments ?? undefined,
+        })
+        processedCount.value++
+        progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100)
       } catch (error) {
-        console.error(`Failed to assign reviewer for review ID ${review.id}:`, error);
+        console.error(`Failed to assign reviewer for review ID ${review.id}:`, error)
       }
     }
     
@@ -896,6 +905,13 @@ const handleBatchAssignReviewer = async (command: string) => {
 
     for (let i = 0; i < selectedReviews.value.length; i++) {
       const review = selectedReviews.value[i];
+
+      // Skip API call if the reviewer is the same
+      if (review.reviewer === batchReviewerUsername.value) {
+        console.log(`Reviewer for review ID ${review.id} is already assigned. Skipping.`)
+        continue;
+      }
+
       try {
         await reviewsApi.assignTask({
           pull_request_id: review.pull_request_id,
@@ -906,6 +922,9 @@ const handleBatchAssignReviewer = async (command: string) => {
           source_branch: review.source_branch,
           target_branch: review.target_branch,
           pull_request_commit_id: review.pull_request_commit_id,
+          git_code_diff: review.git_code_diff ?? "",
+          ai_suggestions: review.ai_suggestions || {},
+          reviewer_comments: review.reviewer_comments ?? undefined,
         });
         processedCount.value++;
         progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100);

@@ -105,6 +105,9 @@ export interface ReviewAssignmentRequest {
   source_branch: string
   target_branch: string
   pull_request_commit_id?: string | null
+  git_code_diff: string
+  ai_suggestions?: any
+  reviewer_comments?: string
 }
 
 // Reviews API
