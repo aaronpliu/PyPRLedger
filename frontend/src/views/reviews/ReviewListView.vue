@@ -842,7 +842,7 @@ const executeBatchAssignReviewer = async () => {
     for (let i = 0; i < selectedReviews.value.length; i++) {
       const review = selectedReviews.value[i]
       try {
-        const assignmentData: ReviewAssignmentRequest = {
+        await reviewsApi.assignTask({
           pull_request_id: review.pull_request_id,
           project_key: review.project_key,
           repository_slug: review.repository_slug,
@@ -850,19 +850,13 @@ const executeBatchAssignReviewer = async () => {
           pull_request_user: review.pull_request_user,
           source_branch: review.source_branch,
           target_branch: review.target_branch,
-          pull_request_commit_id: review.pull_request_commit_id || undefined,
-        }
-        
-        await reviewsApi.assignTask(assignmentData)
-        successCount++
+          pull_request_commit_id: review.pull_request_commit_id,
+        });
+        processedCount.value++;
+        progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100);
       } catch (error) {
-        console.error(`Failed to assign review ${review.id}:`, error)
-        failCount++
+        console.error(`Failed to assign reviewer for review ID ${review.id}:`, error);
       }
-      
-      processedCount.value = i + 1
-      progressPercentage.value = Math.round(((i + 1) / selectedReviews.value.length) * 100)
-      progressMessage.value = `Assigning review ${i + 1} of ${selectedReviews.value.length}...`
     }
     
     progressStatus.value = failCount > 0 ? 'warning' : 'success'
@@ -881,6 +875,54 @@ const executeBatchAssignReviewer = async () => {
     ElMessage.error('Failed to assign reviewers')
   }
 }
+
+const handleBatchAssignReviewer = async (command: string) => {
+  if (!batchReviewerUsername.value) {
+    ElMessage.warning('Please select a reviewer before confirming.');
+    return;
+  }
+
+  if (selectedReviews.value.length === 0) {
+    ElMessage.warning('No reviews selected for assignment.');
+    return;
+  }
+
+  try {
+    bulkOperationLoading.value = true;
+    progressMessage.value = 'Assigning reviewers...';
+    progressPercentage.value = 0;
+    processedCount.value = 0;
+    totalCount.value = selectedReviews.value.length;
+
+    for (let i = 0; i < selectedReviews.value.length; i++) {
+      const review = selectedReviews.value[i];
+      try {
+        await reviewsApi.assignTask({
+          pull_request_id: review.pull_request_id,
+          project_key: review.project_key,
+          repository_slug: review.repository_slug,
+          assignee_username: batchReviewerUsername.value,
+          pull_request_user: review.pull_request_user,
+          source_branch: review.source_branch,
+          target_branch: review.target_branch,
+          pull_request_commit_id: review.pull_request_commit_id,
+        });
+        processedCount.value++;
+        progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100);
+      } catch (error) {
+        console.error(`Failed to assign reviewer for review ID ${review.id}:`, error);
+      }
+    }
+
+    ElMessage.success('Batch assignment completed successfully.');
+    await loadReviews();
+    clearSelection();
+  } catch (error) {
+    ElMessage.error('An error occurred during batch assignment.');
+  } finally {
+    bulkOperationLoading.value = false;
+  }
+};
 
 // Load reviewers when component mounts
 onMounted(async () => {

@@ -196,7 +196,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import { rbacApi } from '@/api/rbac'
-import type { Role, RoleAssignment } from '@/types'
+import type { ResourceType, Role, RoleAssignment } from '@/types'
 
 const { t } = useI18n()
 const loading = ref(false)
@@ -353,7 +353,7 @@ const assignRole = async () => {
   try {
     await rbacApi.assignRole(selectedUser.value.id, {
       role_id: roleForm.role_id,
-      resource_type: roleForm.resource_type,
+      resource_type: roleForm.resource_type as ResourceType,
       resource_id: roleForm.resource_id || null,
     })
     

@@ -47,7 +47,7 @@ export interface RoleAssignment {
   auth_user_id: number
   role_id: number
   role_name?: string  // Added for display purposes
-  resource_type: 'global' | 'project' | 'repository'
+  resource_type: ResourceType
   resource_id: string | null
   granted_by: number | null
   expires_at: string | null
@@ -56,10 +56,13 @@ export interface RoleAssignment {
 
 export interface RoleAssignmentRequest {
   role_id: number
-  resource_type: 'global' | 'project' | 'repository'
+  resource_type: ResourceType
   resource_id?: string | null
   expires_at?: string | null
 }
+
+// Define a common type for resource types
+export type ResourceType = 'global' | 'project' | 'repository';
 
 // Audit types
 export interface AuditLog {
