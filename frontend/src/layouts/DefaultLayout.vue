@@ -78,11 +78,25 @@
     <el-main class="layout-main" role="main">
       <router-view />
     </el-main>
+
+    <!-- Footer -->
+    <el-footer class="layout-footer" role="contentinfo">
+      <div class="footer-content">
+        <div class="footer-left">
+          <span class="copyright">{{ COPYRIGHT }}</span>
+        </div>
+        <div class="footer-right">
+          <span class="version-info">
+            UI v{{ UI_VERSION }} | API v{{ apiVersion }}
+          </span>
+        </div>
+      </div>
+    </el-footer>
   </el-container>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { User, ArrowDown } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -94,12 +108,21 @@ import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
+import { UI_VERSION, COPYRIGHT, fetchApiVersion, getApiVersion } from '@/config/versions'
 
 const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const languageStore = useLanguage()
+
+// API version state
+const apiVersion = ref<string>('loading...')
+
+// Fetch API version on mount
+onMounted(async () => {
+  apiVersion.value = await fetchApiVersion()
+})
 
 // Initialize keyboard shortcuts
 useKeyboardShortcuts()
@@ -200,5 +223,30 @@ const handleLanguageChange = (lang: string) => {
 .layout-main {
   padding: 20px;
   background: var(--el-bg-color-page);
+}
+
+.layout-footer {
+  height: 40px;
+  padding: 0 20px;
+  background: var(--el-bg-color);
+  border-top: 1px solid var(--el-border-color);
+}
+
+.footer-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 100%;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.copyright {
+  font-weight: 500;
+}
+
+.version-info {
+  font-family: monospace;
+  opacity: 0.8;
 }
 </style>

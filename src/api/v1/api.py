@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from src import __version__
 from src.api.v1.endpoints import audit, auth, project_registry, projects, rbac, reviews, users
 
 
@@ -24,14 +25,10 @@ api_router.include_router(project_registry.router, tags=["project-registry"])
 # API information endpoint
 @api_router.get("/info")
 async def api_info():
-    """Get API information"""
+    """Get API information including version"""
     return {
         "name": "Pull Request Code Review Result Storage System API",
-        "version": "1.0.0",
+        "version": __version__,
         "description": "FastAPI-based Pull Request Code Review Result Storage System",
-        "endpoints": {
-            "reviews": "/api/v1/reviews",
-            "users": "/api/v1/users",
-            "projects": "/api/v1/projects",
-        },
+        "docs": "/api/docs",
     }

@@ -9,7 +9,7 @@ from fastapi_offline import FastAPIOffline
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from src import __version__
-from src.api.v1.api import api_router
+from src.api import api_router
 from src.core.config import settings
 from src.core.database import close_db, init_db
 from src.core.exceptions import AppException, ErrorCode
@@ -244,13 +244,3 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 async def health_check() -> dict:
     """Health check endpoint"""
     return {"status": "healthy", "version": __version__}
-
-
-@app.get("/")
-async def root() -> dict:
-    """Root path"""
-    return {
-        "message": "Pull Request Code Review Result Storage System API",
-        "version": __version__,
-        "docs": "/api/docs",
-    }
