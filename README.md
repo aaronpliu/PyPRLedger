@@ -128,27 +128,84 @@ docker-compose up -d
 - Grafana: http://localhost:3000 (admin/admin)
 - Prometheus: http://localhost:9090
 
-### Local Development
 
-1. Install dependencies:
+## 💻 Local Development Setup
+
+### 1. Clone Repository
+
 ```bash
-pip install -r requirements/dev.txt
+git clone <repository-url>
+cd PRLedger
 ```
 
-2. Set up environment:
+### 2. Install uv
+
+```bash
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+### 3. Create Virtual Environment
+
+```bash
+uv venv
+```
+
+### 4. Activate Virtual Environment
+
+```bash
+source .venv/bin/activate  # On macOS/Linux
+# Or on Windows:
+# .venv\Scripts\activate
+```
+
+### 5. Install Dependencies
+
+```bash
+uv sync --all-extras
+```
+
+### 6. Configure Environment
+
 ```bash
 cp .env.example .env
+# Edit .env file with your configuration
 ```
 
-3. Run database migrations:
+### 7. Setup Database
+
+If using MySQL locally:
+
+```bash
+mysql -u root -p
+CREATE DATABASE code_review CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+EXIT;
+```
+
+### 8. Run Migrations
+
 ```bash
 alembic upgrade head
 ```
 
-4. Start the application:
+### 9. Start Application
+
 ```bash
-uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+# Development mode with auto-reload
+uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+
+# Production mode
+uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
+
+### 10. Access Application
+
+- **API**: http://localhost:8000
+- **Documentation**: http://localhost:8000/api/docs
+- **Metrics**: http://localhost:8000/metrics
 
 ## API Endpoints
 

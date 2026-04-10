@@ -1,0 +1,50 @@
+# Handle line endings automatically for different operating systems
+* text=auto
+
+# Explicitly declare text files to ensure consistent line endings
+*.py text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.vue text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sql text eol=lf
+*.lock text eol=lf
+*.git* text eol=lf
+
+# Added jsx and tsx file extensions for consistent line endings
+*.jsx text eol=lf
+*.tsx text eol=lf
+
+# Docker-related files
+Dockerfile text eol=lf
+*.dockerignore text eol=lf
+
+# Binary files - do not modify line endings
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# Ensure shell scripts have LF endings
+*.sh text eol=lf
+
+# Windows-specific files
+*.bat text eol=crlf
+*.cmd text eol=crlf
