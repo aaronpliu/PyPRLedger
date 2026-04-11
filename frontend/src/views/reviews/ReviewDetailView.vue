@@ -15,7 +15,24 @@
             <div class="card-header">
               <span class="card-title">📋 Review Information</span>
               <el-space>
-                <el-button type="success" size="small" @click="showScoreDialog = true">
+                <el-tooltip
+                  v-if="currentUserHasScore"
+                  content="You already have a score. Use the 'Update' button in the Scores table below to modify it."
+                  placement="top"
+                >
+                  <span>
+                    <el-button type="success" size="small" disabled>
+                      <el-icon><Plus /></el-icon>
+                      Add Score
+                    </el-button>
+                  </span>
+                </el-tooltip>
+                <el-button 
+                  v-else
+                  type="success" 
+                  size="small" 
+                  @click="showScoreDialog = true"
+                >
                   <el-icon><Plus /></el-icon>
                   Add Score
                 </el-button>
@@ -66,7 +83,7 @@
         <!-- Dual Column Layout: Code Diff + AI Review -->
         <el-row :gutter="16" style="margin-top: 16px" v-if="review.git_code_diff || review.ai_suggestions">
           <!-- Code Diff Column -->
-          <el-col :span="review.ai_suggestions ? 12 : 24">
+          <el-col :xs="24" :sm="24" :md="review.ai_suggestions ? 14 : 24" :lg="review.ai_suggestions ? 14 : 24" :xl="review.ai_suggestions ? 15 : 24">
             <div class="analysis-column">
               <div class="analysis-column-header">
                 <span>📝 Code Changes</span>
@@ -86,7 +103,7 @@
           </el-col>
 
           <!-- AI Review Column -->
-          <el-col :span="review.ai_suggestions ? 12 : 0" v-if="review.ai_suggestions">
+          <el-col :xs="24" :sm="24" :md="review.ai_suggestions ? 10 : 0" :lg="review.ai_suggestions ? 10 : 0" :xl="review.ai_suggestions ? 9 : 0" v-if="review.ai_suggestions">
             <div class="analysis-column">
               <div class="analysis-column-header">
                 🤖 AI Review Results
@@ -103,7 +120,24 @@
           <template #header>
             <div class="card-header">
               <span class="card-title">📊 Scores ({{ scores.length }})</span>
-              <el-button type="primary" size="small" @click="showScoreDialog = true">
+              <el-tooltip
+                v-if="currentUserHasScore"
+                content="You already have a score. Use the 'Update' button in the table to modify it."
+                placement="top"
+              >
+                <span>
+                  <el-button type="primary" size="small" disabled>
+                    <el-icon><Plus /></el-icon>
+                    Add Score
+                  </el-button>
+                </span>
+              </el-tooltip>
+              <el-button 
+                v-else
+                type="primary" 
+                size="small" 
+                @click="showScoreDialog = true"
+              >
                 <el-icon><Plus /></el-icon>
                 Add Score
               </el-button>
@@ -161,7 +195,14 @@
     </el-row>
 
     <!-- Add Score Dialog -->
-    <el-dialog v-model="showScoreDialog" :title="editingScore ? 'Update Score' : 'Add Score'" width="900px">
+    <el-dialog 
+      v-model="showScoreDialog" 
+      :title="editingScore ? 'Update Score' : 'Add Score'" 
+      width="900px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      show-close
+    >
       <!-- Quick Score Buttons -->
       <QuickScoreButtons @select="handleQuickScoreSelect" />
       
@@ -260,6 +301,13 @@ const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
 // Detect current theme
 const isDarkTheme = computed(() => {
   return document.documentElement.getAttribute('data-theme') === 'dark'
+})
+
+// Check if current user already has a score
+const currentUserHasScore = computed(() => {
+  const currentUsername = authStore.currentUser?.username
+  if (!currentUsername || !review.value) return false
+  return scores.value.some(s => s.reviewer === currentUsername)
 })
 
 // Configure MdEditor to use English
@@ -569,10 +617,20 @@ const handleCloseDialog = () => {
 watch(showScoreDialog, (isOpen) => {
   if (isOpen && review.value) {
     // Always set reviewer to current user
-    scoreForm.reviewer = authStore.currentUser?.username || ''
+    const currentUsername = authStore.currentUser?.username || ''
+    scoreForm.reviewer = currentUsername
     
-    // If not editing, reset other fields
-    if (!editingScore.value) {
+    // Check if current user already has a score for this review
+    const existingScore = scores.value.find(s => s.reviewer === currentUsername)
+    
+    if (existingScore) {
+      // User already has a score, enter edit mode
+      editingScore.value = existingScore
+      scoreForm.score = existingScore.score
+      scoreForm.reviewer_comments = existingScore.reviewer_comments || ''
+    } else {
+      // No existing score, reset form for new score
+      editingScore.value = null
       scoreForm.score = 0
       scoreForm.reviewer_comments = ''
     }
@@ -638,7 +696,10 @@ onMounted(() => {
   overflow: hidden;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
   background: white;
-  height: 600px; /* Fixed height for the entire column */
+  /* Responsive height based on viewport */
+  height: calc(100vh - 380px);
+  min-height: 500px;
+  max-height: 800px;
   display: flex;
   flex-direction: column;
 }
@@ -693,6 +754,28 @@ onMounted(() => {
 
 [data-theme='dark'] .analysis-column-body::-webkit-scrollbar-thumb:hover {
   background: #64748b;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+  .analysis-column {
+    height: calc(100vh - 320px);
+    min-height: 400px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .analysis-column {
+    height: calc(100vh - 350px);
+    max-height: 900px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .analysis-column {
+    height: calc(100vh - 320px);
+    max-height: 1000px;
+  }
 }
 
 .score-value {
