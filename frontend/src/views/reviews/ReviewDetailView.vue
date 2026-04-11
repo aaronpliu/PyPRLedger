@@ -200,12 +200,92 @@
         </el-form-item>
         
         <el-form-item label="Comments">
-          <el-input
-            v-model="scoreForm.reviewer_comments"
-            type="textarea"
-            :rows="3"
-            placeholder="Optional comments..."
-          />
+          <div class="comment-editor">
+            <!-- Toolbar -->
+            <div class="editor-toolbar">
+              <el-tooltip content="Bold" placement="top">
+                <el-button size="small" text @click="insertMarkdown('**', '**')">
+                  <strong>B</strong>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="Italic" placement="top">
+                <el-button size="small" text @click="insertMarkdown('*', '*')">
+                  <em>I</em>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="Code" placement="top">
+                <el-button size="small" text @click="insertMarkdown('`', '`')">
+                  <code>&lt;/&gt;</code>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="Link" placement="top">
+                <el-button size="small" text @click="insertLink">
+                  🔗
+                </el-button>
+              </el-tooltip>
+              <el-divider direction="vertical" />
+              <el-tooltip content="Emoji Picker" placement="top">
+                <el-popover
+                  v-model:visible="showEmojiPicker"
+                  placement="bottom-start"
+                  :width="320"
+                  trigger="click"
+                >
+                  <template #reference>
+                    <el-button size="small" text>😊</el-button>
+                  </template>
+                  <div class="emoji-picker">
+                    <div class="emoji-grid">
+                      <button
+                        v-for="emoji in commonEmojis"
+                        :key="emoji"
+                        class="emoji-btn"
+                        @click="insertEmoji(emoji)"
+                      >
+                        {{ emoji }}
+                      </button>
+                    </div>
+                  </div>
+                </el-popover>
+              </el-tooltip>
+              <el-divider direction="vertical" />
+              <el-tooltip content="Toggle Preview" placement="top">
+                <el-button 
+                  size="small" 
+                  :type="showPreview ? 'primary' : ''"
+                  text 
+                  @click="showPreview = !showPreview"
+                >
+                  👁️ Preview
+                </el-button>
+              </el-tooltip>
+            </div>
+            
+            <!-- Editor Area -->
+            <div class="editor-content">
+              <el-input
+                v-if="!showPreview"
+                v-model="scoreForm.reviewer_comments"
+                type="textarea"
+                :rows="6"
+                placeholder="Add comments... (supports Markdown)"
+                maxlength="1000"
+                show-word-limit
+                @keydown.ctrl.enter="handleAddScore"
+              />
+              <div v-else class="markdown-preview">
+                <div v-if="!scoreForm.reviewer_comments" class="preview-empty">
+                  No content to preview
+                </div>
+                <div v-else v-html="renderMarkdown(scoreForm.reviewer_comments)"></div>
+              </div>
+            </div>
+            
+            <!-- Helper Text -->
+            <div class="editor-hint">
+              💡 Tip: Use **bold**, *italic*, `code`, [link](url). Press Ctrl+Enter to submit.
+            </div>
+          </div>
         </el-form-item>
       </el-form>
       
@@ -247,6 +327,8 @@ const showScoreDialog = ref(false)
 const editingScore = ref<Score | null>(null)
 const scoreFormRef = ref<FormInstance>()
 const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
+const showEmojiPicker = ref(false)
+const showPreview = ref(false)
 
 const scoreForm = reactive<ScoreCreate>({
   pull_request_id: '',
@@ -425,6 +507,94 @@ const confirmDelete = async () => {
 
 const handleQuickScoreSelect = (value: number) => {
   scoreForm.score = value
+}
+
+// Common emojis for quick insertion
+const commonEmojis = [
+  '👍', '👎', '✅', '❌', '⭐', '💡', '🔥', '🎉',
+  '👀', '💬', '📝', '🚀', '⚠️', '🐛', '✨', '💯',
+  '😊', '😄', '🤔', '👏', '🙏', '❤️', '💪', '🎯',
+]
+
+// Insert markdown syntax at cursor position
+const insertMarkdown = (before: string, after: string) => {
+  const textarea = document.querySelector('.comment-editor textarea') as HTMLTextAreaElement
+  if (!textarea) return
+  
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  const text = scoreForm.reviewer_comments || ''
+  const selectedText = text.substring(start, end)
+  
+  const newText = text.substring(0, start) + before + selectedText + after + text.substring(end)
+  scoreForm.reviewer_comments = newText
+  
+  // Restore cursor position
+  setTimeout(() => {
+    textarea.focus()
+    textarea.setSelectionRange(start + before.length, end + before.length)
+  }, 0)
+}
+
+// Insert link
+const insertLink = () => {
+  const url = prompt('Enter URL:')
+  if (url) {
+    const text = prompt('Enter link text:', url)
+    if (text) {
+      insertMarkdown('[', `](${url})`)
+      // Replace placeholder with actual text
+      const textarea = document.querySelector('.comment-editor textarea') as HTMLTextAreaElement
+      if (textarea) {
+        const currentText = scoreForm.reviewer_comments || ''
+        const lastBracket = currentText.lastIndexOf('[')
+        if (lastBracket !== -1) {
+          const newText = currentText.substring(0, lastBracket + 1) + text + currentText.substring(lastBracket + 1)
+          scoreForm.reviewer_comments = newText
+        }
+      }
+    }
+  }
+}
+
+// Insert emoji
+const insertEmoji = (emoji: string) => {
+  const textarea = document.querySelector('.comment-editor textarea') as HTMLTextAreaElement
+  if (!textarea) return
+  
+  const start = textarea.selectionStart
+  const text = scoreForm.reviewer_comments || ''
+  const newText = text.substring(0, start) + emoji + text.substring(start)
+  scoreForm.reviewer_comments = newText
+  showEmojiPicker.value = false
+  
+  setTimeout(() => {
+    textarea.focus()
+    textarea.setSelectionRange(start + emoji.length, start + emoji.length)
+  }, 0)
+}
+
+// Simple markdown renderer
+const renderMarkdown = (text: string): string => {
+  if (!text) return ''
+  
+  let html = text
+    // Escape HTML
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Code
+    .replace(/`(.+?)`/g, '<code style="background: #f1f5f9; padding: 2px 6px; border-radius: 3px; font-family: monospace;">$1</code>')
+    // Links
+    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; text-decoration: underline;">$1</a>')
+    // Line breaks
+    .replace(/\n/g, '<br>')
+  
+  return html
 }
 
 // Watch for dialog open to set reviewer
@@ -633,6 +803,123 @@ onMounted(() => {
 
 :deep(.el-card:hover) {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Comment Editor Styles */
+.comment-editor {
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  background: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--el-border-color);
+  flex-wrap: wrap;
+}
+
+.editor-toolbar :deep(.el-button) {
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.editor-content {
+  position: relative;
+}
+
+.markdown-preview {
+  min-height: 150px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 12px;
+  background: white;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--el-text-color-primary);
+}
+
+[data-theme='dark'] .markdown-preview {
+  background: #1e293b;
+  color: #cbd5e1;
+}
+
+.preview-empty {
+  color: var(--el-text-color-secondary);
+  font-style: italic;
+  text-align: center;
+  padding: 40px 0;
+}
+
+.editor-hint {
+  padding: 6px 12px;
+  background: var(--el-fill-color-lighter);
+  font-size: 0.75rem;
+  color: var(--el-text-color-secondary);
+  border-top: 1px solid var(--el-border-color);
+}
+
+/* Emoji Picker */
+.emoji-picker {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  padding: 8px;
+}
+
+.emoji-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.emoji-btn:hover {
+  background: var(--el-fill-color);
+  transform: scale(1.2);
+}
+
+/* Markdown Preview Styles */
+.markdown-preview :deep(strong) {
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.markdown-preview :deep(em) {
+  font-style: italic;
+}
+
+.markdown-preview :deep(code) {
+  background: var(--el-fill-color-light);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 0.85em;
+}
+
+.markdown-preview :deep(a) {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.markdown-preview :deep(a:hover) {
+  color: #2563eb;
 }
 </style>
 
