@@ -184,8 +184,6 @@ class PullRequestReview(Base):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert pull request review model to dictionary"""
-        from datetime import datetime
-
         return {
             "id": self.id,
             "pull_request_id": self.pull_request_id,
@@ -401,8 +399,6 @@ class PullRequestScore(Base):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert pull request score model to dictionary"""
-        from datetime import datetime
-
         return {
             "id": self.id,
             "pull_request_id": self.pull_request_id,

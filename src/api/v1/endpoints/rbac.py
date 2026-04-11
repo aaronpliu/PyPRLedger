@@ -5,11 +5,13 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
+from src.models.role import Role
 from src.schemas.rbac import (
     RoleAssignmentRequest,
     RoleAssignmentResponse,
@@ -96,10 +98,6 @@ async def create_role(
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> RoleResponse:
     """Create new role (requires system admin)"""
-    from sqlalchemy import select
-
-    from src.models.role import Role
-
     await rbac_service.require_permission(current_user.id, "manage", "settings")
 
     # Check if role name already exists

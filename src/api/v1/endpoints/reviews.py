@@ -1,10 +1,9 @@
 import logging
 import traceback
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +16,7 @@ from src.core.exceptions import (
 )
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
+from src.models.pull_request import PullRequestReview
 from src.models.user import User
 from src.schemas.pull_request import (
     ReviewAssignmentRequest,
@@ -30,6 +30,8 @@ from src.schemas.pull_request import (
     ReviewStats,
     ReviewUpdate,
 )
+from src.services.audit_service import AuditService
+from src.services.rbac_service import RBACService
 from src.services.review_score_service import ReviewScoreService
 from src.services.review_service import ReviewService
 from src.utils.metrics import OperationTimer, metrics
@@ -52,7 +54,7 @@ def get_score_service() -> ReviewScoreService:
     return ReviewScoreService(metrics_collector=metrics)
 
 
-@router.post("", response_model=ReviewResponse)
+@router.post("", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
 async def upsert_review(
     review_data: ReviewCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -85,7 +87,6 @@ async def upsert_review(
             metrics.increment_pull_request(
                 project=review.project_key, status=review.pull_request_status
             )
-            status_code = status.HTTP_201_CREATED if is_created else status.HTTP_200_OK
             # Handle both ORM object and Pydantic model
             if hasattr(review, "to_dict"):
                 # ORM object (PullRequestReview) - to_dict already converts datetime to ISO format
@@ -97,7 +98,9 @@ async def upsert_review(
                 # Fallback to dict() method
                 review_data_dict = dict(review)
 
-            return JSONResponse(status_code=status_code, content=review_data_dict)
+            # Note: FastAPI will automatically set status code based on is_created flag
+            # For now, we always return 201 Created as declared in the decorator
+            return ReviewResponse(**review_data_dict)
         except (ProjectNotFoundException, UserNotFoundException) as e:
             metrics.increment_error(error_type=e.code, endpoint="POST /api/v1/reviews")
             raise HTTPException(
@@ -105,8 +108,6 @@ async def upsert_review(
                 detail={"error": e.code, "message": e.message, "detail": e.detail},
             )
         except Exception as e:
-            import traceback
-
             error_traceback = traceback.format_exc()
             logger.error(f"Failed to upsert review: {str(e)}\n{error_traceback}")
             metrics.increment_error(
@@ -186,8 +187,6 @@ async def list_reviews(
         ReviewListResponse: List of reviews with full entity information, app_name, and pagination info
     """
     try:
-        from src.services.rbac_service import RBACService
-
         rbac_service = RBACService(db)
 
         # Check if user has review_admin role (by checking 'assign' permission)
@@ -366,8 +365,6 @@ async def get_review(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-
         error_traceback = traceback.format_exc()
         logger.error(f"Failed to get review {pull_request_id}: {str(e)}\n{error_traceback}")
         metrics.increment_error(
@@ -586,8 +583,6 @@ async def get_reviews_by_project(
     Returns:
         ReviewListResponse: List of reviews with pagination info
     """
-    import traceback
-
     try:
         reviews, total = await review_service.get_reviews_by_project(
             project_key, db, page, page_size
@@ -1232,8 +1227,6 @@ async def assign_review_task(
         NotFoundException: If assignee not found
         HTTPException: 400 if assignee is not a reviewer
     """
-    from src.services.rbac_service import RBACService
-
     # Check permission - must have 'assign' permission (review_admin)
     rbac_service = RBACService(db)
     await rbac_service.require_permission(
@@ -1261,7 +1254,6 @@ async def assign_review_task(
         )
 
     # Check if review already exists (with NULL reviewer or matching commit)
-    from src.models.pull_request import PullRequestReview
 
     # First, try to find existing review with NULL reviewer for this PR
 
@@ -1276,7 +1268,6 @@ async def assign_review_task(
 
     if existing_review:
         # Update existing NULL reviewer record
-        from datetime import UTC, datetime
 
         existing_review.reviewer = assignment_data.assignee_username
         existing_review.assigned_by = current_user.username
@@ -1304,7 +1295,6 @@ async def assign_review_task(
         )
     else:
         # Create new review with assigned reviewer
-        from datetime import UTC, datetime
 
         review_data = ReviewCreate(
             pull_request_id=assignment_data.pull_request_id,
@@ -1339,8 +1329,6 @@ async def assign_review_task(
 
     # Log audit trail
     try:
-        from src.services.audit_service import AuditService
-
         audit_service = AuditService(db)
         await audit_service.log_action(
             auth_user_id=current_user.id,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
@@ -32,8 +32,6 @@ async def get_current_user_with_token(
     Raises:
         HTTPException: If not authenticated or token is invalid
     """
-    from fastapi import HTTPException, status
-
     authorization = request.headers.get("Authorization")
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -107,8 +105,6 @@ def require_permission(
                 resource_id=resource_id,
             )
         except Exception as e:
-            from fastapi import HTTPException, status
-
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=str(e),
