@@ -1260,20 +1260,82 @@ async def assign_review_task(
             detail=f"User '{assignment_data.assignee_username}' is not marked as a reviewer",
         )
 
-    # Create review with assigned reviewer
-    review_data = ReviewCreate(
-        pull_request_id=assignment_data.pull_request_id,
-        project_key=assignment_data.project_key,
-        repository_slug=assignment_data.repository_slug,
-        reviewer=assignment_data.assignee_username,
-        pull_request_user=assignment_data.pull_request_user,
-        source_branch=assignment_data.source_branch,
-        target_branch=assignment_data.target_branch,
-        pull_request_status="open",
-        pull_request_commit_id=assignment_data.pull_request_commit_id,
-    )
+    # Check if review already exists (with NULL reviewer or matching commit)
+    from src.models.pull_request import PullRequestReview
 
-    review, is_created = await review_service.upsert_review(review_data, db)
+    # First, try to find existing review with NULL reviewer for this PR
+
+    stmt = select(PullRequestReview).where(
+        PullRequestReview.pull_request_id == assignment_data.pull_request_id,
+        PullRequestReview.project_key == assignment_data.project_key,
+        PullRequestReview.repository_slug == assignment_data.repository_slug,
+        PullRequestReview.reviewer.is_(None),  # Find unassigned reviews
+    )
+    result = await db.execute(stmt)
+    existing_review = result.scalar_one_or_none()
+
+    if existing_review:
+        # Update existing NULL reviewer record
+        from datetime import UTC, datetime
+
+        existing_review.reviewer = assignment_data.assignee_username
+        existing_review.assigned_by = current_user.username
+        existing_review.assigned_date = datetime.now(UTC)
+        existing_review.assignment_status = "assigned"
+        existing_review.updated_date = datetime.now(UTC)
+
+        # Update other fields if provided
+        if assignment_data.pull_request_commit_id:
+            existing_review.pull_request_commit_id = assignment_data.pull_request_commit_id
+        if assignment_data.git_code_diff:
+            existing_review.git_code_diff = assignment_data.git_code_diff
+        if assignment_data.ai_suggestions:
+            existing_review.ai_suggestions = assignment_data.ai_suggestions
+        if assignment_data.reviewer_comments:
+            existing_review.reviewer_comments = assignment_data.reviewer_comments
+
+        await db.flush()
+        await db.refresh(existing_review)
+
+        review = existing_review
+        logger.info(
+            f"Updated existing review assignment: PR {assignment_data.pull_request_id} "
+            f"to {assignment_data.assignee_username} by {current_user.username}"
+        )
+    else:
+        # Create new review with assigned reviewer
+        from datetime import UTC, datetime
+
+        review_data = ReviewCreate(
+            pull_request_id=assignment_data.pull_request_id,
+            project_key=assignment_data.project_key,
+            repository_slug=assignment_data.repository_slug,
+            reviewer=assignment_data.assignee_username,
+            pull_request_user=assignment_data.pull_request_user,
+            source_branch=assignment_data.source_branch,
+            target_branch=assignment_data.target_branch,
+            pull_request_status="open",
+            pull_request_commit_id=assignment_data.pull_request_commit_id,
+            git_code_diff=assignment_data.git_code_diff,
+            ai_suggestions=assignment_data.ai_suggestions,
+            reviewer_comments=assignment_data.reviewer_comments,
+        )
+
+        review_obj, is_created = await review_service.upsert_review(review_data, db)
+
+        # Update assignment tracking fields
+        if hasattr(review_obj, "assigned_by"):
+            review_obj.assigned_by = current_user.username
+            review_obj.assigned_date = datetime.now(UTC)
+            review_obj.assignment_status = "assigned"
+            await db.flush()
+            await db.refresh(review_obj)
+
+        review = review_obj
+        logger.info(
+            f"Created new review with assignment: PR {assignment_data.pull_request_id} "
+            f"to {assignment_data.assignee_username} by {current_user.username}"
+        )
 
     # Log audit trail
     try:

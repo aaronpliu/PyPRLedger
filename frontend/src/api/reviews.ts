@@ -8,7 +8,7 @@ export interface Review {
   // Business key fields
   project_key: string
   repository_slug: string
-  reviewer: string
+  reviewer: string | null  // Can be null for pending assignment
   pull_request_user: string
   
   source_branch: string

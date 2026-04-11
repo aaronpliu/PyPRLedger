@@ -173,32 +173,51 @@ class ReviewService:
             username=review_data.pull_request_user, is_reviewer=False
         )
 
-        reviewer = await entity_sync_service.sync_user(
-            username=review_data.reviewer, is_reviewer=True
-        )
-
-        # Check if review already exists for the same reviewer and file
-        # A review is uniquely identified by (commit_id, project_key, repository_slug, source_filename, reviewer)
-        existing_review_result = await db.execute(
-            select(PullRequestReview).where(
-                PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
-                PullRequestReview.project_key == project.project_key,
-                PullRequestReview.repository_slug == repository.repository_slug,
-                PullRequestReview.source_filename == review_data.source_filename,
-                PullRequestReview.reviewer == reviewer.username,
+        # Sync reviewer if provided, otherwise set to None
+        reviewer = None
+        if review_data.reviewer:
+            reviewer = await entity_sync_service.sync_user(
+                username=review_data.reviewer, is_reviewer=True
             )
-        )
+
+        # Check if review already exists
+        # For NULL reviewer: match by commit_id + project + repo + file (without reviewer)
+        # For non-NULL reviewer: match by commit_id + project + repo + file + reviewer
+        if reviewer:
+            # Case 1: Reviewer is specified - find exact match
+            existing_review_result = await db.execute(
+                select(PullRequestReview).where(
+                    PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
+                    PullRequestReview.project_key == project.project_key,
+                    PullRequestReview.repository_slug == repository.repository_slug,
+                    PullRequestReview.source_filename == review_data.source_filename,
+                    PullRequestReview.reviewer == reviewer.username,
+                )
+            )
+        else:
+            # Case 2: Reviewer is NULL - find pending assignment record
+            existing_review_result = await db.execute(
+                select(PullRequestReview).where(
+                    PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
+                    PullRequestReview.project_key == project.project_key,
+                    PullRequestReview.repository_slug == repository.repository_slug,
+                    PullRequestReview.source_filename == review_data.source_filename,
+                    PullRequestReview.reviewer.is_(None),  # Use IS NULL for SQL
+                )
+            )
+
         existing_review = existing_review_result.scalar_one_or_none()
         if existing_review:
             raise ReviewAlreadyExistsException(pull_request_id=review_data.pull_request_id)
 
         # Create new review (score is now stored separately in PullRequestScore table)
+
         new_review = PullRequestReview(
             pull_request_id=review_data.pull_request_id,
             pull_request_commit_id=review_data.pull_request_commit_id,
             project_key=project.project_key,
             repository_slug=repository.repository_slug,
-            reviewer=reviewer.username,
+            reviewer=reviewer.username if reviewer else None,  # Can be NULL
             pull_request_user=pr_user.username,
             source_branch=review_data.source_branch,
             target_branch=review_data.target_branch,
@@ -208,6 +227,10 @@ class ReviewService:
             reviewer_comments=review_data.reviewer_comments,
             pull_request_status=review_data.pull_request_status,
             metadata=review_data.metadata,
+            # Assignment tracking - webhook creates auto_created reviews
+            assigned_by=None,  # Not manually assigned
+            assigned_date=None,
+            assignment_status="auto_created" if not reviewer else "assigned",
         )
         db.add(new_review)
         await db.flush()
@@ -223,10 +246,12 @@ class ReviewService:
                 "username": pr_user.username,
                 "display_name": pr_user.display_name,
             }
-            review_dict["reviewer_info"] = {
-                "username": reviewer.username,
-                "display_name": reviewer.display_name,
-            }
+            if reviewer:
+                if reviewer:
+                    review_dict["reviewer_info"] = {
+                        "username": reviewer.username,
+                        "display_name": reviewer.display_name,
+                    }
         await self._set_review_in_cache(
             project_key=str(project.project_key),
             repository_slug=str(repository.repository_slug),
@@ -234,10 +259,11 @@ class ReviewService:
             review_data=review_dict,
         )
 
-        # Update metrics
-        self.metrics.increment_review(
-            project=str(project.project_key), reviewer=str(reviewer.username)
-        )
+        # Update metrics (only if reviewer is set)
+        if reviewer:
+            self.metrics.increment_review(
+                project=str(project.project_key), reviewer=str(reviewer.username)
+            )
 
         logger.info(f"Created new review: {new_review.pull_request_id}")
         return ReviewResponse(**new_review.to_dict())
@@ -270,20 +296,39 @@ class ReviewService:
             username=review_data.pull_request_user, is_reviewer=False
         )
 
-        reviewer = await entity_sync_service.sync_user(
-            username=review_data.reviewer, is_reviewer=True
-        )
-
-        # Check if review already exists for the same reviewer and file
-        existing_review_result = await db.execute(
-            select(PullRequestReview).where(
-                PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
-                PullRequestReview.project_key == project.project_key,
-                PullRequestReview.repository_slug == repository.repository_slug,
-                PullRequestReview.source_filename == review_data.source_filename,
-                PullRequestReview.reviewer == reviewer.username,
+        # Sync reviewer if provided, otherwise set to None
+        reviewer = None
+        if review_data.reviewer:
+            reviewer = await entity_sync_service.sync_user(
+                username=review_data.reviewer, is_reviewer=True
             )
-        )
+
+        # Check if review already exists
+        # For NULL reviewer: match by commit_id + project + repo + file (without reviewer)
+        # For non-NULL reviewer: match by commit_id + project + repo + file + reviewer
+        if reviewer:
+            # Case 1: Reviewer is specified - find exact match
+            existing_review_result = await db.execute(
+                select(PullRequestReview).where(
+                    PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
+                    PullRequestReview.project_key == project.project_key,
+                    PullRequestReview.repository_slug == repository.repository_slug,
+                    PullRequestReview.source_filename == review_data.source_filename,
+                    PullRequestReview.reviewer == reviewer.username,
+                )
+            )
+        else:
+            # Case 2: Reviewer is NULL - find pending assignment record
+            existing_review_result = await db.execute(
+                select(PullRequestReview).where(
+                    PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
+                    PullRequestReview.project_key == project.project_key,
+                    PullRequestReview.repository_slug == repository.repository_slug,
+                    PullRequestReview.source_filename == review_data.source_filename,
+                    PullRequestReview.reviewer.is_(None),  # Use IS NULL for SQL
+                )
+            )
+
         existing_review = existing_review_result.scalar_one_or_none()
 
         if existing_review:
@@ -305,10 +350,11 @@ class ReviewService:
                     "username": pr_user.username,
                     "display_name": pr_user.display_name,
                 }
-                review_dict["reviewer_info"] = {
-                    "username": reviewer.username,
-                    "display_name": reviewer.display_name,
-                }
+                if reviewer:
+                    review_dict["reviewer_info"] = {
+                        "username": reviewer.username,
+                        "display_name": reviewer.display_name,
+                    }
             await self._set_review_in_cache(
                 project_key=str(project.project_key),
                 repository_slug=str(repository.repository_slug),
@@ -316,10 +362,11 @@ class ReviewService:
                 review_data=review_dict,
             )
 
-            # Update metrics
-            self.metrics.increment_review(
-                project=str(project.project_key), reviewer=str(reviewer.username)
-            )
+            # Update metrics (only if reviewer is set)
+            if reviewer:
+                self.metrics.increment_review(
+                    project=str(project.project_key), reviewer=str(reviewer.username)
+                )
 
             logger.info(f"Updated review: {existing_review.pull_request_id}")
             return ReviewResponse(**existing_review.to_dict()), False

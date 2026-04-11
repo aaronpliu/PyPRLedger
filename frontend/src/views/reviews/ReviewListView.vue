@@ -801,6 +801,13 @@ const closeProgressDialog = () => {
 // Task assignment handlers
 // Handle single reviewer change
 const handleReviewerChange = async (row: Review) => {
+  // If reviewer is cleared (set to null/empty), don't proceed
+  if (!row.reviewer) {
+    ElMessage.warning('Please select a reviewer')
+    loadReviews() // Reload to reset the dropdown
+    return
+  }
+  
   try {
     const assignmentData: ReviewAssignmentRequest = {
       pull_request_id: row.pull_request_id,
@@ -851,9 +858,12 @@ const executeBatchAssignReviewer = async () => {
     for (let i = 0; i < selectedReviews.value.length; i++) {
       const review = selectedReviews.value[i]
 
-      // Skip API call if the reviewer is the same
+      // Skip API call if the reviewer is the same or already assigned
       if (review.reviewer === batchReviewerUsername.value) {
         console.log(`Reviewer for review ID ${review.id} is already assigned. Skipping.`)
+        processedCount.value++
+        progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100)
+        successCount++
         continue
       }
 
@@ -873,8 +883,10 @@ const executeBatchAssignReviewer = async () => {
         })
         processedCount.value++
         progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100)
+        successCount++
       } catch (error) {
         console.error(`Failed to assign reviewer for review ID ${review.id}:`, error)
+        failCount++
       }
     }
     
@@ -916,9 +928,11 @@ const handleBatchAssignReviewer = async (command: string) => {
     for (let i = 0; i < selectedReviews.value.length; i++) {
       const review = selectedReviews.value[i];
 
-      // Skip API call if the reviewer is the same
+      // Skip API call if the reviewer is the same or already assigned
       if (review.reviewer === batchReviewerUsername.value) {
         console.log(`Reviewer for review ID ${review.id} is already assigned. Skipping.`)
+        processedCount.value++;
+        progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100);
         continue;
       }
 

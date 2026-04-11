@@ -57,12 +57,39 @@ class PullRequestReview(Base):
         index=True,
     )
 
-    reviewer: Mapped[str] = mapped_column(
-        String(64), ForeignKey("user.username", ondelete="CASCADE"), nullable=False, index=True
+    reviewer: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("user.username", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Reviewer username (NULL means pending assignment)",
     )
 
     pull_request_user: Mapped[str] = mapped_column(
         String(64), ForeignKey("user.username", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # Assignment tracking fields
+    assigned_by: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("user.username", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Username of the user who assigned this review task",
+    )
+
+    assigned_date: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="Timestamp when the review was assigned",
+    )
+
+    assignment_status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="auto_created",
+        server_default="auto_created",
+        comment="Assignment status: auto_created (webhook), assigned (manual), completed",
     )
 
     # Pull request information
@@ -175,6 +202,17 @@ class PullRequestReview(Base):
             "reviewer_comments": self.reviewer_comments,
             "pull_request_status": self.pull_request_status,
             "metadata": self.review_metadata,
+            # Assignment tracking
+            "assigned_by": self.assigned_by,
+            "assigned_date": (
+                self.assigned_date.isoformat()
+                if isinstance(self.assigned_date, datetime)
+                else self.assigned_date
+            )
+            if self.assigned_date
+            else None,
+            "assignment_status": self.assignment_status,
+            # Timestamps
             "created_date": (
                 self.created_date.isoformat()
                 if isinstance(self.created_date, datetime)
@@ -220,6 +258,7 @@ class PullRequestReview(Base):
             "reviewer_comments",
             "pull_request_status",
             "review_metadata",
+            "reviewer",  # Allow updating reviewer for task assignment
         ]
 
         for key, value in data.items():

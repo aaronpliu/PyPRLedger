@@ -20,7 +20,12 @@ class ReviewBase(BaseModel):
     # Business keys (only required fields - API caller doesn't need to pass IDs)
     project_key: str = Field(..., min_length=1, max_length=32, description="Project key")
     repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
-    reviewer: str = Field(..., min_length=1, max_length=64, description="Reviewer username")
+    reviewer: str | None = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        description="Reviewer username (NULL for pending assignment)",
+    )
     pull_request_user: str = Field(
         ..., min_length=1, max_length=64, description="Pull request user username"
     )
@@ -95,6 +100,12 @@ class ReviewUpdate(BaseModel):
     reviewer_comments: str | None = Field(None, max_length=10000)
     pull_request_status: str | None = Field(None)
     metadata: dict[str, Any] | None = Field(None)
+    reviewer: str | None = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        description="Reviewer username (can be set to assign reviewer)",
+    )
 
     @field_validator("pull_request_status")
     def validate_status(cls, v):
@@ -213,7 +224,12 @@ class ReviewResponse(BaseModel):
     # Business key fields - required top-level identifiers
     project_key: str = Field(..., min_length=1, max_length=32, description="Project key")
     repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
-    reviewer: str = Field(..., min_length=1, max_length=64, description="Reviewer username")
+    reviewer: str | None = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        description="Reviewer username (NULL for pending assignment)",
+    )
     pull_request_user: str = Field(
         ..., min_length=1, max_length=64, description="Pull request user username"
     )
@@ -574,6 +590,9 @@ class ReviewAssignmentRequest(BaseModel):
     source_branch: str = Field(..., min_length=1, description="Source branch")
     target_branch: str = Field(..., min_length=1, description="Target branch")
     pull_request_commit_id: str | None = Field(None, description="Commit ID (optional)")
+    git_code_diff: str | None = Field(None, description="Git code diff content (optional)")
+    ai_suggestions: dict[str, Any] | None = Field(None, description="AI suggestions (optional)")
+    reviewer_comments: str | None = Field(None, description="Reviewer comments (optional)")
 
     model_config = {
         "json_schema_extra": {
