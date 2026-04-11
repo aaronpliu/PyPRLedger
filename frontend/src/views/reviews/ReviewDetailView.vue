@@ -161,7 +161,7 @@
     </el-row>
 
     <!-- Add Score Dialog -->
-    <el-dialog v-model="showScoreDialog" :title="editingScore ? 'Update Score' : 'Add Score'" width="700px">
+    <el-dialog v-model="showScoreDialog" :title="editingScore ? 'Update Score' : 'Add Score'" width="900px">
       <!-- Quick Score Buttons -->
       <QuickScoreButtons @select="handleQuickScoreSelect" />
       
@@ -200,97 +200,24 @@
         </el-form-item>
         
         <el-form-item label="Comments">
-          <div class="comment-editor">
-            <!-- Toolbar -->
-            <div class="editor-toolbar">
-              <el-tooltip content="Bold" placement="top">
-                <el-button size="small" text @click="insertMarkdown('**', '**')">
-                  <strong>B</strong>
-                </el-button>
-              </el-tooltip>
-              <el-tooltip content="Italic" placement="top">
-                <el-button size="small" text @click="insertMarkdown('*', '*')">
-                  <em>I</em>
-                </el-button>
-              </el-tooltip>
-              <el-tooltip content="Code" placement="top">
-                <el-button size="small" text @click="insertMarkdown('`', '`')">
-                  <code>&lt;/&gt;</code>
-                </el-button>
-              </el-tooltip>
-              <el-tooltip content="Link" placement="top">
-                <el-button size="small" text @click="insertLink">
-                  🔗
-                </el-button>
-              </el-tooltip>
-              <el-divider direction="vertical" />
-              <el-tooltip content="Emoji Picker" placement="top">
-                <el-popover
-                  v-model:visible="showEmojiPicker"
-                  placement="bottom-start"
-                  :width="320"
-                  trigger="click"
-                >
-                  <template #reference>
-                    <el-button size="small" text>😊</el-button>
-                  </template>
-                  <div class="emoji-picker">
-                    <div class="emoji-grid">
-                      <button
-                        v-for="emoji in commonEmojis"
-                        :key="emoji"
-                        class="emoji-btn"
-                        @click="insertEmoji(emoji)"
-                      >
-                        {{ emoji }}
-                      </button>
-                    </div>
-                  </div>
-                </el-popover>
-              </el-tooltip>
-              <el-divider direction="vertical" />
-              <el-tooltip content="Toggle Preview" placement="top">
-                <el-button 
-                  size="small" 
-                  :type="showPreview ? 'primary' : ''"
-                  text 
-                  @click="showPreview = !showPreview"
-                >
-                  👁️ Preview
-                </el-button>
-              </el-tooltip>
-            </div>
-            
-            <!-- Editor Area -->
-            <div class="editor-content">
-              <el-input
-                v-if="!showPreview"
-                v-model="scoreForm.reviewer_comments"
-                type="textarea"
-                :rows="6"
-                placeholder="Add comments... (supports Markdown)"
-                maxlength="1000"
-                show-word-limit
-                @keydown.ctrl.enter="handleAddScore"
-              />
-              <div v-else class="markdown-preview">
-                <div v-if="!scoreForm.reviewer_comments" class="preview-empty">
-                  No content to preview
-                </div>
-                <div v-else v-html="renderMarkdown(scoreForm.reviewer_comments)"></div>
-              </div>
-            </div>
-            
-            <!-- Helper Text -->
-            <div class="editor-hint">
-              💡 Tip: Use **bold**, *italic*, `code`, [link](url). Press Ctrl+Enter to submit.
-            </div>
+          <MdEditor
+            v-model="scoreForm.reviewer_comments"
+            :toolbars="toolbars"
+            :theme="isDarkTheme ? 'dark' : 'light'"
+            language="en-US"
+            preview-theme="vuepress"
+            code-theme="atom"
+            style="height: 400px; border-radius: 6px; overflow: hidden;"
+            placeholder="Add your comments here... (supports Markdown)"
+          />
+          <div class="editor-hint" style="margin-top: 8px;">
+            💡 Supports Markdown formatting. Use the toolbar above or type directly.
           </div>
         </el-form-item>
       </el-form>
       
       <template #footer>
-        <el-button @click="showScoreDialog = false">Cancel</el-button>
+        <el-button @click="handleCloseDialog">Cancel</el-button>
         <el-button type="primary" :loading="addingScore" @click="handleAddScore">
           {{ editingScore ? 'Update' : 'Add' }} Score
         </el-button>
@@ -300,9 +227,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Clock, Plus, Delete, User } from '@element-plus/icons-vue'
+import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
+import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
 import { scoresApi } from '@/api/scores'
 import type { Review } from '@/api/reviews'
@@ -327,8 +256,127 @@ const showScoreDialog = ref(false)
 const editingScore = ref<Score | null>(null)
 const scoreFormRef = ref<FormInstance>()
 const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
-const showEmojiPicker = ref(false)
-const showPreview = ref(false)
+
+// Detect current theme
+const isDarkTheme = computed(() => {
+  return document.documentElement.getAttribute('data-theme') === 'dark'
+})
+
+// Configure MdEditor to use English
+config({
+  editorConfig: {
+    languageUserDefined: {
+      'en-US': {
+        toolbarTips: {
+          bold: 'Bold',
+          underline: 'Underline',
+          italic: 'Italic',
+          strikeThrough: 'Strikethrough',
+          title: 'Title',
+          sub: 'Subscript',
+          sup: 'Superscript',
+          quote: 'Quote',
+          unorderedList: 'Unordered List',
+          orderedList: 'Ordered List',
+          codeRow: 'Inline Code',
+          code: 'Code Block',
+          link: 'Link',
+          image: 'Image',
+          table: 'Table',
+          revoke: 'Undo',
+          next: 'Redo',
+          save: 'Save',
+          prettier: 'Format',
+          pageFullscreen: 'Page Fullscreen',
+          fullscreen: 'Fullscreen',
+          preview: 'Preview',
+          htmlPreview: 'HTML Preview',
+          catalog: 'Catalog',
+        },
+        titleItem: {
+          h1: 'Heading 1',
+          h2: 'Heading 2',
+          h3: 'Heading 3',
+          h4: 'Heading 4',
+          h5: 'Heading 5',
+          h6: 'Heading 6',
+        },
+        imgTitleItem: {
+          link: 'Add Image Link',
+          upload: 'Upload Image',
+          clip2upload: 'Clip and Upload',
+        },
+        linkModalTips: {
+          linkTitle: 'Add Link',
+          imageTitle: 'Add Image',
+          descLabel: 'Description:',
+          descLabelPlaceHolder: 'Enter description...',
+          urlLabel: 'Link URL:',
+          urlLabelPlaceHolder: 'Enter URL...',
+          buttonOK: 'OK',
+        },
+        clipModalTips: {
+          title: 'Crop Image',
+          buttonUpload: 'Upload',
+        },
+        copyCode: {
+          text: 'Copy',
+          successTips: 'Copied!',
+          failTips: 'Copy failed!',
+        },
+        mermaid: {
+          flow: 'Flowchart',
+          sequence: 'Sequence Diagram',
+          gantt: 'Gantt Chart',
+          class: 'Class Diagram',
+          state: 'State Diagram',
+          pie: 'Pie Chart',
+          relationship: 'Relationship Diagram',
+          journey: 'Journey Diagram',
+        },
+        katex: {
+          inline: 'Inline Formula',
+          block: 'Block Formula',
+        },
+        footer: {
+          markdownTotal: 'Words',
+          scrollAuto: 'Sync Scroll',
+        },
+      },
+    },
+  },
+})
+
+// Toolbar configuration
+const toolbars: ToolbarNames[] = [
+  'bold',
+  'underline',
+  'italic',
+  'strikeThrough',
+  '-',
+  'title',
+  'sub',
+  'sup',
+  'quote',
+  'unorderedList',
+  'orderedList',
+  '-',
+  'codeRow',
+  'code',
+  'link',
+  'image',
+  'table',
+  '-',
+  'revoke',
+  'next',
+  'save',
+  '=',
+  'pageFullscreen',
+  'fullscreen',
+  'preview',
+  'htmlPreview',
+  'catalog',
+]
 
 const scoreForm = reactive<ScoreCreate>({
   pull_request_id: '',
@@ -337,7 +385,7 @@ const scoreForm = reactive<ScoreCreate>({
   repository_slug: '',
   reviewer: '',
   score: 0,
-  reviewer_comments: null,
+  reviewer_comments: '',
   source_filename: null,
 })
 
@@ -427,7 +475,7 @@ const handleAddScore = async () => {
         editingScore.value = null
         // Reset form
         scoreForm.score = 0
-        scoreForm.reviewer_comments = null
+        scoreForm.reviewer_comments = ''
         loadReview()
       } catch (error) {
         ElMessage.error(editingScore.value ? 'Failed to update score' : 'Failed to add score')
@@ -441,7 +489,7 @@ const handleAddScore = async () => {
 const editScore = (score: Score) => {
   editingScore.value = score
   scoreForm.score = score.score
-  scoreForm.reviewer_comments = score.reviewer_comments || null
+  scoreForm.reviewer_comments = score.reviewer_comments || ''
   showScoreDialog.value = true
 }
 
@@ -509,92 +557,12 @@ const handleQuickScoreSelect = (value: number) => {
   scoreForm.score = value
 }
 
-// Common emojis for quick insertion
-const commonEmojis = [
-  '👍', '👎', '✅', '❌', '⭐', '💡', '🔥', '🎉',
-  '👀', '💬', '📝', '🚀', '⚠️', '🐛', '✨', '💯',
-  '😊', '😄', '🤔', '👏', '🙏', '❤️', '💪', '🎯',
-]
-
-// Insert markdown syntax at cursor position
-const insertMarkdown = (before: string, after: string) => {
-  const textarea = document.querySelector('.comment-editor textarea') as HTMLTextAreaElement
-  if (!textarea) return
-  
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-  const text = scoreForm.reviewer_comments || ''
-  const selectedText = text.substring(start, end)
-  
-  const newText = text.substring(0, start) + before + selectedText + after + text.substring(end)
-  scoreForm.reviewer_comments = newText
-  
-  // Restore cursor position
-  setTimeout(() => {
-    textarea.focus()
-    textarea.setSelectionRange(start + before.length, end + before.length)
-  }, 0)
-}
-
-// Insert link
-const insertLink = () => {
-  const url = prompt('Enter URL:')
-  if (url) {
-    const text = prompt('Enter link text:', url)
-    if (text) {
-      insertMarkdown('[', `](${url})`)
-      // Replace placeholder with actual text
-      const textarea = document.querySelector('.comment-editor textarea') as HTMLTextAreaElement
-      if (textarea) {
-        const currentText = scoreForm.reviewer_comments || ''
-        const lastBracket = currentText.lastIndexOf('[')
-        if (lastBracket !== -1) {
-          const newText = currentText.substring(0, lastBracket + 1) + text + currentText.substring(lastBracket + 1)
-          scoreForm.reviewer_comments = newText
-        }
-      }
-    }
-  }
-}
-
-// Insert emoji
-const insertEmoji = (emoji: string) => {
-  const textarea = document.querySelector('.comment-editor textarea') as HTMLTextAreaElement
-  if (!textarea) return
-  
-  const start = textarea.selectionStart
-  const text = scoreForm.reviewer_comments || ''
-  const newText = text.substring(0, start) + emoji + text.substring(start)
-  scoreForm.reviewer_comments = newText
-  showEmojiPicker.value = false
-  
-  setTimeout(() => {
-    textarea.focus()
-    textarea.setSelectionRange(start + emoji.length, start + emoji.length)
-  }, 0)
-}
-
-// Simple markdown renderer
-const renderMarkdown = (text: string): string => {
-  if (!text) return ''
-  
-  let html = text
-    // Escape HTML
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    // Bold
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    // Italic
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // Code
-    .replace(/`(.+?)`/g, '<code style="background: #f1f5f9; padding: 2px 6px; border-radius: 3px; font-family: monospace;">$1</code>')
-    // Links
-    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; text-decoration: underline;">$1</a>')
-    // Line breaks
-    .replace(/\n/g, '<br>')
-  
-  return html
+const handleCloseDialog = () => {
+  showScoreDialog.value = false
+  editingScore.value = null
+  // Reset form
+  scoreForm.score = 0
+  scoreForm.reviewer_comments = ''
 }
 
 // Watch for dialog open to set reviewer
@@ -606,9 +574,15 @@ watch(showScoreDialog, (isOpen) => {
     // If not editing, reset other fields
     if (!editingScore.value) {
       scoreForm.score = 0
-      scoreForm.reviewer_comments = null
+      scoreForm.reviewer_comments = ''
     }
   }
+})
+
+// Watch for theme changes and force re-render of MdEditor
+watch(isDarkTheme, () => {
+  // Force re-computation by accessing the computed property
+  void isDarkTheme.value
 })
 
 onMounted(() => {
@@ -805,54 +779,211 @@ onMounted(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* Comment Editor Styles */
-.comment-editor {
-  border: 1px solid var(--el-border-color);
+/* MdEditor custom styles */
+:deep(.md-editor) {
   border-radius: 6px;
   overflow: hidden;
+  border: 1px solid var(--el-border-color);
+  transition: all 0.3s ease;
 }
 
-.editor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px;
+/* Light theme customization */
+:deep(.md-editor) {
+  --md-bk-color: #ffffff;
+  --md-color: var(--el-text-color-primary);
+  --md-bk-color-outstand: #f8fafc;
+  --md-border-color: var(--el-border-color);
+  --md-scrollbar-bg-color: #f1f5f9;
+  --md-scrollbar-thumb-color: #cbd5e1;
+}
+
+/* Dark theme customization */
+[data-theme='dark'] :deep(.md-editor) {
+  --md-bk-color: #1e293b !important;
+  --md-color: #cbd5e1 !important;
+  --md-bk-color-outstand: #0f172a !important;
+  --md-border-color: #334155 !important;
+  --md-scrollbar-bg-color: #0f172a !important;
+  --md-scrollbar-thumb-color: #475569 !important;
+}
+
+/* Toolbar styling */
+:deep(.md-editor-toolbar) {
   background: var(--el-fill-color-light);
   border-bottom: 1px solid var(--el-border-color);
-  flex-wrap: wrap;
+  transition: all 0.3s ease;
 }
 
-.editor-toolbar :deep(.el-button) {
-  min-width: 32px;
-  height: 32px;
-  padding: 0;
+[data-theme='dark'] :deep(.md-editor-toolbar) {
+  background: #1e293b;
+  border-bottom-color: #334155;
 }
 
-.editor-content {
-  position: relative;
-}
-
-.markdown-preview {
-  min-height: 150px;
-  max-height: 400px;
-  overflow-y: auto;
-  padding: 12px;
-  background: white;
-  font-size: 0.9rem;
-  line-height: 1.6;
+/* Toolbar button hover */
+:deep(.md-editor-toolbar-item:hover) {
+  background: var(--el-fill-color);
   color: var(--el-text-color-primary);
 }
 
-[data-theme='dark'] .markdown-preview {
+[data-theme='dark'] :deep(.md-editor-toolbar-item:hover) {
+  background: #334155;
+  color: #cbd5e1;
+}
+
+/* Active toolbar button */
+:deep(.md-editor-toolbar-item.active) {
+  color: #3b82f6;
+}
+
+[data-theme='dark'] :deep(.md-editor-toolbar-item.active) {
+  color: #60a5fa;
+}
+
+/* Editor content area - textarea */
+:deep(.md-editor-content) {
+  background: white;
+  transition: background 0.3s ease;
+}
+
+[data-theme='dark'] :deep(.md-editor-content) {
+  background: #1e293b;
+}
+
+/* Textarea itself */
+:deep(.md-editor-textarea) {
+  background: white;
+  color: var(--el-text-color-primary);
+}
+
+[data-theme='dark'] :deep(.md-editor-textarea) {
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+/* Preview area */
+:deep(.md-editor-preview) {
+  background: white;
+  color: var(--el-text-color-primary);
+  transition: all 0.3s ease;
+}
+
+[data-theme='dark'] :deep(.md-editor-preview) {
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+/* Code block styling */
+:deep(.md-editor-preview pre) {
+  background: #f1f5f9;
+  border: 1px solid var(--el-border-color);
+  transition: all 0.3s ease;
+}
+
+[data-theme='dark'] :deep(.md-editor-preview pre) {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+/* Inline code */
+:deep(.md-editor-preview code) {
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
+  transition: all 0.3s ease;
+}
+
+[data-theme='dark'] :deep(.md-editor-preview code) {
+  background: #334155;
+  color: #cbd5e1;
+}
+
+/* Links */
+:deep(.md-editor-preview a) {
+  color: #3b82f6;
+  transition: color 0.2s ease;
+}
+
+:deep(.md-editor-preview a:hover) {
+  color: #2563eb;
+}
+
+[data-theme='dark'] :deep(.md-editor-preview a) {
+  color: #60a5fa;
+}
+
+[data-theme='dark'] :deep(.md-editor-preview a:hover) {
+  color: #93c5fd;
+}
+
+/* Blockquote */
+:deep(.md-editor-preview blockquote) {
+  border-left-color: #3b82f6;
+  background: var(--el-fill-color-lighter);
+  color: var(--el-text-color-regular);
+  transition: all 0.3s ease;
+}
+
+[data-theme='dark'] :deep(.md-editor-preview blockquote) {
+  background: #0f172a;
+  border-left-color: #60a5fa;
+  color: #94a3b8;
+}
+
+/* Table styling */
+:deep(.md-editor-preview table) {
+  border-color: var(--el-border-color);
+}
+
+:deep(.md-editor-preview table th),
+:deep(.md-editor-preview table td) {
+  border-color: var(--el-border-color);
+  transition: all 0.3s ease;
+}
+
+[data-theme='dark'] :deep(.md-editor-preview table th),
+[data-theme='dark'] :deep(.md-editor-preview table td) {
+  border-color: #334155;
+  background: #0f172a;
+}
+
+[data-theme='dark'] :deep(.md-editor-preview table th) {
+  background: #1e293b;
+}
+
+/* Input area placeholder */
+:deep(.md-editor-textarea::placeholder) {
+  color: var(--el-text-color-placeholder);
+}
+
+[data-theme='dark'] :deep(.md-editor-textarea::placeholder) {
+  color: #64748b;
+}
+
+/* Ensure all editor child elements inherit correct colors */
+[data-theme='dark'] :deep(.md-editor-input) {
   background: #1e293b;
   color: #cbd5e1;
 }
 
-.preview-empty {
-  color: var(--el-text-color-secondary);
-  font-style: italic;
-  text-align: center;
-  padding: 40px 0;
+/* CodeMirror or other editor internals */
+[data-theme='dark'] :deep(.cm-editor) {
+  background: #1e293b;
+  color: #cbd5e1;
+}
+
+[data-theme='dark'] :deep(.cm-content) {
+  background: #1e293b;
+  color: #cbd5e1;
+}
+
+[data-theme='dark'] :deep(.cm-gutters) {
+  background: #0f172a;
+  border-right-color: #334155;
+  color: #64748b;
+}
+
+[data-theme='dark'] :deep(.cm-activeLineGutter) {
+  background: #334155;
+  color: #cbd5e1;
 }
 
 .editor-hint {
@@ -860,66 +991,7 @@ onMounted(() => {
   background: var(--el-fill-color-lighter);
   font-size: 0.75rem;
   color: var(--el-text-color-secondary);
-  border-top: 1px solid var(--el-border-color);
-}
-
-/* Emoji Picker */
-.emoji-picker {
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.emoji-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 4px;
-  padding: 8px;
-}
-
-.emoji-btn {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: transparent;
   border-radius: 4px;
-  cursor: pointer;
-  font-size: 1.2rem;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.emoji-btn:hover {
-  background: var(--el-fill-color);
-  transform: scale(1.2);
-}
-
-/* Markdown Preview Styles */
-.markdown-preview :deep(strong) {
-  font-weight: 700;
-  color: var(--el-text-color-primary);
-}
-
-.markdown-preview :deep(em) {
-  font-style: italic;
-}
-
-.markdown-preview :deep(code) {
-  background: var(--el-fill-color-light);
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: 'SF Mono', Monaco, monospace;
-  font-size: 0.85em;
-}
-
-.markdown-preview :deep(a) {
-  color: #3b82f6;
-  text-decoration: underline;
-}
-
-.markdown-preview :deep(a:hover) {
-  color: #2563eb;
 }
 </style>
 
@@ -952,5 +1024,18 @@ onMounted(() => {
 
 [data-theme='dark'] .el-descriptions table tbody tr td * {
   color: inherit !important;
+}
+
+/* MdEditor global dark mode overrides */
+[data-theme='dark'] .md-editor {
+  --md-bk-color: #1e293b !important;
+  --md-color: #cbd5e1 !important;
+}
+
+[data-theme='dark'] .md-editor textarea,
+[data-theme='dark'] .md-editor .md-editor-content,
+[data-theme='dark'] .md-editor .md-editor-preview {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important;
 }
 </style>
