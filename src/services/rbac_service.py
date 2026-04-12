@@ -491,32 +491,40 @@ class RBACService:
                 },
             )
 
-        # 4. Check delegatee doesn't already have this delegation
+        # 4. Check if delegatee already has this role (direct assignment or active delegation)
+        # This prevents duplicate role assignments
         stmt = select(UserRoleAssignment).where(
             and_(
                 UserRoleAssignment.auth_user_id == delegatee_id,
                 UserRoleAssignment.role_id == role_id,
-                UserRoleAssignment.delegator_id == delegator_id,
                 UserRoleAssignment.resource_type == resource_type,
                 UserRoleAssignment.resource_id == resource_id,
-                UserRoleAssignment.is_delegated == True,
             )
         )
         result = await self.db.execute(stmt)
-        existing = result.scalar_one_or_none()
+        existing_assignments = result.scalars().all()
 
-        if existing:
-            # Check if it's expired/revoked, allow re-delegation
-            if existing.delegation_status in ["expired", "revoked"]:
-                logger.info(
-                    f"Re-delegating role {role_id} from {delegator_id} to {delegatee_id} "
-                    f"(previous delegation was {existing.delegation_status})"
-                )
-            else:
+        # Check for active direct assignment
+        for assignment in existing_assignments:
+            if not assignment.is_delegated:
                 raise ForbiddenException(
-                    message="Delegation already exists and is active",
-                    detail={"assignment_id": existing.id},
+                    message="User already has this role directly assigned",
+                    detail={
+                        "delegatee_id": delegatee_id,
+                        "role_id": role_id,
+                        "assignment_id": assignment.id,
+                        "note": "Cannot delegate a role that the user already has.",
+                    },
                 )
+
+        # Check for active delegation from same delegator
+        for assignment in existing_assignments:
+            if assignment.is_delegated and assignment.delegator_id == delegator_id:
+                if assignment.delegation_status in ["active", "pending"]:
+                    raise ForbiddenException(
+                        message="Delegation already exists and is active",
+                        detail={"assignment_id": assignment.id},
+                    )
 
         # 4.5. Prevent delegation chains: delegatee cannot re-delegate delegated roles
         # Check if delegatee already has this role via delegation (not direct assignment)
@@ -658,8 +666,10 @@ class RBACService:
             include_expired: Include expired/revoked delegations
 
         Returns:
-            List of delegation records with role details
+            List of delegation records with role details and usernames
         """
+        from src.models.auth_user import AuthUser
+
         stmt = (
             select(UserRoleAssignment, Role)
             .join(Role, UserRoleAssignment.role_id == Role.id)
@@ -682,16 +692,36 @@ class RBACService:
         result = await self.db.execute(stmt)
         delegations = result.all()
 
+        # Collect all unique user IDs (delegators and delegatees)
+        user_ids = set()
+        for assignment, _ in delegations:
+            user_ids.add(assignment.delegator_id)
+            user_ids.add(assignment.auth_user_id)  # delegatee
+
+        # Fetch usernames in batch
+        username_map = {}
+        if user_ids:
+            user_stmt = select(AuthUser).where(AuthUser.id.in_(user_ids))
+            user_result = await self.db.execute(user_stmt)
+            users = user_result.scalars().all()
+            username_map = {user.id: user.username for user in users}
+
         return [
             {
                 "id": assignment.id,
                 "auth_user_id": assignment.auth_user_id,  # delegatee
+                "delegatee_username": username_map.get(
+                    assignment.auth_user_id, f"User {assignment.auth_user_id}"
+                ),
                 "role_id": assignment.role_id,
                 "role_name": role.name,
                 "resource_type": assignment.resource_type,
                 "resource_id": assignment.resource_id,
                 "granted_by": assignment.granted_by,
                 "delegator_id": assignment.delegator_id,
+                "delegator_username": username_map.get(
+                    assignment.delegator_id, f"User {assignment.delegator_id}"
+                ),
                 "is_delegated": assignment.is_delegated,
                 "delegation_status": assignment.delegation_status,
                 "delegation_scope": assignment.delegation_scope,

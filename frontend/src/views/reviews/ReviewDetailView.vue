@@ -23,28 +23,38 @@
                 <span class="card-title">📋 Review Information</span>
               </div>
               <el-space>
-                <el-tooltip
-                  v-if="currentUserHasScore"
-                  content="You already have a score. Use the 'Update' button in the Scores table below to modify it."
-                  placement="top"
-                >
-                  <span>
-                    <el-button type="success" size="small" disabled>
-                      <el-icon><Plus /></el-icon>
-                      Add Score
-                    </el-button>
-                  </span>
-                </el-tooltip>
+                <!-- Add Score Button - Only show if user has permission -->
+                <template v-if="canCreateScore">
+                  <el-tooltip
+                    v-if="currentUserHasScore"
+                    content="You already have a score. Use the 'Update' button in the Scores table below to modify it."
+                    placement="top"
+                  >
+                    <span>
+                      <el-button type="success" size="small" disabled>
+                        <el-icon><Plus /></el-icon>
+                        Add Score
+                      </el-button>
+                    </span>
+                  </el-tooltip>
+                  <el-button 
+                    v-else
+                    type="success" 
+                    size="small" 
+                    @click="showScoreDialog = true"
+                  >
+                    <el-icon><Plus /></el-icon>
+                    Add Score
+                  </el-button>
+                </template>
+                
+                <!-- Delete Review Button - Only show if user has permission -->
                 <el-button 
-                  v-else
-                  type="success" 
+                  v-if="canDeleteReview"
+                  type="danger" 
                   size="small" 
-                  @click="showScoreDialog = true"
+                  @click="confirmDelete"
                 >
-                  <el-icon><Plus /></el-icon>
-                  Add Score
-                </el-button>
-                <el-button type="danger" size="small" @click="confirmDelete">
                   <el-icon><Delete /></el-icon>
                   Delete
                 </el-button>
@@ -130,27 +140,30 @@
           <template #header>
             <div class="card-header">
               <span class="card-title">📊 Scores ({{ scores.length }})</span>
-              <el-tooltip
-                v-if="currentUserHasScore"
-                content="You already have a score. Use the 'Update' button in the table to modify it."
-                placement="top"
-              >
-                <span>
-                  <el-button type="primary" size="small" disabled>
-                    <el-icon><Plus /></el-icon>
-                    Add Score
-                  </el-button>
-                </span>
-              </el-tooltip>
-              <el-button 
-                v-else
-                type="primary" 
-                size="small" 
-                @click="showScoreDialog = true"
-              >
-                <el-icon><Plus /></el-icon>
-                Add Score
-              </el-button>
+              <!-- Add Score Button - Only show if user has permission -->
+              <template v-if="canCreateScore">
+                <el-tooltip
+                  v-if="currentUserHasScore"
+                  content="You already have a score. Use the 'Update' button in the table to modify it."
+                  placement="top"
+                >
+                  <span>
+                    <el-button type="primary" size="small" disabled>
+                      <el-icon><Plus /></el-icon>
+                      Add Score
+                    </el-button>
+                  </span>
+                </el-tooltip>
+                <el-button 
+                  v-else
+                  type="primary" 
+                  size="small" 
+                  @click="showScoreDialog = true"
+                >
+                  <el-icon><Plus /></el-icon>
+                  Add Score
+                </el-button>
+              </template>
             </div>
           </template>
 
@@ -179,19 +192,27 @@
             </el-table-column>
             <el-table-column label="Actions" width="180">
               <template #default="{ row }">
+                <!-- Update button: 
+                     - review_admin+: can update any score
+                     - reviewer: can only update their own score (hide others')
+                -->
                 <el-button 
+                  v-if="canDeleteAnyScore || (canCreateScore && canEditScore(row))"
                   size="small" 
                   type="primary" 
                   @click="editScore(row)"
-                  :disabled="!canEditScore(row)"
                 >
                   Update
                 </el-button>
+                <!-- Delete button: 
+                     - review_admin+: can delete any score
+                     - reviewer: can only delete their own score
+                -->
                 <el-button 
+                  v-if="canDeleteAnyScore || (canCreateScore && canEditScore(row))"
                   size="small" 
                   type="danger" 
                   @click="deleteScore(row)"
-                  :disabled="!canDeleteScore(row)"
                 >
                   Delete
                 </el-button>
@@ -319,6 +340,30 @@ const currentUserHasScore = computed(() => {
   const currentUsername = authStore.currentUser?.username
   if (!currentUsername || !review.value) return false
   return scores.value.some(s => s.reviewer === currentUsername)
+})
+
+// Check if current user has permission to create/update scores
+// Requires 'reviewer' role or higher (has 'create' permission on 'scores')
+const canCreateScore = computed(() => {
+  const roles = authStore.user?.roles || []
+  // reviewer, review_admin, system_admin have create permission
+  return roles.includes('reviewer') || roles.includes('review_admin') || roles.includes('system_admin')
+})
+
+// Check if current user has permission to delete scores
+// Requires 'review_admin' role or higher (has 'delete' permission on 'scores')
+const canDeleteAnyScore = computed(() => {
+  const roles = authStore.user?.roles || []
+  // Only review_admin and system_admin have delete permission
+  return roles.includes('review_admin') || roles.includes('system_admin')
+})
+
+// Check if current user has permission to delete reviews
+// Requires 'review_admin' role or higher (has 'delete' permission on 'reviews')
+const canDeleteReview = computed(() => {
+  const roles = authStore.user?.roles || []
+  // Only review_admin and system_admin can delete reviews
+  return roles.includes('review_admin') || roles.includes('system_admin')
 })
 
 // Configure MdEditor to use English

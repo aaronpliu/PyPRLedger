@@ -512,9 +512,15 @@ async def delete_review(
     pull_request_id: Annotated[str, Path(description="Pull request ID")],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> None:
     """
-    Delete a pull request review using composite business key
+    Delete a pull request review using composite business key (soft delete)
+
+    ## Access Control
+
+    Requires 'delete' permission on 'reviews' resource.
+    Typically granted to 'review_admin' role and above.
 
     Args:
         project_key: The project key
@@ -522,14 +528,34 @@ async def delete_review(
         pull_request_id: The pull request ID
         db: Database session
         review_service: Review service instance
+        current_user: Authenticated user (must have delete permission)
 
     Returns:
         None: Successful deletion returns 204 No Content
 
     Raises:
+        HTTPException: 403 Forbidden if user lacks permission
         ReviewNotFoundException: If the review doesn't exist
     """
     try:
+        # Check if user has permission to delete reviews
+        rbac_service = RBACService(db)
+
+        has_permission = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="delete",
+            resource_type="reviews",
+        )
+
+        if not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "FORBIDDEN",
+                    "message": "You do not have permission to delete reviews. Requires 'review_admin' role or higher.",
+                },
+            )
+
         # Use composite key for precise cache operations
         deleted = await review_service.delete_review(
             pull_request_id=pull_request_id,
@@ -788,6 +814,7 @@ async def upsert_score(
     score_data: ReviewScoreCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     score_service: Annotated[ReviewScoreService, Depends(get_score_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> ReviewScoreResponse:
     """
     Create or update a pull request review score
@@ -821,6 +848,11 @@ async def upsert_score(
     - 9.0: "Good suggestion"
     - 10.0: "Must apply change"
 
+    ## Access Control
+
+    Requires 'create' or 'update' permission on 'scores' resource.
+    Typically granted to 'reviewer' role and above.
+
     Args:
         score_data: The score upsert payload containing:
             - pull_request_id: PR identifier
@@ -834,6 +866,7 @@ async def upsert_score(
             - reviewer_comments: Optional detailed feedback
         db: Database session
         score_service: Review score service instance
+        current_user: Authenticated user
 
     Returns:
         ReviewScoreResponse: The created/updated score with enriched information including:
@@ -843,15 +876,36 @@ async def upsert_score(
             - updated_date: When the score was last updated
 
     Raises:
+        HTTPException: 403 Forbidden if user lacks permission
         HTTPException: 200 OK on success
     """
     try:
+        # Check if user has permission to create/update scores
+        rbac_service = RBACService(db)
+
+        has_permission = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="create",
+            resource_type="scores",
+        )
+
+        if not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "FORBIDDEN",
+                    "message": "You do not have permission to submit scores. Requires 'reviewer' role or higher.",
+                },
+            )
+
         score = await score_service.upsert_score(score_data, db, include_details=True)
 
         # Return the Pydantic model directly - FastAPI will serialize it according to response_model
         # Note: Using fixed 200 OK status code as per response_model declaration
         return score
 
+    except HTTPException:
+        raise
     except Exception as e:
         error_traceback = traceback.format_exc()
         logger.error(f"Failed to upsert score: {str(e)}\n{error_traceback}")
@@ -1057,12 +1111,16 @@ async def delete_score(
     ),
     db: Annotated[AsyncSession, Depends(get_db_session)] = None,
     score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)] = None,
 ) -> None:
     """
     Soft delete a reviewer's score for a review target (mark as inactive)
 
-    The reviewer parameter acts as the current user (no auth system yet).
-    Only the score owner can delete their own score.
+    ## Access Control
+
+    Requires 'delete' permission on 'scores' resource.
+    Typically granted to 'review_admin' role and above.
+    Regular reviewers can only delete their own scores (checked in service layer).
 
     Args:
         reviewer: Reviewer username (acts as current user)
@@ -1072,14 +1130,53 @@ async def delete_score(
         source_filename: Optional filename (omit or null for PR-level)
         db: Database session
         score_service: Review score service instance
+        current_user: Authenticated user
 
     Returns:
         None: Successful deletion returns 204 No Content
 
     Raises:
+        HTTPException: 403 Forbidden if user lacks permission
         HTTPException: 404 if score not found or already deleted
     """
     try:
+        # Check if user has permission to delete scores
+        rbac_service = RBACService(db)
+
+        has_delete_permission = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="delete",
+            resource_type="scores",
+        )
+
+        # If user doesn't have delete permission, check if they're deleting their own score
+        if not has_delete_permission:
+            # Regular users can only delete their own scores
+            if reviewer != current_user.username:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You can only delete your own scores. Requires 'review_admin' role or higher to delete others' scores.",
+                    },
+                )
+
+            # User is deleting their own score, check if they have create permission (reviewer+)
+            has_create_permission = await rbac_service.check_permission(
+                auth_user_id=current_user.id,
+                action="create",
+                resource_type="scores",
+            )
+
+            if not has_create_permission:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You do not have permission to manage scores. Requires 'reviewer' role or higher.",
+                    },
+                )
+
         # Use reviewer as current_user (no auth system yet)
         deleted = await score_service.delete_score(
             pull_request_id=pull_request_id,
@@ -1119,12 +1216,15 @@ async def batch_delete_scores(
     request_data: dict,
     db: Annotated[AsyncSession, Depends(get_db_session)] = None,
     score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)] = None,
 ) -> dict:
     """
     Batch soft delete multiple scores (mark as inactive)
 
-    The current_user is extracted from the first score's reviewer field
-    (no auth system yet). All scores must belong to the same reviewer.
+    ## Access Control
+
+    Requires 'delete' permission on 'scores' resource.
+    Typically granted to 'review_admin' role and above.
 
     Args:
         request_data: JSON body containing:
@@ -1136,14 +1236,25 @@ async def batch_delete_scores(
                 - reviewer
         db: Database session
         score_service: Review score service instance
+        current_user: Authenticated user
 
     Returns:
         dict: Deletion results with counts
 
     Raises:
+        HTTPException: 403 Forbidden if user lacks permission
         HTTPException: 400 if invalid request, 500 on server error
     """
     try:
+        # Check if user has permission to delete scores
+        rbac_service = RBACService(db)
+
+        has_delete_permission = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="delete",
+            resource_type="scores",
+        )
+
         # Extract scores from request
         scores_to_delete = request_data.get("scores", [])
 
@@ -1153,10 +1264,10 @@ async def batch_delete_scores(
                 detail={"error": "BAD_REQUEST", "message": "No scores provided for deletion"},
             )
 
-        # Extract current_user from first score (all should be same reviewer)
-        current_user = scores_to_delete[0].get("reviewer")
+        # Extract reviewer username from first score (all should be same reviewer)
+        reviewer_username = scores_to_delete[0].get("reviewer")
 
-        if not current_user:
+        if not reviewer_username:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"error": "BAD_REQUEST", "message": "Reviewer field is required"},
@@ -1164,7 +1275,7 @@ async def batch_delete_scores(
 
         # Validate all scores have same reviewer
         for score_info in scores_to_delete:
-            if score_info.get("reviewer") != current_user:
+            if score_info.get("reviewer") != reviewer_username:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={
@@ -1173,11 +1284,39 @@ async def batch_delete_scores(
                     },
                 )
 
+        # If user doesn't have delete permission, check if they're deleting their own scores
+        if not has_delete_permission:
+            # Regular users can only delete their own scores
+            if reviewer_username != current_user.username:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You can only delete your own scores. Requires 'review_admin' role or higher to delete others' scores.",
+                    },
+                )
+
+            # User is deleting their own scores, check if they have create permission (reviewer+)
+            has_create_permission = await rbac_service.check_permission(
+                auth_user_id=current_user.id,
+                action="create",
+                resource_type="scores",
+            )
+
+            if not has_create_permission:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You do not have permission to manage scores. Requires 'reviewer' role or higher.",
+                    },
+                )
+
         # Perform batch deletion
         result = await score_service.delete_scores_batch(
             scores_to_delete=scores_to_delete,
             db=db,
-            current_user=current_user,
+            current_user=reviewer_username,
         )
 
         return {

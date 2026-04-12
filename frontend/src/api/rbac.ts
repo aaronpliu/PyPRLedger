@@ -16,12 +16,14 @@ export interface DelegationCreate {
 export interface DelegationResponse {
   id: number
   auth_user_id: number
+  delegatee_username?: string | null
   role_id: number
   role_name?: string | null
   resource_type: string
   resource_id?: string | null
   granted_by?: number | null
   delegator_id?: number | null
+  delegator_username?: string | null
   is_delegated: boolean
   delegation_status?: string | null
   delegation_scope?: Record<string, string[]> | null

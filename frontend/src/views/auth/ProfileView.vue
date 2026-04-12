@@ -173,9 +173,9 @@
                     </template>
                   </el-table-column>
                   <el-table-column prop="resource_type" label="Resource Type" width="120" />
-                  <el-table-column label="Delegator" width="120">
+                  <el-table-column label="Delegator" width="150">
                     <template #default="{ row }">
-                      <el-tag type="info" size="small">ID: {{ row.delegator_id }}</el-tag>
+                      <span>{{ row.delegator_username || `User ${row.delegator_id}` }}</span>
                     </template>
                   </el-table-column>
                   <el-table-column label="Status" width="120">
@@ -214,9 +214,9 @@
                     </template>
                   </el-table-column>
                   <el-table-column prop="resource_type" label="Resource Type" width="120" />
-                  <el-table-column label="Delegatee" width="120">
+                  <el-table-column label="Delegatee" width="150">
                     <template #default="{ row }">
-                      <el-tag type="info" size="small">ID: {{ row.auth_user_id }}</el-tag>
+                      <span>{{ row.delegatee_username || `User ${row.auth_user_id}` }}</span>
                     </template>
                   </el-table-column>
                   <el-table-column label="Status" width="120">
