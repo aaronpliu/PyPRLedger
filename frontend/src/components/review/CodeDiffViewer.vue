@@ -201,6 +201,37 @@ const renderDiff = () => {
 :deep(.d2h-wrapper),
 :deep(.d2h-file-header),
 :deep(.d2h-file-wrapper) {
-  background-color: inherit;
+  background-color: var(--el-bg-color);
+  transition: background-color 0.3s ease;
+}
+
+/* Light theme specific styles */
+[data-theme='light'] :deep(.d2h-file-header) {
+  background-color: #f6f8fa;
+  border-bottom: 1px solid #e1e4e8;
+}
+
+[data-theme='light'] :deep(.d2h-file-wrapper) {
+  background-color: #ffffff;
+  border: 1px solid #e1e4e8;
+}
+
+[data-theme='light'] :deep(.d2h-code-line-ctn) {
+  background-color: #ffffff;
+}
+
+/* Dark theme specific styles */
+[data-theme='dark'] :deep(.d2h-file-header) {
+  background-color: #2d333b;
+  border-bottom: 1px solid #444c56;
+}
+
+[data-theme='dark'] :deep(.d2h-file-wrapper) {
+  background-color: #1e293b;
+  border: 1px solid #444c56;
+}
+
+[data-theme='dark'] :deep(.d2h-code-line-ctn) {
+  background-color: #1e293b;
 }
 </style>
