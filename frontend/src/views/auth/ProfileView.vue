@@ -7,125 +7,225 @@
         </div>
       </template>
 
-      <!-- User Info -->
-      <el-descriptions :column="1" border>
-        <el-descriptions-item label="Username">
-          {{ authStore.user?.username }}
-        </el-descriptions-item>
-        <el-descriptions-item label="Email">
-          {{ authStore.user?.email }}
-        </el-descriptions-item>
-        <el-descriptions-item label="Roles">
-          <div class="roles-header">
-            <div v-if="authStore.user?.roles && authStore.user.roles.length > 0" class="roles-container">
-              <el-tag
-                v-for="role in authStore.user.roles"
-                :key="role"
-                :type="getRoleTagType(role)"
-                size="small"
-                style="margin-right: 8px; margin-bottom: 4px;"
-              >
-                {{ formatRoleName(role) }}
-              </el-tag>
-            </div>
-            <el-tag v-else type="info" size="small">No roles assigned</el-tag>
-            
-            <!-- Popover for viewer-only users -->
-            <el-popover
-              v-if="isViewerOnly"
-              placement="top"
-              :width="350"
-              trigger="click"
-            >
-              <template #reference>
-                <el-button
-                  link
-                  type="warning"
-                  size="small"
-                  style="margin-left: 8px;"
+      <el-tabs v-model="activeTab" type="border-card">
+        <!-- User Info Tab -->
+        <el-tab-pane label="User Info" name="info">
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="Username">
+              {{ authStore.user?.username }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Email">
+              {{ authStore.user?.email }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Roles">
+              <div class="roles-header">
+                <div v-if="authStore.user?.roles && authStore.user.roles.length > 0" class="roles-container">
+                  <el-tag
+                    v-for="role in authStore.user.roles"
+                    :key="role"
+                    :type="getRoleTagType(role)"
+                    size="small"
+                    style="margin-right: 8px; margin-bottom: 4px;"
+                  >
+                    {{ formatRoleName(role) }}
+                  </el-tag>
+                </div>
+                <el-tag v-else type="info" size="small">No roles assigned</el-tag>
+                
+                <!-- Popover for viewer-only users -->
+                <el-popover
+                  v-if="isViewerOnly"
+                  placement="top"
+                  :width="350"
+                  trigger="click"
                 >
-                  <el-icon><InfoFilled /></el-icon>
-                </el-button>
-              </template>
-              <div class="viewer-tips-content">
-                <h4 style="margin: 0 0 12px 0; color: var(--el-color-warning);">
-                  <el-icon style="vertical-align: middle; margin-right: 4px;"><WarningFilled /></el-icon>
-                  Viewer Role Limitations
-                </h4>
-                <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
-                  <li>You can only <strong>view</strong> code reviews and scores</li>
-                  <li>You <strong>cannot</strong> add or update scores</li>
-                  <li>You <strong>cannot</strong> add comments to reviews</li>
-                  <li>You <strong>cannot</strong> be assigned review tasks</li>
-                </ul>
-                <el-divider style="margin: 12px 0;" />
-                <p style="margin: 0; color: var(--el-text-color-secondary); font-size: 13px;">
-                  💡 To gain full reviewer permissions, please contact a system administrator to upgrade your role.
-                </p>
+                  <template #reference>
+                    <el-button
+                      link
+                      type="warning"
+                      size="small"
+                      style="margin-left: 8px;"
+                    >
+                      <el-icon><InfoFilled /></el-icon>
+                    </el-button>
+                  </template>
+                  <div class="viewer-tips-content">
+                    <h4 style="margin: 0 0 12px 0; color: var(--el-color-warning);">
+                      <el-icon style="vertical-align: middle; margin-right: 4px;"><WarningFilled /></el-icon>
+                      Viewer Role Limitations
+                    </h4>
+                    <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
+                      <li>You can only <strong>view</strong> code reviews and scores</li>
+                      <li>You <strong>cannot</strong> add or update scores</li>
+                      <li>You <strong>cannot</strong> add comments to reviews</li>
+                      <li>You <strong>cannot</strong> be assigned review tasks</li>
+                    </ul>
+                    <el-divider style="margin: 12px 0;" />
+                    <p style="margin: 0; color: var(--el-text-color-secondary); font-size: 13px;">
+                      💡 To gain full reviewer permissions, please contact a system administrator to upgrade your role.
+                    </p>
+                  </div>
+                </el-popover>
               </div>
-            </el-popover>
-          </div>
-        </el-descriptions-item>
-        <el-descriptions-item label="Status">
-          <el-tag :type="authStore.user?.is_active ? 'success' : 'danger'">
-            {{ authStore.user?.is_active ? 'Active' : 'Inactive' }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="Last Login">
-          {{ authStore.user?.last_login_at ? formatDate(authStore.user.last_login_at) : 'Never' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="Member Since">
-          {{ authStore.user?.created_at ? formatDate(authStore.user.created_at) : 'N/A' }}
-        </el-descriptions-item>
-      </el-descriptions>
+            </el-descriptions-item>
+            <el-descriptions-item label="Status">
+              <el-tag :type="authStore.user?.is_active ? 'success' : 'danger'">
+                {{ authStore.user?.is_active ? 'Active' : 'Inactive' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="Last Login">
+              {{ authStore.user?.last_login_at ? formatDate(authStore.user.last_login_at) : 'Never' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Member Since">
+              {{ authStore.user?.created_at ? formatDate(authStore.user.created_at) : 'N/A' }}
+            </el-descriptions-item>
+          </el-descriptions>
 
-      <!-- Change Password Section -->
-      <el-divider />
-      <h3>Change Password</h3>
-      <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="140px" class="password-form">
-        <el-form-item label="Current Password" prop="old_password">
-          <el-input
-            v-model="passwordForm.old_password"
-            type="password"
-            placeholder="Enter current password"
-            show-password
-          />
-        </el-form-item>
-        
-        <el-form-item label="New Password" prop="new_password">
-          <el-input
-            v-model="passwordForm.new_password"
-            type="password"
-            placeholder="Enter new password"
-            show-password
-          />
-        </el-form-item>
-        
-        <el-form-item label="Confirm Password" prop="confirm_password">
-          <el-input
-            v-model="passwordForm.confirm_password"
-            type="password"
-            placeholder="Confirm new password"
-            show-password
-          />
-        </el-form-item>
-        
-        <el-form-item>
-          <el-button type="primary" :loading="changingPassword" @click="handleChangePassword">
-            Change Password
-          </el-button>
-        </el-form-item>
-      </el-form>
+          <!-- Change Password Section -->
+          <el-divider />
+          <h3>Change Password</h3>
+          <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="140px" class="password-form">
+            <el-form-item label="Current Password" prop="old_password">
+              <el-input
+                v-model="passwordForm.old_password"
+                type="password"
+                placeholder="Enter current password"
+                show-password
+              />
+            </el-form-item>
+            
+            <el-form-item label="New Password" prop="new_password">
+              <el-input
+                v-model="passwordForm.new_password"
+                type="password"
+                placeholder="Enter new password"
+                show-password
+              />
+            </el-form-item>
+            
+            <el-form-item label="Confirm Password" prop="confirm_password">
+              <el-input
+                v-model="passwordForm.confirm_password"
+                type="password"
+                placeholder="Confirm new password"
+                show-password
+              />
+            </el-form-item>
+            
+            <el-form-item>
+              <el-button type="primary" :loading="changingPassword" @click="handleChangePassword">
+                Change Password
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
+        <!-- Role Delegations Tab -->
+        <el-tab-pane label="Role Delegations" name="delegations">
+          <el-tabs v-model="delegationDirection" type="card" style="margin-bottom: 20px;">
+            <el-tab-pane label="Received" name="received">
+              <div v-loading="loadingReceived">
+                <el-empty v-if="receivedDelegations.length === 0" description="No delegations received" />
+                <el-table v-else :data="receivedDelegations" stripe style="width: 100%">
+                  <el-table-column prop="role_name" label="Role" width="150">
+                    <template #default="{ row }">
+                      <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
+                        {{ row.role_name || `Role ${row.role_id}` }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="resource_type" label="Resource Type" width="120" />
+                  <el-table-column label="Delegator" width="150">
+                    <template #default="{ row }">
+                      User #{{ row.delegator_id }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="Status" width="120">
+                    <template #default="{ row }">
+                      <el-tag :type="getStatusType(row.delegation_status)">
+                        {{ formatStatus(row.delegation_status) }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="Valid Period" min-width="200">
+                    <template #default="{ row }">
+                      <div v-if="row.starts_at && row.expires_at">
+                        {{ formatDate(row.starts_at) }} → {{ formatDate(row.expires_at) }}
+                      </div>
+                      <span v-else>-</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="Reason" min-width="200">
+                    <template #default="{ row }">
+                      {{ row.delegation_reason || '-' }}
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="Sent" name="sent">
+              <div v-loading="loadingSent">
+                <el-empty v-if="sentDelegations.length === 0" description="No delegations sent" />
+                <el-table v-else :data="sentDelegations" stripe style="width: 100%">
+                  <el-table-column prop="role_name" label="Role" width="150">
+                    <template #default="{ row }">
+                      <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
+                        {{ row.role_name || `Role ${row.role_id}` }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="resource_type" label="Resource Type" width="120" />
+                  <el-table-column label="Delegatee" width="150">
+                    <template #default="{ row }">
+                      User #{{ row.auth_user_id }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="Status" width="120">
+                    <template #default="{ row }">
+                      <el-tag :type="getStatusType(row.delegation_status)">
+                        {{ formatStatus(row.delegation_status) }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="Valid Period" min-width="200">
+                    <template #default="{ row }">
+                      <div v-if="row.starts_at && row.expires_at">
+                        {{ formatDate(row.starts_at) }} → {{ formatDate(row.expires_at) }}
+                      </div>
+                      <span v-else>-</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="Actions" width="120" fixed="right">
+                    <template #default="{ row }">
+                      <el-button
+                        v-if="row.delegation_status === 'active' || row.delegation_status === 'pending'"
+                        size="small"
+                        type="danger"
+                        @click="handleRevokeDelegation(row.id)"
+                      >
+                        Revoke
+                      </el-button>
+                      <span v-else style="color: var(--el-text-color-secondary);">-</span>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </el-tab-pane>
+      </el-tabs>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/auth'
-import { ElMessage } from 'element-plus'
+import { rbacApi, type DelegationResponse } from '@/api/rbac'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { InfoFilled, WarningFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
@@ -134,6 +234,14 @@ const router = useRouter()
 const authStore = useAuthStore()
 const passwordFormRef = ref<FormInstance>()
 const changingPassword = ref(false)
+const activeTab = ref('info')
+const delegationDirection = ref<'received' | 'sent'>('received')
+
+// Delegation data
+const loadingReceived = ref(false)
+const loadingSent = ref(false)
+const receivedDelegations = ref<DelegationResponse[]>([])
+const sentDelegations = ref<DelegationResponse[]>([])
 
 const passwordForm = reactive({
   old_password: '',
@@ -206,6 +314,97 @@ const isViewerOnly = computed(() => {
   const roles = authStore.user?.roles || []
   return roles.length === 1 && roles[0] === 'viewer'
 })
+
+// Load delegations
+const loadReceivedDelegations = async () => {
+  if (!authStore.user?.id) return
+  loadingReceived.value = true
+  try {
+    receivedDelegations.value = await rbacApi.getUserDelegations(
+      authStore.user.id,
+      'received',
+      true // include expired
+    )
+  } catch (error) {
+    console.error('Failed to load received delegations:', error)
+  } finally {
+    loadingReceived.value = false
+  }
+}
+
+const loadSentDelegations = async () => {
+  if (!authStore.user?.id) return
+  loadingSent.value = true
+  try {
+    sentDelegations.value = await rbacApi.getUserDelegations(
+      authStore.user.id,
+      'sent',
+      true // include expired
+    )
+  } catch (error) {
+    console.error('Failed to load sent delegations:', error)
+  } finally {
+    loadingSent.value = false
+  }
+}
+
+// Watch for tab changes
+watch(delegationDirection, (newDir) => {
+  if (newDir === 'received') {
+    loadReceivedDelegations()
+  } else {
+    loadSentDelegations()
+  }
+})
+
+watch(activeTab, (newTab) => {
+  if (newTab === 'delegations') {
+    loadReceivedDelegations()
+    loadSentDelegations()
+  }
+})
+
+// Format delegation status
+const formatStatus = (status?: string | null): string => {
+  if (!status) return 'Unknown'
+  const statusMap: Record<string, string> = {
+    active: 'Active',
+    pending: 'Pending',
+    expired: 'Expired',
+    revoked: 'Revoked',
+  }
+  return statusMap[status] || status
+}
+
+const getStatusType = (status?: string | null): 'success' | 'warning' | 'info' | 'danger' => {
+  if (!status) return 'info'
+  const typeMap: Record<string, 'success' | 'warning' | 'info' | 'danger'> = {
+    active: 'success',
+    pending: 'warning',
+    expired: 'info',
+    revoked: 'danger',
+  }
+  return typeMap[status] || 'info'
+}
+
+// Revoke delegation
+const handleRevokeDelegation = async (assignmentId: number) => {
+  try {
+    await ElMessageBox.confirm(
+      'Are you sure you want to revoke this delegation?',
+      'Confirm Revoke',
+      { type: 'warning' }
+    )
+    
+    await rbacApi.revokeDelegation(assignmentId, { reason: 'Revoked by delegator' })
+    ElMessage.success('Delegation revoked successfully')
+    loadSentDelegations()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('Failed to revoke delegation')
+    }
+  }
+}
 
 const handleChangePassword = async () => {
   if (!passwordFormRef.value) return

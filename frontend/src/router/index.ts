@@ -73,6 +73,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/RoleManagementView.vue'),
       },
       {
+        path: 'delegations',
+        name: 'DelegationManagement',
+        component: () => import('@/views/admin/DelegationManagementView.vue'),
+      },
+      {
         path: 'audit',
         name: 'AuditLogs',
         component: () => import('@/views/admin/AuditLogView.vue'),

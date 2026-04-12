@@ -45,7 +45,12 @@
     "last_login": "最后登录",
     "status": "状态",
     "active": "活跃",
-    "inactive": "未激活"
+    "inactive": "未激活",
+    "role_delegations": "角色委托",
+    "received": "收到的委托",
+    "sent": "发出的委托",
+    "delegation_revoked": "委托撤销成功",
+    "revoke_failed": "撤销委托失败"
   },
   "dashboard": {
     "welcome": "欢迎使用 PR Ledger",
@@ -100,6 +105,7 @@
     "admin_panel": "管理面板",
     "users": "用户",
     "roles": "角色",
+    "delegations": "委托管理",
     "audit_logs": "审计日志",
     "user_management": "用户管理",
     "role_management": "角色管理",

@@ -45,7 +45,12 @@
     "last_login": "最後登入",
     "status": "狀態",
     "active": "活躍",
-    "inactive": "未啟用"
+    "inactive": "未啟用",
+    "role_delegations": "角色委託",
+    "received": "收到的委託",
+    "sent": "發出的委託",
+    "delegation_revoked": "委託撤銷成功",
+    "revoke_failed": "撤銷委託失敗"
   },
   "dashboard": {
     "welcome": "歡迎使用 PR Ledger",
@@ -100,6 +105,7 @@
     "admin_panel": "管理面板",
     "users": "使用者",
     "roles": "角色",
+    "delegations": "委託管理",
     "audit_logs": "稽核日誌",
     "user_management": "使用者管理",
     "role_management": "角色管理",

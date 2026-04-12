@@ -19,7 +19,7 @@ from src.schemas.delegation import (
 from src.services.rbac_service import RBACService
 
 
-router = APIRouter(prefix="/delegations", tags=["role-delegations"])
+router = APIRouter(tags=["role-delegations"])
 
 
 def get_rbac_service(
@@ -219,6 +219,7 @@ async def get_user_delegations(
     return [DelegationResponse(**d) for d in delegations]
 
 
+# Note: This route must be defined AFTER /users/{user_id} to avoid conflicts
 @router.post("/cleanup-expired")
 async def cleanup_expired_delegations(
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],

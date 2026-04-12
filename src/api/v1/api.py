@@ -22,7 +22,7 @@ api_router.include_router(audit.router, tags=["audit-logs"])
 
 api_router.include_router(rbac.router, tags=["rbac-management"])
 
-api_router.include_router(delegation.router, prefix="/rbac", tags=["role-delegations"])
+api_router.include_router(delegation.router, prefix="/rbac/delegations", tags=["role-delegations"])
 
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 
