@@ -68,7 +68,20 @@ class RBACService:
         from datetime import UTC, datetime
 
         now = datetime.now(UTC)
-        active_assignments = [a for a in assignments if not a.expires_at or a.expires_at > now]
+
+        def is_assignment_active(assignment) -> bool:
+            """Check if assignment is not expired, handling timezone-aware/naive datetimes"""
+            if not assignment.expires_at:
+                return True
+
+            expires_at = assignment.expires_at
+            # If expires_at is naive (no timezone), assume it's UTC
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+
+            return expires_at > now
+
+        active_assignments = [a for a in assignments if is_assignment_active(a)]
 
         if not active_assignments:
             logger.warning(f"User {auth_user_id} has no active role assignments")
