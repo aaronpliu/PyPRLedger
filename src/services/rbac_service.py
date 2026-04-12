@@ -168,6 +168,7 @@ class RBACService:
         return [
             {
                 "id": assignment.id,
+                "auth_user_id": assignment.auth_user_id,
                 "role_id": assignment.role_id,
                 "role_name": role.name,
                 "resource_type": assignment.resource_type,

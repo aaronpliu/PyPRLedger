@@ -122,6 +122,19 @@
 
         <!-- Role Delegations Tab -->
         <el-tab-pane label="Role Delegations" name="delegations">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="margin: 0;">My Delegations</h3>
+            <el-button 
+              v-if="canManageDelegations"
+              type="primary" 
+              size="small"
+              @click="showCreateDialog = true"
+            >
+              <el-icon><Plus /></el-icon>
+              Create Delegation
+            </el-button>
+          </div>
+          
           <el-tabs v-model="delegationDirection" type="card" style="margin-bottom: 20px;">
             <el-tab-pane label="Received" name="received">
               <div v-loading="loadingReceived">
@@ -216,6 +229,23 @@
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <!-- Create Delegation Dialog -->
+    <el-dialog v-model="showCreateDialog" title="Create Role Delegation" width="800px">
+      <DelegationForm
+        ref="delegationFormRef"
+        :current-user-id="authStore.user?.id || 0"
+        :current-username="authStore.user?.username || ''"
+        @submit="handleSubmitDelegation"
+      />
+      
+      <template #footer>
+        <el-button @click="showCreateDialog = false">Cancel</el-button>
+        <el-button type="primary" :loading="creating" @click="handleConfirmCreate">
+          Create Delegation
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -227,8 +257,9 @@ import { authApi } from '@/api/auth'
 import { rbacApi, type DelegationResponse } from '@/api/rbac'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { InfoFilled, WarningFilled } from '@element-plus/icons-vue'
+import { InfoFilled, WarningFilled, Plus } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import DelegationForm from '@/components/delegation/DelegationForm.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -242,6 +273,11 @@ const loadingReceived = ref(false)
 const loadingSent = ref(false)
 const receivedDelegations = ref<DelegationResponse[]>([])
 const sentDelegations = ref<DelegationResponse[]>([])
+
+// Create delegation dialog
+const showCreateDialog = ref(false)
+const creating = ref(false)
+const delegationFormRef = ref<InstanceType<typeof DelegationForm>>()
 
 const passwordForm = reactive({
   old_password: '',
@@ -313,6 +349,12 @@ const getRoleTagType = (role: string): 'success' | 'warning' | 'danger' | 'info'
 const isViewerOnly = computed(() => {
   const roles = authStore.user?.roles || []
   return roles.length === 1 && roles[0] === 'viewer'
+})
+
+// Check if user can manage delegations
+const canManageDelegations = computed(() => {
+  const roles = authStore.user?.roles || []
+  return roles.includes('system_admin') || roles.includes('review_admin')
 })
 
 // Load delegations
@@ -403,6 +445,42 @@ const handleRevokeDelegation = async (assignmentId: number) => {
     if (error !== 'cancel') {
       ElMessage.error('Failed to revoke delegation')
     }
+  }
+}
+
+// Handle delegation form submit (called by child component)
+const handleSubmitDelegation = (formData: any) => {
+  // Store form data for confirmation
+  pendingDelegationData.value = formData
+}
+
+const pendingDelegationData = ref<any>(null)
+
+// Confirm and create delegation
+const handleConfirmCreate = async () => {
+  if (!pendingDelegationData.value) return
+  
+  try {
+    creating.value = true
+    await rbacApi.createDelegation(pendingDelegationData.value)
+    
+    ElMessage.success('Delegation created successfully')
+    showCreateDialog.value = false
+    pendingDelegationData.value = null
+    
+    // Reset the form
+    if (delegationFormRef.value) {
+      delegationFormRef.value.reset()
+    }
+    
+    loadSentDelegations()
+  } catch (error: any) {
+    // Don't show permission errors
+    if (error?.response?.status !== 403) {
+      ElMessage.error(error?.response?.data?.detail || 'Failed to create delegation')
+    }
+  } finally {
+    creating.value = false
   }
 }
 

@@ -120,82 +120,17 @@
     </el-card>
 
     <!-- Create Delegation Dialog -->
-    <el-dialog v-model="showCreateDialog" title="Create Role Delegation" width="700px">
-      <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="140px">
-        <el-form-item label="Delegator (You)" prop="delegator">
-          <el-input :value="`User #${authStore.user?.id} (${authStore.user?.username})`" disabled />
-        </el-form-item>
-        
-        <el-form-item label="Delegatee User ID" prop="delegatee_id">
-          <el-input-number v-model="createForm.delegatee_id" :min="1" style="width: 100%" />
-        </el-form-item>
-        
-        <el-form-item label="Role" prop="role_id">
-          <el-select v-model="createForm.role_id" placeholder="Select role" style="width: 100%">
-            <el-option
-              v-for="role in availableRoles"
-              :key="role.id"
-              :label="role.name"
-              :value="role.id"
-            />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Resource Type" prop="resource_type">
-          <el-select v-model="createForm.resource_type" style="width: 100%">
-            <el-option label="Global" value="global" />
-            <el-option label="Project" value="project" />
-            <el-option label="Repository" value="repository" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Resource ID" prop="resource_id">
-          <el-input v-model="createForm.resource_id" placeholder="Leave empty for global" />
-        </el-form-item>
-        
-        <el-form-item label="Start Time" prop="starts_at">
-          <el-date-picker
-            v-model="createForm.starts_at"
-            type="datetime"
-            placeholder="Select start time"
-            style="width: 100%"
-          />
-        </el-form-item>
-        
-        <el-form-item label="Expiry Time" prop="expires_at">
-          <el-date-picker
-            v-model="createForm.expires_at"
-            type="datetime"
-            placeholder="Select expiry time"
-            style="width: 100%"
-          />
-        </el-form-item>
-        
-        <el-form-item label="Delegation Scope" prop="delegation_scope">
-          <el-input
-            v-model="scopeText"
-            type="textarea"
-            :rows="4"
-            placeholder='{"reviews": ["read", "create"], "scores": ["read"]}'
-          />
-          <div style="margin-top: 8px; color: var(--el-text-color-secondary); font-size: 12px;">
-            JSON format: specify which permissions to delegate (subset of your permissions)
-          </div>
-        </el-form-item>
-        
-        <el-form-item label="Reason">
-          <el-input
-            v-model="createForm.reason"
-            type="textarea"
-            :rows="2"
-            placeholder="Reason for delegation..."
-          />
-        </el-form-item>
-      </el-form>
+    <el-dialog v-model="showCreateDialog" title="Create Role Delegation" width="800px">
+      <DelegationForm
+        ref="delegationFormRef"
+        :current-user-id="authStore.user?.id || 0"
+        :current-username="authStore.user?.username || ''"
+        @submit="handleSubmitDelegation"
+      />
       
       <template #footer>
         <el-button @click="showCreateDialog = false">Cancel</el-button>
-        <el-button type="primary" :loading="creating" @click="handleCreate">
+        <el-button type="primary" :loading="creating" @click="handleConfirmCreate">
           Create Delegation
         </el-button>
       </template>
@@ -209,17 +144,16 @@ import { Plus, Search } from '@element-plus/icons-vue'
 import { rbacApi, type DelegationResponse, type DelegationListQuery } from '@/api/rbac'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
+import DelegationForm from '@/components/delegation/DelegationForm.vue'
 
 const authStore = useAuthStore()
 const loading = ref(false)
 const creating = ref(false)
 const delegations = ref<DelegationResponse[]>([])
 const showCreateDialog = ref(false)
-const createFormRef = ref<FormInstance>()
-const scopeText = ref('')
-const availableRoles = ref<any[]>([])
+const delegationFormRef = ref<InstanceType<typeof DelegationForm>>()
+const pendingDelegationData = ref<any>(null)
 
 const filters = reactive<DelegationListQuery>({
   delegator_id: undefined,
@@ -227,25 +161,6 @@ const filters = reactive<DelegationListQuery>({
   status: undefined,
   include_expired: false,
 })
-
-const createForm = reactive({
-  delegatee_id: 1,
-  role_id: undefined as number | undefined,
-  resource_type: 'global',
-  resource_id: '',
-  delegation_scope: {} as Record<string, string[]>,
-  starts_at: new Date(),
-  expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days later
-  reason: '',
-})
-
-const createRules: FormRules = {
-  delegatee_id: [{ required: true, message: 'Please input delegatee user ID', trigger: 'blur' }],
-  role_id: [{ required: true, message: 'Please select a role', trigger: 'change' }],
-  resource_type: [{ required: true, message: 'Please select resource type', trigger: 'change' }],
-  starts_at: [{ required: true, message: 'Please select start time', trigger: 'change' }],
-  expires_at: [{ required: true, message: 'Please select expiry time', trigger: 'change' }],
-}
 
 // Statistics
 const activeCount = computed(() => delegations.value.filter(d => d.delegation_status === 'active').length)
@@ -333,56 +248,37 @@ const handleRevoke = async (row: DelegationResponse) => {
   }
 }
 
-const handleCreate = async () => {
-  if (!createFormRef.value) return
-  
-  await createFormRef.value.validate(async (valid) => {
-    if (valid) {
-      try {
-        // Parse delegation scope from text
-        let delegationScope
-        try {
-          delegationScope = scopeText.value ? JSON.parse(scopeText.value) : {}
-        } catch (e) {
-          ElMessage.error('Invalid JSON format for delegation scope')
-          return
-        }
-        
-        creating.value = true
-        await rbacApi.createDelegation({
-          delegatee_id: createForm.delegatee_id,
-          role_id: createForm.role_id!,
-          resource_type: createForm.resource_type,
-          resource_id: createForm.resource_id || null,
-          delegation_scope: delegationScope,
-          starts_at: dayjs(createForm.starts_at).toISOString(),
-          expires_at: dayjs(createForm.expires_at).toISOString(),
-          reason: createForm.reason || null,
-        })
-        
-        ElMessage.success('Delegation created successfully')
-        showCreateDialog.value = false
-        resetCreateForm()
-        loadDelegations()
-      } catch (error) {
-        ElMessage.error('Failed to create delegation')
-      } finally {
-        creating.value = false
-      }
-    }
-  })
+// Handle delegation form submit (called by child component)
+const handleSubmitDelegation = (formData: any) => {
+  pendingDelegationData.value = formData
 }
 
-const resetCreateForm = () => {
-  createForm.delegatee_id = 1
-  createForm.role_id = undefined
-  createForm.resource_type = 'global'
-  createForm.resource_id = ''
-  createForm.delegation_scope = {}
-  createForm.starts_at = new Date()
-  createForm.expires_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-  createForm.reason = ''
-  scopeText.value = ''
+// Confirm and create delegation
+const handleConfirmCreate = async () => {
+  if (!pendingDelegationData.value) return
+  
+  try {
+    creating.value = true
+    await rbacApi.createDelegation(pendingDelegationData.value)
+    
+    ElMessage.success('Delegation created successfully')
+    showCreateDialog.value = false
+    pendingDelegationData.value = null
+    
+    // Reset the form
+    if (delegationFormRef.value) {
+      delegationFormRef.value.reset()
+    }
+    
+    loadDelegations()
+  } catch (error: any) {
+    // Don't show permission errors
+    if (error?.response?.status !== 403) {
+      ElMessage.error(error?.response?.data?.detail || 'Failed to create delegation')
+    }
+  } finally {
+    creating.value = false
+  }
 }
 
 onMounted(() => {

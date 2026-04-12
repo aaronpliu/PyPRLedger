@@ -29,4 +29,11 @@ export const usersApi = {
   updateUser(userId: number, data: Partial<User>): Promise<User> {
     return request.put(`/users/${userId}`, data)
   },
+
+  /**
+   * Search users by username (for delegation)
+   */
+  searchUsers(query: string, limit: number = 10): Promise<User[]> {
+    return request.get('/users', { params: { search: query, limit } })
+  },
 }

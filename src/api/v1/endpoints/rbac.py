@@ -41,9 +41,16 @@ async def list_roles(
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> list[RoleResponse]:
-    """List all roles (requires system admin)"""
-    # Check if user has system admin permission
-    await rbac_service.require_permission(current_user.id, "manage", "settings")
+    """List all roles (requires manage roles or manage settings permission)"""
+    # Check if user has permission to manage roles OR settings
+    has_permission = await rbac_service.check_permission(current_user.id, "manage", "roles")
+    if not has_permission:
+        has_permission = await rbac_service.check_permission(current_user.id, "manage", "settings")
+
+    if not has_permission:
+        from src.core.exceptions import ForbiddenException
+
+        raise ForbiddenException(message="You do not have permission to view roles")
 
     roles = await rbac_service.get_all_roles()
     return [
@@ -184,7 +191,19 @@ async def get_user_roles(
         await rbac_service.require_permission(current_user.id, "read", "users")
 
     assignments = await rbac_service.get_user_roles(auth_user_id)
-    return assignments
+    return [
+        RoleAssignmentResponse(
+            id=a["id"],
+            auth_user_id=a["auth_user_id"],
+            role_id=a["role_id"],
+            resource_type=a["resource_type"],
+            resource_id=a["resource_id"],
+            granted_by=a["granted_by"],
+            expires_at=a["expires_at"],
+            created_at=a["created_at"],
+        )
+        for a in assignments
+    ]
 
 
 @router.post(
