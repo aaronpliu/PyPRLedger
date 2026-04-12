@@ -1,7 +1,16 @@
 from fastapi import APIRouter
 
 from src import __version__
-from src.api.v1.endpoints import audit, auth, project_registry, projects, rbac, reviews, users
+from src.api.v1.endpoints import (
+    audit,
+    auth,
+    delegation,
+    project_registry,
+    projects,
+    rbac,
+    reviews,
+    users,
+)
 
 
 api_router = APIRouter()
@@ -12,6 +21,8 @@ api_router.include_router(auth.router, tags=["authentication"])
 api_router.include_router(audit.router, tags=["audit-logs"])
 
 api_router.include_router(rbac.router, tags=["rbac-management"])
+
+api_router.include_router(delegation.router, prefix="/rbac", tags=["role-delegations"])
 
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 
