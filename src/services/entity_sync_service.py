@@ -6,7 +6,7 @@ when inserting PR reviews. It queries existing records and fetches from Bitbucke
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.project import Project
@@ -161,6 +161,10 @@ class EntitySyncService:
         await self.db.flush()
 
         logger.info(f"Created user from Bitbucket API: {username}")
+
+        # Auto-associate with auth_user if exists
+        await self._auto_associate_auth_user(user)
+
         return user
 
     async def sync_all_entities(
@@ -189,3 +193,196 @@ class EntitySyncService:
         reviewer_user = await self.sync_user(reviewer, is_reviewer=True)
 
         return project, repository, pr_user, reviewer_user
+
+    async def _auto_associate_auth_user(self, bitbucket_user: User) -> None:
+        """Auto-associate auth_user when Bitbucket user is created
+
+        If an auth_user exists with the same username but no user_id link,
+        create the link and upgrade role from 'viewer' to 'reviewer'.
+
+        Args:
+            bitbucket_user: The newly created or synced Bitbucket user
+        """
+        from src.models.auth_user import AuthUser
+
+        # Find auth_user with same username but no link
+        stmt = select(AuthUser).where(
+            and_(
+                AuthUser.username == bitbucket_user.username,
+                AuthUser.user_id.is_(None),
+            )
+        )
+        result = await self.db.execute(stmt)
+        auth_user = result.scalar_one_or_none()
+
+        if not auth_user:
+            logger.debug(f"No unlinked auth_user found for {bitbucket_user.username}")
+            return
+
+        # Create the association
+        auth_user.user_id = bitbucket_user.id
+        await self.db.flush()
+
+        logger.info(
+            f"Auto-associated auth_user {auth_user.id} with Bitbucket user {bitbucket_user.id}"
+        )
+
+        # Log audit trail
+        await self._log_association_audit(auth_user.id, bitbucket_user.id, bitbucket_user.username)
+
+        # Upgrade role from viewer to reviewer
+        await self._upgrade_role_to_reviewer(auth_user.id)
+
+    async def _upgrade_role_to_reviewer(self, auth_user_id: int) -> None:
+        """Upgrade user role from viewer to reviewer after Bitbucket user association
+
+        Only upgrades if the user currently has 'viewer' role and doesn't have higher roles.
+        This prevents downgrading users who may have been manually assigned admin roles.
+
+        Args:
+            auth_user_id: The auth user ID to upgrade
+        """
+        from src.models.rbac import UserRoleAssignment
+        from src.models.role import Role
+        from src.services.rbac_service import RBACService
+
+        rbac_service = RBACService(self.db)
+
+        # Get viewer and reviewer roles
+        stmt = select(Role).where(Role.name.in_(["viewer", "reviewer"]))
+        result = await self.db.execute(stmt)
+        roles = {r.name: r for r in result.scalars().all()}
+
+        viewer_role = roles.get("viewer")
+        reviewer_role = roles.get("reviewer")
+
+        if not viewer_role or not reviewer_role:
+            logger.warning("Viewer or reviewer role not found, skipping upgrade")
+            return
+
+        # Check current roles of the user
+        stmt = (
+            select(UserRoleAssignment, Role)
+            .join(Role, UserRoleAssignment.role_id == Role.id)
+            .where(
+                and_(
+                    UserRoleAssignment.auth_user_id == auth_user_id,
+                    UserRoleAssignment.resource_type == "global",
+                )
+            )
+        )
+        result = await self.db.execute(stmt)
+        current_assignments = result.all()
+
+        # Extract role names
+        current_role_names = {role.name for _, role in current_assignments}
+
+        # Safety check: Don't downgrade if user has admin roles
+        admin_roles = {"review_admin", "system_admin"}
+        if current_role_names & admin_roles:
+            logger.info(
+                f"User {auth_user_id} has admin roles {current_role_names & admin_roles}, "
+                f"skipping auto-upgrade to avoid permission conflicts"
+            )
+            return
+
+        # Check if already has reviewer role
+        if "reviewer" in current_role_names:
+            logger.info(f"User {auth_user_id} already has reviewer role")
+            # Remove redundant viewer role if exists
+            if "viewer" in current_role_names:
+                viewer_assignment = next(
+                    (
+                        assignment
+                        for assignment, role in current_assignments
+                        if role.name == "viewer"
+                    ),
+                    None,
+                )
+                if viewer_assignment:
+                    await self.db.delete(viewer_assignment)
+                    await self.db.commit()
+                    logger.info(f"Removed redundant viewer role from user {auth_user_id}")
+            return
+
+        # Check if has viewer role
+        viewer_assignment = next(
+            (assignment for assignment, role in current_assignments if role.name == "viewer"),
+            None,
+        )
+
+        if not viewer_assignment:
+            logger.debug(f"User {auth_user_id} doesn't have viewer role, assigning reviewer")
+
+        try:
+            # Remove viewer role if exists
+            if viewer_assignment:
+                await self.db.delete(viewer_assignment)
+
+            # Assign reviewer role
+            await rbac_service.assign_role(
+                auth_user_id=auth_user_id,
+                role_id=reviewer_role.id,
+                resource_type="global",
+                resource_id=None,
+                granted_by=None,  # System assigned
+            )
+            await self.db.commit()
+
+            logger.info(f"Upgraded user {auth_user_id} from viewer to reviewer role")
+
+            # Log audit trail for role upgrade
+            await self._log_role_upgrade_audit(auth_user_id)
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Failed to upgrade role for user {auth_user_id}: {e}")
+
+    async def _log_association_audit(
+        self, auth_user_id: int, bitbucket_user_id: int, username: str
+    ) -> None:
+        """Log audit trail for automatic user association
+
+        Args:
+            auth_user_id: The auth user ID
+            bitbucket_user_id: The Bitbucket user ID
+            username: The username
+        """
+        try:
+            from src.services.audit_service import AuditService
+
+            audit_service = AuditService(self.db)
+            await audit_service.log_action(
+                auth_user_id=None,  # System action, no specific user
+                action="auto_associate_user",
+                resource_type="users",
+                resource_id=str(auth_user_id),
+                new_values={
+                    "auth_user_id": auth_user_id,
+                    "bitbucket_user_id": bitbucket_user_id,
+                    "username": username,
+                    "action": "auto_associated",
+                },
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log association audit: {e}")
+
+    async def _log_role_upgrade_audit(self, auth_user_id: int) -> None:
+        """Log audit trail for role upgrade
+
+        Args:
+            auth_user_id: The auth user ID that was upgraded
+        """
+        try:
+            from src.services.audit_service import AuditService
+
+            audit_service = AuditService(self.db)
+            await audit_service.log_action(
+                auth_user_id=None,  # System action
+                action="auto_upgrade_role",
+                resource_type="users",
+                resource_id=str(auth_user_id),
+                old_values={"role": "viewer"},
+                new_values={"role": "reviewer", "reason": "bitbucket_user_associated"},
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log role upgrade audit: {e}")
