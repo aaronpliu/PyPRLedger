@@ -32,6 +32,10 @@ class UserinfoResponse(BaseModel):
     bitbucket_user_id: int | None = None
     last_login_at: datetime | None = None
     created_at: datetime
+    roles: list[str] = Field(
+        default_factory=list,
+        description="List of role names assigned to the user",
+    )
 
 
 class RegisterRequest(BaseModel):

@@ -15,6 +15,20 @@
         <el-descriptions-item label="Email">
           {{ authStore.user?.email }}
         </el-descriptions-item>
+        <el-descriptions-item label="Roles">
+          <div v-if="authStore.user?.roles && authStore.user.roles.length > 0" class="roles-container">
+            <el-tag
+              v-for="role in authStore.user.roles"
+              :key="role"
+              :type="getRoleTagType(role)"
+              size="small"
+              style="margin-right: 8px; margin-bottom: 4px;"
+            >
+              {{ formatRoleName(role) }}
+            </el-tag>
+          </div>
+          <el-tag v-else type="info" size="small">No roles assigned</el-tag>
+        </el-descriptions-item>
         <el-descriptions-item label="Status">
           <el-tag :type="authStore.user?.is_active ? 'success' : 'danger'">
             {{ authStore.user?.is_active ? 'Active' : 'Inactive' }}
@@ -127,6 +141,28 @@ const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
 }
 
+const formatRoleName = (role: string): string => {
+  // Convert role name to display format
+  const roleMap: Record<string, string> = {
+    viewer: 'Viewer',
+    reviewer: 'Reviewer',
+    review_admin: 'Review Admin',
+    system_admin: 'System Admin',
+  }
+  return roleMap[role] || role
+}
+
+const getRoleTagType = (role: string): 'success' | 'warning' | 'danger' | 'info' => {
+  // Assign different colors based on role level
+  const roleTypes: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
+    viewer: 'info',
+    reviewer: 'success',
+    review_admin: 'warning',
+    system_admin: 'danger',
+  }
+  return roleTypes[role] || 'info'
+}
+
 const handleChangePassword = async () => {
   if (!passwordFormRef.value) return
   
@@ -202,5 +238,11 @@ h3 {
 /* Ensure consistent label width for all password fields */
 .password-form :deep(.el-form-item) {
   margin-bottom: 20px;
+}
+
+.roles-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 </style>

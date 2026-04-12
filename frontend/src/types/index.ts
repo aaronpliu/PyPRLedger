@@ -2,11 +2,12 @@
 export interface User {
   id: number
   username: string
-  email: string
+  email: string | null
   is_active: boolean
+  bitbucket_user_id: number | null
   last_login_at: string | null
   created_at: string
-  updated_at: string
+  roles: string[]
 }
 
 // Auth types

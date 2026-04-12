@@ -63,9 +63,10 @@ class AuthService:
 
         # Auto-associate with Bitbucket user if not already linked
         if not auth_user.user_id:
-            await self._auto_link_bitbucket_user(auth_user)
-            # After linking, upgrade role to reviewer if currently viewer
-            await self._upgrade_linked_user_role(auth_user.id)
+            linked = await self._auto_link_bitbucket_user(auth_user)
+            # Only upgrade role if successfully linked to a Bitbucket user
+            if linked:
+                await self._upgrade_linked_user_role(auth_user.id)
 
         # Update last login time
         auth_user.last_login_at = datetime.now(UTC)
@@ -184,8 +185,17 @@ class AuthService:
             auth_user: Authenticated user
 
         Returns:
-            UserinfoResponse with user details
+            UserinfoResponse with user details including roles
         """
+        # Get user roles
+        from src.services.rbac_service import RBACService
+
+        rbac_service = RBACService(self.db)
+        role_assignments = await rbac_service.get_user_roles(auth_user.id)
+
+        # Extract unique role names
+        roles = list({assignment["role_name"] for assignment in role_assignments})
+
         return UserinfoResponse(
             id=auth_user.id,
             username=auth_user.username,
@@ -194,6 +204,7 @@ class AuthService:
             bitbucket_user_id=auth_user.user_id,
             last_login_at=auth_user.last_login_at,
             created_at=auth_user.created_at,
+            roles=roles,
         )
 
     async def change_password(
@@ -225,11 +236,14 @@ class AuthService:
 
         return True
 
-    async def _auto_link_bitbucket_user(self, auth_user: AuthUser) -> None:
+    async def _auto_link_bitbucket_user(self, auth_user: AuthUser) -> bool:
         """Auto-link auth user with Bitbucket user by username
 
         Args:
             auth_user: Auth user to link
+
+        Returns:
+            True if successfully linked, False otherwise
         """
         stmt = select(User).where(User.username == auth_user.username)
         result = await self.db.execute(stmt)
@@ -238,6 +252,13 @@ class AuthService:
         if bitbucket_user:
             auth_user.user_id = bitbucket_user.id
             await self.db.commit()
+            logger.info(
+                f"Auto-linked auth_user {auth_user.id} with Bitbucket user {bitbucket_user.id}"
+            )
+            return True
+
+        logger.debug(f"No Bitbucket user found for username: {auth_user.username}")
+        return False
 
     async def _assign_default_role(self, auth_user_id: int, has_bitbucket_user: bool) -> None:
         """Assign default role to newly registered user
