@@ -64,7 +64,44 @@ async def create_delegation(
     ```
     """
     # Check if current user has permission to manage roles
+    # Note: Delegated users cannot create new delegations (no delegation chains)
     await rbac_service.require_permission(current_user.id, "manage", "roles")
+
+    # Additional check: ensure current user is not a delegatee trying to re-delegate
+    # This prevents delegation chains even if they somehow got manage roles permission
+    # Directly query the database for active delegated role assignments
+    import logging
+
+    from sqlalchemy import and_, select
+
+    from src.models.rbac import UserRoleAssignment
+
+    logger = logging.getLogger(__name__)
+
+    stmt = select(UserRoleAssignment).where(
+        and_(
+            UserRoleAssignment.auth_user_id == current_user.id,
+            UserRoleAssignment.is_delegated == True,
+            UserRoleAssignment.delegation_status == "active",
+        )
+    )
+    result = await rbac_service.db.execute(stmt)
+    active_delegated_roles = result.scalars().all()
+
+    if active_delegated_roles:
+        from src.core.exceptions import ForbiddenException
+
+        logger.warning(
+            f"User {current_user.id} attempted to create delegation but has {len(active_delegated_roles)} active delegated role(s)"
+        )
+        raise ForbiddenException(
+            message="Users with delegated roles cannot create new delegations. Delegation chains are not allowed.",
+            detail={
+                "active_delegations_count": len(active_delegated_roles),
+                "delegated_role_ids": [r.role_id for r in active_delegated_roles],
+                "note": "Only users with directly assigned roles can delegate permissions.",
+            },
+        )
 
     # Normalize resource_id for global scope (empty string -> None)
     resource_id = data.resource_id

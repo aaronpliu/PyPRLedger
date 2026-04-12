@@ -64,13 +64,32 @@ class RBACService:
             f"resource_type={resource_type}, found {len(assignments)} assignments"
         )
 
-        # Filter out expired assignments
+        # Log all assignments for debugging
+        for a in assignments:
+            logger.debug(
+                f"  [ALL] Assignment ID: {a.id}, role_id: {a.role_id}, "
+                f"is_delegated: {a.is_delegated}, "
+                f"delegation_status: {a.delegation_status if a.is_delegated else 'N/A'}, "
+                f"expires_at: {a.expires_at}"
+            )
+
+        # Filter out expired/inactive assignments
         from datetime import UTC, datetime
 
         now = datetime.now(UTC)
 
         def is_assignment_active(assignment) -> bool:
-            """Check if assignment is not expired, handling timezone-aware/naive datetimes"""
+            """Check if assignment is active and not revoked/expired"""
+            # For delegated roles, check delegation_status
+            if assignment.is_delegated:
+                # Only 'active' status grants permissions
+                if assignment.delegation_status != "active":
+                    logger.debug(
+                        f"Delegation {assignment.id} is not active: status={assignment.delegation_status}"
+                    )
+                    return False
+
+            # Check expiration time
             if not assignment.expires_at:
                 return True
 
@@ -79,9 +98,21 @@ class RBACService:
             if expires_at.tzinfo is None:
                 expires_at = expires_at.replace(tzinfo=UTC)
 
-            return expires_at > now
+            is_not_expired = expires_at > now
+            if not is_not_expired:
+                logger.debug(f"Assignment {assignment.id} has expired: {expires_at}")
+
+            return is_not_expired
 
         active_assignments = [a for a in assignments if is_assignment_active(a)]
+
+        logger.debug(f"Active assignments after filtering: {len(active_assignments)}")
+        for a in active_assignments:
+            logger.debug(
+                f"  - Assignment ID: {a.id}, role_id: {a.role_id}, "
+                f"is_delegated: {a.is_delegated}, "
+                f"delegation_status: {a.delegation_status if a.is_delegated else 'N/A'}"
+            )
 
         if not active_assignments:
             logger.warning(f"User {auth_user_id} has no active role assignments")
@@ -179,15 +210,17 @@ class RBACService:
     async def get_user_roles(
         self, auth_user_id: int, resource_type: str | None = None
     ) -> list[dict]:
-        """Get all roles assigned to user
+        """Get all active roles assigned to user
 
         Args:
             auth_user_id: User ID
             resource_type: Optional filter by resource type
 
         Returns:
-            List of role assignments with role details
+            List of role assignments with role details (excludes revoked/expired delegations)
         """
+        from datetime import UTC, datetime
+
         stmt = (
             select(UserRoleAssignment, Role)
             .join(Role, UserRoleAssignment.role_id == Role.id)
@@ -199,6 +232,36 @@ class RBACService:
 
         result = await self.db.execute(stmt)
         assignments = result.all()
+
+        now = datetime.now(UTC)
+
+        # Filter out inactive assignments
+        def is_assignment_active(assignment) -> bool:
+            """Check if assignment is active and not revoked/expired"""
+            # For delegated roles, check delegation_status
+            if assignment.is_delegated:
+                # Only 'active' status grants permissions
+                if assignment.delegation_status != "active":
+                    return False
+
+            # Check expiration time
+            if assignment.expires_at:
+                expires_at = assignment.expires_at
+                # If expires_at is naive (no timezone), assume it's UTC
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=UTC)
+
+                if expires_at <= now:
+                    return False
+
+            return True
+
+        # Filter and return only active assignments
+        active_assignments = [
+            (assignment, role)
+            for assignment, role in assignments
+            if is_assignment_active(assignment)
+        ]
 
         return [
             {
@@ -214,7 +277,7 @@ class RBACService:
                 ),
                 "created_at": assignment.created_at.isoformat(),
             }
-            for assignment, role in assignments
+            for assignment, role in active_assignments
         ]
 
     async def assign_role(
@@ -454,6 +517,32 @@ class RBACService:
                     message="Delegation already exists and is active",
                     detail={"assignment_id": existing.id},
                 )
+
+        # 4.5. Prevent delegation chains: delegatee cannot re-delegate delegated roles
+        # Check if delegatee already has this role via delegation (not direct assignment)
+        delegatee_assignments_stmt = select(UserRoleAssignment).where(
+            and_(
+                UserRoleAssignment.auth_user_id == delegatee_id,
+                UserRoleAssignment.role_id == role_id,
+                UserRoleAssignment.is_delegated == True,
+                UserRoleAssignment.delegation_status.in_(["active", "pending"]),
+            )
+        )
+        delegatee_result = await self.db.execute(delegatee_assignments_stmt)
+        delegatee_delegations = delegatee_result.scalars().all()
+
+        if delegatee_delegations:
+            # Find which delegator gave this role to the delegatee
+            for delegation in delegatee_delegations:
+                if delegation.delegator_id != delegator_id:
+                    raise ForbiddenException(
+                        message="Cannot create delegation chain: delegatee already has this role from another user",
+                        detail={
+                            "delegatee_id": delegatee_id,
+                            "role_id": role_id,
+                            "existing_delegator_id": delegation.delegator_id,
+                        },
+                    )
 
         # 5. Determine initial status
         delegation_status = "pending" if starts_at > now else "active"

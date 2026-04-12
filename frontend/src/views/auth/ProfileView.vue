@@ -10,76 +10,101 @@
       <el-tabs v-model="activeTab" type="border-card">
         <!-- User Info Tab -->
         <el-tab-pane label="User Info" name="info">
-          <el-descriptions :column="1" border>
-            <el-descriptions-item label="Username">
-              {{ authStore.user?.username }}
-            </el-descriptions-item>
-            <el-descriptions-item label="Email">
-              {{ authStore.user?.email }}
-            </el-descriptions-item>
-            <el-descriptions-item label="Roles">
-              <div class="roles-header">
-                <div v-if="authStore.user?.roles && authStore.user.roles.length > 0" class="roles-container">
-                  <el-tag
-                    v-for="role in authStore.user.roles"
-                    :key="role"
-                    :type="getRoleTagType(role)"
-                    size="small"
-                    style="margin-right: 8px; margin-bottom: 4px;"
-                  >
-                    {{ formatRoleName(role) }}
-                  </el-tag>
-                </div>
-                <el-tag v-else type="info" size="small">No roles assigned</el-tag>
-                
-                <!-- Popover for viewer-only users -->
-                <el-popover
-                  v-if="isViewerOnly"
-                  placement="top"
-                  :width="350"
-                  trigger="click"
-                >
-                  <template #reference>
-                    <el-button
-                      link
-                      type="warning"
-                      size="small"
-                      style="margin-left: 8px;"
-                    >
-                      <el-icon><InfoFilled /></el-icon>
-                    </el-button>
-                  </template>
-                  <div class="viewer-tips-content">
-                    <h4 style="margin: 0 0 12px 0; color: var(--el-color-warning);">
-                      <el-icon style="vertical-align: middle; margin-right: 4px;"><WarningFilled /></el-icon>
-                      Viewer Role Limitations
-                    </h4>
-                    <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
-                      <li>You can only <strong>view</strong> code reviews and scores</li>
-                      <li>You <strong>cannot</strong> add or update scores</li>
-                      <li>You <strong>cannot</strong> add comments to reviews</li>
-                      <li>You <strong>cannot</strong> be assigned review tasks</li>
-                    </ul>
-                    <el-divider style="margin: 12px 0;" />
-                    <p style="margin: 0; color: var(--el-text-color-secondary); font-size: 13px;">
-                      💡 To gain full reviewer permissions, please contact a system administrator to upgrade your role.
-                    </p>
-                  </div>
-                </el-popover>
+          <!-- Compact user info grid -->
+          <el-row :gutter="16" style="margin-bottom: 20px;">
+            <el-col :span="12">
+              <div class="info-item">
+                <label>Username:</label>
+                <span>{{ authStore.user?.username }}</span>
               </div>
-            </el-descriptions-item>
-            <el-descriptions-item label="Status">
-              <el-tag :type="authStore.user?.is_active ? 'success' : 'danger'">
-                {{ authStore.user?.is_active ? 'Active' : 'Inactive' }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="Last Login">
-              {{ authStore.user?.last_login_at ? formatDate(authStore.user.last_login_at) : 'Never' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="Member Since">
-              {{ authStore.user?.created_at ? formatDate(authStore.user.created_at) : 'N/A' }}
-            </el-descriptions-item>
-          </el-descriptions>
+            </el-col>
+            <el-col :span="12">
+              <div class="info-item">
+                <label>Email:</label>
+                <span>{{ authStore.user?.email || 'N/A' }}</span>
+              </div>
+            </el-col>
+          </el-row>
+          
+          <el-row :gutter="16" style="margin-bottom: 20px;">
+            <el-col :span="12">
+              <div class="info-item">
+                <label>Status:</label>
+                <el-tag :type="authStore.user?.is_active ? 'success' : 'danger'" size="small">
+                  {{ authStore.user?.is_active ? 'Active' : 'Inactive' }}
+                </el-tag>
+              </div>
+            </el-col>
+            <el-col :span="12">
+              <div class="info-item">
+                <label>Last Login:</label>
+                <span>{{ authStore.user?.last_login_at ? formatDate(authStore.user.last_login_at) : 'Never' }}</span>
+              </div>
+            </el-col>
+          </el-row>
+          
+          <el-row :gutter="16" style="margin-bottom: 20px;">
+            <el-col :span="12">
+              <div class="info-item">
+                <label>Member Since:</label>
+                <span>{{ authStore.user?.created_at ? formatDate(authStore.user.created_at) : 'N/A' }}</span>
+              </div>
+            </el-col>
+            <el-col :span="12">
+              <div class="info-item">
+                <label>Roles:</label>
+                <div class="roles-header">
+                  <div v-if="authStore.user?.roles && authStore.user.roles.length > 0" class="roles-container">
+                    <el-tag
+                      v-for="role in authStore.user.roles"
+                      :key="role"
+                      :type="getRoleTagType(role)"
+                      size="small"
+                      style="margin-right: 4px;"
+                    >
+                      {{ formatRoleName(role) }}
+                    </el-tag>
+                  </div>
+                  <el-tag v-else type="info" size="small">No roles</el-tag>
+                  
+                  <!-- Popover for viewer-only users -->
+                  <el-popover
+                    v-if="isViewerOnly"
+                    placement="top"
+                    :width="350"
+                    trigger="click"
+                  >
+                    <template #reference>
+                      <el-button
+                        link
+                        type="warning"
+                        size="small"
+                        style="margin-left: 4px;"
+                      >
+                        <el-icon><InfoFilled /></el-icon>
+                      </el-button>
+                    </template>
+                    <div class="viewer-tips-content">
+                      <h4 style="margin: 0 0 12px 0; color: var(--el-color-warning);">
+                        <el-icon style="vertical-align: middle; margin-right: 4px;"><WarningFilled /></el-icon>
+                        Viewer Role Limitations
+                      </h4>
+                      <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
+                        <li>You can only <strong>view</strong> code reviews and scores</li>
+                        <li>You <strong>cannot</strong> add or update scores</li>
+                        <li>You <strong>cannot</strong> add comments to reviews</li>
+                        <li>You <strong>cannot</strong> be assigned review tasks</li>
+                      </ul>
+                      <el-divider style="margin: 12px 0;" />
+                      <p style="margin: 0; color: var(--el-text-color-secondary); font-size: 13px;">
+                        💡 To gain full reviewer permissions, please contact a system administrator to upgrade your role.
+                      </p>
+                    </div>
+                  </el-popover>
+                </div>
+              </div>
+            </el-col>
+          </el-row>
 
           <!-- Change Password Section -->
           <el-divider />
@@ -148,9 +173,9 @@
                     </template>
                   </el-table-column>
                   <el-table-column prop="resource_type" label="Resource Type" width="120" />
-                  <el-table-column label="Delegator" width="150">
+                  <el-table-column label="Delegator" width="120">
                     <template #default="{ row }">
-                      User #{{ row.delegator_id }}
+                      <el-tag type="info" size="small">ID: {{ row.delegator_id }}</el-tag>
                     </template>
                   </el-table-column>
                   <el-table-column label="Status" width="120">
@@ -189,9 +214,9 @@
                     </template>
                   </el-table-column>
                   <el-table-column prop="resource_type" label="Resource Type" width="120" />
-                  <el-table-column label="Delegatee" width="150">
+                  <el-table-column label="Delegatee" width="120">
                     <template #default="{ row }">
-                      User #{{ row.auth_user_id }}
+                      <el-tag type="info" size="small">ID: {{ row.auth_user_id }}</el-tag>
                     </template>
                   </el-table-column>
                   <el-table-column label="Status" width="120">
@@ -352,10 +377,41 @@ const isViewerOnly = computed(() => {
 })
 
 // Check if user can manage delegations
-const canManageDelegations = computed(() => {
+// User must have admin role AND not have any active delegated roles (to prevent delegation chains)
+const canManageDelegations = ref(false)
+
+const updateCanManageDelegations = () => {
   const roles = authStore.user?.roles || []
-  return roles.includes('system_admin') || roles.includes('review_admin')
-})
+  
+  // Check if user has admin role directly assigned
+  const hasDirectAdminRole = roles.includes('system_admin') || roles.includes('review_admin')
+  
+  // Also check if user has any ACTIVE delegated admin roles
+  // (revoked delegations should not count)
+  const hasActiveDelegatedAdminRole = receivedDelegations.value.some(
+    d => d.delegation_status === 'active' && 
+         (d.role_name === 'system_admin' || d.role_name === 'review_admin')
+  )
+  
+  // Check if user has any active delegated roles (to prevent delegation chains)
+  const hasAnyActiveDelegatedRoles = receivedDelegations.value.some(
+    d => d.delegation_status === 'active'
+  )
+  
+  // User can manage delegations if:
+  // 1. They have direct admin role OR active delegated admin role
+  // 2. AND they don't have any other active delegated roles (prevent chains)
+  const hasAdminPermission = hasDirectAdminRole || hasActiveDelegatedAdminRole
+  canManageDelegations.value = hasAdminPermission && !hasAnyActiveDelegatedRoles
+  
+  console.log('canManageDelegations updated:', {
+    roles,
+    hasDirectAdminRole,
+    hasActiveDelegatedAdminRole,
+    hasAnyActiveDelegatedRoles,
+    canManage: canManageDelegations.value
+  })
+}
 
 // Load delegations
 const loadReceivedDelegations = async () => {
@@ -403,6 +459,8 @@ watch(activeTab, (newTab) => {
   if (newTab === 'delegations') {
     loadReceivedDelegations()
     loadSentDelegations()
+    // Update permission check after loading delegations
+    setTimeout(() => updateCanManageDelegations(), 100)
   }
 })
 
@@ -440,7 +498,13 @@ const handleRevokeDelegation = async (assignmentId: number) => {
     
     await rbacApi.revokeDelegation(assignmentId, { reason: 'Revoked by delegator' })
     ElMessage.success('Delegation revoked successfully')
-    loadSentDelegations()
+    
+    // Reload delegations
+    await loadSentDelegations()
+    await loadReceivedDelegations()
+    
+    // Update permission check
+    updateCanManageDelegations()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('Failed to revoke delegation')
@@ -526,12 +590,12 @@ const handleChangePassword = async () => {
 
 <style scoped>
 .profile-container {
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
 }
 
 .profile-card {
-  padding: 20px;
+  padding: 16px;
 }
 
 .card-header {
@@ -542,9 +606,29 @@ const handleChangePassword = async () => {
   font-weight: bold;
 }
 
-h3 {
-  margin: 20px 0 16px 0;
+/* Compact info item layout */
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.info-item label {
+  font-weight: 600;
+  color: var(--el-text-color-regular);
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.info-item span {
   color: var(--el-text-color-primary);
+}
+
+h3 {
+  margin: 16px 0 12px 0;
+  color: var(--el-text-color-primary);
+  font-size: 16px;
 }
 
 /* Fix el-descriptions theme compatibility */
