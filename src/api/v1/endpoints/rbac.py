@@ -76,8 +76,16 @@ async def get_role(
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> RoleResponse:
-    """Get role details (requires system admin)"""
-    await rbac_service.require_permission(current_user.id, "manage", "settings")
+    """Get role details (requires manage roles or manage settings permission)"""
+    # Check if user has permission to manage roles OR settings
+    has_permission = await rbac_service.check_permission(current_user.id, "manage", "roles")
+    if not has_permission:
+        has_permission = await rbac_service.check_permission(current_user.id, "manage", "settings")
+
+    if not has_permission:
+        from src.core.exceptions import ForbiddenException
+
+        raise ForbiddenException(message="You do not have permission to view role details")
 
     role = await rbac_service.get_role_by_id(role_id)
     if not role:

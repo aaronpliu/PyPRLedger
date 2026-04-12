@@ -9,7 +9,7 @@
     <el-form-item label="Delegatee" prop="delegatee_id">
       <el-autocomplete
         v-model="delegateeSearch"
-        :fetch-suggestions="searchUsers"
+        :fetch-suggestions="filterUsers"
         placeholder="Search by username..."
         style="width: 100%"
         @select="handleSelectUser"
@@ -19,34 +19,57 @@
           <div class="user-option">
             <span class="username">{{ item.username }}</span>
             <span class="user-info">
-              <el-tag size="small" type="info">ID: {{ item.id }}</el-tag>
-              <el-tag v-if="item.roles && item.roles.length" size="small" style="margin-left: 8px;">
-                {{ item.roles.join(', ') }}
+              <el-tag 
+                v-if="item.bitbucket_user_id" 
+                size="small" 
+                type="success"
+              >
+                ✓ Bitbucket
               </el-tag>
-              <el-tag v-else size="small" type="warning" style="margin-left: 8px;">No roles</el-tag>
+              <el-tag 
+                v-else 
+                size="small" 
+                type="warning"
+              >
+                ⚠ No Bitbucket
+              </el-tag>
             </span>
           </div>
         </template>
       </el-autocomplete>
       <div v-if="selectedUser" style="margin-top: 8px;">
         <el-alert
-          :title="`Selected: ${selectedUser.username} (ID: ${selectedUser.id})`"
+          :title="`Selected: ${selectedUser.username}`"
           type="success"
           :closable="false"
           show-icon
         >
           <template #default>
             <div style="font-size: 12px; margin-top: 4px;">
-              Current Roles: 
-              <el-tag v-for="role in selectedUser.roles" :key="role" size="small" style="margin: 2px;">
-                {{ role }}
-              </el-tag>
-              <span v-if="!selectedUser.roles || selectedUser.roles.length === 0" style="color: var(--el-color-warning);">
-                No roles assigned
-              </span>
+              <div style="margin-bottom: 4px;">
+                Bitbucket Status: 
+                <el-tag v-if="selectedUser.bitbucket_user_id" size="small" type="success">
+                  ✓ Linked (ID: {{ selectedUser.bitbucket_user_id }})
+                </el-tag>
+                <el-tag v-else size="small" type="warning">
+                  ⚠ Not linked to Bitbucket
+                </el-tag>
+              </div>
+              <div>
+                Current Roles: 
+                <el-tag v-for="role in selectedUser.roles" :key="role" size="small" style="margin: 2px;">
+                  {{ role }}
+                </el-tag>
+                <span v-if="!selectedUser.roles || selectedUser.roles.length === 0" style="color: var(--el-color-warning);">
+                  No roles assigned
+                </span>
+              </div>
             </div>
           </template>
         </el-alert>
+      </div>
+      <div style="margin-top: 4px; color: var(--el-text-color-secondary); font-size: 12px;">
+        💡 Showing all active users. Users with Bitbucket linkage are recommended.
       </div>
     </el-form-item>
     
@@ -114,41 +137,72 @@
     <!-- Permission Matrix -->
     <el-form-item label="Permissions" prop="permissions">
       <div class="permission-matrix">
-        <el-table :data="permissionRows" border size="small">
+        <el-alert
+          v-if="!form.role_id"
+          title="Please select a role first to see available permissions"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 12px;"
+        />
+        
+        <el-table v-else-if="permissionRows.length > 0" :data="permissionRows" border size="small">
           <el-table-column prop="resource" label="Resource" width="150" fixed />
           <el-table-column label="Read" width="80" align="center">
             <template #default="{ row }">
-              <el-checkbox v-model="row.read" @change="updatePermissions" />
+              <el-checkbox 
+                v-model="row.read" 
+                :disabled="!hasActionForResource(row.resource, 'read')"
+                @change="updatePermissions" 
+              />
             </template>
           </el-table-column>
           <el-table-column label="Create" width="80" align="center">
             <template #default="{ row }">
-              <el-checkbox v-model="row.create" @change="updatePermissions" />
+              <el-checkbox 
+                v-model="row.create" 
+                :disabled="!hasActionForResource(row.resource, 'create')"
+                @change="updatePermissions" 
+              />
             </template>
           </el-table-column>
           <el-table-column label="Update" width="80" align="center">
             <template #default="{ row }">
-              <el-checkbox v-model="row.update" @change="updatePermissions" />
+              <el-checkbox 
+                v-model="row.update" 
+                :disabled="!hasActionForResource(row.resource, 'update')"
+                @change="updatePermissions" 
+              />
             </template>
           </el-table-column>
           <el-table-column label="Delete" width="80" align="center">
             <template #default="{ row }">
-              <el-checkbox v-model="row.delete" @change="updatePermissions" />
+              <el-checkbox 
+                v-model="row.delete" 
+                :disabled="!hasActionForResource(row.resource, 'delete')"
+                @change="updatePermissions" 
+              />
             </template>
           </el-table-column>
           <el-table-column label="Manage" width="80" align="center">
             <template #default="{ row }">
-              <el-checkbox v-model="row.manage" @change="updatePermissions" />
+              <el-checkbox 
+                v-model="row.manage" 
+                :disabled="!hasActionForResource(row.resource, 'manage')"
+                @change="updatePermissions" 
+              />
             </template>
           </el-table-column>
         </el-table>
         
+        <el-empty v-else description="No permissions available for this role" />
+        
         <div style="margin-top: 8px; color: var(--el-text-color-secondary); font-size: 12px;">
-          💡 Select the permissions you want to delegate. Only permissions you have can be delegated.
+          💡 Select the permissions you want to delegate. Only permissions from your role can be delegated.
         </div>
         
         <!-- Preview JSON -->
-        <el-collapse style="margin-top: 12px;">
+        <el-collapse v-if="permissionRows.length > 0" style="margin-top: 12px;">
           <el-collapse-item title="View JSON Format" name="json">
             <pre style="background: var(--el-fill-color-light); padding: 12px; border-radius: 4px; font-size: 12px; overflow-x: auto;">{{ permissionJson }}</pre>
           </el-collapse-item>
@@ -169,7 +223,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { usersApi } from '@/api/users'
 import { rbacApi } from '@/api/rbac'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -192,16 +247,12 @@ const formRef = ref<FormInstance>()
 const delegateeSearch = ref('')
 const selectedUser = ref<User | null>(null)
 const availableRoles = ref<any[]>([])
-const searching = ref(false)
+const allUsers = ref<User[]>([])  // Preloaded users
+const filteredUsers = ref<User[]>([])  // Filtered for display
 
-// Permission matrix data
-const permissionRows = ref([
-  { resource: 'reviews', read: false, create: false, update: false, delete: false, manage: false },
-  { resource: 'scores', read: false, create: false, update: false, delete: false, manage: false },
-  { resource: 'projects', read: false, create: false, update: false, delete: false, manage: false },
-  { resource: 'repositories', read: false, create: false, update: false, delete: false, manage: false },
-  { resource: 'users', read: false, create: false, update: false, delete: false, manage: false },
-])
+// Permission matrix data - will be populated dynamically based on selected role
+const permissionRows = ref<any[]>([])
+const availablePermissions = ref<Record<string, string[]>>({})  // Available permissions from role
 
 const form = reactive({
   delegatee_id: 0,
@@ -238,28 +289,49 @@ const permissionJson = computed(() => {
   return JSON.stringify(scope, null, 2)
 })
 
-// Search users
-const searchUsers = async (queryString: string, cb: any) => {
-  if (!queryString || queryString.length < 2) {
-    cb([])
-    return
+// Filter users based on search query (frontend filtering)
+const filterUsers = (queryString: string, cb: any) => {
+  let users = allUsers.value
+  
+  // Filter by username if query provided
+  if (queryString && queryString.length > 0) {
+    const query = queryString.toLowerCase()
+    users = users.filter(user => 
+      user.username.toLowerCase().includes(query)
+    )
   }
   
-  searching.value = true
+  // Sort: Bitbucket-linked users first, then by username
+  const sorted = [...users].sort((a, b) => {
+    // Prioritize users with Bitbucket linkage
+    if (a.bitbucket_user_id && !b.bitbucket_user_id) return -1
+    if (!a.bitbucket_user_id && b.bitbucket_user_id) return 1
+    // Then sort by username
+    return a.username.localeCompare(b.username)
+  })
+  
+  // Format for autocomplete
+  const results = sorted.map(user => ({
+    ...user,
+    value: user.username,
+  }))
+  
+  cb(results)
+}
+
+// Load all users on component mount
+const loadUsers = async () => {
   try {
-    const response: any = await usersApi.searchUsers(queryString, 10)
-    // Handle both array and object responses
-    const users = Array.isArray(response) ? response : (response.items || response.data || [])
-    const results = users.map((user: any) => ({
-      ...user,
-      value: user.username, // For autocomplete display
-    }))
-    cb(results)
+    console.log('Loading users for delegation...')
+    const users = await usersApi.getAllUsers(500)
+    allUsers.value = Array.isArray(users) ? users : []
+    console.log(`✓ Loaded ${allUsers.value.length} users for delegation`)
+    if (allUsers.value.length > 0) {
+      console.log('Sample user:', allUsers.value[0])
+    }
   } catch (error) {
-    console.error('Failed to search users:', error)
-    cb([])
-  } finally {
-    searching.value = false
+    console.error('✗ Failed to load users:', error)
+    ElMessage.warning('Failed to load user list. Search will be limited.')
   }
 }
 
@@ -273,6 +345,60 @@ const handleSelectUser = (user: User & { value: string }) => {
 // Update permissions from checkbox matrix
 const updatePermissions = () => {
   // Permissions are automatically updated via computed property
+}
+
+// Load role permissions and build permission matrix dynamically
+const loadRolePermissions = async (roleId: number) => {
+  try {
+    const role = await rbacApi.getRoleById(roleId)
+    
+    if (!role || !role.permissions) {
+      console.warn('No permissions found for role:', roleId)
+      permissionRows.value = []
+      availablePermissions.value = {}
+      return
+    }
+    
+    // Parse permissions (might be string or object)
+    let perms: Record<string, string[]>
+    if (typeof role.permissions === 'string') {
+      perms = JSON.parse(role.permissions)
+    } else {
+      perms = role.permissions
+    }
+    
+    availablePermissions.value = perms
+    
+    // Build permission rows dynamically based on available permissions
+    const allActions = ['read', 'create', 'update', 'delete', 'manage']
+    permissionRows.value = Object.keys(perms).map(resource => {
+      const row: any = { resource }
+      allActions.forEach(action => {
+        row[action] = false  // Default unchecked
+      })
+      return row
+    })
+    
+    console.log(`Loaded permissions for role '${role.name}':`, perms)
+  } catch (error) {
+    console.error('Failed to load role permissions:', error)
+    permissionRows.value = []
+    availablePermissions.value = {}
+  }
+}
+
+// Check if any resource has the specified action
+const hasPermission = (action: string): boolean => {
+  // Check if any resource in availablePermissions has this action
+  return Object.values(availablePermissions.value).some(actions => 
+    actions.includes(action)
+  )
+}
+
+// Check if a specific resource has the specified action
+const hasActionForResource = (resource: string, action: string): boolean => {
+  const actions = availablePermissions.value[resource]
+  return actions ? actions.includes(action) : false
 }
 
 // Load available roles (only roles that current user has)
@@ -370,8 +496,21 @@ const reset = () => {
   })
 }
 
+// Watch for role changes to load permissions
+watch(() => form.role_id, (newRoleId) => {
+  if (newRoleId) {
+    loadRolePermissions(newRoleId)
+  } else {
+    permissionRows.value = []
+    availablePermissions.value = {}
+  }
+})
+
 // Initialize
-loadRoles()
+onMounted(() => {
+  loadUsers()
+  loadRoles()
+})
 
 // Expose methods
 defineExpose({

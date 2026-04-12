@@ -31,7 +31,22 @@ export const usersApi = {
   },
 
   /**
-   * Search users by username (for delegation)
+   * Get all active auth users (for delegation)
+   * Returns AuthUser records (system login users), not Bitbucket users
+   */
+  async getAllUsers(limit: number = 500): Promise<User[]> {
+    const response: any = await request.get('/users/auth-users', { 
+      params: { 
+        active: true,  // Only active users
+        limit: limit 
+      } 
+    })
+    // Handle response format
+    return response.items || []
+  },
+
+  /**
+   * Search users by username (for delegation - fallback)
    */
   searchUsers(query: string, limit: number = 10): Promise<User[]> {
     return request.get('/users', { params: { search: query, limit } })

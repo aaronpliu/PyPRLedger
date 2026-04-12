@@ -458,7 +458,19 @@ const pendingDelegationData = ref<any>(null)
 
 // Confirm and create delegation
 const handleConfirmCreate = async () => {
-  if (!pendingDelegationData.value) return
+  // First validate the form
+  if (!delegationFormRef.value) return
+  
+  const isValid = await delegationFormRef.value.validate()
+  if (!isValid) {
+    ElMessage.warning('Please fill in all required fields')
+    return
+  }
+  
+  if (!pendingDelegationData.value) {
+    ElMessage.warning('Please complete the delegation form')
+    return
+  }
   
   try {
     creating.value = true

@@ -59,6 +59,11 @@ class RBACService:
         result = await self.db.execute(stmt)
         assignments = result.scalars().all()
 
+        logger.debug(
+            f"Checking permission: user={auth_user_id}, action={action}, "
+            f"resource_type={resource_type}, found {len(assignments)} assignments"
+        )
+
         # Filter out expired assignments
         from datetime import UTC, datetime
 
@@ -66,16 +71,17 @@ class RBACService:
         active_assignments = [a for a in assignments if not a.expires_at or a.expires_at > now]
 
         if not active_assignments:
+            logger.warning(f"User {auth_user_id} has no active role assignments")
             return False
 
         # Check permissions by level (repository > project > global)
         for level in ["repository", "project", "global"]:
             if level == "global":
-                # For global level, match assignments where resource_id is NULL/None
+                # For global level, match assignments where resource_id is NULL or empty string
                 level_assignments = [
                     a
                     for a in active_assignments
-                    if a.resource_type == level and a.resource_id is None
+                    if a.resource_type == level and (a.resource_id is None or a.resource_id == "")
                 ]
             else:
                 # For project/repository level, match specific resource_id
@@ -84,6 +90,8 @@ class RBACService:
                     for a in active_assignments
                     if a.resource_type == level and a.resource_id == resource_id
                 ]
+
+            logger.debug(f"Level {level}: found {len(level_assignments)} assignments")
 
             for assignment in level_assignments:
                 # Get role permissions
@@ -101,12 +109,26 @@ class RBACService:
 
                     permissions = json.loads(permissions)
 
+                logger.debug(
+                    f"Checking role '{role.name}' (ID: {role.id}): "
+                    f"permissions={list(permissions.keys())}"
+                )
+
                 # Check if action is allowed for this resource type
                 resource_permissions = permissions.get(resource_type, [])
 
                 if action in resource_permissions:
+                    logger.info(
+                        f"✓ Permission granted: user={auth_user_id}, "
+                        f"action={action}, resource_type={resource_type}, "
+                        f"role={role.name}"
+                    )
                     return True
 
+        logger.warning(
+            f"✗ Permission denied: user={auth_user_id}, action={action}, "
+            f"resource_type={resource_type}"
+        )
         return False
 
     async def require_permission(
@@ -370,11 +392,21 @@ class RBACService:
             )
 
         # 3. Validate delegation_scope is subset of delegator's permissions
+        logger.info(f"Validating delegation scope for user {delegator_id}, role {role_id}")
+
         delegator_permissions = await self._get_user_permissions_for_role(
             delegator_id, role_id, resource_type, resource_id
         )
 
+        logger.info(f"Delegator permissions: {delegator_permissions}")
+        logger.info(f"Requested delegation scope: {delegation_scope}")
+
         if not self._is_permission_subset(delegation_scope, delegator_permissions):
+            logger.error(
+                f"Permission subset validation failed:\n"
+                f"  Requested: {delegation_scope}\n"
+                f"  Available: {delegator_permissions}"
+            )
             raise ForbiddenException(
                 message="Cannot delegate permissions you don't have",
                 detail={
@@ -617,15 +649,34 @@ class RBACService:
         resource_type: str,
         resource_id: str | None,
     ) -> bool:
-        """Check if user has a specific role with given resource scope"""
-        stmt = select(UserRoleAssignment).where(
-            and_(
-                UserRoleAssignment.auth_user_id == user_id,
-                UserRoleAssignment.role_id == role_id,
-                UserRoleAssignment.resource_type == resource_type,
-                UserRoleAssignment.resource_id == resource_id,
+        """Check if user has a specific role with given resource scope
+
+        For 'global' resource type, resource_id should be NULL or empty string.
+        Both NULL and empty string are treated as equivalent for global scope.
+        """
+        from sqlalchemy import or_
+
+        # Build conditions
+        conditions = [
+            UserRoleAssignment.auth_user_id == user_id,
+            UserRoleAssignment.role_id == role_id,
+            UserRoleAssignment.resource_type == resource_type,
+        ]
+
+        # Handle resource_id matching (None and '' are equivalent for global)
+        if resource_type == "global":
+            # For global scope, match both NULL and empty string
+            conditions.append(
+                or_(
+                    UserRoleAssignment.resource_id.is_(None),
+                    UserRoleAssignment.resource_id == "",
+                )
             )
-        )
+        else:
+            # For project/repository, exact match required
+            conditions.append(UserRoleAssignment.resource_id == resource_id)
+
+        stmt = select(UserRoleAssignment).where(and_(*conditions))
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none() is not None
 
@@ -636,12 +687,35 @@ class RBACService:
         resource_type: str,
         resource_id: str | None,
     ) -> dict:
-        """Get permissions for a user's specific role assignment"""
+        """Get permissions for a user's specific role assignment
+
+        First verifies that the user actually has this role with the specified
+        resource scope, then returns the role's permissions.
+        """
+        logger.debug(
+            f"Getting permissions for user {user_id}, role {role_id}, "
+            f"resource_type={resource_type}, resource_id={resource_id}"
+        )
+
+        # 1. Verify user has this role with the specified resource scope
+        has_role = await self._check_user_has_role(user_id, role_id, resource_type, resource_id)
+
+        logger.debug(f"User {user_id} has role {role_id}: {has_role}")
+
+        if not has_role:
+            logger.warning(
+                f"User {user_id} does not have role {role_id} with "
+                f"resource_type={resource_type}, resource_id={resource_id}"
+            )
+            return {}
+
+        # 2. Get role definition and return its permissions
         stmt = select(Role).where(Role.id == role_id)
         result = await self.db.execute(stmt)
         role = result.scalar_one_or_none()
 
         if not role:
+            logger.error(f"Role {role_id} not found in database")
             return {}
 
         permissions = role.permissions
@@ -650,6 +724,9 @@ class RBACService:
 
             permissions = json.loads(permissions)
 
+        logger.info(
+            f"✓ User {user_id} has role '{role.name}' (ID: {role_id}) with permissions: {list(permissions.keys())}"
+        )
         return permissions
 
     def _is_permission_subset(self, subset: dict, superset: dict) -> bool:
