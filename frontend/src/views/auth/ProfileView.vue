@@ -16,18 +16,55 @@
           {{ authStore.user?.email }}
         </el-descriptions-item>
         <el-descriptions-item label="Roles">
-          <div v-if="authStore.user?.roles && authStore.user.roles.length > 0" class="roles-container">
-            <el-tag
-              v-for="role in authStore.user.roles"
-              :key="role"
-              :type="getRoleTagType(role)"
-              size="small"
-              style="margin-right: 8px; margin-bottom: 4px;"
+          <div class="roles-header">
+            <div v-if="authStore.user?.roles && authStore.user.roles.length > 0" class="roles-container">
+              <el-tag
+                v-for="role in authStore.user.roles"
+                :key="role"
+                :type="getRoleTagType(role)"
+                size="small"
+                style="margin-right: 8px; margin-bottom: 4px;"
+              >
+                {{ formatRoleName(role) }}
+              </el-tag>
+            </div>
+            <el-tag v-else type="info" size="small">No roles assigned</el-tag>
+            
+            <!-- Popover for viewer-only users -->
+            <el-popover
+              v-if="isViewerOnly"
+              placement="top"
+              :width="350"
+              trigger="click"
             >
-              {{ formatRoleName(role) }}
-            </el-tag>
+              <template #reference>
+                <el-button
+                  link
+                  type="warning"
+                  size="small"
+                  style="margin-left: 8px;"
+                >
+                  <el-icon><InfoFilled /></el-icon>
+                </el-button>
+              </template>
+              <div class="viewer-tips-content">
+                <h4 style="margin: 0 0 12px 0; color: var(--el-color-warning);">
+                  <el-icon style="vertical-align: middle; margin-right: 4px;"><WarningFilled /></el-icon>
+                  Viewer Role Limitations
+                </h4>
+                <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
+                  <li>You can only <strong>view</strong> code reviews and scores</li>
+                  <li>You <strong>cannot</strong> add or update scores</li>
+                  <li>You <strong>cannot</strong> add comments to reviews</li>
+                  <li>You <strong>cannot</strong> be assigned review tasks</li>
+                </ul>
+                <el-divider style="margin: 12px 0;" />
+                <p style="margin: 0; color: var(--el-text-color-secondary); font-size: 13px;">
+                  💡 To gain full reviewer permissions, please contact a system administrator to upgrade your role.
+                </p>
+              </div>
+            </el-popover>
           </div>
-          <el-tag v-else type="info" size="small">No roles assigned</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="Status">
           <el-tag :type="authStore.user?.is_active ? 'success' : 'danger'">
@@ -84,12 +121,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/auth'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { InfoFilled, WarningFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -162,6 +200,12 @@ const getRoleTagType = (role: string): 'success' | 'warning' | 'danger' | 'info'
   }
   return roleTypes[role] || 'info'
 }
+
+// Check if user has only viewer role (no other roles)
+const isViewerOnly = computed(() => {
+  const roles = authStore.user?.roles || []
+  return roles.length === 1 && roles[0] === 'viewer'
+})
 
 const handleChangePassword = async () => {
   if (!passwordFormRef.value) return
@@ -244,5 +288,21 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.roles-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.viewer-tips-content h4 {
+  display: flex;
+  align-items: center;
+}
+
+.viewer-tips-content ul li {
+  margin-bottom: 4px;
 }
 </style>
