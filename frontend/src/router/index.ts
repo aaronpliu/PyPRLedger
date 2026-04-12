@@ -38,6 +38,19 @@ const routes: RouteRecordRaw[] = [
         name: 'ReviewDetail',
         component: () => import('@/views/reviews/ReviewDetailView.vue'),
       },
+      // Task Assignment routes (for review_admin)
+      {
+        path: 'task-assignment',
+        name: 'TaskAssignment',
+        component: () => import('@/views/reviews/TaskAssignmentView.vue'),
+        meta: { requiresAdmin: true },
+      },
+      {
+        path: 'task-assignment/:id',
+        name: 'TaskAssignmentDetail',
+        component: () => import('@/views/reviews/TaskAssignmentDetailView.vue'),
+        meta: { requiresAdmin: true },
+      },
       {
         path: 'profile',
         name: 'Profile',

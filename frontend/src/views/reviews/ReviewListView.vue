@@ -126,47 +126,6 @@
           <span>{{ selectedReviews.length }} item{{ selectedReviews.length > 1 ? 's' : '' }} selected</span>
         </div>
         <div class="bulk-actions">
-          <!-- Batch Assign Reviewer (Review Admin Only) -->
-          <el-dropdown 
-            v-if="isReviewAdmin"
-            @command="handleBatchAssignReviewer" 
-            trigger="click"
-          >
-            <el-button size="small" type="primary">
-              <el-icon><User /></el-icon>
-              Assign Reviewer
-              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu style="min-width: 250px; padding: 8px;">
-                <div style="padding: 8px 0;">
-                  <el-select 
-                    v-model="batchReviewerUsername" 
-                    placeholder="Select reviewer"
-                    filterable
-                    size="small"
-                    style="width: 100%"
-                  >
-                    <el-option 
-                      v-for="reviewer in reviewers" 
-                      :key="reviewer.username"
-                      :label="`${reviewer.display_name} (${reviewer.username})`"
-                      :value="reviewer.username"
-                    />
-                  </el-select>
-                  <el-button 
-                    type="primary" 
-                    size="small" 
-                    style="width: 100%; margin-top: 8px;"
-                    @click="executeBatchAssignReviewer"
-                  >
-                    Confirm Assignment
-                  </el-button>
-                </div>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-          
           <el-button size="small" type="danger" @click="showBulkDeleteDialog">
             <el-icon><Delete /></el-icon>
             Delete Selected
@@ -250,28 +209,8 @@
         <!-- Reviewer -->
         <el-table-column label="Reviewer" width="200">
           <template #default="{ row }">
-            <div v-if="isReviewAdmin">
-              <el-select 
-                v-model="row.reviewer" 
-                placeholder="Select reviewer"
-                filterable
-                size="small"
-                style="width: 100%"
-                @change="handleReviewerChange(row)"
-              >
-                <el-option 
-                  v-for="reviewer in reviewers" 
-                  :key="reviewer.username"
-                  :label="`${reviewer.display_name} (${reviewer.username})`"
-                  :value="reviewer.username"
-                />
-              </el-select>
-              <div class="text-secondary" style="font-size: 0.75rem; margin-top: 4px;">
-                {{ row.source_filename ? '📄 File-level' : '📋 PR-level' }}
-              </div>
-            </div>
-            <div v-else>
-              <div>{{ row.reviewer_info?.display_name || row.reviewer }}</div>
+            <div>
+              <div>{{ row.reviewer_info?.display_name || row.reviewer || 'Unassigned' }}</div>
               <div class="text-secondary" style="font-size: 0.8rem;">
                 {{ row.source_filename ? '📄 File-level' : '📋 PR-level' }}
               </div>
@@ -407,10 +346,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu, User } from '@element-plus/icons-vue'
+import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
-import type { Review, ReviewAssignmentRequest } from '@/api/reviews'
-import { usersApi } from '@/api/users'
+import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
@@ -450,9 +388,9 @@ const progressMessage = ref('')
 const processedCount = ref(0)
 const totalCount = ref(0)
 
-// Task assignment state
-const reviewers = ref<any[]>([])
-const batchReviewerUsername = ref('')
+// Task assignment state - REMOVED: Use Task Assignment page instead
+// const reviewers = ref<any[]>([])
+// const batchReviewerUsername = ref('')
 
 // Filter fields configuration
 const filterFields = [
@@ -798,186 +736,9 @@ const closeProgressDialog = () => {
   showProgressDialog.value = false
 }
 
-// Task assignment handlers
-// Handle single reviewer change
-const handleReviewerChange = async (row: Review) => {
-  // If reviewer is cleared (set to null/empty), don't proceed
-  if (!row.reviewer) {
-    ElMessage.warning('Please select a reviewer')
-    loadReviews() // Reload to reset the dropdown
-    return
-  }
-  
-  try {
-    const assignmentData: ReviewAssignmentRequest = {
-      pull_request_id: row.pull_request_id,
-      project_key: row.project_key,
-      repository_slug: row.repository_slug,
-      assignee_username: row.reviewer,
-      pull_request_user: row.pull_request_user,
-      source_branch: row.source_branch,
-      target_branch: row.target_branch,
-      pull_request_commit_id: row.pull_request_commit_id || undefined,
-      git_code_diff: row.git_code_diff ?? "",
-      ai_suggestions: row.ai_suggestions || {},
-      reviewer_comments: row.reviewer_comments ?? undefined,
-    }
-    
-    await reviewsApi.assignTask(assignmentData)
-    ElMessage.success(`Assigned to ${row.reviewer}`)
-  } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || 'Failed to update reviewer')
-    loadReviews()
-  }
-}
-
-// Batch assign reviewer
-const executeBatchAssignReviewer = async () => {
-  if (!batchReviewerUsername.value) {
-    ElMessage.warning('Please select a reviewer')
-    return
-  }
-  
-  if (selectedReviews.value.length === 0) {
-    ElMessage.warning('No items selected')
-    return
-  }
-  
-  showProgressDialog.value = true
-  bulkOperationLoading.value = true
-  processedCount.value = 0
-  totalCount.value = selectedReviews.value.length
-  progressPercentage.value = 0
-  progressStatus.value = undefined
-  progressMessage.value = `Assigning reviewer ${batchReviewerUsername.value}...`
-  
-  let successCount = 0
-  let failCount = 0
-  
-  try {
-    for (let i = 0; i < selectedReviews.value.length; i++) {
-      const review = selectedReviews.value[i]
-
-      // Skip API call if the reviewer is the same or already assigned
-      if (review.reviewer === batchReviewerUsername.value) {
-        console.log(`Reviewer for review ID ${review.id} is already assigned. Skipping.`)
-        processedCount.value++
-        progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100)
-        successCount++
-        continue
-      }
-
-      try {
-        await reviewsApi.assignTask({
-          pull_request_id: review.pull_request_id,
-          project_key: review.project_key,
-          repository_slug: review.repository_slug,
-          assignee_username: batchReviewerUsername.value,
-          pull_request_user: review.pull_request_user,
-          source_branch: review.source_branch,
-          target_branch: review.target_branch,
-          pull_request_commit_id: review.pull_request_commit_id,
-          git_code_diff: review.git_code_diff ?? "",
-          ai_suggestions: review.ai_suggestions || {},
-          reviewer_comments: review.reviewer_comments ?? undefined,
-        })
-        processedCount.value++
-        progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100)
-        successCount++
-      } catch (error) {
-        console.error(`Failed to assign reviewer for review ID ${review.id}:`, error)
-        failCount++
-      }
-    }
-    
-    progressStatus.value = failCount > 0 ? 'warning' : 'success'
-    progressMessage.value = `Completed: ${successCount} succeeded, ${failCount} failed`
-    bulkOperationLoading.value = false
-    
-    ElMessage.success(`Successfully assigned ${successCount} review${successCount !== 1 ? 's' : ''} to ${batchReviewerUsername.value}`)
-    
-    await loadReviews()
-    clearSelection()
-    batchReviewerUsername.value = ''
-  } catch (error) {
-    progressStatus.value = 'exception'
-    progressMessage.value = 'Batch assignment failed'
-    bulkOperationLoading.value = false
-    ElMessage.error('Failed to assign reviewers')
-  }
-}
-
-const handleBatchAssignReviewer = async (command: string) => {
-  if (!batchReviewerUsername.value) {
-    ElMessage.warning('Please select a reviewer before confirming.');
-    return;
-  }
-
-  if (selectedReviews.value.length === 0) {
-    ElMessage.warning('No reviews selected for assignment.');
-    return;
-  }
-
-  try {
-    bulkOperationLoading.value = true;
-    progressMessage.value = 'Assigning reviewers...';
-    progressPercentage.value = 0;
-    processedCount.value = 0;
-    totalCount.value = selectedReviews.value.length;
-
-    for (let i = 0; i < selectedReviews.value.length; i++) {
-      const review = selectedReviews.value[i];
-
-      // Skip API call if the reviewer is the same or already assigned
-      if (review.reviewer === batchReviewerUsername.value) {
-        console.log(`Reviewer for review ID ${review.id} is already assigned. Skipping.`)
-        processedCount.value++;
-        progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100);
-        continue;
-      }
-
-      try {
-        await reviewsApi.assignTask({
-          pull_request_id: review.pull_request_id,
-          project_key: review.project_key,
-          repository_slug: review.repository_slug,
-          assignee_username: batchReviewerUsername.value,
-          pull_request_user: review.pull_request_user,
-          source_branch: review.source_branch,
-          target_branch: review.target_branch,
-          pull_request_commit_id: review.pull_request_commit_id,
-          git_code_diff: review.git_code_diff ?? "",
-          ai_suggestions: review.ai_suggestions || {},
-          reviewer_comments: review.reviewer_comments ?? undefined,
-        });
-        processedCount.value++;
-        progressPercentage.value = Math.round((processedCount.value / totalCount.value) * 100);
-      } catch (error) {
-        console.error(`Failed to assign reviewer for review ID ${review.id}:`, error);
-      }
-    }
-
-    ElMessage.success('Batch assignment completed successfully.');
-    await loadReviews();
-    clearSelection();
-  } catch (error) {
-    ElMessage.error('An error occurred during batch assignment.');
-  } finally {
-    bulkOperationLoading.value = false;
-  }
-};
-
-// Load reviewers when component mounts
-onMounted(async () => {
+// Load reviews when component mounts
+onMounted(() => {
   loadReviews()
-  
-  // Load reviewers for dropdown
-  try {
-    const response = await usersApi.getReviewers(100)
-    reviewers.value = response.items
-  } catch (error) {
-    console.error('Failed to load reviewers:', error)
-  }
 })
 </script>
 

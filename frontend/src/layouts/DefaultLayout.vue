@@ -18,6 +18,7 @@
             >
               <el-menu-item index="/">Dashboard</el-menu-item>
               <el-menu-item index="/reviews">Reviews</el-menu-item>
+              <el-menu-item v-if="isAdmin" index="/task-assignment">Task Assignment</el-menu-item>
               <el-sub-menu index="/scores">
                 <template #title>Scores</template>
                 <el-menu-item index="/scores">Score List</el-menu-item>
@@ -142,6 +143,12 @@ onMounted(() => {
 })
 
 const activeMenu = computed(() => route.path)
+
+// Check if user is admin (review_admin or system_admin)
+const isAdmin = computed(() => {
+  const userRoles = authStore.user?.roles || []
+  return userRoles.includes('review_admin') || userRoles.includes('system_admin')
+})
 
 const handleCommand = (command: string) => {
   if (command === 'logout') {

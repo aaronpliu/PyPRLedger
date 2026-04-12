@@ -9,6 +9,7 @@ from src.api.v1.endpoints import (
     projects,
     rbac,
     reviews,
+    task_assignment,  # Task assignment endpoints for review_admin
     users,
 )
 
@@ -25,6 +26,9 @@ api_router.include_router(rbac.router, tags=["rbac-management"])
 api_router.include_router(delegation.router, prefix="/rbac/delegations", tags=["role-delegations"])
 
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
+
+# Task assignment endpoints (for review_admin to manage reviews)
+api_router.include_router(task_assignment.router, tags=["task-assignment"])
 
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 
