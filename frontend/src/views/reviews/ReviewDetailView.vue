@@ -433,7 +433,7 @@ const scoreForm = reactive<ScoreCreate>({
   repository_slug: '',
   reviewer: '',
   score: 0,
-  reviewer_comments: '',
+  reviewer_comments: undefined,  // Use undefined instead of null for MdEditor compatibility
   source_filename: null,
 })
 
@@ -523,7 +523,7 @@ const handleAddScore = async () => {
         editingScore.value = null
         // Reset form
         scoreForm.score = 0
-        scoreForm.reviewer_comments = ''
+        scoreForm.reviewer_comments = undefined
         loadReview()
       } catch (error) {
         ElMessage.error(editingScore.value ? 'Failed to update score' : 'Failed to add score')
@@ -537,7 +537,7 @@ const handleAddScore = async () => {
 const editScore = (score: Score) => {
   editingScore.value = score
   scoreForm.score = score.score
-  scoreForm.reviewer_comments = score.reviewer_comments || ''
+  scoreForm.reviewer_comments = score.reviewer_comments ?? undefined  // Convert null to undefined
   showScoreDialog.value = true
 }
 
@@ -610,7 +610,7 @@ const handleCloseDialog = () => {
   editingScore.value = null
   // Reset form
   scoreForm.score = 0
-  scoreForm.reviewer_comments = ''
+  scoreForm.reviewer_comments = undefined
 }
 
 // Watch for dialog open to set reviewer

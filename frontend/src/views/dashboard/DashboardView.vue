@@ -195,7 +195,11 @@ const loadDashboardData = async () => {
     
     // Fetch first page to get total count
     const firstPage = await reviewsApi.getReviews({ page: 1, page_size: pageSize })
-    firstPage.items.forEach(r => allReviewers.add(r.reviewer))
+    firstPage.items.forEach(r => {
+      if (r.reviewer) {
+        allReviewers.add(r.reviewer)
+      }
+    })
     
     // Calculate total pages and fetch remaining
     const totalPages = Math.ceil(firstPage.total / pageSize)
@@ -208,7 +212,13 @@ const loadDashboardData = async () => {
       for (let i = 2; i <= pagesToFetch + 1; i++) {
         promises.push(
           reviewsApi.getReviews({ page: i, page_size: pageSize })
-            .then(data => data.items.forEach(r => allReviewers.add(r.reviewer)))
+            .then(data => {
+              data.items.forEach(r => {
+                if (r.reviewer) {
+                  allReviewers.add(r.reviewer)
+                }
+              })
+            })
             .catch(err => console.warn(`Failed to fetch page ${i}:`, err))
         )
       }

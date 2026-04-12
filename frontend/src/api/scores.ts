@@ -24,7 +24,7 @@ export interface ScoreCreate {
   repository_slug: string
   reviewer: string
   score: number
-  reviewer_comments?: string | null
+  reviewer_comments?: string  // Use undefined instead of null for better TypeScript compatibility
   source_filename?: string | null  // null for PR-level score
 }
 
