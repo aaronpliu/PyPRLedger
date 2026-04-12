@@ -9,11 +9,19 @@
     <el-row :gutter="20" class="content-row" v-if="review">
       <!-- Main Content -->
       <el-col :span="24">
-        <!-- Review Info Card -->
+        <!-- Review Info Card (Collapsible) -->
         <el-card class="info-card" shadow="hover">
           <template #header>
             <div class="card-header">
-              <span class="card-title">📋 Review Information</span>
+              <div class="card-title-wrapper" @click="toggleInfoCollapse" style="cursor: pointer; flex: 1;">
+                <el-icon 
+                  :class="['collapse-icon', { 'is-collapsed': !isInfoExpanded }]" 
+                  style="margin-right: 8px; transition: transform 0.3s;"
+                >
+                  <ArrowDown />
+                </el-icon>
+                <span class="card-title">📋 Review Information</span>
+              </div>
               <el-space>
                 <el-tooltip
                   v-if="currentUserHasScore"
@@ -44,40 +52,42 @@
             </div>
           </template>
 
-          <el-descriptions :column="3" border size="default">
-            <el-descriptions-item label="PR ID" label-align="right">
-              <el-tag type="info" size="small">{{ review.pull_request_id }}</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="Commit ID" v-if="review.pull_request_commit_id" label-align="right">
-              <el-tag type="success" size="small">{{ review.pull_request_commit_id.substring(0, 8) }}</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="Project" label-align="right">
-              <strong>{{ review.project_key }}</strong> / {{ review.repository_slug }}
-            </el-descriptions-item>
-            <el-descriptions-item label="Reviewer" label-align="right">
-              <el-avatar :size="24" style="vertical-align: middle; margin-right: 8px;">{{ getInitials(review.reviewer_info?.display_name || review.reviewer) }}</el-avatar>
-              {{ review.reviewer_info?.display_name || review.reviewer }}
-            </el-descriptions-item>
-            <el-descriptions-item label="Status" label-align="right">
-              <el-tag :type="getStatusType(review.pull_request_status)" effect="dark">
-                {{ review.pull_request_status }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="Level" label-align="right">
-              <el-tag :type="review.source_filename ? 'warning' : 'success'" size="small">
-                {{ review.source_filename ? '📄 File-Level' : '📋 PR-Level' }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="Summary" :span="3" label-align="right">
-              <div class="summary-text">{{ review.reviewer_comments || 'No summary provided' }}</div>
-            </el-descriptions-item>
-            <el-descriptions-item label="Created" label-align="right">
-              <el-icon><Clock /></el-icon> {{ formatDate(review.created_date || '') }}
-            </el-descriptions-item>
-            <el-descriptions-item label="Updated" label-align="right">
-              <el-icon><Clock /></el-icon> {{ formatDate(review.updated_date || '') }}
-            </el-descriptions-item>
-          </el-descriptions>
+          <el-collapse-transition>
+            <el-descriptions v-if="isInfoExpanded" :column="3" border size="default">
+              <el-descriptions-item label="PR ID" label-align="right">
+                <el-tag type="info" size="small">{{ review.pull_request_id }}</el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="Commit ID" v-if="review.pull_request_commit_id" label-align="right">
+                <el-tag type="success" size="small">{{ review.pull_request_commit_id.substring(0, 8) }}</el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="Project" label-align="right">
+                <strong>{{ review.project_key }}</strong> / {{ review.repository_slug }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Reviewer" label-align="right">
+                <el-avatar :size="24" style="vertical-align: middle; margin-right: 8px;">{{ getInitials(review.reviewer_info?.display_name || review.reviewer) }}</el-avatar>
+                {{ review.reviewer_info?.display_name || review.reviewer }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Status" label-align="right">
+                <el-tag :type="getStatusType(review.pull_request_status)" effect="dark">
+                  {{ review.pull_request_status }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="Level" label-align="right">
+                <el-tag :type="review.source_filename ? 'warning' : 'success'" size="small">
+                  {{ review.source_filename ? '📄 File-Level' : '📋 PR-Level' }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="Summary" :span="3" label-align="right">
+                <div class="summary-text">{{ review.reviewer_comments || 'No summary provided' }}</div>
+              </el-descriptions-item>
+              <el-descriptions-item label="Created" label-align="right">
+                <el-icon><Clock /></el-icon> {{ formatDate(review.created_date || '') }}
+              </el-descriptions-item>
+              <el-descriptions-item label="Updated" label-align="right">
+                <el-icon><Clock /></el-icon> {{ formatDate(review.updated_date || '') }}
+              </el-descriptions-item>
+            </el-descriptions>
+          </el-collapse-transition>
         </el-card>
 
         <!-- Dual Column Layout: Code Diff + AI Review -->
@@ -270,7 +280,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Plus, Delete, User } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User, ArrowDown } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
@@ -297,6 +307,7 @@ const showScoreDialog = ref(false)
 const editingScore = ref<Score | null>(null)
 const scoreFormRef = ref<FormInstance>()
 const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
+const isInfoExpanded = ref(true)  // Default expanded
 
 // Detect current theme
 const isDarkTheme = computed(() => {
@@ -605,6 +616,10 @@ const handleQuickScoreSelect = (value: number) => {
   scoreForm.score = value
 }
 
+const toggleInfoCollapse = () => {
+  isInfoExpanded.value = !isInfoExpanded.value
+}
+
 const handleCloseDialog = () => {
   showScoreDialog.value = false
   editingScore.value = null
@@ -669,6 +684,21 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.card-title-wrapper {
+  display: flex;
+  align-items: center;
+  user-select: none;
+}
+
+.collapse-icon {
+  font-size: 16px;
+  color: var(--el-text-color-secondary);
+}
+
+.collapse-icon.is-collapsed {
+  transform: rotate(-90deg);
 }
 
 .card-title {
