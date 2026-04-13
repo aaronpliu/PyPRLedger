@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
-from datetime import UTC, datetime
+import secrets
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
-from jose import JWTError
+from jose import ExpiredSignatureError, JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +19,8 @@ from src.core.exceptions import (
     AppException,
     ErrorCode,
     InvalidCredentialsException,
+    InvalidTokenException,
+    TokenExpiredException,
     UserInactiveException,
 )
 from src.models.auth_user import AuthUser
@@ -21,9 +28,13 @@ from src.models.user import User
 from src.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserinfoResponse
 from src.utils.jwt import create_access_token, decode_access_token
 from src.utils.password import hash_password, verify_password
+from src.utils.redis import get_redis_client
 
 
 logger = logging.getLogger(__name__)
+
+
+REFRESH_SESSION_KEY_PREFIX = "auth:refresh_session"
 
 
 class AuthService:
@@ -31,6 +42,97 @@ class AuthService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.redis_client = get_redis_client()
+
+    @staticmethod
+    def _get_refresh_session_key(session_id: str) -> str:
+        return f"{REFRESH_SESSION_KEY_PREFIX}:{session_id}"
+
+    @staticmethod
+    def _hash_token(token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _generate_session_id() -> str:
+        return uuid4().hex
+
+    @staticmethod
+    def _build_refresh_token(session_id: str) -> str:
+        return f"{session_id}.{secrets.token_urlsafe(48)}"
+
+    @staticmethod
+    def _extract_session_id_from_refresh_token(refresh_token: str) -> str:
+        session_id, separator, _ = refresh_token.partition(".")
+        if not session_id or not separator:
+            raise InvalidTokenException("Invalid refresh token")
+        return session_id
+
+    @staticmethod
+    def _get_refresh_expires_in_seconds() -> int:
+        return settings.REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES * 60
+
+    async def _store_refresh_session(
+        self,
+        auth_user: AuthUser,
+        session_id: str,
+        refresh_token: str,
+    ) -> None:
+        session_data = {
+            "auth_user_id": auth_user.id,
+            "username": auth_user.username,
+            "refresh_token_hash": self._hash_token(refresh_token),
+            "created_at": datetime.now(UTC).isoformat(),
+            "last_activity_at": datetime.now(UTC).isoformat(),
+        }
+        await self.redis_client.setex(
+            self._get_refresh_session_key(session_id),
+            self._get_refresh_expires_in_seconds(),
+            json.dumps(session_data),
+        )
+
+    async def _get_refresh_session(self, session_id: str) -> dict[str, str] | None:
+        session_data = await self.redis_client.get(self._get_refresh_session_key(session_id))
+        if not session_data:
+            return None
+        try:
+            return json.loads(session_data)
+        except json.JSONDecodeError as exc:
+            logger.warning("Failed to decode refresh session for session_id=%s", session_id)
+            await self.redis_client.delete(self._get_refresh_session_key(session_id))
+            raise InvalidTokenException("Invalid refresh session") from exc
+
+    async def _delete_refresh_session(self, session_id: str) -> None:
+        await self.redis_client.delete(self._get_refresh_session_key(session_id))
+
+    async def _create_token_response(self, auth_user: AuthUser, session_id: str) -> TokenResponse:
+        refresh_token = self._build_refresh_token(session_id)
+        await self._store_refresh_session(auth_user, session_id, refresh_token)
+        access_token = create_access_token(
+            subject=auth_user.id,
+            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+            extra_data={
+                "username": auth_user.username,
+                "sid": session_id,
+                "typ": "access",
+            },
+        )
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            refresh_expires_in=self._get_refresh_expires_in_seconds(),
+        )
+
+    async def _get_auth_user_by_id(self, auth_user_id: int) -> AuthUser:
+        stmt = select(AuthUser).where(AuthUser.id == auth_user_id)
+        result = await self.db.execute(stmt)
+        auth_user = result.scalar_one_or_none()
+        if not auth_user:
+            raise InvalidTokenException("Authenticated user not found")
+        if not auth_user.is_active:
+            raise UserInactiveException(username=auth_user.username)
+        return auth_user
 
     async def authenticate(self, login_data: LoginRequest) -> TokenResponse:
         """Authenticate user with username and password
@@ -72,17 +174,7 @@ class AuthService:
         auth_user.last_login_at = datetime.now(UTC)
         await self.db.commit()
 
-        # Create JWT token
-        access_token = create_access_token(
-            subject=auth_user.id,
-            extra_data={"username": auth_user.username},
-        )
-
-        return TokenResponse(
-            access_token=access_token,
-            token_type="bearer",
-            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        )
+        return await self._create_token_response(auth_user, self._generate_session_id())
 
     async def register(self, register_data: RegisterRequest) -> TokenResponse:
         """Register a new user
@@ -133,17 +225,44 @@ class AuthService:
         has_bitbucket_user = bitbucket_user is not None
         await self._assign_default_role(new_auth_user.id, has_bitbucket_user)
 
-        # Create JWT token
-        access_token = create_access_token(
-            subject=new_auth_user.id,
-            extra_data={"username": new_auth_user.username},
-        )
+        return await self._create_token_response(new_auth_user, self._generate_session_id())
 
-        return TokenResponse(
-            access_token=access_token,
-            token_type="bearer",
-            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        )
+    async def refresh_tokens(self, refresh_token: str) -> TokenResponse:
+        """Refresh access and refresh tokens using a valid refresh session."""
+        session_id = self._extract_session_id_from_refresh_token(refresh_token)
+        session_data = await self._get_refresh_session(session_id)
+        if not session_data:
+            raise TokenExpiredException("Session expired due to inactivity")
+
+        expected_hash = session_data.get("refresh_token_hash")
+        if not expected_hash or not hmac.compare_digest(
+            expected_hash, self._hash_token(refresh_token)
+        ):
+            await self._delete_refresh_session(session_id)
+            raise InvalidTokenException("Invalid refresh token")
+
+        auth_user = await self._get_auth_user_by_id(int(session_data["auth_user_id"]))
+        return await self._create_token_response(auth_user, session_id)
+
+    async def logout(self, token: str | None = None, refresh_token: str | None = None) -> None:
+        """Invalidate the refresh session for the current login session."""
+        session_id: str | None = None
+
+        if refresh_token:
+            try:
+                session_id = self._extract_session_id_from_refresh_token(refresh_token)
+            except InvalidTokenException:
+                session_id = None
+
+        if not session_id and token:
+            try:
+                payload = decode_access_token(token)
+                session_id = payload.get("sid")
+            except JWTError:
+                session_id = None
+
+        if session_id:
+            await self._delete_refresh_session(session_id)
 
     async def get_current_user(self, token: str) -> AuthUser:
         """Get current authenticated user from JWT token
@@ -159,24 +278,24 @@ class AuthService:
         """
         try:
             payload = decode_access_token(token)
+            if payload.get("typ") != "access":
+                raise InvalidTokenException("Invalid token type")
             user_id: str = payload.get("sub")
+            session_id: str | None = payload.get("sid")
             if user_id is None:
-                raise InvalidCredentialsException()
+                raise InvalidTokenException()
+            if not session_id:
+                raise InvalidTokenException("Session missing from token")
+        except ExpiredSignatureError as e:
+            raise TokenExpiredException() from e
         except JWTError as e:
-            raise InvalidCredentialsException() from e
+            raise InvalidTokenException() from e
 
-        # Fetch user from database
-        stmt = select(AuthUser).where(AuthUser.id == int(user_id))
-        result = await self.db.execute(stmt)
-        auth_user = result.scalar_one_or_none()
+        session_data = await self._get_refresh_session(session_id)
+        if not session_data:
+            raise TokenExpiredException("Session expired due to inactivity")
 
-        if not auth_user:
-            raise InvalidCredentialsException()
-
-        if not auth_user.is_active:
-            raise UserInactiveException(username=auth_user.username)
-
-        return auth_user
+        return await self._get_auth_user_by_id(int(user_id))
 
     async def get_user_info(self, auth_user: AuthUser) -> UserinfoResponse:
         """Get user information for response

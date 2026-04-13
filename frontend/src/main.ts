@@ -34,6 +34,6 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 
 // Initialize auth
 const authStore = useAuthStore()
-authStore.initAuth()
-
-app.mount('#app')
+authStore.initAuth().finally(() => {
+  app.mount('#app')
+})

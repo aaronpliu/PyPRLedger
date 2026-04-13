@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(default="development-secret-key-change-in-production")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
+    REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES: int = Field(default=120)
+    ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS: int = Field(default=60)
 
     # CORS configuration
     BACKEND_CORS_ORIGINS: str = Field(

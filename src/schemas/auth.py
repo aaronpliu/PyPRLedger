@@ -18,8 +18,12 @@ class TokenResponse(BaseModel):
     """Token response schema"""
 
     access_token: str = Field(..., description="JWT access token")
+    refresh_token: str = Field(..., description="Opaque refresh token")
     token_type: str = Field(default="bearer", description="Token type")
     expires_in: int = Field(..., description="Token expiration time in seconds")
+    refresh_expires_in: int = Field(
+        ..., description="Refresh token idle expiration time in seconds"
+    )
 
 
 class UserinfoResponse(BaseModel):
@@ -56,4 +60,10 @@ class ChangePasswordRequest(BaseModel):
 class TokenRefreshRequest(BaseModel):
     """Token refresh request (for future use with refresh tokens)"""
 
-    pass  # Currently using same access token, can be extended later
+    refresh_token: str = Field(..., description="Refresh token")
+
+
+class LogoutRequest(BaseModel):
+    """Logout request payload"""
+
+    refresh_token: str | None = Field(None, description="Refresh token to revoke")

@@ -20,8 +20,10 @@ export const authApi = {
   },
 
   // Logout
-  logout(): Promise<void> {
-    return request.post('/auth/logout')
+  logout(refreshToken?: string): Promise<void> {
+    return request.post('/auth/logout', {
+      refresh_token: refreshToken ?? null,
+    })
   },
 
   // Refresh token

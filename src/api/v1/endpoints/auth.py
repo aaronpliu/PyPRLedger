@@ -11,7 +11,9 @@ from src.core.database import get_db_session
 from src.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
+    LogoutRequest,
     RegisterRequest,
+    TokenRefreshRequest,
     TokenResponse,
     UserinfoResponse,
 )
@@ -53,6 +55,20 @@ async def register(
 ) -> TokenResponse:
     """Registration endpoint"""
     return await auth_service.register(register_data)
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Refresh access token",
+    description="Refresh the access token using a valid refresh token",
+)
+async def refresh_tokens(
+    refresh_request: TokenRefreshRequest,
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+) -> TokenResponse:
+    """Refresh token endpoint."""
+    return await auth_service.refresh_tokens(refresh_request.refresh_token)
 
 
 @router.get(
@@ -133,12 +149,25 @@ async def change_password(
 @router.post(
     "/logout",
     summary="User logout",
-    description="Logout current user (client should discard token)",
+    description="Logout current user and revoke the active refresh session",
 )
-async def logout() -> dict[str, str]:
+async def logout(
+    request: Request,
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    logout_request: LogoutRequest | None = None,
+) -> dict[str, str]:
     """Logout endpoint
 
-    Note: With JWT tokens, logout is primarily client-side (discard token).
-    Server-side token blacklisting can be added later if needed.
+    Revokes the server-side refresh session so the current login can no longer
+    mint new access tokens.
     """
-    return {"message": "Logged out successfully. Please discard your token."}
+    authorization = request.headers.get("Authorization")
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+
+    await auth_service.logout(
+        token=token,
+        refresh_token=logout_request.refresh_token if logout_request else None,
+    )
+    return {"message": "Logged out successfully."}
