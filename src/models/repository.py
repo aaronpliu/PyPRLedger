@@ -11,7 +11,7 @@ from src.core.database import Base
 
 if TYPE_CHECKING:
     from src.models.project import Project
-    from src.models.pull_request import PullRequestReview, PullRequestScore
+    from src.models.pull_request import PullRequestReviewBase, PullRequestScore
 
 
 class Repository(Base):
@@ -46,8 +46,8 @@ class Repository(Base):
     project: Mapped[Project] = relationship("Project", back_populates="repositories")
 
     # Relationship to pull request reviews
-    pull_request_reviews: Mapped[list[PullRequestReview]] = relationship(
-        "PullRequestReview", back_populates="repository"
+    pull_request_reviews: Mapped[list[PullRequestReviewBase]] = relationship(
+        "PullRequestReviewBase", back_populates="repository"
     )
 
     # Score records

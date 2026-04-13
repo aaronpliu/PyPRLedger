@@ -17,7 +17,11 @@ from src.core.exceptions import (
 )
 from src.models.project import Project
 from src.models.project_registry import ProjectRegistry
-from src.models.pull_request import PullRequestReview, PullRequestScore
+from src.models.pull_request import (
+    PullRequestReviewAssignment,
+    PullRequestReviewBase,
+    PullRequestScore,
+)
 from src.schemas.pull_request import (
     ReviewCreate,
     ReviewFilter,
@@ -144,6 +148,140 @@ class ReviewService:
         except Exception as e:
             logger.warning(f"Failed to invalidate list cache: {str(e)}")
 
+    @staticmethod
+    def _serialize_review(
+        base: PullRequestReviewBase,
+        assignment: PullRequestReviewAssignment | None = None,
+    ) -> dict[str, Any]:
+        review_dict = base.to_dict()
+        review_dict.update(
+            {
+                "id": assignment.id if assignment else base.id,
+                "reviewer": assignment.reviewer if assignment else None,
+                "reviewer_comments": assignment.reviewer_comments if assignment else None,
+                "assigned_by": assignment.assigned_by if assignment else None,
+                "assigned_date": (
+                    assignment.assigned_date.isoformat()
+                    if assignment and isinstance(assignment.assigned_date, datetime)
+                    else assignment.assigned_date
+                    if assignment
+                    else None
+                ),
+                "assignment_status": (
+                    assignment.assignment_status if assignment else "auto_created"
+                ),
+            }
+        )
+        return review_dict
+
+    @staticmethod
+    def _flatten_reviews(
+        bases: list[PullRequestReviewBase],
+        reviewer: str | None = None,
+    ) -> list[dict[str, Any]]:
+        reviews: list[dict[str, Any]] = []
+
+        for base in bases:
+            assignments = list(base.assignments)
+            if reviewer:
+                assignments = [
+                    assignment for assignment in assignments if assignment.reviewer == reviewer
+                ]
+
+            if assignments:
+                reviews.extend(
+                    ReviewService._serialize_review(base, assignment) for assignment in assignments
+                )
+            elif reviewer is None:
+                reviews.append(ReviewService._serialize_review(base))
+
+        return reviews
+
+    @staticmethod
+    def _build_base_conditions(
+        review_data: ReviewCreate,
+        project_key: str,
+        repository_slug: str,
+    ) -> list[Any]:
+        conditions = [
+            PullRequestReviewBase.pull_request_commit_id == review_data.pull_request_commit_id,
+            PullRequestReviewBase.project_key == project_key,
+            PullRequestReviewBase.repository_slug == repository_slug,
+        ]
+        if review_data.source_filename is None:
+            conditions.append(PullRequestReviewBase.source_filename.is_(None))
+        else:
+            conditions.append(PullRequestReviewBase.source_filename == review_data.source_filename)
+        return conditions
+
+    async def _get_existing_base(
+        self,
+        review_data: ReviewCreate,
+        db: AsyncSession,
+        project_key: str,
+        repository_slug: str,
+    ) -> PullRequestReviewBase | None:
+        stmt = (
+            select(PullRequestReviewBase)
+            .options(
+                selectinload(PullRequestReviewBase.assignments).selectinload(
+                    PullRequestReviewAssignment.reviewer_rel
+                ),
+                selectinload(PullRequestReviewBase.project),
+                selectinload(PullRequestReviewBase.repository),
+                selectinload(PullRequestReviewBase.pull_request_user_rel),
+            )
+            .where(*self._build_base_conditions(review_data, project_key, repository_slug))
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    def _get_existing_assignment(
+        base: PullRequestReviewBase,
+        reviewer: str,
+    ) -> PullRequestReviewAssignment | None:
+        return next(
+            (assignment for assignment in base.assignments if assignment.reviewer == reviewer), None
+        )
+
+    @staticmethod
+    def _populate_base(
+        base: PullRequestReviewBase,
+        review_data: ReviewCreate,
+        pull_request_user: str,
+    ) -> None:
+        base.pull_request_id = review_data.pull_request_id
+        base.pull_request_commit_id = review_data.pull_request_commit_id
+        base.project_key = review_data.project_key
+        base.repository_slug = review_data.repository_slug
+        base.pull_request_user = pull_request_user
+        base.source_branch = review_data.source_branch
+        base.target_branch = review_data.target_branch
+        base.git_code_diff = review_data.git_code_diff
+        base.source_filename = review_data.source_filename
+        base.ai_suggestions = review_data.ai_suggestions
+        base.pull_request_status = review_data.pull_request_status
+        base.review_metadata = review_data.metadata
+
+    @staticmethod
+    def _populate_assignment(
+        assignment: PullRequestReviewAssignment,
+        reviewer: str,
+        review_data: ReviewCreate,
+    ) -> None:
+        assignment.reviewer = reviewer
+        assignment.reviewer_comments = review_data.reviewer_comments
+        if not assignment.assignment_status:
+            assignment.assignment_status = "assigned"
+
+    @staticmethod
+    def _build_review_response(
+        base: PullRequestReviewBase,
+        assignment: PullRequestReviewAssignment | None = None,
+    ) -> ReviewResponse:
+        return ReviewResponse(**ReviewService._serialize_review(base, assignment))
+
     async def create_review(
         self, review_data: ReviewCreate, db: AsyncSession, include_details: bool = False
     ) -> ReviewResponse:
@@ -180,65 +318,40 @@ class ReviewService:
                 username=review_data.reviewer, is_reviewer=True
             )
 
-        # Check if review already exists
-        # For NULL reviewer: match by commit_id + project + repo + file (without reviewer)
-        # For non-NULL reviewer: match by commit_id + project + repo + file + reviewer
-        if reviewer:
-            # Case 1: Reviewer is specified - find exact match
-            existing_review_result = await db.execute(
-                select(PullRequestReview).where(
-                    PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
-                    PullRequestReview.project_key == project.project_key,
-                    PullRequestReview.repository_slug == repository.repository_slug,
-                    PullRequestReview.source_filename == review_data.source_filename,
-                    PullRequestReview.reviewer == reviewer.username,
-                )
-            )
-        else:
-            # Case 2: Reviewer is NULL - find pending assignment record
-            existing_review_result = await db.execute(
-                select(PullRequestReview).where(
-                    PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
-                    PullRequestReview.project_key == project.project_key,
-                    PullRequestReview.repository_slug == repository.repository_slug,
-                    PullRequestReview.source_filename == review_data.source_filename,
-                    PullRequestReview.reviewer.is_(None),  # Use IS NULL for SQL
-                )
-            )
+        existing_base = await self._get_existing_base(
+            review_data,
+            db,
+            project.project_key,
+            repository.repository_slug,
+        )
 
-        existing_review = existing_review_result.scalar_one_or_none()
-        if existing_review:
+        if reviewer and existing_base:
+            existing_assignment = self._get_existing_assignment(existing_base, reviewer.username)
+            if existing_assignment:
+                raise ReviewAlreadyExistsException(pull_request_id=review_data.pull_request_id)
+        elif existing_base:
             raise ReviewAlreadyExistsException(pull_request_id=review_data.pull_request_id)
 
-        # Create new review (score is now stored separately in PullRequestScore table)
-
-        new_review = PullRequestReview(
-            pull_request_id=review_data.pull_request_id,
-            pull_request_commit_id=review_data.pull_request_commit_id,
-            project_key=project.project_key,
-            repository_slug=repository.repository_slug,
-            reviewer=reviewer.username if reviewer else None,  # Can be NULL
-            pull_request_user=pr_user.username,
-            source_branch=review_data.source_branch,
-            target_branch=review_data.target_branch,
-            git_code_diff=review_data.git_code_diff,
-            source_filename=review_data.source_filename,
-            ai_suggestions=review_data.ai_suggestions,
-            reviewer_comments=review_data.reviewer_comments,
-            pull_request_status=review_data.pull_request_status,
-            metadata=review_data.metadata,
-            # Assignment tracking - webhook creates auto_created reviews
-            assigned_by=None,  # Not manually assigned
-            assigned_date=None,
-            assignment_status="auto_created" if not reviewer else "assigned",
-        )
-        db.add(new_review)
+        new_base = PullRequestReviewBase()
+        self._populate_base(new_base, review_data, pr_user.username)
+        db.add(new_base)
         await db.flush()
-        await db.refresh(new_review)
+
+        new_assignment = None
+        if reviewer:
+            new_assignment = PullRequestReviewAssignment(
+                review_base_id=new_base.id,
+                reviewer=reviewer.username,
+                assignment_status="assigned",
+            )
+            self._populate_assignment(new_assignment, reviewer.username, review_data)
+            db.add(new_assignment)
+            await db.flush()
+
         await db.commit()  # Commit the transaction to make data visible to other connections
 
         # Cache the new review using composite key
-        review_dict = new_review.to_dict()
+        review_dict = self._serialize_review(new_base, new_assignment)
         if include_details:
             # Add project and user details
             review_dict["project_name"] = project.project_name
@@ -255,7 +368,7 @@ class ReviewService:
         await self._set_review_in_cache(
             project_key=str(project.project_key),
             repository_slug=str(repository.repository_slug),
-            pull_request_id=str(new_review.pull_request_id),
+            pull_request_id=str(new_base.pull_request_id),
             review_data=review_dict,
         )
 
@@ -265,8 +378,8 @@ class ReviewService:
                 project=str(project.project_key), reviewer=str(reviewer.username)
             )
 
-        logger.info(f"Created new review: {new_review.pull_request_id}")
-        return ReviewResponse(**new_review.to_dict())
+        logger.info(f"Created new review: {new_base.pull_request_id}")
+        return ReviewResponse(**review_dict)
 
     async def upsert_review(
         self, review_data: ReviewCreate, db: AsyncSession, include_details: bool = False
@@ -303,47 +416,38 @@ class ReviewService:
                 username=review_data.reviewer, is_reviewer=True
             )
 
-        # Check if review already exists
-        # For NULL reviewer: match by commit_id + project + repo + file (without reviewer)
-        # For non-NULL reviewer: match by commit_id + project + repo + file + reviewer
-        if reviewer:
-            # Case 1: Reviewer is specified - find exact match
-            existing_review_result = await db.execute(
-                select(PullRequestReview).where(
-                    PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
-                    PullRequestReview.project_key == project.project_key,
-                    PullRequestReview.repository_slug == repository.repository_slug,
-                    PullRequestReview.source_filename == review_data.source_filename,
-                    PullRequestReview.reviewer == reviewer.username,
-                )
-            )
-        else:
-            # Case 2: Reviewer is NULL - find pending assignment record
-            existing_review_result = await db.execute(
-                select(PullRequestReview).where(
-                    PullRequestReview.pull_request_commit_id == review_data.pull_request_commit_id,
-                    PullRequestReview.project_key == project.project_key,
-                    PullRequestReview.repository_slug == repository.repository_slug,
-                    PullRequestReview.source_filename == review_data.source_filename,
-                    PullRequestReview.reviewer.is_(None),  # Use IS NULL for SQL
-                )
-            )
+        existing_base = await self._get_existing_base(
+            review_data,
+            db,
+            project.project_key,
+            repository.repository_slug,
+        )
+        existing_assignment = None
+        if reviewer and existing_base:
+            existing_assignment = self._get_existing_assignment(existing_base, reviewer.username)
 
-        existing_review = existing_review_result.scalar_one_or_none()
+        created = False
+        if existing_base:
+            self._populate_base(existing_base, review_data, pr_user.username)
+            existing_base.updated_date = datetime.now(UTC)
 
-        if existing_review:
-            # UPDATE existing review
-            update_data = review_data.model_dump(exclude_unset=True)
-            for field, value in update_data.items():
-                setattr(existing_review, field, value)
-
-            existing_review.updated_date = datetime.now(UTC)
+            if reviewer:
+                if existing_assignment:
+                    self._populate_assignment(existing_assignment, reviewer.username, review_data)
+                    existing_assignment.updated_date = datetime.now(UTC)
+                else:
+                    existing_assignment = PullRequestReviewAssignment(
+                        review_base_id=existing_base.id,
+                        reviewer=reviewer.username,
+                        assignment_status="assigned",
+                    )
+                    self._populate_assignment(existing_assignment, reviewer.username, review_data)
+                    db.add(existing_assignment)
+                    created = True
             await db.flush()
-            await db.refresh(existing_review)
-            await db.commit()  # Commit the transaction to make data visible to other connections
+            await db.commit()
 
-            # Cache the updated review
-            review_dict = existing_review.to_dict()
+            review_dict = self._serialize_review(existing_base, existing_assignment)
             if include_details:
                 review_dict["project_name"] = project.project_name
                 review_dict["pull_request_user_info"] = {
@@ -358,7 +462,7 @@ class ReviewService:
             await self._set_review_in_cache(
                 project_key=str(project.project_key),
                 repository_slug=str(repository.repository_slug),
-                pull_request_id=str(existing_review.pull_request_id),
+                pull_request_id=str(existing_base.pull_request_id),
                 review_data=review_dict,
             )
 
@@ -368,21 +472,20 @@ class ReviewService:
                     project=str(project.project_key), reviewer=str(reviewer.username)
                 )
 
-            logger.info(f"Updated review: {existing_review.pull_request_id}")
-            return ReviewResponse(**existing_review.to_dict()), False
+            logger.info(f"Updated review: {existing_base.pull_request_id}")
+            return ReviewResponse(**review_dict), created
         else:
-            # CREATE new review - delegate to create_review
             new_review_response = await self.create_review(review_data, db, include_details)
             logger.info(f"Created new review: {new_review_response.pull_request_id}")
             return new_review_response, True
 
     async def get_review(
         self,
-        project_key: str,
-        repository_slug: str,
+        project_key: str | None,
+        repository_slug: str | None,
         pull_request_id: str,
         db: AsyncSession,
-    ) -> list[PullRequestReview]:
+    ) -> list[dict[str, Any]]:
         """
         Get all pull request reviews by composite business key
 
@@ -393,7 +496,7 @@ class ReviewService:
             db: Database session
 
         Returns:
-            list[PullRequestReview]: List of all matching reviews for this PR
+            list[dict[str, Any]]: List of all matching reviews for this PR
 
         Raises:
             DatabaseException: If database query fails
@@ -401,41 +504,37 @@ class ReviewService:
         try:
             logger.info(f"Querying database for reviews: {pull_request_id}")
 
-            # Build query with eager loading of all relationships
             query = (
-                select(PullRequestReview)
+                select(PullRequestReviewBase)
                 .options(
-                    selectinload(PullRequestReview.project),
-                    selectinload(PullRequestReview.repository),
-                    selectinload(PullRequestReview.pull_request_user_rel),
-                    selectinload(PullRequestReview.reviewer_rel),
+                    selectinload(PullRequestReviewBase.project),
+                    selectinload(PullRequestReviewBase.repository),
+                    selectinload(PullRequestReviewBase.pull_request_user_rel),
+                    selectinload(PullRequestReviewBase.assignments).selectinload(
+                        PullRequestReviewAssignment.reviewer_rel
+                    ),
                 )
-                .where(
-                    PullRequestReview.pull_request_id == pull_request_id,
-                    PullRequestReview.project_key == project_key,
-                    PullRequestReview.repository_slug == repository_slug,
-                )
-                .order_by(desc(PullRequestReview.created_date))
+                .where(PullRequestReviewBase.pull_request_id == pull_request_id)
+                .order_by(desc(PullRequestReviewBase.created_date))
             )
 
-            # Add project_key and repository_slug filters if provided
             if project_key:
-                query = query.where(PullRequestReview.project_key == project_key)
+                query = query.where(PullRequestReviewBase.project_key == project_key)
             if repository_slug:
-                query = query.where(PullRequestReview.repository_slug == repository_slug)
+                query = query.where(PullRequestReviewBase.repository_slug == repository_slug)
 
             result = await db.execute(query)
-            reviews = result.scalars().all()
+            bases = result.scalars().unique().all()
+            reviews = self._flatten_reviews(list(bases))
 
             if reviews:
                 logger.info(f"Found {len(reviews)} review(s) for PR: {pull_request_id}")
-                # Cache all results using composite key
                 for review in reviews:
                     await self._set_review_in_cache(
-                        str(review.project_key),
-                        str(review.repository_slug),
+                        str(review["project_key"]),
+                        str(review["repository_slug"]),
                         pull_request_id,
-                        review.to_dict(),
+                        review,
                     )
                 return reviews
 
@@ -461,7 +560,7 @@ class ReviewService:
         page_size: int = 20,
         use_cache: bool = True,
         app_names: list[str] | None = None,
-    ) -> tuple[list[PullRequestReview], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """
         List pull request reviews with filtering and pagination
 
@@ -474,14 +573,18 @@ class ReviewService:
             app_names: Optional list of app names to filter by (supports multiple apps)
 
         Returns:
-            Tuple[List[PullRequestReview], int]: List of reviews and total count
+            Tuple[List[dict[str, Any]], int]: List of reviews and total count
         """
-        # Build query conditions using business keys
-        conditions = []
+        query = select(PullRequestReviewBase).options(
+            selectinload(PullRequestReviewBase.project),
+            selectinload(PullRequestReviewBase.repository),
+            selectinload(PullRequestReviewBase.pull_request_user_rel),
+            selectinload(PullRequestReviewBase.assignments).selectinload(
+                PullRequestReviewAssignment.reviewer_rel
+            ),
+        )
 
-        # Handle app_name filtering via registry lookup
         if app_names:
-            # Get all (project_key, repository_slug) pairs for requested apps
             registry_query = select(
                 ProjectRegistry.project_key,
                 ProjectRegistry.repository_slug,
@@ -490,49 +593,70 @@ class ReviewService:
             project_repo_pairs = registry_result.all()
 
             if project_repo_pairs:
-                # Build OR condition for all matching pairs
                 app_conditions = [
                     and_(
-                        PullRequestReview.project_key == pk,
-                        PullRequestReview.repository_slug == rs,
+                        PullRequestReviewBase.project_key == pk,
+                        PullRequestReviewBase.repository_slug == rs,
                     )
                     for pk, rs in project_repo_pairs
                 ]
-                conditions.append(or_(*app_conditions))
+                query = query.where(or_(*app_conditions))
             else:
-                # No projects registered to these apps, return empty result
                 return [], 0
 
-        # Add other filter conditions
         if filters.pull_request_id:
-            conditions.append(PullRequestReview.pull_request_id == filters.pull_request_id)
+            query = query.where(PullRequestReviewBase.pull_request_id == filters.pull_request_id)
         if filters.project_key:
-            conditions.append(PullRequestReview.project_key == filters.project_key)
+            query = query.where(PullRequestReviewBase.project_key == filters.project_key)
         if filters.repository_slug:
-            conditions.append(PullRequestReview.repository_slug == filters.repository_slug)
+            query = query.where(PullRequestReviewBase.repository_slug == filters.repository_slug)
         if filters.pull_request_user:
-            conditions.append(PullRequestReview.pull_request_user == filters.pull_request_user)
+            query = query.where(
+                PullRequestReviewBase.pull_request_user == filters.pull_request_user
+            )
         if filters.reviewer:
-            conditions.append(PullRequestReview.reviewer == filters.reviewer)
+            query = query.join(PullRequestReviewBase.assignments).where(
+                PullRequestReviewAssignment.reviewer == filters.reviewer
+            )
         if filters.source_branch:
-            conditions.append(PullRequestReview.source_branch == filters.source_branch)
+            query = query.where(PullRequestReviewBase.source_branch == filters.source_branch)
         if filters.target_branch:
-            conditions.append(PullRequestReview.target_branch == filters.target_branch)
+            query = query.where(PullRequestReviewBase.target_branch == filters.target_branch)
         if filters.pull_request_status:
-            conditions.append(PullRequestReview.pull_request_status == filters.pull_request_status)
+            query = query.where(
+                PullRequestReviewBase.pull_request_status == filters.pull_request_status
+            )
         if filters.pull_request_commit_id:
-            # Support prefix matching for short commit IDs
-            conditions.append(
-                PullRequestReview.pull_request_commit_id.like(f"{filters.pull_request_commit_id}%")
+            query = query.where(
+                PullRequestReviewBase.pull_request_commit_id.like(
+                    f"{filters.pull_request_commit_id}%"
+                )
+            )
+        if filters.date_from:
+            query = query.where(PullRequestReviewBase.created_date >= filters.date_from)
+        if filters.date_to:
+            query = query.where(PullRequestReviewBase.created_date <= filters.date_to)
+        score_join = and_(
+            PullRequestScore.pull_request_id == PullRequestReviewBase.pull_request_id,
+            PullRequestScore.project_key == PullRequestReviewBase.project_key,
+            PullRequestScore.repository_slug == PullRequestReviewBase.repository_slug,
+            or_(
+                and_(
+                    PullRequestScore.source_filename.is_(None),
+                    PullRequestReviewBase.source_filename.is_(None),
+                ),
+                PullRequestScore.source_filename == PullRequestReviewBase.source_filename,
+            ),
+        )
+        if filters.score_min is not None or filters.score_max is not None:
+            query = query.join(
+                PullRequestScore,
+                score_join,
             )
         if filters.score_min is not None:
-            conditions.append(PullRequestReview.score >= filters.score_min)
+            query = query.where(PullRequestScore.score >= filters.score_min)
         if filters.score_max is not None:
-            conditions.append(PullRequestReview.score <= filters.score_max)
-        if filters.date_from:
-            conditions.append(PullRequestReview.created_date >= filters.date_from)
-        if filters.date_to:
-            conditions.append(PullRequestReview.created_date <= filters.date_to)
+            query = query.where(PullRequestScore.score <= filters.score_max)
 
         # Try cache first for list results (only if no app_name filter)
         if not app_names and use_cache:
@@ -548,46 +672,28 @@ class ReviewService:
             except Exception as e:
                 logger.warning(f"Failed to get review list from cache: {str(e)}")
 
-        # Get total count
-        count_query = select(func.count()).select_from(PullRequestReview)
-        if conditions:
-            count_query = count_query.where(and_(*conditions))
-
-        count_result = await db.execute(count_query)
-        total = count_result.scalar()
-
-        # Get reviews with eager loading of ALL relationships
-        query = (
-            select(PullRequestReview)
-            .options(
-                selectinload(PullRequestReview.project),
-                selectinload(PullRequestReview.repository),
-                selectinload(PullRequestReview.pull_request_user_rel),
-                selectinload(PullRequestReview.reviewer_rel),
-            )
-            .order_by(desc(PullRequestReview.created_date))
-            .limit(page_size)
-            .offset((page - 1) * page_size)
-        )
-        if conditions:
-            query = query.where(and_(*conditions))
-
+        query = query.order_by(desc(PullRequestReviewBase.created_date)).distinct()
         result = await db.execute(query)
-        reviews = result.scalars().all()
+        bases = result.scalars().unique().all()
+        flattened_reviews = self._flatten_reviews(list(bases), filters.reviewer)
+        total = len(flattened_reviews)
+        start = (page - 1) * page_size
+        end = start + page_size
+        reviews = flattened_reviews[start:end]
 
         # Cache the result (only if no app_name filter)
         if not app_names and use_cache and reviews:
             try:
                 filter_dict = filters.model_dump(exclude_unset=True)
                 cache_key = self._get_list_cache_key(filter_dict, page, page_size)
-                cache_data = {"reviews": [r.to_dict() for r in reviews], "total": total}
+                cache_data = {"reviews": reviews, "total": total}
                 await self.redis_client.setex(
                     cache_key, settings.CACHE_TTL_REVIEWS, json.dumps(cache_data)
                 )
             except Exception as e:
                 logger.warning(f"Failed to cache review list: {str(e)}")
 
-        return list(reviews), total
+        return reviews, total
 
     async def update_review(
         self,
@@ -624,31 +730,71 @@ class ReviewService:
         if not reviews:
             raise ReviewNotFoundException(pull_request_id=pull_request_id)
 
-        # Get the first review (should be only one for this PR)
         review = reviews[0]
 
-        # Check status transition if status is being updated
+        base_stmt = (
+            select(PullRequestReviewBase)
+            .options(selectinload(PullRequestReviewBase.assignments))
+            .where(PullRequestReviewBase.id == review["id"])
+        )
+        if review.get("reviewer"):
+            base_stmt = (
+                select(PullRequestReviewBase)
+                .options(selectinload(PullRequestReviewBase.assignments))
+                .join(PullRequestReviewBase.assignments)
+                .where(PullRequestReviewAssignment.id == review["id"])
+            )
+        base_result = await db.execute(base_stmt)
+        base = base_result.scalar_one_or_none()
+        if not base:
+            raise ReviewNotFoundException(pull_request_id=pull_request_id)
+
+        assignment = None
+        if review.get("reviewer"):
+            assignment = self._get_existing_assignment(base, review["reviewer"])
+
         if (
             update_data.pull_request_status
-            and update_data.pull_request_status != review.pull_request_status
+            and update_data.pull_request_status != base.pull_request_status
         ):
-            if not review.can_transition_to(update_data.pull_request_status):
+            if not base.can_transition_to(update_data.pull_request_status):
                 raise ReviewStatusException(
-                    current_status=str(review.pull_request_status),
+                    current_status=str(base.pull_request_status),
                     target_status=update_data.pull_request_status,
                 )
 
-        # Update review
-        review.update(update_data.model_dump(exclude_unset=True))
+        update_payload = update_data.model_dump(exclude_unset=True)
+        base_updates = {
+            "git_code_diff": update_payload.get("git_code_diff"),
+            "source_filename": update_payload.get("source_filename"),
+            "ai_suggestions": update_payload.get("ai_suggestions"),
+            "pull_request_status": update_payload.get("pull_request_status"),
+            "review_metadata": update_payload.get("metadata"),
+        }
+        base.update({key: value for key, value in base_updates.items() if value is not None})
+        base.updated_date = datetime.now(UTC)
 
-        # Invalidate cache using composite key from the review itself
+        if assignment and "reviewer_comments" in update_payload:
+            assignment.reviewer_comments = update_payload["reviewer_comments"]
+            assignment.updated_date = datetime.now(UTC)
+
+        if (
+            assignment
+            and update_payload.get("reviewer")
+            and update_payload["reviewer"] != assignment.reviewer
+        ):
+            assignment.reviewer = update_payload["reviewer"]
+
+        await db.flush()
+        await db.commit()
+
         await self._invalidate_review_cache(
-            str(review.project_key), str(review.repository_slug), pull_request_id
+            str(base.project_key), str(base.repository_slug), pull_request_id
         )
         await self._invalidate_list_cache()
 
         logger.info(f"Updated review: {pull_request_id}")
-        return review.to_dict()
+        return self._serialize_review(base, assignment)
 
     async def delete_review(
         self,
@@ -679,14 +825,29 @@ class ReviewService:
         if not reviews:
             return False
 
-        # Get the first review (should be only one for this PR)
         review = reviews[0]
 
-        await db.delete(review)
+        if review.get("reviewer"):
+            stmt = select(PullRequestReviewAssignment).where(
+                PullRequestReviewAssignment.id == review["id"]
+            )
+            result = await db.execute(stmt)
+            assignment = result.scalar_one_or_none()
+            if not assignment:
+                return False
+            await db.delete(assignment)
+        else:
+            stmt = select(PullRequestReviewBase).where(PullRequestReviewBase.id == review["id"])
+            result = await db.execute(stmt)
+            base = result.scalar_one_or_none()
+            if not base:
+                return False
+            await db.delete(base)
 
-        # Invalidate cache using composite key from the review itself
+        await db.commit()
+
         await self._invalidate_review_cache(
-            str(review.project_key), str(review.repository_slug), pull_request_id
+            str(review["project_key"]), str(review["repository_slug"]), pull_request_id
         )
         await self._invalidate_list_cache()
 
@@ -720,10 +881,9 @@ class ReviewService:
             except Exception as e:
                 logger.warning(f"Failed to get review stats from cache: {str(e)}")
 
-        # Build base query for reviews
-        base_query = select(PullRequestReview)
+        base_query = select(PullRequestReviewBase)
         if project_key:
-            base_query = base_query.where(PullRequestReview.project_key == project_key)
+            base_query = base_query.where(PullRequestReviewBase.project_key == project_key)
 
         # Get total reviews
         total_query = select(func.count()).select_from(base_query.subquery())
@@ -732,9 +892,10 @@ class ReviewService:
 
         # Get reviews by status
         status_query = select(
-            PullRequestReview.pull_request_status, func.count(PullRequestReview.id)
+            PullRequestReviewBase.pull_request_status,
+            func.count(PullRequestReviewBase.id),
         ).select_from(base_query.subquery())
-        status_query = status_query.group_by(PullRequestReview.pull_request_status)
+        status_query = status_query.group_by(PullRequestReviewBase.pull_request_status)
         status_result = await db.execute(status_query)
         status_counts = {row[0]: row[1] for row in status_result}
 
@@ -762,19 +923,19 @@ class ReviewService:
         )
 
         today_query = select(func.count()).select_from(
-            base_query.where(PullRequestReview.created_date >= today).subquery()
+            base_query.where(PullRequestReviewBase.created_date >= today).subquery()
         )
         today_result = await db.execute(today_query)
         reviews_today = today_result.scalar()
 
         week_query = select(func.count()).select_from(
-            base_query.where(PullRequestReview.created_date >= week_ago).subquery()
+            base_query.where(PullRequestReviewBase.created_date >= week_ago).subquery()
         )
         week_result = await db.execute(week_query)
         reviews_this_week = week_result.scalar()
 
         month_query = select(func.count()).select_from(
-            base_query.where(PullRequestReview.created_date >= month_ago).subquery()
+            base_query.where(PullRequestReviewBase.created_date >= month_ago).subquery()
         )
         month_result = await db.execute(month_query)
         reviews_this_month = month_result.scalar()
@@ -804,7 +965,7 @@ class ReviewService:
 
     async def get_reviews_by_reviewer(
         self, reviewer_username: str, db: AsyncSession, page: int = 1, page_size: int = 20
-    ) -> tuple[list[PullRequestReview], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """
         Get reviews by reviewer
 
@@ -815,14 +976,14 @@ class ReviewService:
             db: Database session
 
         Returns:
-            tuple[List[PullRequestReview], int]: List of reviews and total count
+            tuple[List[dict[str, Any]], int]: List of reviews and total count
         """
         filters = ReviewFilter(reviewer=reviewer_username)
         return await self.list_reviews(filters, db, page, page_size)
 
     async def get_reviews_by_project(
         self, project_key: str, db: AsyncSession, page: int = 1, page_size: int = 20
-    ) -> tuple[list[PullRequestReview], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """
         Get reviews by project
 
@@ -833,7 +994,7 @@ class ReviewService:
             db: Database session
 
         Returns:
-            tuple[List[PullRequestReview], int]: List of reviews and total count
+            tuple[List[dict[str, Any]], int]: List of reviews and total count
         """
         filters = ReviewFilter(project_key=project_key)
         return await self.list_reviews(filters, db, page, page_size)
@@ -846,7 +1007,7 @@ class ReviewService:
         repository_slug: str | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> tuple[list[PullRequestReview], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """
         Get reviews by status
 
@@ -859,7 +1020,7 @@ class ReviewService:
             db: Database session
 
         Returns:
-            tuple[List[PullRequestReview], int]: List of reviews and total count
+            tuple[List[dict[str, Any]], int]: List of reviews and total count
         """
         filters = ReviewFilter(
             pull_request_status=review_status,
@@ -903,29 +1064,49 @@ class ReviewService:
         if not reviews:
             raise ReviewNotFoundException(pull_request_id=pull_request_id)
 
-        # Get the first review (should be only one for this PR)
         review = reviews[0]
 
-        # Check status transition
-        if not review.can_transition_to(new_status):
+        stmt = (
+            select(PullRequestReviewBase)
+            .options(selectinload(PullRequestReviewBase.assignments))
+            .where(PullRequestReviewBase.pull_request_id == pull_request_id)
+        )
+        if project_key:
+            stmt = stmt.where(PullRequestReviewBase.project_key == project_key)
+        if repository_slug:
+            stmt = stmt.where(PullRequestReviewBase.repository_slug == repository_slug)
+        result = await db.execute(stmt.order_by(desc(PullRequestReviewBase.created_date)))
+        base = result.scalars().first()
+        if not base:
+            raise ReviewNotFoundException(pull_request_id=pull_request_id)
+
+        if not base.can_transition_to(new_status):
             raise ReviewStatusException(
-                current_status=str(review.pull_request_status),
+                current_status=str(base.pull_request_status),
                 target_status=new_status,
             )
 
-        # Update status
-        review.pull_request_status = new_status
+        base.pull_request_status = new_status
+        base.updated_date = datetime.now(UTC)
+        await db.flush()
+        await db.commit()
 
-        # Invalidate cache using composite key from the review itself
         await self._invalidate_review_cache(
-            str(review.project_key), str(review.repository_slug), pull_request_id
+            str(base.project_key), str(base.repository_slug), pull_request_id
         )
         await self._invalidate_list_cache()
 
-        return review.to_dict()
+        assignment = None
+        if review.get("reviewer"):
+            assignment = next(
+                (item for item in base.assignments if item.reviewer == review["reviewer"]),
+                None,
+            )
+
+        return self._serialize_review(base, assignment)
 
     async def enrich_review_with_entities(
-        self, review: PullRequestReview | dict[str, Any], db: AsyncSession
+        self, review: PullRequestReviewBase | dict[str, Any], db: AsyncSession
     ) -> dict[str, Any]:
         """
         Enrich a review with full entity information using relationships or direct queries
@@ -1056,7 +1237,7 @@ class ReviewService:
         return enriched
 
     async def _enrich_from_relationships(
-        self, review: PullRequestReview, review_dict: dict[str, Any]
+        self, review: PullRequestReviewBase, review_dict: dict[str, Any]
     ) -> dict[str, Any]:
         """
         Enrich review using pre-loaded SQLAlchemy relationships
@@ -1350,7 +1531,15 @@ class ReviewService:
 
         # Collect unique project-repo pairs for batch app_name resolution
         project_repo_pairs = [
-            (str(review.project_key), str(review.repository_slug)) for review in reviews
+            (
+                str(review["project_key"] if isinstance(review, dict) else review.project_key),
+                str(
+                    review["repository_slug"]
+                    if isinstance(review, dict)
+                    else review.repository_slug
+                ),
+            )
+            for review in reviews
         ]
 
         # Batch resolve app_names
@@ -1361,8 +1550,14 @@ class ReviewService:
         enriched_reviews = []
         for review in reviews:
             enriched = await self.enrich_review_with_entities(review, db)
-            # Inject app_name from registry
-            pair_key = (str(review.project_key), str(review.repository_slug))
+            pair_key = (
+                str(review["project_key"] if isinstance(review, dict) else review.project_key),
+                str(
+                    review["repository_slug"]
+                    if isinstance(review, dict)
+                    else review.repository_slug
+                ),
+            )
             enriched["app_name"] = app_name_mapping.get(pair_key, "Unknown")
             enriched_reviews.append(enriched)
 

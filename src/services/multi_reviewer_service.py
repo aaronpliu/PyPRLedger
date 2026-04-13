@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.exceptions import ReviewNotFoundException
-from src.models.review import PullRequestReviewAssignment, PullRequestReviewBase
+from src.models.pull_request import PullRequestReviewAssignment, PullRequestReviewBase
 from src.schemas.review import (
     AssignReviewerRequest,
     ReviewBaseResponse,

@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.core.database import get_db_session
 from src.core.exceptions import (
@@ -16,7 +17,7 @@ from src.core.exceptions import (
 )
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
-from src.models.pull_request import PullRequestReview
+from src.models.pull_request import PullRequestReviewAssignment, PullRequestReviewBase
 from src.models.user import User
 from src.schemas.pull_request import (
     ReviewAssignmentRequest,
@@ -1396,38 +1397,50 @@ async def assign_review_task(
 
     # First, try to find existing review with NULL reviewer for this PR
 
-    stmt = select(PullRequestReview).where(
-        PullRequestReview.pull_request_id == assignment_data.pull_request_id,
-        PullRequestReview.project_key == assignment_data.project_key,
-        PullRequestReview.repository_slug == assignment_data.repository_slug,
-        PullRequestReview.reviewer.is_(None),  # Find unassigned reviews
+    stmt = (
+        select(PullRequestReviewBase)
+        .options(selectinload(PullRequestReviewBase.assignments))
+        .where(
+            PullRequestReviewBase.pull_request_id == assignment_data.pull_request_id,
+            PullRequestReviewBase.project_key == assignment_data.project_key,
+            PullRequestReviewBase.repository_slug == assignment_data.repository_slug,
+        )
     )
     result = await db.execute(stmt)
-    existing_review = result.scalar_one_or_none()
+    existing_review = next(
+        (
+            review_base
+            for review_base in result.scalars().unique().all()
+            if not review_base.assignments
+        ),
+        None,
+    )
 
     if existing_review:
-        # Update existing NULL reviewer record
-
-        existing_review.reviewer = assignment_data.assignee_username
-        existing_review.assigned_by = current_user.username
-        existing_review.assigned_date = datetime.now(UTC)
-        existing_review.assignment_status = "assigned"
+        existing_review.pull_request_user = assignment_data.pull_request_user
         existing_review.updated_date = datetime.now(UTC)
 
-        # Update other fields if provided
         if assignment_data.pull_request_commit_id:
             existing_review.pull_request_commit_id = assignment_data.pull_request_commit_id
         if assignment_data.git_code_diff:
             existing_review.git_code_diff = assignment_data.git_code_diff
         if assignment_data.ai_suggestions:
             existing_review.ai_suggestions = assignment_data.ai_suggestions
-        if assignment_data.reviewer_comments:
-            existing_review.reviewer_comments = assignment_data.reviewer_comments
+
+        assignment = PullRequestReviewAssignment(
+            review_base_id=existing_review.id,
+            reviewer=assignment_data.assignee_username,
+            assigned_by=current_user.username,
+            assigned_date=datetime.now(UTC),
+            assignment_status="assigned",
+            reviewer_comments=assignment_data.reviewer_comments,
+        )
+        db.add(assignment)
 
         await db.flush()
-        await db.refresh(existing_review)
+        await db.refresh(assignment)
 
-        review = existing_review
+        review = assignment.to_full_dict()
         logger.info(
             f"Updated existing review assignment: PR {assignment_data.pull_request_id} "
             f"to {assignment_data.assignee_username} by {current_user.username}"
@@ -1453,14 +1466,27 @@ async def assign_review_task(
         review_obj, is_created = await review_service.upsert_review(review_data, db)
 
         # Update assignment tracking fields
-        if hasattr(review_obj, "assigned_by"):
-            review_obj.assigned_by = current_user.username
-            review_obj.assigned_date = datetime.now(UTC)
-            review_obj.assignment_status = "assigned"
+        stmt = (
+            select(PullRequestReviewAssignment)
+            .join(PullRequestReviewAssignment.review_base)
+            .options(selectinload(PullRequestReviewAssignment.review_base))
+            .where(
+                PullRequestReviewBase.pull_request_id == assignment_data.pull_request_id,
+                PullRequestReviewBase.project_key == assignment_data.project_key,
+                PullRequestReviewBase.repository_slug == assignment_data.repository_slug,
+                PullRequestReviewAssignment.reviewer == assignment_data.assignee_username,
+            )
+            .order_by(PullRequestReviewAssignment.id.desc())
+        )
+        result = await db.execute(stmt)
+        assignment = result.scalars().first()
+        if assignment:
+            assignment.assigned_by = current_user.username
+            assignment.assigned_date = datetime.now(UTC)
+            assignment.assignment_status = "assigned"
             await db.flush()
-            await db.refresh(review_obj)
 
-        review = review_obj
+        review = assignment.to_full_dict() if assignment else review_obj.model_dump(mode="json")
         logger.info(
             f"Created new review with assignment: PR {assignment_data.pull_request_id} "
             f"to {assignment_data.assignee_username} by {current_user.username}"
@@ -1489,13 +1515,10 @@ async def assign_review_task(
 
     # Handle both ORM object and Pydantic model
     if hasattr(review, "to_dict"):
-        # ORM object (PullRequestReview)
         review_data_dict = review.to_dict()
     elif hasattr(review, "model_dump"):
-        # Pydantic model (ReviewResponse)
         review_data_dict = review.model_dump(mode="json")
     else:
-        # Fallback to dict() method
         review_data_dict = dict(review)
 
     return ReviewResponse(**review_data_dict)
