@@ -6,7 +6,7 @@ This document outlines the implementation plan and details for the User Role Del
 
 **Status**: ✅ Completed  
 **Implementation Date**: April 12, 2026  
-**Version**: Backend 1.5.0+
+**Version**: Backend 1.6.0+
 
 ---
 

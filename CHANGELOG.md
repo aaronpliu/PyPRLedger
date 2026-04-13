@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0] - 2026-04-13
+
+### Added
+- **Multi-Reviewer Review Architecture** - Split review persistence into base review and reviewer assignment tables
+  - Added `pull_request_review_base` for shared PR review data
+  - Added `pull_request_review_assignment` for reviewer-specific assignment state
+  - Added migration coverage for the new review model and permission updates
+
+- **Review Assignment and Delegation Flows** - Expanded review administration workflow across backend and UI
+  - Added reviewer assignment tracking with assignment status and reviewer comments
+  - Added frontend task assignment and role delegation management support
+  - Added backend support for delegated review administration flows
+
+### Changed
+- **Backend Review Mapping** - Refactored ORM and service layers to use the new base-plus-assignment schema
+  - Updated review, project, repository, and user relationships to target the new tables
+  - Flattened base and assignment data at the service boundary to preserve the existing API response shape
+  - Updated project statistics and assignment endpoints for the new schema
+
+- **Release Metadata** - Aligned backend and frontend version surfaces for the new release
+  - Backend version bumped to 1.6.0
+  - Frontend version bumped to 1.1.0
+  - Documentation updated to reflect the new release
+
+### Fixed
+- **Legacy Review Compatibility** - Removed stale single-table review assumptions after the schema refactor
+  - Fixed assignment flows that previously depended on `pull_request_review.reviewer IS NULL`
+  - Fixed mixed review model imports after consolidating canonical models
+  - Fixed review statistics queries against the refactored tables
+
+### Technical Details
+- **Backend Version**: 1.6.0 (FastAPI service)
+- **Frontend Version**: 1.1.0 (Vue 3 application)
+- **Database Migrations**: Added multi-reviewer and permission updates through migrations 011 and 012
+
+---
+
 ## [1.5.0] - 2026-04-08
 
 ### Added
@@ -492,6 +529,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
+| 1.6.0 | 2026-04-13 | Multi-reviewer review table split, assignment workflow, role delegation, release metadata alignment |
+| 1.5.0 | 2026-04-08 | Vue.js frontend application, advanced review management, analytics dashboard |
 | 1.4.0 | 2026-04-06 | Diff2HTML integration, score deletion, Material Design UI overhaul, cache enhancements |
 | 1.3.2 | 2026-04-05 | Score architecture refactoring, review UI testing page, cache management, schema unification |
 | 1.3.1 | 2026-03-31 | Multi-reviewer score support with UPSERT pattern, independent iteration tracking |
@@ -550,9 +589,9 @@ def validate_field(cls, v):
    ```
 
 2. **Run database migrations** (if applicable):
-   ```bash
-   alembic upgrade head
-   ```
+  ```bash
+  alembic upgrade head
+  ```
 
 3. **Restart application** to pick up new logging configuration:
    ```bash

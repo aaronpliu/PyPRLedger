@@ -2,30 +2,36 @@
 
 ## Overview
 
-Version management has been consolidated to a **single source of truth** - `pyproject.toml`. All other locations now dynamically read the version from this file.
+Version management now uses **two explicit sources of truth**:
+
+- `pyproject.toml` for the backend/API version
+- `frontend/package.json` for the frontend/UI version
 
 ## What Changed
 
-### Before (❌ Multiple Sources of Truth)
+### Before (❌ Stale and Mixed Version Sources)
 ```
 pyproject.toml        → version = "0.1.0"
 src/__init__.py       → __version__ = "1.0.0"
 src/main.py           → version="1.0.0"
 src/api/__init__.py   → __version__ = "1.0.0"
+frontend/package.json → version = "1.0.0"
 ```
 
-### After (✅ Single Source of Truth)
+### After (✅ Explicit Backend and Frontend Sources)
 ```
-pyproject.toml        → version = "1.0.0" (SOURCE OF TRUTH)
-src/__init__.py       → reads from pyproject.toml via importlib.metadata
+pyproject.toml        → version = "1.6.0" (BACKEND/API SOURCE OF TRUTH)
+frontend/package.json → version = "1.1.0" (FRONTEND/UI SOURCE OF TRUTH)
+src/__init__.py       → reads from pyproject.toml via tomllib
 src/main.py           → imports __version__ from src.__init__
+frontend/src/config/versions.ts → reads UI version from package.json
 ```
 
 ## Files Modified
 
 ### 1. `src/__init__.py`
-- Now uses `importlib.metadata` to read version from `pyproject.toml`
-- Includes fallback to `"0.1.0-dev"` for development environments
+- Now uses `tomllib` to read version from `pyproject.toml`
+- Includes fallback to `"1.0.0-dev"` for development environments
 - Removed hardcoded version string
 
 ### 2. `src/main.py`
@@ -47,6 +53,10 @@ src/main.py           → imports __version__ from src.__init__
 - Added version reference in header
 - Points to `pyproject.toml` and bump script
 
+### 6. `frontend/package.json`
+- Stores the UI release version
+- Consumed by `frontend/src/config/versions.ts` at build time
+
 ## How to Use
 
 ### Check Current Version
@@ -56,10 +66,10 @@ python3 scripts/bump_version.py show
 
 ### Bump Version
 ```bash
-# Major release (1.0.0 → 2.0.0)
+# Major release (1.5.0 → 2.0.0)
 python3 scripts/bump_version.py major
 
-# Minor release (1.0.0 → 1.1.0)
+# Minor release (1.5.0 → 1.6.0)
 python3 scripts/bump_version.py minor
 
 # Patch release (1.0.0 → 1.0.1)
@@ -98,10 +108,10 @@ print(__version__)
 
 ## Benefits
 
-✅ **Single Point of Maintenance**: Only update one file (`pyproject.toml`)
-✅ **DRY Principle**: No duplication of version strings
+✅ **Clear Ownership**: Backend and frontend versions are updated in their own package metadata
+✅ **DRY Principle**: No duplication of backend runtime version strings
 ✅ **Automated Releases**: Easy version bumping with scripts
-✅ **Consistency**: All parts of the application use the same version
+✅ **Consistency**: Backend runtime and OpenAPI use the same API version automatically
 ✅ **Modern Standard**: Follows PEP 621 and Python packaging best practices
 ✅ **CI/CD Friendly**: Easy to integrate with automated release pipelines
 
@@ -109,15 +119,15 @@ print(__version__)
 
 ```
 ┌─────────────────┐
-│ pyproject.toml  │ ← Single Source of Truth
+│ pyproject.toml  │ ← Backend/API source
 │  version =      │
 └────────┬────────┘
          │
          ├──────────────────────────────┐
          │                              │
     ┌────▼─────────┐           ┌────────▼────────┐
-    │ importlib    │           │ pip install -e .│
-    │ metadata     │           │ (reads during   │
+    │ tomllib      │           │ pip install -e .│
+    │ file reader  │           │ (reads during   │
     └────┬─────────┘           │  installation)  │
          │                     └─────────────────┘
     ┌────▼─────────┐
@@ -129,6 +139,8 @@ print(__version__)
     │ src/main.py  │
     │ FastAPI app  │
     └──────────────┘
+
+frontend/package.json → frontend/src/config/versions.ts → UI version label
 ```
 
 ## Troubleshooting
