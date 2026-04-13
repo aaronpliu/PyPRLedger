@@ -10,7 +10,6 @@ from src.models.organization import OrganizationGroup
 from src.models.project import Project
 from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import (
-    PullRequestReview,
     PullRequestReviewAssignment,
     PullRequestReviewBase,
 )
@@ -24,9 +23,8 @@ __all__ = [
     "Project",
     "Repository",
     "User",
-    "PullRequestReview",  # Legacy
-    "PullRequestReviewBase",  # New
-    "PullRequestReviewAssignment",  # New
+    "PullRequestReviewBase",
+    "PullRequestReviewAssignment",
     "AuthUser",
     "Role",
     "OrganizationGroup",

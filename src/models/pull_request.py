@@ -329,9 +329,6 @@ class PullRequestReviewAssignment(Base):
         return {**base_dict, **self.to_dict()}
 
 
-PullRequestReview = PullRequestReviewBase
-
-
 class PullRequestScore(Base):
     """Pull request score model representing the pull_request_score table in the database
 
