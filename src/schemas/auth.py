@@ -67,3 +67,15 @@ class LogoutRequest(BaseModel):
     """Logout request payload"""
 
     refresh_token: str | None = Field(None, description="Refresh token to revoke")
+
+
+class AuthSessionResponse(BaseModel):
+    """Active refresh session metadata"""
+
+    session_id: str
+    auth_user_id: int
+    username: str
+    created_at: datetime
+    last_activity_at: datetime
+    expires_in_seconds: int
+    is_current: bool = False

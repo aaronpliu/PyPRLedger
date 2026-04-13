@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
+from src.core.permissions import get_current_user_with_token
+from src.models.auth_user import AuthUser
 from src.schemas.auth import (
+    AuthSessionResponse,
     ChangePasswordRequest,
     LoginRequest,
     LogoutRequest,
@@ -18,6 +21,7 @@ from src.schemas.auth import (
     UserinfoResponse,
 )
 from src.services.auth_service import AuthService
+from src.services.rbac_service import RBACService
 
 
 router = APIRouter(prefix="/auth")
@@ -26,6 +30,11 @@ router = APIRouter(prefix="/auth")
 def get_auth_service(db: Annotated[AsyncSession, Depends(get_db_session)]) -> AuthService:
     """Dependency to get auth service instance"""
     return AuthService(db)
+
+
+def get_rbac_service(db: Annotated[AsyncSession, Depends(get_db_session)]) -> RBACService:
+    """Dependency to get RBAC service instance"""
+    return RBACService(db)
 
 
 @router.post(
@@ -171,3 +180,66 @@ async def logout(
         refresh_token=logout_request.refresh_token if logout_request else None,
     )
     return {"message": "Logged out successfully."}
+
+
+@router.get(
+    "/sessions/me",
+    response_model=list[AuthSessionResponse],
+    summary="List my active sessions",
+    description="List all active refresh sessions belonging to the current user",
+)
+async def list_my_sessions(
+    request: Request,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+) -> list[AuthSessionResponse]:
+    """List active sessions for the current user."""
+    authorization = request.headers.get("Authorization")
+    current_session_id: str | None = None
+
+    if authorization and authorization.startswith("Bearer "):
+        current_session_id = await auth_service.get_session_id_from_token(
+            authorization.split(" ")[1]
+        )
+
+    return await auth_service.list_sessions(
+        auth_user_id=current_user.id,
+        current_session_id=current_session_id,
+    )
+
+
+@router.get(
+    "/sessions",
+    response_model=list[AuthSessionResponse],
+    summary="List active sessions",
+    description="Administrative session inventory for active refresh sessions",
+)
+async def list_sessions(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+    auth_user_id: int | None = Query(
+        default=None,
+        description="Optional auth user ID filter",
+    ),
+) -> list[AuthSessionResponse]:
+    """List active sessions for operations and support."""
+    await rbac_service.require_permission(current_user.id, "manage", "users")
+    return await auth_service.list_sessions(auth_user_id=auth_user_id)
+
+
+@router.delete(
+    "/sessions/{session_id}",
+    summary="Revoke a session",
+    description="Administrative endpoint to revoke an active refresh session immediately",
+)
+async def revoke_session(
+    session_id: str,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict[str, str]:
+    """Revoke an active session by session id."""
+    await rbac_service.require_permission(current_user.id, "manage", "users")
+    await auth_service.revoke_session(session_id)
+    return {"message": "Session revoked successfully."}

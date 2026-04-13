@@ -20,12 +20,19 @@ from src.core.exceptions import (
     ErrorCode,
     InvalidCredentialsException,
     InvalidTokenException,
+    NotFoundException,
     TokenExpiredException,
     UserInactiveException,
 )
 from src.models.auth_user import AuthUser
 from src.models.user import User
-from src.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserinfoResponse
+from src.schemas.auth import (
+    AuthSessionResponse,
+    LoginRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserinfoResponse,
+)
 from src.utils.jwt import create_access_token, decode_access_token
 from src.utils.password import hash_password, verify_password
 from src.utils.redis import get_redis_client
@@ -76,13 +83,15 @@ class AuthService:
         auth_user: AuthUser,
         session_id: str,
         refresh_token: str,
+        created_at: str | None = None,
     ) -> None:
+        now = datetime.now(UTC).isoformat()
         session_data = {
             "auth_user_id": auth_user.id,
             "username": auth_user.username,
             "refresh_token_hash": self._hash_token(refresh_token),
-            "created_at": datetime.now(UTC).isoformat(),
-            "last_activity_at": datetime.now(UTC).isoformat(),
+            "created_at": created_at or now,
+            "last_activity_at": now,
         }
         await self.redis_client.setex(
             self._get_refresh_session_key(session_id),
@@ -104,9 +113,26 @@ class AuthService:
     async def _delete_refresh_session(self, session_id: str) -> None:
         await self.redis_client.delete(self._get_refresh_session_key(session_id))
 
-    async def _create_token_response(self, auth_user: AuthUser, session_id: str) -> TokenResponse:
+    @staticmethod
+    def _parse_datetime(value: str) -> datetime:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed
+
+    async def _create_token_response(
+        self,
+        auth_user: AuthUser,
+        session_id: str,
+        created_at: str | None = None,
+    ) -> TokenResponse:
         refresh_token = self._build_refresh_token(session_id)
-        await self._store_refresh_session(auth_user, session_id, refresh_token)
+        await self._store_refresh_session(
+            auth_user,
+            session_id,
+            refresh_token,
+            created_at=created_at,
+        )
         access_token = create_access_token(
             subject=auth_user.id,
             expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
@@ -242,7 +268,11 @@ class AuthService:
             raise InvalidTokenException("Invalid refresh token")
 
         auth_user = await self._get_auth_user_by_id(int(session_data["auth_user_id"]))
-        return await self._create_token_response(auth_user, session_id)
+        return await self._create_token_response(
+            auth_user,
+            session_id,
+            created_at=session_data.get("created_at"),
+        )
 
     async def logout(self, token: str | None = None, refresh_token: str | None = None) -> None:
         """Invalidate the refresh session for the current login session."""
@@ -263,6 +293,65 @@ class AuthService:
 
         if session_id:
             await self._delete_refresh_session(session_id)
+
+    async def get_session_id_from_token(self, token: str) -> str:
+        """Extract the session id from an access token."""
+        try:
+            payload = decode_access_token(token)
+            if payload.get("typ") != "access":
+                raise InvalidTokenException("Invalid token type")
+            session_id = payload.get("sid")
+            if not session_id:
+                raise InvalidTokenException("Session missing from token")
+            return session_id
+        except ExpiredSignatureError as exc:
+            raise TokenExpiredException() from exc
+        except JWTError as exc:
+            raise InvalidTokenException() from exc
+
+    async def list_sessions(
+        self,
+        auth_user_id: int | None = None,
+        current_session_id: str | None = None,
+    ) -> list[AuthSessionResponse]:
+        """List active refresh sessions, optionally filtered by auth user."""
+        session_keys = await self.redis_client.keys(f"{REFRESH_SESSION_KEY_PREFIX}:*")
+        sessions: list[AuthSessionResponse] = []
+
+        for session_key in session_keys:
+            session_id = session_key.removeprefix(f"{REFRESH_SESSION_KEY_PREFIX}:")
+            session_data = await self._get_refresh_session(session_id)
+            if not session_data:
+                continue
+
+            session_auth_user_id = int(session_data["auth_user_id"])
+            if auth_user_id is not None and session_auth_user_id != auth_user_id:
+                continue
+
+            expires_in_seconds = await self.redis_client.ttl(session_key)
+            if expires_in_seconds < 0:
+                continue
+
+            sessions.append(
+                AuthSessionResponse(
+                    session_id=session_id,
+                    auth_user_id=session_auth_user_id,
+                    username=session_data["username"],
+                    created_at=self._parse_datetime(session_data["created_at"]),
+                    last_activity_at=self._parse_datetime(session_data["last_activity_at"]),
+                    expires_in_seconds=expires_in_seconds,
+                    is_current=session_id == current_session_id,
+                )
+            )
+
+        sessions.sort(key=lambda session: session.last_activity_at, reverse=True)
+        return sessions
+
+    async def revoke_session(self, session_id: str) -> None:
+        """Revoke a refresh session by session id."""
+        deleted_count = await self.redis_client.delete(self._get_refresh_session_key(session_id))
+        if deleted_count == 0:
+            raise NotFoundException(message=f"Session {session_id} not found")
 
     async def get_current_user(self, token: str) -> AuthUser:
         """Get current authenticated user from JWT token
