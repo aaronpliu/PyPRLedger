@@ -66,7 +66,11 @@
         <el-table-column label="User Agent" min-width="260">
           <template #default="{ row }">
             <div class="device-cell" :title="getDeviceDetails(row.user_agent).rawUserAgent || ''">
-              <div class="device-label">{{ getDeviceDetails(row.user_agent).label }}</div>
+              <div class="device-label-row">
+                <el-icon class="device-icon"><component :is="getDeviceIcon(row.user_agent)" /></el-icon>
+                <span class="device-label">{{ getDeviceDetails(row.user_agent).label }}</span>
+                <el-tag v-if="row.is_current" size="small" type="primary">This device</el-tag>
+              </div>
               <div class="device-meta">
                 {{ getDeviceDetails(row.user_agent).browserLabel }} · {{ getDeviceDetails(row.user_agent).osLabel }}
               </div>
@@ -105,6 +109,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Cellphone, Monitor } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { authApi } from '@/api/auth'
 import type { AuthSession } from '@/types'
@@ -121,6 +126,13 @@ const formatDate = (dateStr: string) => {
 
 const getDeviceDetails = (userAgent: string | null | undefined) => {
   return getSessionDeviceDetails(userAgent)
+}
+
+const getDeviceIcon = (userAgent: string | null | undefined) => {
+  const category = getDeviceDetails(userAgent).category
+  if (category === 'mobile') return Cellphone
+  if (category === 'tablet') return Cellphone
+  return Monitor
 }
 
 const formatDuration = (seconds: number) => {
@@ -256,7 +268,21 @@ onMounted(() => {
   min-width: 0;
 }
 
+.device-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.device-icon {
+  color: var(--el-color-primary);
+  flex-shrink: 0;
+}
+
 .device-label {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

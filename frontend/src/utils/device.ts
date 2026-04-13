@@ -1,6 +1,7 @@
 import { UAParser } from 'ua-parser-js'
 
 export interface SessionDeviceDetails {
+  category: 'desktop' | 'mobile' | 'tablet'
   label: string
   browserLabel: string
   osLabel: string
@@ -14,6 +15,7 @@ function compactParts(parts: Array<string | undefined | null>): string[] {
 export function getSessionDeviceDetails(userAgent: string | null | undefined): SessionDeviceDetails {
   if (!userAgent) {
     return {
+      category: 'desktop',
       label: 'Unknown device',
       browserLabel: 'Unknown browser',
       osLabel: 'Unknown OS',
@@ -26,15 +28,12 @@ export function getSessionDeviceDetails(userAgent: string | null | undefined): S
   const browser = parser.getBrowser()
   const os = parser.getOS()
 
-  const deviceType = device.type === 'mobile'
-    ? 'Mobile'
+  const category = device.type === 'mobile'
+    ? 'mobile'
     : device.type === 'tablet'
-      ? 'Tablet'
-      : device.type === 'smarttv'
-        ? 'TV'
-        : device.type === 'wearable'
-          ? 'Wearable'
-          : 'Desktop'
+      ? 'tablet'
+      : 'desktop'
+  const deviceType = category === 'mobile' ? 'Mobile' : category === 'tablet' ? 'Tablet' : 'Desktop'
 
   const vendorModel = compactParts([device.vendor, device.model]).join(' ')
   const browserLabel = compactParts([browser.name, browser.version]).join(' ') || 'Unknown browser'
@@ -42,6 +41,7 @@ export function getSessionDeviceDetails(userAgent: string | null | undefined): S
   const label = vendorModel || `${deviceType} · ${browser.name || 'Browser'}`
 
   return {
+    category,
     label,
     browserLabel,
     osLabel,
