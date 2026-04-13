@@ -117,6 +117,18 @@ class AuthService:
     async def _delete_refresh_session(self, session_id: str) -> None:
         await self.redis_client.delete(self._get_refresh_session_key(session_id))
 
+    async def _write_refresh_session_data(
+        self,
+        session_id: str,
+        session_data: dict[str, str | None],
+        expires_in_seconds: int,
+    ) -> None:
+        await self.redis_client.setex(
+            self._get_refresh_session_key(session_id),
+            expires_in_seconds,
+            json.dumps(session_data),
+        )
+
     @staticmethod
     def _parse_datetime(value: str) -> datetime:
         parsed = datetime.fromisoformat(value)
@@ -343,6 +355,33 @@ class AuthService:
             raise TokenExpiredException() from exc
         except JWTError as exc:
             raise InvalidTokenException() from exc
+
+    async def sync_session_client_context(
+        self,
+        token: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> None:
+        """Backfill client metadata for the active session without extending TTL."""
+        session_id = await self.get_session_id_from_token(token)
+        session_data = await self._get_refresh_session(session_id)
+        if not session_data:
+            return
+
+        expires_in_seconds = await self.redis_client.ttl(self._get_refresh_session_key(session_id))
+        if expires_in_seconds <= 0:
+            return
+
+        updated = False
+        if ip_address and session_data.get("ip_address") != ip_address:
+            session_data["ip_address"] = ip_address
+            updated = True
+        if user_agent and session_data.get("user_agent") != user_agent:
+            session_data["user_agent"] = user_agent
+            updated = True
+
+        if updated:
+            await self._write_refresh_session_data(session_id, session_data, expires_in_seconds)
 
     async def list_sessions(
         self,

@@ -42,9 +42,20 @@ async def get_current_user_with_token(
 
     token = authorization.split(" ")[1]
     auth_service = AuthService(db)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    ip_address = forwarded_for.split(",")[0].strip() if forwarded_for else None
+    if not ip_address and request.client:
+        ip_address = request.client.host
+    user_agent = request.headers.get("User-Agent")
 
     try:
-        return await auth_service.get_current_user(token)
+        auth_user = await auth_service.get_current_user(token)
+        await auth_service.sync_session_client_context(
+            token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return auth_user
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

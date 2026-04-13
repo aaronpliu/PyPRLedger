@@ -136,6 +136,12 @@ async def get_current_user_info(
 
     try:
         auth_user = await auth_service.get_current_user(token)
+        ip_address, user_agent = get_request_client_context(request)
+        await auth_service.sync_session_client_context(
+            token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
         return await auth_service.get_user_info(auth_user)
     except Exception as e:
         raise HTTPException(
@@ -169,6 +175,12 @@ async def change_password(
 
     try:
         auth_user = await auth_service.get_current_user(token)
+        ip_address, user_agent = get_request_client_context(request)
+        await auth_service.sync_session_client_context(
+            token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
         await auth_service.change_password(
             auth_user,
             password_data.old_password,
