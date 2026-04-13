@@ -58,6 +58,18 @@
             {{ formatDate(row.last_activity_at) }}
           </template>
         </el-table-column>
+        <el-table-column label="IP Address" width="150">
+          <template #default="{ row }">
+            {{ row.ip_address || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="User Agent" min-width="260">
+          <template #default="{ row }">
+            <span class="user-agent-text" :title="row.user_agent || ''">
+              {{ row.user_agent || '-' }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column label="Idle Timeout Remaining" width="190">
           <template #default="{ row }">
             <el-tag :type="getExpiryTagType(row.expires_in_seconds)">
@@ -230,5 +242,13 @@ onMounted(() => {
   font-family: 'Consolas', 'Courier New', monospace;
   font-size: 12px;
   word-break: break-all;
+}
+
+.user-agent-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

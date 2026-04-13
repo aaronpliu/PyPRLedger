@@ -252,6 +252,74 @@
             </el-tab-pane>
           </el-tabs>
         </el-tab-pane>
+
+        <el-tab-pane label="My Sessions" name="sessions">
+          <div class="sessions-header">
+            <div>
+              <h3>Active Sessions</h3>
+              <p class="sessions-subtitle">
+                Revoke any session you no longer trust. Revoking the current session will log you out immediately.
+              </p>
+            </div>
+            <el-button type="primary" size="small" :loading="loadingSessions" @click="loadSessions">
+              Refresh
+            </el-button>
+          </div>
+
+          <el-table :data="sessions" v-loading="loadingSessions" stripe style="width: 100%">
+            <el-table-column label="Session" min-width="220">
+              <template #default="{ row }">
+                <div class="session-id-cell">
+                  <span class="session-id">{{ row.session_id }}</span>
+                  <el-tag v-if="row.is_current" size="small" type="success">Current</el-tag>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="Created" width="180">
+              <template #default="{ row }">
+                {{ formatDate(row.created_at) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="Last Activity" width="180">
+              <template #default="{ row }">
+                {{ formatDate(row.last_activity_at) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="IP" width="140">
+              <template #default="{ row }">
+                {{ row.ip_address || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="User Agent" min-width="240">
+              <template #default="{ row }">
+                <span class="user-agent-text" :title="row.user_agent || ''">
+                  {{ row.user_agent || '-' }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="Idle Timeout Remaining" width="180">
+              <template #default="{ row }">
+                <el-tag :type="getSessionExpiryType(row.expires_in_seconds)">
+                  {{ formatDuration(row.expires_in_seconds) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="Actions" width="140" fixed="right">
+              <template #default="{ row }">
+                <el-button
+                  size="small"
+                  type="danger"
+                  :loading="revokingSessionId === row.session_id"
+                  @click="handleRevokeSession(row.session_id, row.is_current)"
+                >
+                  Revoke
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <el-empty v-if="!loadingSessions && sessions.length === 0" description="No active sessions found" />
+        </el-tab-pane>
       </el-tabs>
     </el-card>
 
@@ -285,6 +353,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { InfoFilled, WarningFilled, Plus } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import DelegationForm from '@/components/delegation/DelegationForm.vue'
+import type { AuthSession } from '@/types'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -292,6 +361,9 @@ const passwordFormRef = ref<FormInstance>()
 const changingPassword = ref(false)
 const activeTab = ref('info')
 const delegationDirection = ref<'received' | 'sent'>('received')
+const loadingSessions = ref(false)
+const sessions = ref<AuthSession[]>([])
+const revokingSessionId = ref<string | null>(null)
 
 // Delegation data
 const loadingReceived = ref(false)
@@ -346,6 +418,29 @@ const passwordRules: FormRules = {
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
+}
+
+const formatDuration = (seconds: number) => {
+  const totalSeconds = Math.max(seconds, 0)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const remainingSeconds = totalSeconds % 60
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`
+  }
+
+  return `${remainingSeconds}s`
+}
+
+const getSessionExpiryType = (seconds: number): 'success' | 'warning' | 'danger' => {
+  if (seconds <= 300) return 'danger'
+  if (seconds <= 1800) return 'warning'
+  return 'success'
 }
 
 const formatRoleName = (role: string): string => {
@@ -461,8 +556,52 @@ watch(activeTab, (newTab) => {
     loadSentDelegations()
     // Update permission check after loading delegations
     setTimeout(() => updateCanManageDelegations(), 100)
+  } else if (newTab === 'sessions') {
+    loadSessions()
   }
 })
+
+const loadSessions = async () => {
+  loadingSessions.value = true
+  try {
+    sessions.value = await authApi.getMySessions()
+  } catch (error) {
+    ElMessage.error('Failed to load active sessions')
+  } finally {
+    loadingSessions.value = false
+  }
+}
+
+const handleRevokeSession = async (sessionId: string, isCurrent: boolean) => {
+  try {
+    await ElMessageBox.confirm(
+      isCurrent
+        ? 'Revoke your current session and log out now?'
+        : 'Revoke this active session?',
+      'Confirm Session Revocation',
+      { type: 'warning' }
+    )
+
+    revokingSessionId.value = sessionId
+    await authApi.revokeMySession(sessionId)
+
+    if (isCurrent) {
+      authStore.clearAuth()
+      ElMessage.success('Current session revoked. Please login again.')
+      await router.replace('/login')
+      return
+    }
+
+    ElMessage.success('Session revoked successfully')
+    await loadSessions()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('Failed to revoke session')
+    }
+  } finally {
+    revokingSessionId.value = null
+  }
+}
 
 // Format delegation status
 const formatStatus = (status?: string | null): string => {
@@ -586,6 +725,10 @@ const handleChangePassword = async () => {
     }
   })
 }
+
+onMounted(() => {
+  loadSessions()
+})
 </script>
 
 <style scoped>
@@ -677,5 +820,39 @@ h3 {
 
 .viewer-tips-content ul li {
   margin-bottom: 4px;
+}
+
+.sessions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.sessions-subtitle {
+  margin: 6px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.session-id-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-id {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.user-agent-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

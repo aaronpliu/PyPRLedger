@@ -75,6 +75,8 @@ class AuthSessionResponse(BaseModel):
     session_id: str
     auth_user_id: int
     username: str
+    ip_address: str | None = None
+    user_agent: str | None = None
     created_at: datetime
     last_activity_at: datetime
     expires_in_seconds: int

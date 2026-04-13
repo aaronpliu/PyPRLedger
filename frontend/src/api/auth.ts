@@ -37,6 +37,11 @@ export const authApi = {
     return request.get('/auth/sessions/me')
   },
 
+  // Revoke one of the current user's active sessions
+  revokeMySession(sessionId: string): Promise<{ message: string }> {
+    return request.delete(`/auth/sessions/me/${sessionId}`)
+  },
+
   // List active sessions for administration
   getSessions(authUserId?: number): Promise<AuthSession[]> {
     return request.get('/auth/sessions', {

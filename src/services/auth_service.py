@@ -84,6 +84,8 @@ class AuthService:
         session_id: str,
         refresh_token: str,
         created_at: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> None:
         now = datetime.now(UTC).isoformat()
         session_data = {
@@ -92,6 +94,8 @@ class AuthService:
             "refresh_token_hash": self._hash_token(refresh_token),
             "created_at": created_at or now,
             "last_activity_at": now,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
         }
         await self.redis_client.setex(
             self._get_refresh_session_key(session_id),
@@ -99,7 +103,7 @@ class AuthService:
             json.dumps(session_data),
         )
 
-    async def _get_refresh_session(self, session_id: str) -> dict[str, str] | None:
+    async def _get_refresh_session(self, session_id: str) -> dict[str, str | None] | None:
         session_data = await self.redis_client.get(self._get_refresh_session_key(session_id))
         if not session_data:
             return None
@@ -125,6 +129,8 @@ class AuthService:
         auth_user: AuthUser,
         session_id: str,
         created_at: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> TokenResponse:
         refresh_token = self._build_refresh_token(session_id)
         await self._store_refresh_session(
@@ -132,6 +138,8 @@ class AuthService:
             session_id,
             refresh_token,
             created_at=created_at,
+            ip_address=ip_address,
+            user_agent=user_agent,
         )
         access_token = create_access_token(
             subject=auth_user.id,
@@ -160,7 +168,12 @@ class AuthService:
             raise UserInactiveException(username=auth_user.username)
         return auth_user
 
-    async def authenticate(self, login_data: LoginRequest) -> TokenResponse:
+    async def authenticate(
+        self,
+        login_data: LoginRequest,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> TokenResponse:
         """Authenticate user with username and password
 
         Args:
@@ -200,9 +213,19 @@ class AuthService:
         auth_user.last_login_at = datetime.now(UTC)
         await self.db.commit()
 
-        return await self._create_token_response(auth_user, self._generate_session_id())
+        return await self._create_token_response(
+            auth_user,
+            self._generate_session_id(),
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
-    async def register(self, register_data: RegisterRequest) -> TokenResponse:
+    async def register(
+        self,
+        register_data: RegisterRequest,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> TokenResponse:
         """Register a new user
 
         Args:
@@ -251,9 +274,19 @@ class AuthService:
         has_bitbucket_user = bitbucket_user is not None
         await self._assign_default_role(new_auth_user.id, has_bitbucket_user)
 
-        return await self._create_token_response(new_auth_user, self._generate_session_id())
+        return await self._create_token_response(
+            new_auth_user,
+            self._generate_session_id(),
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
 
-    async def refresh_tokens(self, refresh_token: str) -> TokenResponse:
+    async def refresh_tokens(
+        self,
+        refresh_token: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> TokenResponse:
         """Refresh access and refresh tokens using a valid refresh session."""
         session_id = self._extract_session_id_from_refresh_token(refresh_token)
         session_data = await self._get_refresh_session(session_id)
@@ -272,6 +305,8 @@ class AuthService:
             auth_user,
             session_id,
             created_at=session_data.get("created_at"),
+            ip_address=session_data.get("ip_address") or ip_address,
+            user_agent=session_data.get("user_agent") or user_agent,
         )
 
     async def logout(self, token: str | None = None, refresh_token: str | None = None) -> None:
@@ -337,6 +372,8 @@ class AuthService:
                     session_id=session_id,
                     auth_user_id=session_auth_user_id,
                     username=session_data["username"],
+                    ip_address=session_data.get("ip_address"),
+                    user_agent=session_data.get("user_agent"),
                     created_at=self._parse_datetime(session_data["created_at"]),
                     last_activity_at=self._parse_datetime(session_data["last_activity_at"]),
                     expires_in_seconds=expires_in_seconds,
@@ -352,6 +389,15 @@ class AuthService:
         deleted_count = await self.redis_client.delete(self._get_refresh_session_key(session_id))
         if deleted_count == 0:
             raise NotFoundException(message=f"Session {session_id} not found")
+
+    async def revoke_user_session(self, auth_user_id: int, session_id: str) -> None:
+        """Revoke a session only if it belongs to the specified user."""
+        session_data = await self._get_refresh_session(session_id)
+        if not session_data:
+            raise NotFoundException(message=f"Session {session_id} not found")
+        if int(session_data["auth_user_id"] or 0) != auth_user_id:
+            raise InvalidTokenException("Session does not belong to the current user")
+        await self._delete_refresh_session(session_id)
 
     async def get_current_user(self, token: str) -> AuthUser:
         """Get current authenticated user from JWT token
