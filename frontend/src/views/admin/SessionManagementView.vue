@@ -65,9 +65,12 @@
         </el-table-column>
         <el-table-column label="User Agent" min-width="260">
           <template #default="{ row }">
-            <span class="user-agent-text" :title="row.user_agent || ''">
-              {{ row.user_agent || '-' }}
-            </span>
+            <div class="device-cell" :title="getDeviceDetails(row.user_agent).rawUserAgent || ''">
+              <div class="device-label">{{ getDeviceDetails(row.user_agent).label }}</div>
+              <div class="device-meta">
+                {{ getDeviceDetails(row.user_agent).browserLabel }} · {{ getDeviceDetails(row.user_agent).osLabel }}
+              </div>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="Idle Timeout Remaining" width="190">
@@ -105,6 +108,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { authApi } from '@/api/auth'
 import type { AuthSession } from '@/types'
+import { getSessionDeviceDetails } from '@/utils/device'
 
 const loading = ref(false)
 const sessions = ref<AuthSession[]>([])
@@ -113,6 +117,10 @@ const revokingSessionId = ref<string | null>(null)
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
+}
+
+const getDeviceDetails = (userAgent: string | null | undefined) => {
+  return getSessionDeviceDetails(userAgent)
 }
 
 const formatDuration = (seconds: number) => {
@@ -244,9 +252,19 @@ onMounted(() => {
   word-break: break-all;
 }
 
-.user-agent-text {
-  display: inline-block;
-  max-width: 100%;
+.device-cell {
+  min-width: 0;
+}
+
+.device-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-meta {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

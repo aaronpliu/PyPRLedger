@@ -292,9 +292,12 @@
             </el-table-column>
             <el-table-column label="User Agent" min-width="240">
               <template #default="{ row }">
-                <span class="user-agent-text" :title="row.user_agent || ''">
-                  {{ row.user_agent || '-' }}
-                </span>
+                <div class="device-cell" :title="getDeviceDetails(row.user_agent).rawUserAgent || ''">
+                  <div class="device-label">{{ getDeviceDetails(row.user_agent).label }}</div>
+                  <div class="device-meta">
+                    {{ getDeviceDetails(row.user_agent).browserLabel }} · {{ getDeviceDetails(row.user_agent).osLabel }}
+                  </div>
+                </div>
               </template>
             </el-table-column>
             <el-table-column label="Idle Timeout Remaining" width="180">
@@ -354,6 +357,7 @@ import { InfoFilled, WarningFilled, Plus } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import DelegationForm from '@/components/delegation/DelegationForm.vue'
 import type { AuthSession } from '@/types'
+import { getSessionDeviceDetails } from '@/utils/device'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -435,6 +439,10 @@ const formatDuration = (seconds: number) => {
   }
 
   return `${remainingSeconds}s`
+}
+
+const getDeviceDetails = (userAgent: string | null | undefined) => {
+  return getSessionDeviceDetails(userAgent)
 }
 
 const getSessionExpiryType = (seconds: number): 'success' | 'warning' | 'danger' => {
@@ -848,9 +856,19 @@ h3 {
   word-break: break-all;
 }
 
-.user-agent-text {
-  display: inline-block;
-  max-width: 100%;
+.device-cell {
+  min-width: 0;
+}
+
+.device-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-meta {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
