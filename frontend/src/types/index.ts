@@ -35,6 +35,16 @@ export interface PasswordChangeRequest {
   new_password: string
 }
 
+export interface AuthSession {
+  session_id: string
+  auth_user_id: number
+  username: string
+  created_at: string
+  last_activity_at: string
+  expires_in_seconds: number
+  is_current: boolean
+}
+
 // RBAC types
 export interface Role {
   id: number

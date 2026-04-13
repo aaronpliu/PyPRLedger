@@ -95,6 +95,11 @@ const routes: RouteRecordRaw[] = [
         name: 'AuditLogs',
         component: () => import('@/views/admin/AuditLogView.vue'),
       },
+      {
+        path: 'sessions',
+        name: 'SessionManagement',
+        component: () => import('@/views/admin/SessionManagementView.vue'),
+      },
     ],
   },
 
