@@ -59,6 +59,7 @@ def upgrade() -> None:
         sa.Column("git_code_diff", sa.Text(), nullable=True),
         sa.Column("ai_suggestions", mysql.JSON(), nullable=True),
         sa.Column("pull_request_status", sa.String(32), nullable=False),
+        sa.Column("pull_request_user", sa.String(64), nullable=False, index=True),
         sa.Column("metadata", mysql.JSON(), nullable=True),
         # Timestamps
         sa.Column(
@@ -159,7 +160,7 @@ def upgrade() -> None:
             pull_request_commit_id,
             project_key,
             repository_slug,
-            source_filename,
+            COALESCE(source_filename, '') AS source_filename,
             MIN(source_branch),
             MIN(target_branch),
             MIN(git_code_diff),

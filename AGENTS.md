@@ -96,7 +96,7 @@ from src.utils.metrics import metrics
 
 ### Naming Conventions
 
-- **Classes**: `PascalCase` (e.g., `UserService`, `PullRequestReview`)
+- **Classes**: `PascalCase` (e.g., `UserService`, `PullRequestReviewBase`, `PullRequestReviewAssignment`)
 - **Functions/methods**: `snake_case` (e.g., `get_user_by_id`, `_get_cache_key`)
 - **Variables**: `snake_case` (e.g., `user_id`, `cache_key`)
 - **Constants**: `UPPER_SNAKE_CASE` (e.g., `CACHE_TTL_USERS`)

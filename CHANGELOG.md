@@ -449,7 +449,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **SQLAlchemy Model Circular Dependency** - Resolved critical startup error preventing application initialization
-  - Fixed circular reference between `PullRequestReview` and `User` models
+  - Fixed circular reference between `PullRequestReviewBase` and `User` models
   - Removed duplicate `Base` class definition in `src/models/user.py`
   - Unified all models to use single `Base` from `src/core/database.py`
   - Used string-free relationship definitions to enable lazy loading

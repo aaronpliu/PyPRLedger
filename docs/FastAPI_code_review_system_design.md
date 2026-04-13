@@ -341,9 +341,9 @@ app_name_mapping = {
 
 3. **Eager Loading**: Prevent N+1 queries
    ```python
-   select(PullRequestReview).options(
-       selectinload(PullRequestReview.project),
-       selectinload(PullRequestReview.repository),
+   select(PullRequestReviewBase).options(
+       selectinload(PullRequestReviewBase.project),
+       selectinload(PullRequestReviewBase.repository),
    )
    ```
 
