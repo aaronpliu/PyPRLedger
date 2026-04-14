@@ -85,21 +85,30 @@
       </el-form>
 
       <!-- Reviews Table -->
-      <el-table :data="reviews" v-loading="loading" stripe border>
+      <el-table
+        :data="reviews"
+        v-loading="loading"
+        stripe
+        border
+        table-layout="auto"
+        class="task-assignment-table"
+        :header-cell-style="{ textAlign: 'center' }"
+        :cell-style="{ verticalAlign: 'middle' }"
+      >
         <el-table-column prop="id" label="ID" width="80" />
         
-        <el-table-column label="PR Info" min-width="200">
+        <el-table-column label="PR Info" min-width="220">
           <template #default="{ row }">
-            <div class="pr-info">
+            <div class="pr-info" :title="`${row.pull_request_id} | ${row.project_key}/${row.repository_slug}`">
               <div class="pr-id">{{ row.pull_request_id }}</div>
               <div class="pr-project">{{ row.project_key }}/{{ row.repository_slug }}</div>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column label="Branches" min-width="180">
+        <el-table-column label="Branches" min-width="220">
           <template #default="{ row }">
-            <div class="branches">
+            <div class="branches" :title="`${row.source_branch} -> ${row.target_branch}`">
               <el-tag size="small">{{ row.source_branch }}</el-tag>
               <span class="arrow">→</span>
               <el-tag size="small" type="success">{{ row.target_branch }}</el-tag>
@@ -107,7 +116,18 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Reviewers" min-width="250">
+        <el-table-column label="PR User" min-width="180">
+          <template #default="{ row }">
+            <div class="pr-user" :title="row.pull_request_user_info?.display_name || row.pull_request_user || '-'">
+              <div class="pr-user-name">{{ row.pull_request_user_info?.display_name || row.pull_request_user || '-' }}</div>
+              <div v-if="row.pull_request_user_info?.username && row.pull_request_user_info?.display_name !== row.pull_request_user_info?.username" class="pr-user-username">
+                {{ row.pull_request_user_info.username }}
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="Reviewers" min-width="260">
           <template #default="{ row }">
             <div class="reviewers-list">
               <el-tag
@@ -133,7 +153,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Progress" width="120">
+        <el-table-column label="Progress" min-width="120">
           <template #default="{ row }">
             <div class="progress-info">
               <el-progress
@@ -148,7 +168,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="PR Status" width="110">
+        <el-table-column label="PR Status" min-width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.pull_request_status)">
               {{ row.pull_request_status }}
@@ -156,7 +176,19 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Actions" width="150" fixed="right">
+        <el-table-column prop="created_date" label="Created" min-width="170">
+          <template #default="{ row }">
+            {{ formatDate(row.created_date) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="updated_date" label="Updated" min-width="170">
+          <template #default="{ row }">
+            {{ formatDate(row.updated_date) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="Actions" min-width="150" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" link @click="viewDetail(row.id)">
               View
@@ -252,6 +284,7 @@ import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
+import { projectsApi, type ProjectSummary } from '@/api/projects'
 
 const router = useRouter()
 
@@ -271,7 +304,7 @@ const reviewerFilter = ref('')
 const scoredFilter = ref('')
 const severityFilter = ref('')
 const statusFilter = ref('')
-const projects = ref<any[]>([])
+const projects = ref<ProjectSummary[]>([])
 
 // Assign dialog
 const assignDialogVisible = ref(false)
@@ -306,6 +339,21 @@ const loadReviews = async () => {
   }
 }
 
+const loadProjects = async () => {
+  try {
+    const response = await projectsApi.listProjects({
+      page: 1,
+      page_size: 100,
+      is_active: true,
+    })
+    projects.value = response.items
+  } catch (error) {
+    console.error('Failed to load projects:', error)
+    projects.value = []
+    ElMessage.error('Failed to load projects')
+  }
+}
+
 // Handle search input
 const handleSearch = () => {
   applyFilters()
@@ -332,10 +380,8 @@ const applyFilters = () => {
   if (prUserFilter.value) {
     const prUser = prUserFilter.value.toLowerCase()
     result = result.filter(review => 
-      review.reviewers?.some(r => 
-        r.reviewer?.toLowerCase().includes(prUser) ||
-        r.reviewer_info?.display_name?.toLowerCase().includes(prUser)
-      )
+      review.pull_request_user?.toLowerCase().includes(prUser) ||
+      review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
     )
   }
   
@@ -417,6 +463,11 @@ const getPullRequestAuthor = (review: ReviewV2 | null) => {
   return review.pull_request_user_info?.display_name || review.pull_request_user || 'Unknown'
 }
 
+const formatDate = (dateStr?: string | null) => {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString()
+}
+
 const formatReviewerOption = (user: ReviewerUser) => {
   return `${user.display_name} (${user.username})`
 }
@@ -470,6 +521,7 @@ const submitAssignment = async () => {
 }
 
 onMounted(() => {
+  loadProjects()
   loadReviews()
 })
 </script>
@@ -489,37 +541,83 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.task-assignment-table :deep(th.el-table__cell) {
+  text-align: center;
+}
+
+.task-assignment-table :deep(.cell) {
+  white-space: nowrap;
+}
+
 .pr-info {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .pr-id {
   font-weight: 600;
   color: var(--el-color-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pr-project {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pr-user {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pr-user-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pr-user-username {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .branches {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 .arrow {
   color: var(--el-text-color-secondary);
+  flex-shrink: 0;
 }
 
 .reviewers-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
   align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
 }
 
 .status-icon {

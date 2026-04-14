@@ -91,11 +91,24 @@ class Project(Base):
     @classmethod
     def from_dict(cls, data: dict) -> Project:
         """Create project instance from dictionary"""
+        created_date = data.get("created_date")
+        updated_date = data.get("updated_date")
+
+        if isinstance(created_date, str):
+            created_date = datetime.fromisoformat(created_date)
+
+        if isinstance(updated_date, str):
+            updated_date = datetime.fromisoformat(updated_date)
+
         return cls(
+            id=data.get("id"),
             project_id=data.get("project_id"),
             project_name=data.get("project_name"),
             project_key=data.get("project_key"),
             project_url=data.get("project_url"),
+            is_active=data.get("is_active", True),
+            created_date=created_date,
+            updated_date=updated_date,
         )
 
     def update(self, data: dict) -> None:
