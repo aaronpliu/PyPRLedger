@@ -355,9 +355,11 @@ import dayjs from 'dayjs'
 import FilterBuilder from '@/components/common/FilterBuilder.vue'
 import ExportMenu from '@/components/common/ExportMenu.vue'
 import { usePermission } from '@/composables/usePermission'
+import { useReviewNavigationStore } from '@/stores/reviewNavigation'
 
 const router = useRouter()
 const { hasPermission } = usePermission()
+const reviewNavigationStore = useReviewNavigationStore()
 
 // Check if user is review admin
 const isReviewAdmin = computed(() => hasPermission('assign', 'reviews'))
@@ -551,6 +553,17 @@ const applyFilters = () => {
 }
 
 const viewReview = (review: Review) => {
+  reviewNavigationStore.setItems(
+    reviews.value.map(item => ({
+      id: item.id,
+      projectKey: item.project_key,
+      repositorySlug: item.repository_slug,
+      pullRequestId: item.pull_request_id,
+      reviewer: item.reviewer || '',
+      sourceFilename: item.source_filename || '',
+    }))
+  )
+
   router.push({
     name: 'ReviewDetail',
     params: { id: review.id },

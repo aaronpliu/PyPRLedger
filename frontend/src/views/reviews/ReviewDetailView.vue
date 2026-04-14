@@ -4,6 +4,12 @@
       <template #content>
         <span class="page-title">Review Details</span>
       </template>
+      <template #extra>
+        <el-button type="primary" :disabled="!nextReview" @click="goToNextReview">
+          Next
+          <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+        </el-button>
+      </template>
     </el-page-header>
 
     <el-row :gutter="20" class="content-row" v-if="review">
@@ -301,7 +307,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Plus, Delete, User, ArrowDown } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User, ArrowDown, ArrowRight } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
@@ -316,10 +322,12 @@ import QuickScoreButtons from '@/components/review/QuickScoreButtons.vue'
 import ScoreRangeGuide from '@/components/review/ScoreRangeGuide.vue'
 import AIReviewResults from '@/components/review/AIReviewResults.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useReviewNavigationStore, type ReviewNavigationItem } from '@/stores/reviewNavigation'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const reviewNavigationStore = useReviewNavigationStore()
 const loading = ref(false)
 const addingScore = ref(false)
 const review = ref<Review | null>(null)
@@ -538,6 +546,35 @@ const getReviewerDisplayName = (reviewData: Review | null) => {
   )
 }
 
+const normalizeNavigationValue = (value: string | null | undefined) => value || ''
+
+const currentReviewIndex = computed(() => {
+  const projectKey = normalizeRouteQueryValue(route.query.projectKey)
+  const repositorySlug = normalizeRouteQueryValue(route.query.repositorySlug)
+  const pullRequestId = normalizeRouteQueryValue(route.query.pullRequestId)
+  const reviewer = normalizeRouteQueryValue(route.query.reviewer)
+  const sourceFilename = normalizeRouteQueryValue(route.query.sourceFilename)
+
+  return reviewNavigationStore.items.findIndex(item => {
+    return (
+      item.id === Number(route.params.id) &&
+      item.projectKey === normalizeNavigationValue(projectKey) &&
+      item.repositorySlug === normalizeNavigationValue(repositorySlug) &&
+      item.pullRequestId === normalizeNavigationValue(pullRequestId) &&
+      item.reviewer === normalizeNavigationValue(reviewer) &&
+      item.sourceFilename === normalizeNavigationValue(sourceFilename)
+    )
+  })
+})
+
+const nextReview = computed<ReviewNavigationItem | null>(() => {
+  if (currentReviewIndex.value < 0) {
+    return null
+  }
+
+  return reviewNavigationStore.items[currentReviewIndex.value + 1] || null
+})
+
 const normalizeRouteQueryValue = (value: unknown): string | null => {
   if (typeof value !== 'string') return null
   return value.length > 0 ? value : null
@@ -614,6 +651,24 @@ const loadReview = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const goToNextReview = () => {
+  if (!nextReview.value) {
+    return
+  }
+
+  router.push({
+    name: 'ReviewDetail',
+    params: { id: nextReview.value.id },
+    query: {
+      projectKey: nextReview.value.projectKey,
+      repositorySlug: nextReview.value.repositorySlug,
+      pullRequestId: nextReview.value.pullRequestId,
+      reviewer: nextReview.value.reviewer,
+      sourceFilename: nextReview.value.sourceFilename,
+    },
+  })
 }
 
 const handleAddScore = async () => {
@@ -756,6 +811,13 @@ watch(isDarkTheme, () => {
 onMounted(() => {
   loadReview()
 })
+
+watch(
+  () => route.fullPath,
+  () => {
+    loadReview()
+  }
+)
 </script>
 
 <style scoped>
