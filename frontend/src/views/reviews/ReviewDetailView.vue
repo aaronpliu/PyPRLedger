@@ -89,7 +89,7 @@
                 <strong>{{ review.project_key }}</strong> / {{ review.repository_slug }}
               </el-descriptions-item>
               <el-descriptions-item label="Reviewer" label-align="right">
-                <el-avatar :size="24" style="vertical-align: middle; margin-right: 8px;">{{ getInitials(getReviewerDisplayName(review)) }}</el-avatar>
+                <el-avatar :size="24" class="reviewer-avatar">{{ getInitials(getReviewerDisplayName(review)) }}</el-avatar>
                 {{ getReviewerDisplayName(review) }}
               </el-descriptions-item>
               <el-descriptions-item label="Status" label-align="right">
@@ -122,9 +122,9 @@
             <div class="analysis-column">
               <div class="analysis-column-header">
                 <span>📝 Code Changes</span>
-                <el-radio-group v-model="diffFormat" size="small">
-                  <el-radio-button value="line-by-line">📄 Unified</el-radio-button>
-                  <el-radio-button value="side-by-side">↔️ Side by Side</el-radio-button>
+                <el-radio-group v-model="diffFormat" size="small" class="diff-format-toggle">
+                  <el-radio-button value="line-by-line">Line by Line</el-radio-button>
+                  <el-radio-button value="side-by-side">Side by Side</el-radio-button>
                 </el-radio-group>
               </div>
               <div class="analysis-column-body">
@@ -926,6 +926,22 @@ watch(
   color: var(--el-text-color-primary);
 }
 
+.reviewer-avatar {
+  vertical-align: middle;
+  margin-right: 8px;
+  background: linear-gradient(135deg, #2563eb 0%, #0f766e 100%);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.22);
+}
+
+[data-theme='dark'] .reviewer-avatar {
+  background: linear-gradient(135deg, #3b82f6 0%, #14b8a6 100%);
+  box-shadow: 0 1px 4px rgba(20, 184, 166, 0.18);
+}
+
 .summary-text {
   line-height: 1.6;
   color: var(--el-text-color-regular);
@@ -959,10 +975,11 @@ watch(
 }
 
 .analysis-column-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
+  border-bottom: 1px solid var(--el-border-color-light);
   padding: 12px 16px;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 0.95rem;
   display: flex;
   align-items: center;
@@ -970,6 +987,73 @@ watch(
   gap: 8px;
   flex-shrink: 0; /* Prevent header from shrinking */
   overflow: hidden; /* Ensure no scrollbar in header */
+}
+
+[data-theme='dark'] .analysis-column-header {
+  background: #0f172a;
+  color: var(--el-text-color-primary);
+  border-bottom-color: #334155;
+}
+
+:deep(.diff-format-toggle) {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: var(--el-fill-color-extra-light);
+  box-shadow: none;
+}
+
+:deep(.diff-format-toggle .el-radio-button__inner) {
+  min-width: 104px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: transparent;
+  color: var(--el-text-color-regular);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 30px;
+  box-shadow: none !important;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+:deep(.diff-format-toggle .el-radio-button:first-child .el-radio-button__inner),
+:deep(.diff-format-toggle .el-radio-button:last-child .el-radio-button__inner) {
+  border-radius: 6px !important;
+}
+
+:deep(.diff-format-toggle .el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: var(--el-fill-color-dark);
+  color: var(--el-text-color-primary);
+  font-weight: 600;
+}
+
+:deep(.diff-format-toggle .el-radio-button:not(.is-active) .el-radio-button__inner:hover) {
+  background: var(--el-fill-color);
+  color: var(--el-text-color-primary);
+}
+
+[data-theme='dark'] :deep(.diff-format-toggle) {
+  background: #0f172a;
+  border-color: #1e293b;
+  box-shadow: none;
+}
+
+[data-theme='dark'] :deep(.diff-format-toggle .el-radio-button__inner) {
+  color: #cbd5e1;
+}
+
+[data-theme='dark'] :deep(.diff-format-toggle .el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: #334155;
+  color: #f8fafc;
+}
+
+[data-theme='dark'] :deep(.diff-format-toggle .el-radio-button:not(.is-active) .el-radio-button__inner:hover) {
+  background: #172033;
+  color: #f8fafc;
 }
 
 .analysis-column-body {
