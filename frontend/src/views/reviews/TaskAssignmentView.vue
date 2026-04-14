@@ -67,7 +67,7 @@
           </el-select>
         </el-form-item>
         
-        <el-form-item label="Status">
+        <el-form-item label="PR Status">
           <el-select v-model="statusFilter" placeholder="All Status" clearable style="width: 150px" @change="loadReviews">
             <el-option label="Open" value="open" />
             <el-option label="Merged" value="merged" />
@@ -148,7 +148,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Status" width="100">
+        <el-table-column label="PR Status" width="110">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.pull_request_status)">
               {{ row.pull_request_status }}
@@ -182,20 +182,57 @@
     </el-card>
 
     <!-- Assign Reviewer Dialog -->
-    <el-dialog v-model="assignDialogVisible" title="Assign Reviewer" width="500px">
-      <el-form :model="assignForm" label-width="100px">
+    <el-dialog v-model="assignDialogVisible" title="Assign Reviewer" width="640px">
+      <el-form :model="assignForm" label-width="120px">
         <el-form-item label="PR ID">
           <el-input :value="selectedReview?.pull_request_id" disabled />
         </el-form-item>
+        <el-form-item label="Project / Repo">
+          <el-input :value="selectedReview ? `${selectedReview.project_key} / ${selectedReview.repository_slug}` : ''" disabled />
+        </el-form-item>
+        <el-form-item label="PR User">
+          <el-input :value="getPullRequestAuthor(selectedReview)" disabled />
+        </el-form-item>
+        <el-form-item label="Branches">
+          <el-input :value="selectedReview ? `${selectedReview.source_branch} -> ${selectedReview.target_branch}` : ''" disabled />
+        </el-form-item>
+        <el-form-item label="PR Status">
+          <el-tag v-if="selectedReview" :type="getStatusType(selectedReview.pull_request_status)">
+            {{ selectedReview.pull_request_status }}
+          </el-tag>
+        </el-form-item>
+        <el-form-item label="Reviewers">
+          <div class="current-reviewers">
+            <el-tag
+              v-for="reviewer in selectedReview?.reviewers || []"
+              :key="reviewer.id"
+              :type="getReviewerTagType(reviewer.assignment_status)"
+              size="small"
+            >
+              {{ reviewer.reviewer_info?.display_name || reviewer.reviewer }}
+            </el-tag>
+            <span v-if="!selectedReview?.reviewers?.length" class="empty-reviewers">No reviewers assigned</span>
+          </div>
+        </el-form-item>
         <el-form-item label="Reviewer" required>
-          <el-select v-model="assignForm.reviewer" placeholder="Select reviewer" style="width: 100%">
+          <el-select
+            v-model="assignForm.reviewer"
+            placeholder="Select reviewer"
+            style="width: 100%"
+            filterable
+            :loading="loadingReviewers"
+            :disabled="loadingReviewers || availableReviewers.length === 0"
+          >
             <el-option
               v-for="user in availableReviewers"
               :key="user.username"
-              :label="`${user.display_name} (${user.username})`"
+              :label="formatReviewerOption(user)"
               :value="user.username"
             />
           </el-select>
+        </el-form-item>
+        <el-form-item v-if="!loadingReviewers && availableReviewers.length === 0" label="">
+          <span class="empty-reviewers">No available reviewers to assign</span>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -214,6 +251,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
+import { usersApi, type ReviewerUser } from '@/api/users'
 
 const router = useRouter()
 
@@ -239,10 +277,11 @@ const projects = ref<any[]>([])
 const assignDialogVisible = ref(false)
 const selectedReview = ref<ReviewV2 | null>(null)
 const assigning = ref(false)
+const loadingReviewers = ref(false)
 const assignForm = ref({
   reviewer: '',
 })
-const availableReviewers = ref<any[]>([])
+const availableReviewers = ref<ReviewerUser[]>([])
 
 // Load reviews
 const loadReviews = async () => {
@@ -373,17 +412,41 @@ const getStatusType = (status: string) => {
   }
 }
 
+const getPullRequestAuthor = (review: ReviewV2 | null) => {
+  if (!review) return ''
+  return review.pull_request_user_info?.display_name || review.pull_request_user || 'Unknown'
+}
+
+const formatReviewerOption = (user: ReviewerUser) => {
+  return `${user.display_name} (${user.username})`
+}
+
+const loadAvailableReviewers = async (review: ReviewV2) => {
+  loadingReviewers.value = true
+  try {
+    const response = await usersApi.getReviewers()
+    const assignedReviewers = new Set(review.reviewers.map(item => item.reviewer))
+    availableReviewers.value = response.items.filter(user => !assignedReviewers.has(user.username))
+  } catch (error) {
+    console.error('Failed to load reviewers:', error)
+    availableReviewers.value = []
+    ElMessage.error('Failed to load reviewers')
+  } finally {
+    loadingReviewers.value = false
+  }
+}
+
 // View detail
 const viewDetail = (id: number) => {
   router.push(`/task-assignment/${id}`)
 }
 
 // Handle assign reviewer
-const handleAssignReviewer = (review: ReviewV2) => {
+const handleAssignReviewer = async (review: ReviewV2) => {
   selectedReview.value = review
   assignForm.value.reviewer = ''
   assignDialogVisible.value = true
-  // TODO: Load available reviewers
+  await loadAvailableReviewers(review)
 }
 
 // Submit assignment
@@ -397,7 +460,7 @@ const submitAssignment = async () => {
     })
     ElMessage.success('Reviewer assigned successfully')
     assignDialogVisible.value = false
-    loadReviews()
+    await loadReviews()
   } catch (error) {
     console.error('Failed to assign reviewer:', error)
     ElMessage.error('Failed to assign reviewer')
@@ -474,5 +537,18 @@ onMounted(() => {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   text-align: center;
+}
+
+.current-reviewers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 32px;
+  align-items: center;
+}
+
+.empty-reviewers {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
 }
 </style>

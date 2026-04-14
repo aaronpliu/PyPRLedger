@@ -7,6 +7,10 @@ export interface ReviewerAssignment {
     username: string
     display_name: string
   } | null
+  assigned_by_info?: {
+    username: string
+    display_name: string
+  } | null
   assigned_by?: string | null
   assigned_date?: string | null
   assignment_status: 'pending' | 'assigned' | 'in_progress' | 'completed'
@@ -21,6 +25,11 @@ export interface ReviewV2 {
   pull_request_commit_id?: string | null
   project_key: string
   repository_slug: string
+  pull_request_user?: string | null
+  pull_request_user_info?: {
+    username: string
+    display_name: string
+  } | null
   source_filename?: string | null
   source_branch: string
   target_branch: string

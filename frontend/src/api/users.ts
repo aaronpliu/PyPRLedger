@@ -1,11 +1,30 @@
 import request from '@/utils/request'
 import type { User, PaginatedResponse } from '@/types'
 
+export interface ReviewerUser {
+  id: number
+  user_id: number
+  username: string
+  display_name: string
+  email_address: string
+  active: boolean
+  is_reviewer: boolean
+  created_date: string
+  updated_date: string
+}
+
+export interface ReviewerListResponse {
+  items: ReviewerUser[]
+  total: number
+  page: number
+  page_size: number
+}
+
 export const usersApi = {
   /**
    * Get active reviewers
    */
-  getReviewers(limit: number = 100): Promise<PaginatedResponse<User>> {
+  getReviewers(limit: number = 100): Promise<ReviewerListResponse> {
     return request.get('/users/reviewers', { params: { limit } })
   },
 

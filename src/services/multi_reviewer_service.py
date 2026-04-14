@@ -50,6 +50,7 @@ class MultiReviewerService:
             selectinload(PullRequestReviewBase.assignments).selectinload(
                 PullRequestReviewAssignment.assigned_by_rel
             ),
+            selectinload(PullRequestReviewBase.pull_request_user_rel),
         )
 
         # Apply filters
@@ -95,6 +96,7 @@ class MultiReviewerService:
                 selectinload(PullRequestReviewBase.assignments).selectinload(
                     PullRequestReviewAssignment.assigned_by_rel
                 ),
+                selectinload(PullRequestReviewBase.pull_request_user_rel),
             )
             .where(PullRequestReviewBase.id == review_id)
         )
@@ -218,6 +220,12 @@ class MultiReviewerService:
     def _base_to_response(self, base: PullRequestReviewBase) -> ReviewWithAssignmentsResponse:
         """Convert base model to response with assignments"""
         base_dict = base.to_dict()
+
+        if base.pull_request_user_rel:
+            base_dict["pull_request_user_info"] = {
+                "username": base.pull_request_user_rel.username,
+                "display_name": base.pull_request_user_rel.display_name,
+            }
 
         # Process assignments
         assignments = []
