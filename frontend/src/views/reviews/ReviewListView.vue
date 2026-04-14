@@ -554,10 +554,6 @@ const viewReview = (id: number) => {
   router.push(`/reviews/${id}`)
 }
 
-const handleRowClick = (row: Review) => {
-  viewReview(row.id)
-}
-
 const confirmDelete = async (review: Review) => {
   try {
     await ElMessageBox.confirm(

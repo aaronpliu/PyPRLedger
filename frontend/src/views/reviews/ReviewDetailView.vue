@@ -74,8 +74,8 @@
                 <strong>{{ review.project_key }}</strong> / {{ review.repository_slug }}
               </el-descriptions-item>
               <el-descriptions-item label="Reviewer" label-align="right">
-                <el-avatar :size="24" style="vertical-align: middle; margin-right: 8px;">{{ getInitials(review.reviewer_info?.display_name || review.reviewer) }}</el-avatar>
-                {{ review.reviewer_info?.display_name || review.reviewer }}
+                <el-avatar :size="24" style="vertical-align: middle; margin-right: 8px;">{{ getInitials(getReviewerDisplayName(review)) }}</el-avatar>
+                {{ getReviewerDisplayName(review) }}
               </el-descriptions-item>
               <el-descriptions-item label="Status" label-align="right">
                 <el-tag :type="getStatusType(review.pull_request_status)" effect="dark">
@@ -328,7 +328,7 @@ const showScoreDialog = ref(false)
 const editingScore = ref<Score | null>(null)
 const scoreFormRef = ref<FormInstance>()
 const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
-const isInfoExpanded = ref(true)  // Default expanded
+const isInfoExpanded = ref(false)
 
 // Detect current theme
 const isDarkTheme = computed(() => {
@@ -524,6 +524,18 @@ const getInitials = (name: string) => {
     .join('')
     .toUpperCase()
     .substring(0, 2)
+}
+
+const getReviewerDisplayName = (reviewData: Review | null) => {
+  if (!reviewData) return 'Unassigned'
+
+  return (
+    reviewData.reviewer_info?.display_name ||
+    reviewData.reviewer ||
+    reviewData.pull_request_user_info?.display_name ||
+    reviewData.pull_request_user ||
+    'Unassigned'
+  )
 }
 
 const loadReview = async () => {
