@@ -16,7 +16,6 @@
             placeholder="Filter by PR ID, reviewer, or project"
             clearable
             style="width: 300px"
-            @input="handleSearch"
           >
             <template #prefix>
               <el-icon><Search /></el-icon>
@@ -37,7 +36,6 @@
             placeholder="Filter by PR user"
             clearable
             style="width: 180px"
-            @input="applyFilters"
           />
         </el-form-item>
         
@@ -47,19 +45,18 @@
             placeholder="Filter by reviewer"
             clearable
             style="width: 180px"
-            @input="applyFilters"
           />
         </el-form-item>
         
         <el-form-item label="Scored">
-          <el-select v-model="scoredFilter" placeholder="All" clearable style="width: 120px" @change="applyFilters">
+          <el-select v-model="scoredFilter" placeholder="All" clearable style="width: 120px">
             <el-option label="Scored" value="yes" />
             <el-option label="Not Scored" value="no" />
           </el-select>
         </el-form-item>
         
         <el-form-item label="Severity">
-          <el-select v-model="severityFilter" placeholder="All" clearable style="width: 140px" @change="applyFilters">
+          <el-select v-model="severityFilter" placeholder="All" clearable style="width: 140px">
             <el-option label="Critical" value="critical" />
             <el-option label="High" value="high" />
             <el-option label="Medium" value="medium" />
@@ -75,7 +72,7 @@
             <el-option label="Draft" value="draft" />
           </el-select>
         </el-form-item>
-        
+
         <el-form-item>
           <el-button type="primary" @click="loadReviews">
             <el-icon><Refresh /></el-icon>
@@ -86,7 +83,7 @@
 
       <!-- Reviews Table -->
       <el-table
-        :data="reviews"
+        :data="displayedReviews"
         v-loading="loading"
         stripe
         border
@@ -176,13 +173,61 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="created_date" label="Created" min-width="170">
+        <el-table-column prop="created_date" min-width="170">
+          <template #header>
+            <button
+              type="button"
+              class="sort-header-button"
+              :class="{ active: sortState.prop === 'created_date' }"
+              @click="toggleSort('created_date')"
+            >
+              <span class="sort-header-label">Created</span>
+              <div class="sort-header-icons">
+                <el-icon
+                  class="sort-header-icon"
+                  :class="{ active: isActiveSort('created_date', 'ascending') }"
+                >
+                  <ArrowUp />
+                </el-icon>
+                <el-icon
+                  class="sort-header-icon"
+                  :class="{ active: isActiveSort('created_date', 'descending') }"
+                >
+                  <ArrowDown />
+                </el-icon>
+              </div>
+            </button>
+          </template>
           <template #default="{ row }">
             {{ formatDate(row.created_date) }}
           </template>
         </el-table-column>
 
-        <el-table-column prop="updated_date" label="Updated" min-width="170">
+        <el-table-column prop="updated_date" min-width="170">
+          <template #header>
+            <button
+              type="button"
+              class="sort-header-button"
+              :class="{ active: sortState.prop === 'updated_date' }"
+              @click="toggleSort('updated_date')"
+            >
+              <span class="sort-header-label">Updated</span>
+              <div class="sort-header-icons">
+                <el-icon
+                  class="sort-header-icon"
+                  :class="{ active: isActiveSort('updated_date', 'ascending') }"
+                >
+                  <ArrowUp />
+                </el-icon>
+                <el-icon
+                  class="sort-header-icon"
+                  :class="{ active: isActiveSort('updated_date', 'descending') }"
+                >
+                  <ArrowDown />
+                </el-icon>
+              </div>
+            </button>
+          </template>
           <template #default="{ row }">
             {{ formatDate(row.updated_date) }}
           </template>
@@ -204,7 +249,7 @@
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
-        :total="total"
+        :total="displayedTotal"
         :page-sizes="[10, 20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
         @size-change="loadReviews"
@@ -278,10 +323,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, Refresh, Search } from '@element-plus/icons-vue'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
 import { projectsApi, type ProjectSummary } from '@/api/projects'
@@ -290,9 +335,7 @@ const router = useRouter()
 
 // State
 const loading = ref(false)
-const reviews = ref<ReviewV2[]>([])
 const allReviews = ref<ReviewV2[]>([]) // Store all reviews for client-side filtering
-const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
 
@@ -305,6 +348,13 @@ const scoredFilter = ref('')
 const severityFilter = ref('')
 const statusFilter = ref('')
 const projects = ref<ProjectSummary[]>([])
+const sortState = ref<{
+  prop: 'created_date' | 'updated_date'
+  order: 'ascending' | 'descending'
+}>({
+  prop: 'created_date',
+  order: 'descending',
+})
 
 // Assign dialog
 const assignDialogVisible = ref(false)
@@ -329,8 +379,6 @@ const loadReviews = async () => {
 
     const response = await taskAssignmentApi.getReviews(params)
     allReviews.value = response.items // Store all reviews
-    total.value = response.total
-    applyFilters() // Apply client-side filters
   } catch (error) {
     console.error('Failed to load reviews:', error)
     ElMessage.error('Failed to load reviews')
@@ -354,13 +402,7 @@ const loadProjects = async () => {
   }
 }
 
-// Handle search input
-const handleSearch = () => {
-  applyFilters()
-}
-
-// Apply client-side filters
-const applyFilters = () => {
+const displayedReviews = computed(() => {
   let result = [...allReviews.value]
   
   // Apply search filter
@@ -419,9 +461,65 @@ const applyFilters = () => {
       )
     })
   }
-  
-  reviews.value = result
-  total.value = result.length
+
+  result.sort((left, right) => compareReviews(left, right))
+
+  return result
+})
+
+const displayedTotal = computed(() => displayedReviews.value.length)
+
+const isDefaultPrioritySort = computed(
+  () => sortState.value.prop === 'created_date' && sortState.value.order === 'descending'
+)
+
+const compareDateValues = (leftValue?: string | null, rightValue?: string | null) => {
+  const leftTime = leftValue ? new Date(leftValue).getTime() : 0
+  const rightTime = rightValue ? new Date(rightValue).getTime() : 0
+
+  if (sortState.value.order === 'ascending') {
+    return leftTime - rightTime
+  }
+
+  return rightTime - leftTime
+}
+
+const compareReviews = (left: ReviewV2, right: ReviewV2) => {
+  const leftUnassigned = left.total_reviewers === 0
+  const rightUnassigned = right.total_reviewers === 0
+
+  if (isDefaultPrioritySort.value && leftUnassigned !== rightUnassigned) {
+    return leftUnassigned ? -1 : 1
+  }
+
+  const primarySort = compareDateValues(left[sortState.value.prop], right[sortState.value.prop])
+  if (primarySort !== 0) {
+    return primarySort
+  }
+
+  if (leftUnassigned !== rightUnassigned) {
+    return leftUnassigned ? -1 : 1
+  }
+
+  return compareDateValues(left.created_date, right.created_date)
+}
+
+const isActiveSort = (
+  prop: 'created_date' | 'updated_date',
+  order: 'ascending' | 'descending'
+) => {
+  return sortState.value.prop === prop && sortState.value.order === order
+}
+
+const toggleSort = (prop: 'created_date' | 'updated_date') => {
+  if (sortState.value.prop === prop) {
+    sortState.value.order = sortState.value.order === 'descending' ? 'ascending' : 'descending'
+  } else {
+    sortState.value = {
+      prop,
+      order: 'descending',
+    }
+  }
 }
 
 // Get reviewer tag type
@@ -543,6 +641,61 @@ onMounted(() => {
 
 .task-assignment-table :deep(th.el-table__cell) {
   text-align: center;
+}
+
+.sort-header-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+}
+
+.sort-header-label {
+  font-weight: 600;
+}
+
+.sort-header-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sort-header-button:hover {
+  color: var(--el-color-primary);
+}
+
+.sort-header-button.active {
+  color: var(--el-color-primary);
+}
+
+.sort-header-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sort-header-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+
+.sort-header-icon.active {
+  color: var(--el-color-primary);
+  opacity: 1;
 }
 
 .task-assignment-table :deep(.cell) {
