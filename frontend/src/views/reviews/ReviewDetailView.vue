@@ -5,10 +5,19 @@
         <span class="page-title">Review Details</span>
       </template>
       <template #extra>
-        <el-button type="primary" :disabled="!nextReview" @click="goToNextReview">
-          Next
-          <el-icon class="el-icon--right"><ArrowRight /></el-icon>
-        </el-button>
+        <div class="detail-navigation-actions">
+          <span v-if="currentReviewIndex >= 0" class="detail-navigation-position">
+            {{ currentReviewIndex + 1 }} / {{ reviewNavigationStore.total }}
+          </span>
+          <el-button class="detail-navigation-button" :disabled="!previousReview" @click="goToPreviousReview">
+            <el-icon><ArrowLeft /></el-icon>
+            Previous
+          </el-button>
+          <el-button class="detail-navigation-button" type="primary" :disabled="!nextReview" @click="goToNextReview">
+            Next
+            <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+          </el-button>
+        </div>
       </template>
     </el-page-header>
 
@@ -26,7 +35,7 @@
                 >
                   <ArrowDown />
                 </el-icon>
-                <span class="card-title">📋 Review Information</span>
+                <span class="card-title">📋 Review Information (#{{ review.pull_request_id }})</span>
               </div>
               <el-space>
                 <!-- Add Score Button - Only show if user has permission -->
@@ -307,7 +316,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Plus, Delete, User, ArrowDown, ArrowRight } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
@@ -575,6 +584,14 @@ const nextReview = computed<ReviewNavigationItem | null>(() => {
   return reviewNavigationStore.items[currentReviewIndex.value + 1] || null
 })
 
+const previousReview = computed<ReviewNavigationItem | null>(() => {
+  if (currentReviewIndex.value <= 0) {
+    return null
+  }
+
+  return reviewNavigationStore.items[currentReviewIndex.value - 1] || null
+})
+
 const normalizeRouteQueryValue = (value: unknown): string | null => {
   if (typeof value !== 'string') return null
   return value.length > 0 ? value : null
@@ -658,7 +675,7 @@ const goToNextReview = () => {
     return
   }
 
-  router.push({
+  router.replace({
     name: 'ReviewDetail',
     params: { id: nextReview.value.id },
     query: {
@@ -667,6 +684,24 @@ const goToNextReview = () => {
       pullRequestId: nextReview.value.pullRequestId,
       reviewer: nextReview.value.reviewer,
       sourceFilename: nextReview.value.sourceFilename,
+    },
+  })
+}
+
+const goToPreviousReview = () => {
+  if (!previousReview.value) {
+    return
+  }
+
+  router.replace({
+    name: 'ReviewDetail',
+    params: { id: previousReview.value.id },
+    query: {
+      projectKey: previousReview.value.projectKey,
+      repositorySlug: previousReview.value.repositorySlug,
+      pullRequestId: previousReview.value.pullRequestId,
+      reviewer: previousReview.value.reviewer,
+      sourceFilename: previousReview.value.sourceFilename,
     },
   })
 }
@@ -831,6 +866,33 @@ watch(
   font-size: 18px;
   font-weight: 600;
   color: var(--el-text-color-primary);
+}
+
+.detail-navigation-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.detail-navigation-button {
+  width: 104px;
+}
+
+.detail-navigation-position {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  width: 104px;
+  height: 32px;
+  text-align: center;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-lighter);
+  font-weight: 500;
 }
 
 .content-row {
