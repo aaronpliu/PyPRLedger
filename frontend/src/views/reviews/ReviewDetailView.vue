@@ -538,14 +538,52 @@ const getReviewerDisplayName = (reviewData: Review | null) => {
   )
 }
 
+const normalizeRouteQueryValue = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null
+  return value.length > 0 ? value : null
+}
+
+const findMatchingReview = (items: Review[], id: number): Review | null => {
+  const routeReviewer = normalizeRouteQueryValue(route.query.reviewer)
+  const routeSourceFilename = normalizeRouteQueryValue(route.query.sourceFilename)
+
+  const matchedByComposite = items.find(item => {
+    const reviewerMatches = (item.reviewer || null) === routeReviewer
+    const sourceFilenameMatches = (item.source_filename || null) === routeSourceFilename
+    return reviewerMatches && sourceFilenameMatches
+  })
+
+  if (matchedByComposite) {
+    return matchedByComposite
+  }
+
+  return items.find(item => item.id === id) || items[0] || null
+}
+
 const loadReview = async () => {
   const id = Number(route.params.id)
   if (!id) return
 
+  const projectKey = normalizeRouteQueryValue(route.query.projectKey)
+  const repositorySlug = normalizeRouteQueryValue(route.query.repositorySlug)
+  const pullRequestId = normalizeRouteQueryValue(route.query.pullRequestId)
+
   loading.value = true
   try {
-    // Get review by ID (fetches from list)
-    review.value = await reviewsApi.getReviewById(id)
+    if (projectKey && repositorySlug && pullRequestId) {
+      const response = await reviewsApi.getReviewByCompositeKey(
+        projectKey,
+        repositorySlug,
+        pullRequestId,
+        {
+          reviewer: normalizeRouteQueryValue(route.query.reviewer) || undefined,
+          source_filename: normalizeRouteQueryValue(route.query.sourceFilename) || undefined,
+        }
+      )
+      review.value = findMatchingReview(response.items, id)
+    } else {
+      review.value = await reviewsApi.getReviewById(id)
+    }
     
     if (!review.value) {
       throw new Error('Review not found')

@@ -299,6 +299,8 @@ async def get_review(
     pull_request_id: Annotated[str, Path(description="Pull request ID")],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
+    reviewer: str | None = Query(None, description="Filter by reviewer username"),
+    source_filename: str | None = Query(None, description="Filter by source filename"),
 ) -> ReviewListResponse:
     """
     Get all pull request reviews by composite business key.
@@ -323,6 +325,8 @@ async def get_review(
             project_key=project_key,
             repository_slug=repository_slug,
             pull_request_id=pull_request_id,
+            reviewer=reviewer,
+            source_filename=source_filename,
             db=db,
         )
 

@@ -258,7 +258,7 @@
         <!-- Actions -->
         <el-table-column label="Actions" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click.stop="viewReview(row.id)">
+            <el-button size="small" type="primary" @click.stop="viewReview(row)">
               View
             </el-button>
           </template>
@@ -550,8 +550,18 @@ const applyFilters = () => {
   total.value = result.length
 }
 
-const viewReview = (id: number) => {
-  router.push(`/reviews/${id}`)
+const viewReview = (review: Review) => {
+  router.push({
+    name: 'ReviewDetail',
+    params: { id: review.id },
+    query: {
+      projectKey: review.project_key,
+      repositorySlug: review.repository_slug,
+      pullRequestId: review.pull_request_id,
+      reviewer: review.reviewer || '',
+      sourceFilename: review.source_filename || '',
+    },
+  })
 }
 
 const confirmDelete = async (review: Review) => {

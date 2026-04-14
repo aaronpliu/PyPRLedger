@@ -484,6 +484,8 @@ class ReviewService:
         project_key: str | None,
         repository_slug: str | None,
         pull_request_id: str,
+        reviewer: str | None,
+        source_filename: str | None,
         db: AsyncSession,
     ) -> list[dict[str, Any]]:
         """
@@ -522,10 +524,12 @@ class ReviewService:
                 query = query.where(PullRequestReviewBase.project_key == project_key)
             if repository_slug:
                 query = query.where(PullRequestReviewBase.repository_slug == repository_slug)
+            if source_filename:
+                query = query.where(PullRequestReviewBase.source_filename == source_filename)
 
             result = await db.execute(query)
             bases = result.scalars().unique().all()
-            reviews = self._flatten_reviews(list(bases))
+            reviews = self._flatten_reviews(list(bases), reviewer)
 
             if reviews:
                 logger.info(f"Found {len(reviews)} review(s) for PR: {pull_request_id}")

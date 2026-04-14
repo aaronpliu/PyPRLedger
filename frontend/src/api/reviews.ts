@@ -122,9 +122,16 @@ export const reviewsApi = {
   getReviewByCompositeKey(
     projectKey: string,
     repositorySlug: string,
-    pullRequestId: string
+    pullRequestId: string,
+    params?: {
+      reviewer?: string
+      source_filename?: string
+    }
   ): Promise<{ items: Review[]; total: number }> {
-    return request.get(`/reviews/${encodeURIComponent(projectKey)}/${encodeURIComponent(repositorySlug)}/${encodeURIComponent(pullRequestId)}`)
+    return request.get(
+      `/reviews/${encodeURIComponent(projectKey)}/${encodeURIComponent(repositorySlug)}/${encodeURIComponent(pullRequestId)}`,
+      { params }
+    )
   },
 
   // Get review by ID - fetches from list and finds by ID
