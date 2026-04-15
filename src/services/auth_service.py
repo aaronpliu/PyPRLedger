@@ -216,7 +216,7 @@ class AuthService:
 
         # Auto-associate with Bitbucket user if not already linked
         if not auth_user.user_id:
-            linked = await self._auto_link_bitbucket_user(auth_user)
+            linked = await self._auto_link_git_user(auth_user)
             # Only upgrade role if successfully linked to a Bitbucket user
             if linked:
                 await self._upgrade_linked_user_role(auth_user.id)
@@ -262,11 +262,11 @@ class AuthService:
             )
 
         # Try to find matching Bitbucket user
-        bitbucket_user = None
+        git_user = None
         if register_data.username:
             stmt = select(User).where(User.username == register_data.username)
             result = await self.db.execute(stmt)
-            bitbucket_user = result.scalar_one_or_none()
+            git_user = result.scalar_one_or_none()
 
         # Create new auth user
         hashed_password = hash_password(register_data.password)
@@ -274,7 +274,7 @@ class AuthService:
             username=register_data.username,
             email=register_data.email,
             password_hash=hashed_password,
-            user_id=bitbucket_user.id if bitbucket_user else None,
+            user_id=git_user.id if git_user else None,
             is_active=True,
         )
 
@@ -283,8 +283,8 @@ class AuthService:
         await self.db.refresh(new_auth_user)
 
         # Auto-assign role based on Bitbucket user association
-        has_bitbucket_user = bitbucket_user is not None
-        await self._assign_default_role(new_auth_user.id, has_bitbucket_user)
+        has_git_user = git_user is not None
+        await self._assign_default_role(new_auth_user.id, has_git_user)
 
         return await self._create_token_response(
             new_auth_user,
@@ -489,20 +489,20 @@ class AuthService:
         # Extract unique role names
         roles = list({assignment["role_name"] for assignment in role_assignments})
 
-        bitbucket_username = None
+        git_username = None
         if auth_user.user_id:
             stmt = select(User).where(User.id == auth_user.user_id)
             result = await self.db.execute(stmt)
-            bitbucket_user = result.scalar_one_or_none()
-            bitbucket_username = bitbucket_user.username if bitbucket_user else None
+            git_user = result.scalar_one_or_none()
+            git_username = git_user.username if git_user else None
 
         return UserinfoResponse(
             id=auth_user.id,
             username=auth_user.username,
             email=auth_user.email,
             is_active=auth_user.is_active,
-            bitbucket_user_id=auth_user.user_id,
-            bitbucket_username=bitbucket_username,
+            git_user_id=auth_user.user_id,
+            git_username=git_username,
             last_login_at=auth_user.last_login_at,
             created_at=auth_user.created_at,
             roles=roles,
@@ -537,7 +537,7 @@ class AuthService:
 
         return True
 
-    async def _auto_link_bitbucket_user(self, auth_user: AuthUser) -> bool:
+    async def _auto_link_git_user(self, auth_user: AuthUser) -> bool:
         """Auto-link auth user with Bitbucket user by username
 
         Args:
@@ -548,25 +548,23 @@ class AuthService:
         """
         stmt = select(User).where(User.username == auth_user.username)
         result = await self.db.execute(stmt)
-        bitbucket_user = result.scalar_one_or_none()
+        git_user = result.scalar_one_or_none()
 
-        if bitbucket_user:
-            auth_user.user_id = bitbucket_user.id
+        if git_user:
+            auth_user.user_id = git_user.id
             await self.db.commit()
-            logger.info(
-                f"Auto-linked auth_user {auth_user.id} with Bitbucket user {bitbucket_user.id}"
-            )
+            logger.info(f"Auto-linked auth_user {auth_user.id} with Bitbucket user {git_user.id}")
             return True
 
         logger.debug(f"No Bitbucket user found for username: {auth_user.username}")
         return False
 
-    async def _assign_default_role(self, auth_user_id: int, has_bitbucket_user: bool) -> None:
+    async def _assign_default_role(self, auth_user_id: int, has_git_user: bool) -> None:
         """Assign default role to newly registered user
 
         Args:
             auth_user_id: The newly created auth user ID
-            has_bitbucket_user: Whether a matching Bitbucket user was found
+            has_git_user: Whether a matching Bitbucket user was found
         """
         from src.models.role import Role
         from src.services.rbac_service import RBACService
@@ -575,7 +573,7 @@ class AuthService:
 
         # Determine role based on Bitbucket user association
         # If has Bitbucket user -> reviewer, otherwise -> viewer
-        role_name = "reviewer" if has_bitbucket_user else "viewer"
+        role_name = "reviewer" if has_git_user else "viewer"
 
         # Get role by name
         stmt = select(Role).where(Role.name == role_name)
@@ -596,7 +594,7 @@ class AuthService:
             )
             logger.info(
                 f"Auto-assigned {role_name} role to user {auth_user_id} "
-                f"(has_bitbucket_user={has_bitbucket_user})"
+                f"(has_git_user={has_git_user})"
             )
         except Exception as e:
             logger.error(f"Failed to assign default role to user {auth_user_id}: {e}")
@@ -703,7 +701,7 @@ class AuthService:
                 resource_type="users",
                 resource_id=str(auth_user_id),
                 old_values={"role": "viewer"},
-                new_values={"role": "reviewer", "reason": "bitbucket_user_linked_on_login"},
+                new_values={"role": "reviewer", "reason": "git_user_linked_on_login"},
             )
         except Exception as e:
             logger.warning(f"Failed to log login role upgrade audit: {e}")

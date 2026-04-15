@@ -214,12 +214,12 @@ async def list_reviews(
         # Apply role-based filtering
         if not is_review_admin:
             # Regular user - filter by their bitbucket username
-            bitbucket_username = await _get_bitbucket_username(current_user.id, db)
+            git_username = await _get_git_username(current_user.id, db)
 
-            if bitbucket_username:
-                filters.visible_to_username = bitbucket_username
+            if git_username:
+                filters.visible_to_username = git_username
                 logger.info(
-                    f"Regular user {current_user.username} filtered by visible_to={bitbucket_username}"
+                    f"Regular user {current_user.username} filtered by visible_to={git_username}"
                 )
             else:
                 # No linked bitbucket user - return empty list
@@ -902,8 +902,8 @@ async def upsert_score(
                 },
             )
 
-        bitbucket_username = await _get_bitbucket_username(current_user.id, db)
-        if not bitbucket_username:
+        git_username = await _get_git_username(current_user.id, db)
+        if not git_username:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={
@@ -912,7 +912,7 @@ async def upsert_score(
                 },
             )
 
-        if score_data.reviewer != bitbucket_username:
+        if score_data.reviewer != git_username:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={
@@ -944,7 +944,7 @@ async def upsert_score(
             project_key=score_data.project_key,
             repository_slug=score_data.repository_slug,
             source_filename=score_data.source_filename,
-            reviewer=bitbucket_username,
+            reviewer=git_username,
         )
         if not is_assigned:
             raise HTTPException(
@@ -1580,7 +1580,7 @@ async def assign_review_task(
     return ReviewResponse(**review_data_dict)
 
 
-async def _get_bitbucket_username(auth_user_id: int, db: AsyncSession) -> str | None:
+async def _get_git_username(auth_user_id: int, db: AsyncSession) -> str | None:
     """Get bitbucket username linked to auth user
 
     Args:
@@ -1601,6 +1601,6 @@ async def _get_bitbucket_username(auth_user_id: int, db: AsyncSession) -> str | 
     # Get linked bitbucket user
     stmt = select(User).where(User.id == auth_user.user_id)
     result = await db.execute(stmt)
-    bitbucket_user = result.scalar_one_or_none()
+    git_user = result.scalar_one_or_none()
 
-    return bitbucket_user.username if bitbucket_user else None
+    return git_user.username if git_user else None

@@ -56,7 +56,7 @@ class User(Base):
     # Relationships
     # Link to authentication user (one-to-one, optional)
     auth_user: Mapped[AuthUser | None] = relationship(
-        "AuthUser", back_populates="bitbucket_user", foreign_keys="AuthUser.user_id"
+        "AuthUser", back_populates="git_user", foreign_keys="AuthUser.user_id"
     )
 
     authored_reviews: Mapped[list[PullRequestReviewBase]] = relationship(

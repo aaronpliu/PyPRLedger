@@ -194,21 +194,21 @@ class EntitySyncService:
 
         return project, repository, pr_user, reviewer_user
 
-    async def _auto_associate_auth_user(self, bitbucket_user: User) -> None:
+    async def _auto_associate_auth_user(self, git_user: User) -> None:
         """Auto-associate auth_user when Bitbucket user is created
 
         If an auth_user exists with the same username but no user_id link,
         create the link and upgrade role from 'viewer' to 'reviewer'.
 
         Args:
-            bitbucket_user: The newly created or synced Bitbucket user
+            git_user: The newly created or synced Bitbucket user
         """
         from src.models.auth_user import AuthUser
 
         # Find auth_user with same username but no link
         stmt = select(AuthUser).where(
             and_(
-                AuthUser.username == bitbucket_user.username,
+                AuthUser.username == git_user.username,
                 AuthUser.user_id.is_(None),
             )
         )
@@ -216,19 +216,17 @@ class EntitySyncService:
         auth_user = result.scalar_one_or_none()
 
         if not auth_user:
-            logger.debug(f"No unlinked auth_user found for {bitbucket_user.username}")
+            logger.debug(f"No unlinked auth_user found for {git_user.username}")
             return
 
         # Create the association
-        auth_user.user_id = bitbucket_user.id
+        auth_user.user_id = git_user.id
         await self.db.flush()
 
-        logger.info(
-            f"Auto-associated auth_user {auth_user.id} with Bitbucket user {bitbucket_user.id}"
-        )
+        logger.info(f"Auto-associated auth_user {auth_user.id} with Bitbucket user {git_user.id}")
 
         # Log audit trail
-        await self._log_association_audit(auth_user.id, bitbucket_user.id, bitbucket_user.username)
+        await self._log_association_audit(auth_user.id, git_user.id, git_user.username)
 
         # Upgrade role from viewer to reviewer
         await self._upgrade_role_to_reviewer(auth_user.id)
@@ -338,13 +336,13 @@ class EntitySyncService:
             logger.error(f"Failed to upgrade role for user {auth_user_id}: {e}")
 
     async def _log_association_audit(
-        self, auth_user_id: int, bitbucket_user_id: int, username: str
+        self, auth_user_id: int, git_user_id: int, username: str
     ) -> None:
         """Log audit trail for automatic user association
 
         Args:
             auth_user_id: The auth user ID
-            bitbucket_user_id: The Bitbucket user ID
+            git_user_id: The Bitbucket user ID
             username: The username
         """
         try:
@@ -358,7 +356,7 @@ class EntitySyncService:
                 resource_id=str(auth_user_id),
                 new_values={
                     "auth_user_id": auth_user_id,
-                    "bitbucket_user_id": bitbucket_user_id,
+                    "git_user_id": git_user_id,
                     "username": username,
                     "action": "auto_associated",
                 },
@@ -382,7 +380,7 @@ class EntitySyncService:
                 resource_type="users",
                 resource_id=str(auth_user_id),
                 old_values={"role": "viewer"},
-                new_values={"role": "reviewer", "reason": "bitbucket_user_associated"},
+                new_values={"role": "reviewer", "reason": "git_user_associated"},
             )
         except Exception as e:
             logger.warning(f"Failed to log role upgrade audit: {e}")

@@ -58,7 +58,7 @@ class AuthUser(Base):
     )
 
     # Relationships
-    bitbucket_user: Mapped[User | None] = relationship(
+    git_user: Mapped[User | None] = relationship(
         "User", back_populates="auth_user", foreign_keys=[user_id]
     )
     role_assignments: Mapped[list[UserRoleAssignment]] = relationship(

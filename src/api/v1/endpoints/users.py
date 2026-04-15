@@ -296,7 +296,7 @@ async def list_auth_users(
             user_dict = auth_user.to_dict()
             # Add roles information (will be populated by frontend if needed)
             user_dict["roles"] = []  # Placeholder, can be enriched if needed
-            user_dict["bitbucket_user_id"] = auth_user.user_id  # Link to Bitbucket user
+            user_dict["git_user_id"] = auth_user.user_id  # Link to Bitbucket user
             users_data.append(user_dict)
 
         return {

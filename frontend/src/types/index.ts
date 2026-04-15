@@ -4,8 +4,8 @@ export interface User {
   username: string
   email: string | null
   is_active: boolean
-  bitbucket_user_id: number | null
-  bitbucket_username: string | null
+  git_user_id: number | null
+  git_username: string | null
   last_login_at: string | null
   created_at: string
   roles: string[]

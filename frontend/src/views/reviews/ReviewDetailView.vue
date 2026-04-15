@@ -372,7 +372,7 @@ const hasScorePermissionRole = computed(() => {
 })
 
 const effectiveReviewerUsername = computed(() => {
-  return authStore.currentUser?.bitbucket_username || null
+  return authStore.currentUser?.git_username || null
 })
 
 const canCreateScore = computed(() => {

@@ -201,18 +201,18 @@ async def list_reviews(
         
         # ✨ NEW: Apply role-based filtering
         if not is_review_admin:
-            # Regular user - filter by their bitbucket username
-            bitbucket_username = await _get_bitbucket_username(current_user.id, db)
+            # Regular user - filter by their git username
+            git_username = await _get_git_username(current_user.id, db)
             
-            if bitbucket_username:
-                filters.reviewer = bitbucket_username
+            if git_username:
+                filters.reviewer = git_username
                 logger.info(
-                    f"Regular user {current_user.username} filtered by reviewer={bitbucket_username}"
+                    f"Regular user {current_user.username} filtered by reviewer={git_username}"
                 )
             else:
-                # No linked bitbucket user - return empty list
+                # No linked git user - return empty list
                 logger.warning(
-                    f"User {current_user.username} has no linked Bitbucket account"
+                    f"User {current_user.username} has no linked Git account"
                 )
                 return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
         else:
@@ -241,15 +241,15 @@ async def list_reviews(
 
 2. Add helper function at module level:
 ```python
-async def _get_bitbucket_username(auth_user_id: int, db: AsyncSession) -> str | None:
-    """Get bitbucket username linked to auth user
+async def _get_git_username(auth_user_id: int, db: AsyncSession) -> str | None:
+    """Get git username linked to auth user
     
     Args:
         auth_user_id: Auth user ID
         db: Database session
     
     Returns:
-        Bitbucket username or None if not linked
+        Git username or None if not linked
     """
     from src.models.auth_user import AuthUser
     from src.models.user import User
@@ -263,12 +263,12 @@ async def _get_bitbucket_username(auth_user_id: int, db: AsyncSession) -> str | 
     if not auth_user or not auth_user.user_id:
         return None
     
-    # Get linked bitbucket user
+    # Get linked git user
     stmt = select(User).where(User.id == auth_user.user_id)
     result = await db.execute(stmt)
-    bitbucket_user = result.scalar_one_or_none()
+    git_user = result.scalar_one_or_none()
     
-    return bitbucket_user.username if bitbucket_user else None
+    return git_user.username if git_user else None
 ```
 
 **Important Notes**:
@@ -279,7 +279,7 @@ async def _get_bitbucket_username(auth_user_id: int, db: AsyncSession) -> str | 
 **Testing**:
 - Login as regular user and verify only their reviews are shown
 - Login as review_admin and verify all reviews are visible
-- Test with user who has no linked Bitbucket account (should return empty list)
+- Test with user who has no linked Git account (should return empty list)
 
 ---
 
@@ -633,7 +633,7 @@ export const reviewsApi = {
 - API contracts maintained (only added new endpoint)
 
 ### Edge Cases
-- User without linked Bitbucket account → empty review list
+- User without linked Git account → empty review list
 - Reviewer role missing from database → graceful degradation
 - Role assignment failure → logged but registration continues
 

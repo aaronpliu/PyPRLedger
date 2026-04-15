@@ -20,7 +20,7 @@
             <span class="username">{{ item.username }}</span>
             <span class="user-info">
               <el-tag 
-                v-if="item.bitbucket_user_id" 
+                v-if="item.git_user_id" 
                 size="small" 
                 type="success"
               >
@@ -48,8 +48,8 @@
             <div style="font-size: 12px; margin-top: 4px;">
               <div style="margin-bottom: 4px;">
                 Bitbucket Status: 
-                <el-tag v-if="selectedUser.bitbucket_user_id" size="small" type="success">
-                  ✓ Linked (ID: {{ selectedUser.bitbucket_user_id }})
+                <el-tag v-if="selectedUser.git_user_id" size="small" type="success">
+                  ✓ Linked (ID: {{ selectedUser.git_user_id }})
                 </el-tag>
                 <el-tag v-else size="small" type="warning">
                   ⚠ Not linked to Bitbucket
@@ -304,8 +304,8 @@ const filterUsers = (queryString: string, cb: any) => {
   // Sort: Bitbucket-linked users first, then by username
   const sorted = [...users].sort((a, b) => {
     // Prioritize users with Bitbucket linkage
-    if (a.bitbucket_user_id && !b.bitbucket_user_id) return -1
-    if (!a.bitbucket_user_id && b.bitbucket_user_id) return 1
+    if (a.git_user_id && !b.git_user_id) return -1
+    if (!a.git_user_id && b.git_user_id) return 1
     // Then sort by username
     return a.username.localeCompare(b.username)
   })

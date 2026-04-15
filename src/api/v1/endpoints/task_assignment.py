@@ -222,15 +222,15 @@ async def get_my_tasks(
 ) -> ReviewListResponse:
     """Get reviews assigned to current user"""
     try:
-        bitbucket_username = await _get_bitbucket_username(current_user.id, db)
-        if not bitbucket_username:
+        git_username = await _get_git_username(current_user.id, db)
+        if not git_username:
             return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
 
         reviews, total = await service.get_reviews(
             db=db,
             page=page,
             page_size=page_size,
-            visible_to_username=bitbucket_username,
+            visible_to_username=git_username,
         )
 
         return ReviewListResponse(
@@ -246,7 +246,7 @@ async def get_my_tasks(
         )
 
 
-async def _get_bitbucket_username(auth_user_id: int, db: AsyncSession) -> str | None:
+async def _get_git_username(auth_user_id: int, db: AsyncSession) -> str | None:
     stmt = select(AuthUser).where(AuthUser.id == auth_user_id)
     result = await db.execute(stmt)
     auth_user = result.scalar_one_or_none()
@@ -256,5 +256,5 @@ async def _get_bitbucket_username(auth_user_id: int, db: AsyncSession) -> str | 
 
     stmt = select(User).where(User.id == auth_user.user_id)
     result = await db.execute(stmt)
-    bitbucket_user = result.scalar_one_or_none()
-    return bitbucket_user.username if bitbucket_user else None
+    git_user = result.scalar_one_or_none()
+    return git_user.username if git_user else None
