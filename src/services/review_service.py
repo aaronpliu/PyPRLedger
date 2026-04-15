@@ -711,6 +711,7 @@ class ReviewService:
         db: AsyncSession,
         *,
         pull_request_id: str,
+        pull_request_commit_id: str | None,
         project_key: str,
         repository_slug: str,
         source_filename: str | None,
@@ -727,6 +728,11 @@ class ReviewService:
             )
         )
 
+        if pull_request_commit_id is not None:
+            query = query.where(
+                PullRequestReviewBase.pull_request_commit_id == pull_request_commit_id
+            )
+
         if source_filename is None:
             query = query.where(PullRequestReviewBase.source_filename.is_(None))
         else:
@@ -740,6 +746,7 @@ class ReviewService:
         db: AsyncSession,
         *,
         pull_request_id: str,
+        pull_request_commit_id: str | None,
         project_key: str,
         repository_slug: str,
         source_filename: str | None,
@@ -749,6 +756,11 @@ class ReviewService:
             PullRequestReviewBase.project_key == project_key,
             PullRequestReviewBase.repository_slug == repository_slug,
         )
+
+        if pull_request_commit_id is not None:
+            query = query.where(
+                PullRequestReviewBase.pull_request_commit_id == pull_request_commit_id
+            )
 
         if source_filename is None:
             query = query.where(PullRequestReviewBase.source_filename.is_(None))

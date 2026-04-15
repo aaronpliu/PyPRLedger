@@ -925,6 +925,7 @@ async def upsert_score(
         review_base = await review_service.get_review_base_by_target(
             db,
             pull_request_id=score_data.pull_request_id,
+            pull_request_commit_id=score_data.pull_request_commit_id,
             project_key=score_data.project_key,
             repository_slug=score_data.repository_slug,
             source_filename=score_data.source_filename,
@@ -941,6 +942,7 @@ async def upsert_score(
         is_assigned = await review_service.is_user_assigned_to_review(
             db,
             pull_request_id=score_data.pull_request_id,
+            pull_request_commit_id=score_data.pull_request_commit_id,
             project_key=score_data.project_key,
             repository_slug=score_data.repository_slug,
             source_filename=score_data.source_filename,
@@ -955,7 +957,12 @@ async def upsert_score(
                 },
             )
 
-        score = await score_service.upsert_score(score_data, db, include_details=True)
+        score = await score_service.upsert_score(
+            score_data,
+            db,
+            review_base_id=review_base.id,
+            include_details=True,
+        )
 
         # Return the Pydantic model directly - FastAPI will serialize it according to response_model
         # Note: Using fixed 200 OK status code as per response_model declaration

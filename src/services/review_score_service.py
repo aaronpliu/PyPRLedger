@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.config import settings
-from src.models.pull_request import PullRequestScore
+from src.models.pull_request import PullRequestReviewAssignment, PullRequestScore
 from src.schemas.pull_request import (
     ReviewScoreCreate,
     ReviewScoreResponse,
@@ -41,6 +41,7 @@ class ReviewScoreService:
         self,
         score_data: ReviewScoreCreate,
         db: AsyncSession,
+        review_base_id: int,
         include_details: bool = False,
     ) -> ReviewScoreResponse:
         """
@@ -88,8 +89,6 @@ class ReviewScoreService:
 
             existing_score.updated_date = datetime.now(UTC)
             await db.flush()
-            await db.commit()  # Commit immediately after flush to make data visible
-            await db.refresh(existing_score)
             score_obj = existing_score
 
             target = f"file '{source_filename}'" if source_filename else "PR"
@@ -118,14 +117,20 @@ class ReviewScoreService:
             )
             db.add(new_score)
             await db.flush()
-            await db.commit()  # Commit immediately after flush to make data visible
-            await db.refresh(new_score)
             score_obj = new_score
 
             target = f"file '{source_filename}'" if source_filename else "PR"
             logger.info(
                 f"Created new score for reviewer '{reviewer.username}' on {target}: {score_data.score}"
             )
+
+        await self._mark_assignment_completed(
+            db=db,
+            review_base_id=review_base_id,
+            reviewer=reviewer.username,
+        )
+        await db.commit()
+        await db.refresh(score_obj)
 
         # Cache invalidation
         # Invalidate both specific file cache and PR-level (all_files) cache
@@ -152,6 +157,30 @@ class ReviewScoreService:
         # Return enriched response - pass reviewer_obj to avoid lazy loading after commit
         return await self._enrich_score_response(
             score_obj, db, include_details, reviewer_obj=reviewer
+        )
+
+    async def _mark_assignment_completed(
+        self,
+        db: AsyncSession,
+        review_base_id: int,
+        reviewer: str,
+    ) -> None:
+        stmt = select(PullRequestReviewAssignment).where(
+            PullRequestReviewAssignment.review_base_id == review_base_id,
+            PullRequestReviewAssignment.reviewer == reviewer,
+        )
+        result = await db.execute(stmt)
+        assignment = result.scalar_one_or_none()
+
+        if not assignment or assignment.assignment_status == "completed":
+            return
+
+        assignment.assignment_status = "completed"
+        assignment.updated_date = datetime.now(UTC)
+
+        logger.info(
+            "Marked assignment as completed after score submission: "
+            f"review_base_id={review_base_id}, reviewer={reviewer}"
         )
 
     async def get_scores_by_review_target(
