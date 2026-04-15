@@ -45,8 +45,11 @@ const applyTheme = (theme: 'light' | 'dark' | 'auto') => {
 const updateElementPlusTheme = (isDark: boolean) => {
   if (isDark) {
     document.documentElement.classList.add('dark')
+    // Also set data-theme for custom styles
+    document.documentElement.setAttribute('data-theme', 'dark')
   } else {
     document.documentElement.classList.remove('dark')
+    document.documentElement.setAttribute('data-theme', 'light')
   }
 }
 

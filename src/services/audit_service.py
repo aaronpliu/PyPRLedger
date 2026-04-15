@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, desc, func, select
@@ -302,8 +302,6 @@ class AuditService:
         Returns:
             Dictionary with statistics
         """
-        from datetime import timedelta
-
         start_date = datetime.now() - timedelta(days=days)
 
         # Total actions

@@ -2,14 +2,14 @@
 
 ## 🚀 Quick Start
 
-**To release a new version, just run one command:**
+**To release a new backend version, run:**
 
 ```bash
-# Bump minor version (e.g., 1.0.0 → 1.1.0)
-python3 scripts/bump_version.py minor
+# Set backend/API version
+python3 scripts/bump_version.py set 1.6.0
 ```
 
-That's it! The version is automatically updated everywhere.
+Then update `frontend/package.json` for the UI version, for example `1.1.0`.
 
 ---
 
@@ -21,43 +21,50 @@ That's it! The version is automatically updated everywhere.
 | Bump major version | `python3 scripts/bump_version.py major` |
 | Bump minor version | `python3 scripts/bump_version.py minor` |
 | Bump patch version | `python3 scripts/bump_version.py patch` |
-| Set specific version | `python3 scripts/bump_version.py set 2.1.0` |
+| Set backend/API version | `python3 scripts/bump_version.py set 1.6.0` |
 
 ---
 
 ## 🎯 Release Checklist
 
 ```bash
-# 1. Update version
-python3 scripts/bump_version.py minor
+# 1. Update backend/API version
+python3 scripts/bump_version.py set 1.6.0
 
-# 2. Verify the change
+# 2. Update frontend/UI version
+# Edit frontend/package.json and set "version": "1.1.0"
+
+# 3. Verify the change
 cat pyproject.toml | grep version
 
-# 3. Update CHANGELOG.md
+# 4. Update CHANGELOG.md
 # Edit and document changes
 
-# 4. Commit
-git add pyproject.toml CHANGELOG.md
-git commit -m "Release version 1.1.0"
+# 5. Commit
+git add pyproject.toml frontend/package.json CHANGELOG.md
+git commit -m "Release v1.6.0"
 
-# 5. Tag
-git tag -a v1.1.0 -m "Version 1.1.0"
-git push origin v1.1.0
+# 6. Tag
+git tag -a v1.6.0 -m "Version 1.6.0"
 ```
 
 ---
 
 ## ℹ️ Where is the Version Stored?
 
-**Single source of truth:** `pyproject.toml`
+**Backend source of truth:** `pyproject.toml`  
+**Frontend source of truth:** `frontend/package.json`
 
 ```toml
 [project]
-version = "1.0.0"  # ← Only update this file
+version = "1.6.0"  # ← Backend/API version
 ```
 
-All other files read from here automatically.
+```json
+{
+	"version": "1.1.0"
+}
+```
 
 ---
 

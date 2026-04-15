@@ -12,7 +12,7 @@ from src.core.exceptions import (
     ResourceAlreadyExistsException,
 )
 from src.models.project import Project
-from src.models.pull_request import PullRequestReview
+from src.models.pull_request import PullRequestReviewAssignment, PullRequestReviewBase
 from src.models.repository import Repository
 from src.schemas.project import (
     ProjectCreate,
@@ -502,9 +502,11 @@ class ProjectService:
         total_repositories = repo_result.scalar()
 
         # Get total reviews
-        review_query = select(func.count()).select_from(PullRequestReview)
+        review_query = select(func.count()).select_from(PullRequestReviewBase)
         if project_id:
-            review_query = review_query.where(PullRequestReview.project_id == project_id)
+            review_query = review_query.join(
+                Project, Project.project_key == PullRequestReviewBase.project_key
+            ).where(Project.id == project_id)
         review_result = await db.execute(review_query)
         total_reviews = review_result.scalar()
 
@@ -578,16 +580,19 @@ class ProjectService:
         # Get review count
         review_query = (
             select(func.count())
-            .select_from(PullRequestReview)
-            .where(PullRequestReview.project_id == project_id)
+            .select_from(PullRequestReviewBase)
+            .join(Project, Project.project_key == PullRequestReviewBase.project_key)
+            .where(Project.id == project_id)
         )
         review_result = await db.execute(review_query)
         review_count = review_result.scalar()
 
         # Get active reviewer count
         active_reviewer_query = select(func.count()).select_from(
-            select(PullRequestReview.reviewer_id)
-            .where(PullRequestReview.project_id == project_id)
+            select(PullRequestReviewAssignment.reviewer)
+            .join(PullRequestReviewAssignment.review_base)
+            .join(Project, Project.project_key == PullRequestReviewBase.project_key)
+            .where(Project.id == project_id)
             .distinct()
             .subquery()
         )
@@ -794,8 +799,9 @@ class ProjectService:
         # Query database
         query = (
             select(func.count())
-            .select_from(PullRequestReview)
-            .where(PullRequestReview.project_id == project_id)
+            .select_from(PullRequestReviewBase)
+            .join(Project, Project.project_key == PullRequestReviewBase.project_key)
+            .where(Project.id == project_id)
         )
         result = await db.execute(query)
         count = result.scalar()
@@ -835,8 +841,10 @@ class ProjectService:
 
         # Query database
         query = select(func.count()).select_from(
-            select(PullRequestReview.reviewer_id)
-            .where(PullRequestReview.project_id == project_id)
+            select(PullRequestReviewAssignment.reviewer)
+            .join(PullRequestReviewAssignment.review_base)
+            .join(Project, Project.project_key == PullRequestReviewBase.project_key)
+            .where(Project.id == project_id)
             .distinct()
             .subquery()
         )
@@ -880,10 +888,10 @@ class ProjectService:
                 Project.id,
                 Project.project_id,
                 Project.project_name,
-                func.count(PullRequestReview.id).label("review_count"),
+                func.count(PullRequestReviewBase.id).label("review_count"),
             )
-            .join(PullRequestReview, Project.id == PullRequestReview.project_id)
-            .where(PullRequestReview.created_date >= date_threshold)
+            .join(PullRequestReviewBase, Project.project_key == PullRequestReviewBase.project_key)
+            .where(PullRequestReviewBase.created_date >= date_threshold)
             .group_by(Project.id)
             .order_by(desc("review_count"))
             .limit(limit)
@@ -931,12 +939,16 @@ class ProjectService:
                 Project.id,
                 Project.project_id,
                 Project.project_name,
-                func.count(func.distinct(PullRequestReview.reviewer_id)).label(
+                func.count(func.distinct(PullRequestReviewAssignment.reviewer)).label(
                     "active_reviewer_count"
                 ),
             )
-            .join(PullRequestReview, Project.id == PullRequestReview.project_id)
-            .where(PullRequestReview.created_date >= date_threshold)
+            .join(PullRequestReviewBase, Project.project_key == PullRequestReviewBase.project_key)
+            .join(
+                PullRequestReviewAssignment,
+                PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
+            )
+            .where(PullRequestReviewBase.created_date >= date_threshold)
             .group_by(Project.id)
             .order_by(desc("active_reviewer_count"))
             .limit(limit)

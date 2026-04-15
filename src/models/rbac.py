@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
 
 from src.core.database import Base
 
@@ -60,10 +61,55 @@ class UserRoleAssignment(Base):
         nullable=True,
         comment="User who granted this role",
     )
+    starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="Start time for role validity (for delegation or scheduled access)",
+    )
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         nullable=True,
         comment="Optional expiration time for temporary permissions",
+    )
+
+    # Delegation fields
+    is_delegated: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Whether this assignment is delegated from another user",
+    )
+    delegator_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="User who delegated this role (NULL if not delegated)",
+    )
+    delegation_status: Mapped[str | None] = mapped_column(
+        Enum("active", "expired", "revoked", "pending", name="delegation_status_enum"),
+        nullable=True,
+        comment="Status of delegation (only for delegated roles)",
+    )
+    delegation_scope: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Specific permissions being delegated (subset of delegator's permissions)",
+    )
+    delegation_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Reason or description for this delegation",
+    )
+    revoked_by: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="User who revoked this delegation",
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="Time when delegation was revoked",
     )
 
     # Timestamps
@@ -79,6 +125,8 @@ class UserRoleAssignment(Base):
     )
     role: Mapped[Role] = relationship("Role", back_populates="user_assignments")
     granter: Mapped[AuthUser | None] = relationship("AuthUser", foreign_keys=[granted_by])
+    delegator: Mapped[AuthUser | None] = relationship("AuthUser", foreign_keys=[delegator_id])
+    revoker: Mapped[AuthUser | None] = relationship("AuthUser", foreign_keys=[revoked_by])
 
     # Constraints
     __table_args__ = (
@@ -106,6 +154,14 @@ class UserRoleAssignment(Base):
             "resource_type": self.resource_type,
             "resource_id": self.resource_id,
             "granted_by": self.granted_by,
+            "starts_at": self.starts_at.isoformat() if self.starts_at else None,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "is_delegated": self.is_delegated,
+            "delegator_id": self.delegator_id,
+            "delegation_status": self.delegation_status,
+            "delegation_scope": self.delegation_scope,
+            "delegation_reason": self.delegation_reason,
+            "revoked_by": self.revoked_by,
+            "revoked_at": self.revoked_at.isoformat() if self.revoked_at else None,
             "created_at": self.created_at.isoformat(),
         }

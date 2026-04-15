@@ -116,16 +116,87 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- Role Management Dialog -->
+    <el-dialog v-model="showRoleDialog" title="Manage User Roles" width="700px">
+      <div v-if="selectedUser">
+        <h4>User: {{ selectedUser.username }}</h4>
+        
+        <!-- Current Roles -->
+        <h5 style="margin-top: 16px;">Current Roles:</h5>
+        <el-table :data="currentRoles" size="small" border>
+          <el-table-column prop="role_name" label="Role" width="150" />
+          <el-table-column prop="resource_type" label="Scope" width="120" />
+          <el-table-column prop="resource_id" label="Resource" min-width="150">
+            <template #default="{ row }">
+              {{ row.resource_id || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="Actions" width="100">
+            <template #default="{ row }">
+              <el-button 
+                size="small" 
+                type="danger" 
+                @click="revokeRole(row)"
+              >
+                Revoke
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        
+        <!-- Assign New Role -->
+        <h5 style="margin-top: 24px;">Assign New Role:</h5>
+        <el-form :model="roleForm" label-width="120px">
+          <el-form-item label="Role">
+            <el-select v-model="roleForm.role_id" placeholder="Select role" style="width: 100%">
+              <el-option 
+                v-for="role in availableRoles" 
+                :key="role.id"
+                :label="`${role.name} - ${role.description}`"
+                :value="role.id"
+              />
+            </el-select>
+          </el-form-item>
+          
+          <el-form-item label="Scope">
+            <el-radio-group v-model="roleForm.resource_type">
+              <el-radio label="global">Global</el-radio>
+              <el-radio label="project">Project</el-radio>
+              <el-radio label="repository">Repository</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          
+          <el-form-item 
+            v-if="roleForm.resource_type !== 'global'" 
+            label="Resource ID"
+          >
+            <el-input 
+              v-model="roleForm.resource_id" 
+              :placeholder="roleForm.resource_type === 'project' ? 'Project Key (e.g., PROJ)' : 'Repository Slug (e.g., my-repo)'"
+            />
+          </el-form-item>
+          
+          <el-form-item>
+            <el-button type="primary" @click="assignRole">
+              Assign Role
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
+import { rbacApi } from '@/api/rbac'
+import type { ResourceType, Role, RoleAssignment } from '@/types'
 
 const { t } = useI18n()
 const loading = ref(false)
@@ -138,6 +209,17 @@ const searchQuery = ref('')
 const statusFilter = ref<boolean | null>(null)
 const showCreateDialog = ref(false)
 const createFormRef = ref<FormInstance>()
+
+// Role management state
+const showRoleDialog = ref(false)
+const selectedUser = ref<any>(null)
+const currentRoles = ref<RoleAssignment[]>([])
+const availableRoles = ref<Role[]>([])
+const roleForm = reactive({
+  role_id: null as number | null,
+  resource_type: 'global',
+  resource_id: '',
+})
 
 const createForm = reactive({
   username: '',
@@ -247,10 +329,91 @@ const toggleUserStatus = async (user: any) => {
   }
 }
 
-const viewRoles = (user: any) => {
-  // TODO: Navigate to user roles page or open dialog
-  ElMessage.info(`Viewing roles for user: ${user.username}`)
+const viewRoles = async (user: any) => {
+  selectedUser.value = user
+  showRoleDialog.value = true
+  
+  try {
+    // Load current roles
+    currentRoles.value = await rbacApi.getUserRoles(user.id)
+    
+    // Load available roles
+    availableRoles.value = await rbacApi.getRoles()
+  } catch (error) {
+    ElMessage.error('Failed to load role information')
+  }
 }
+
+const assignRole = async () => {
+  if (!selectedUser.value || !roleForm.role_id) {
+    ElMessage.warning('Please select a role')
+    return
+  }
+  
+  try {
+    await rbacApi.assignRole(selectedUser.value.id, {
+      role_id: roleForm.role_id,
+      resource_type: roleForm.resource_type as ResourceType,
+      resource_id: roleForm.resource_id || null,
+    })
+    
+    ElMessage.success('Role assigned successfully')
+    
+    // Reload current roles
+    currentRoles.value = await rbacApi.getUserRoles(selectedUser.value.id)
+    
+    // Reset form
+    roleForm.role_id = null
+    roleForm.resource_type = 'global'
+    roleForm.resource_id = ''
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail || 'Failed to assign role')
+  }
+}
+
+const revokeRole = async (assignment: RoleAssignment) => {
+  if (!selectedUser.value) return
+  
+  try {
+    await ElMessageBox.confirm(
+      `Are you sure you want to revoke the "${assignment.role_name}" role?`,
+      'Confirm Revocation',
+      { 
+        type: 'warning',
+        confirmButtonText: 'Revoke',
+        cancelButtonText: 'Cancel',
+      }
+    )
+    
+    await rbacApi.revokeRole(
+      selectedUser.value.id,
+      assignment.role_id,
+      assignment.resource_type,
+      assignment.resource_id
+    )
+    
+    ElMessage.success('Role revoked successfully')
+    
+    // Reload current roles
+    currentRoles.value = await rbacApi.getUserRoles(selectedUser.value.id)
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.detail || 'Failed to revoke role')
+    }
+  }
+}
+
+// Reset form when dialog closes
+watch(showRoleDialog, (visible) => {
+  if (!visible) {
+    selectedUser.value = null
+    currentRoles.value = []
+    availableRoles.value = []
+    roleForm.role_id = null
+    roleForm.resource_type = 'global'
+    roleForm.resource_id = ''
+  }
+})
 
 onMounted(() => {
   loadUsers()

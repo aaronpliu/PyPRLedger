@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import autoTable, { UserOptions } from 'jspdf-autotable'
 import type { Review } from '@/api/reviews'
 import dayjs from 'dayjs'
 
@@ -50,46 +50,58 @@ export function exportReviewsToPDF(
   yPos += 15
 
   // Prepare table data
-  const headers = includeHeaders ? [['ID', 'PR ID', 'Reviewer', 'Status', 'Summary', 'Created']] : []
+  const headers = includeHeaders ? [['Seq#', 'PR ID', 'Project/Repo', 'PR User', 'Reviewer', 'PR Status', 'Scores', 'Comments', 'Created', 'Updated']] : []
   
-  const data = reviews.map(review => [
-    review.id.toString(),
-    truncateText(review.pull_request_id, 30),
+  const data = reviews.map((review, index) => [
+    (index + 1).toString(),
+    review.pull_request_id,
+    `${review.project_key} / ${review.repository_slug}`,
+    review.pull_request_user_info?.display_name || review.pull_request_user,
     review.reviewer_info?.display_name || review.reviewer,
     review.pull_request_status,
-    truncateText(review.reviewer_comments || '-', 40),
+    review.score_summary && review.score_summary.total_scores > 0
+      ? `${review.score_summary.average_score?.toFixed(1)} (${review.score_summary.total_scores})`
+      : 'No scores',
+    review.reviewer_comments || '-',
     dayjs(review.created_date).format('YYYY-MM-DD HH:mm'),
+    dayjs(review.updated_date).format('YYYY-MM-DD HH:mm'),
   ])
 
   // Add table
-  ;(doc as any).autoTable({
+  autoTable(doc, {
     startY: yPos,
     head: headers,
     body: data,
     theme: 'grid',
     styles: {
-      fontSize: 8,
-      cellPadding: 3,
+      fontSize: 7,
+      cellPadding: 2,
       overflow: 'linebreak',
+      cellWidth: 'wrap',
     },
     headStyles: {
       fillColor: [64, 158, 255], // #409eff
       textColor: 255,
       fontStyle: 'bold',
       halign: 'center',
+      fontSize: 7,
     },
     alternateRowStyles: {
       fillColor: [245, 247, 250], // #f5f7fa
     },
     columnStyles: {
-      0: { cellWidth: 15, halign: 'center' }, // ID
-      1: { cellWidth: 60 }, // PR URL
-      2: { cellWidth: 30 }, // Reviewer
-      3: { cellWidth: 25, halign: 'center' }, // Status
-      4: { cellWidth: 50 }, // Summary
-      5: { cellWidth: 35 }, // Created
+      0: { cellWidth: 12, halign: 'center' }, // Seq#
+      1: { cellWidth: 35 }, // PR ID
+      2: { cellWidth: 35 }, // Project/Repo
+      3: { cellWidth: 25 }, // PR User
+      4: { cellWidth: 25 }, // Reviewer
+      5: { cellWidth: 18, halign: 'center' }, // Status
+      6: { cellWidth: 20, halign: 'center' }, // Scores
+      7: { cellWidth: 'auto' }, // Comments - auto width for full content
+      8: { cellWidth: 28 }, // Created
+      9: { cellWidth: 28 }, // Updated
     },
-    didDrawPage: (data: any) => {
+    didDrawPage: (data) => {
       // Add footer
       doc.setFontSize(8)
       doc.setTextColor(128, 128, 128)
@@ -103,7 +115,7 @@ export function exportReviewsToPDF(
   })
 
   // Add summary section on last page
-  const finalY = (doc as any).lastAutoTable.finalY || yPos
+  const finalY = (doc as any).lastAutoTable?.finalY || yPos
   if (finalY < pageHeight - 40) {
     doc.setFontSize(12)
     doc.setTextColor(64, 158, 255)
@@ -172,7 +184,7 @@ export function exportScoresToPDF(
     dayjs(score.created_at).format('YYYY-MM-DD'),
   ])
 
-  ;(doc as any).autoTable({
+  autoTable(doc, {
     startY: 35,
     head: headers,
     body: data,

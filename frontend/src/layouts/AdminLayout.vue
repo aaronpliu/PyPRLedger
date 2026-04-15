@@ -20,9 +20,17 @@
           <el-icon><Lock /></el-icon>
           <span>Roles</span>
         </el-menu-item>
+        <el-menu-item index="/admin/delegations">
+          <el-icon><Share /></el-icon>
+          <span>Delegations</span>
+        </el-menu-item>
         <el-menu-item index="/admin/audit">
           <el-icon><Document /></el-icon>
           <span>Audit Logs</span>
+        </el-menu-item>
+        <el-menu-item index="/admin/sessions">
+          <el-icon><Monitor /></el-icon>
+          <span>Sessions</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
@@ -65,7 +73,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { User, Lock, Document, ArrowDown } from '@element-plus/icons-vue'
+import { User, Lock, Share, Document, Monitor, ArrowDown } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import NotificationBell from '@/components/common/NotificationBell.vue'

@@ -45,7 +45,12 @@
     "last_login": "Last Login",
     "status": "Status",
     "active": "Active",
-    "inactive": "Inactive"
+    "inactive": "Inactive",
+    "role_delegations": "Role Delegations",
+    "received": "Received",
+    "sent": "Sent",
+    "delegation_revoked": "Delegation revoked successfully",
+    "revoke_failed": "Failed to revoke delegation"
   },
   "dashboard": {
     "welcome": "Welcome to PR Ledger",

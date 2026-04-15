@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -15,6 +16,7 @@ from src.schemas.audit import (
     AuditStatsResponse,
 )
 from src.services.audit_service import AuditService
+from src.services.rbac_service import RBACService
 
 
 router = APIRouter(prefix="/audit")
@@ -45,10 +47,6 @@ async def list_audit_logs(
     offset: int = Query(0, ge=0, description="Pagination offset"),
 ) -> dict:
     """Query audit logs with filters (requires audit_logs:read permission)"""
-    from datetime import datetime
-
-    from src.services.rbac_service import RBACService
-
     # Check permission
     rbac_service = RBACService(audit_service.db)
     await rbac_service.require_permission(current_user.id, "read", "audit_logs")
@@ -124,8 +122,6 @@ async def get_audit_log(
     audit_service: Annotated[AuditService, Depends(get_audit_service)],
 ) -> AuditLogResponse:
     """Get specific audit log entry (requires audit_logs:read permission)"""
-    from src.services.rbac_service import RBACService
-
     # Check permission
     rbac_service = RBACService(audit_service.db)
     await rbac_service.require_permission(current_user.id, "read", "audit_logs")
@@ -172,10 +168,6 @@ async def export_audit_logs(
     format: str = Query("csv", pattern="^(csv|json)$", description="Export format"),
 ) -> Response:
     """Export audit logs (requires audit_logs:export permission)"""
-    from datetime import datetime
-
-    from src.services.rbac_service import RBACService
-
     # Check permission
     rbac_service = RBACService(audit_service.db)
     await rbac_service.require_permission(current_user.id, "export", "audit_logs")
@@ -237,8 +229,6 @@ async def get_audit_stats(
     days: int = Query(30, ge=1, le=365, description="Number of days to calculate stats"),
 ) -> AuditStatsResponse:
     """Get audit statistics (requires audit_logs:read permission)"""
-    from src.services.rbac_service import RBACService
-
     # Check permission
     rbac_service = RBACService(audit_service.db)
     await rbac_service.require_permission(current_user.id, "read", "audit_logs")

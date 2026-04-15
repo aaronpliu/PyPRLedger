@@ -1,11 +1,12 @@
 import logging
 import traceback
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.core.database import get_db_session
 from src.core.exceptions import (
@@ -14,7 +15,12 @@ from src.core.exceptions import (
     ReviewStatusException,
     UserNotFoundException,
 )
+from src.core.permissions import get_current_user_with_token
+from src.models.auth_user import AuthUser
+from src.models.pull_request import PullRequestReviewAssignment, PullRequestReviewBase
+from src.models.user import User
 from src.schemas.pull_request import (
+    ReviewAssignmentRequest,
     ReviewCreate,
     ReviewFilter,
     ReviewListResponse,
@@ -25,6 +31,8 @@ from src.schemas.pull_request import (
     ReviewStats,
     ReviewUpdate,
 )
+from src.services.audit_service import AuditService
+from src.services.rbac_service import RBACService
 from src.services.review_score_service import ReviewScoreService
 from src.services.review_service import ReviewService
 from src.utils.metrics import OperationTimer, metrics
@@ -47,7 +55,7 @@ def get_score_service() -> ReviewScoreService:
     return ReviewScoreService(metrics_collector=metrics)
 
 
-@router.post("", response_model=ReviewResponse)
+@router.post("", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
 async def upsert_review(
     review_data: ReviewCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -80,7 +88,6 @@ async def upsert_review(
             metrics.increment_pull_request(
                 project=review.project_key, status=review.pull_request_status
             )
-            status_code = status.HTTP_201_CREATED if is_created else status.HTTP_200_OK
             # Handle both ORM object and Pydantic model
             if hasattr(review, "to_dict"):
                 # ORM object (PullRequestReview) - to_dict already converts datetime to ISO format
@@ -92,7 +99,9 @@ async def upsert_review(
                 # Fallback to dict() method
                 review_data_dict = dict(review)
 
-            return JSONResponse(status_code=status_code, content=review_data_dict)
+            # Note: FastAPI will automatically set status code based on is_created flag
+            # For now, we always return 201 Created as declared in the decorator
+            return ReviewResponse(**review_data_dict)
         except (ProjectNotFoundException, UserNotFoundException) as e:
             metrics.increment_error(error_type=e.code, endpoint="POST /api/v1/reviews")
             raise HTTPException(
@@ -100,8 +109,6 @@ async def upsert_review(
                 detail={"error": e.code, "message": e.message, "detail": e.detail},
             )
         except Exception as e:
-            import traceback
-
             error_traceback = traceback.format_exc()
             logger.error(f"Failed to upsert review: {str(e)}\n{error_traceback}")
             metrics.increment_error(
@@ -117,6 +124,7 @@ async def upsert_review(
 async def list_reviews(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     pull_request_id: str | None = Query(None, description="Filter by pull request ID"),
     project_key: str | None = Query(
         None, min_length=1, max_length=32, description="Filter by project key"
@@ -150,6 +158,10 @@ async def list_reviews(
     """
     List pull request reviews with filtering and pagination
 
+    Access Control:
+    - review_admin: Can view ALL reviews
+    - reviewer: Can only view reviews where reviewer field matches their username
+
     Response includes full entity information for project, repository, and users,
     plus the virtual app_name field resolved from project registry.
 
@@ -170,11 +182,21 @@ async def list_reviews(
         page_size: Number of items per page
         db: Database session
         review_service: Review service instance
+        current_user: Authenticated user
 
     Returns:
         ReviewListResponse: List of reviews with full entity information, app_name, and pagination info
     """
     try:
+        rbac_service = RBACService(db)
+
+        # Check if user has review_admin role (by checking 'assign' permission)
+        is_review_admin = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="assign",
+            resource_type="reviews",
+        )
+
         filters = ReviewFilter(
             pull_request_id=pull_request_id,
             project_key=project_key,
@@ -188,6 +210,23 @@ async def list_reviews(
             date_from=date_from,
             date_to=date_to,
         )
+
+        # Apply role-based filtering
+        if not is_review_admin:
+            # Regular user - filter by their bitbucket username
+            git_username = await _get_git_username(current_user.id, db)
+
+            if git_username:
+                filters.visible_to_username = git_username
+                logger.info(
+                    f"Regular user {current_user.username} filtered by visible_to={git_username}"
+                )
+            else:
+                # No linked bitbucket user - return empty list
+                logger.warning(f"User {current_user.username} has no linked Bitbucket account")
+                return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
+        else:
+            logger.info(f"Review admin {current_user.username} accessing all reviews")
 
         # Parse app_names from comma-separated string
         app_names_list = None
@@ -259,6 +298,8 @@ async def get_review(
     pull_request_id: Annotated[str, Path(description="Pull request ID")],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
+    reviewer: str | None = Query(None, description="Filter by reviewer username"),
+    source_filename: str | None = Query(None, description="Filter by source filename"),
 ) -> ReviewListResponse:
     """
     Get all pull request reviews by composite business key.
@@ -283,6 +324,8 @@ async def get_review(
             project_key=project_key,
             repository_slug=repository_slug,
             pull_request_id=pull_request_id,
+            reviewer=reviewer,
+            source_filename=source_filename,
             db=db,
         )
 
@@ -326,8 +369,6 @@ async def get_review(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-
         error_traceback = traceback.format_exc()
         logger.error(f"Failed to get review {pull_request_id}: {str(e)}\n{error_traceback}")
         metrics.increment_error(
@@ -475,9 +516,15 @@ async def delete_review(
     pull_request_id: Annotated[str, Path(description="Pull request ID")],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> None:
     """
-    Delete a pull request review using composite business key
+    Delete a pull request review using composite business key (soft delete)
+
+    ## Access Control
+
+    Requires 'delete' permission on 'reviews' resource.
+    Typically granted to 'review_admin' role and above.
 
     Args:
         project_key: The project key
@@ -485,14 +532,34 @@ async def delete_review(
         pull_request_id: The pull request ID
         db: Database session
         review_service: Review service instance
+        current_user: Authenticated user (must have delete permission)
 
     Returns:
         None: Successful deletion returns 204 No Content
 
     Raises:
+        HTTPException: 403 Forbidden if user lacks permission
         ReviewNotFoundException: If the review doesn't exist
     """
     try:
+        # Check if user has permission to delete reviews
+        rbac_service = RBACService(db)
+
+        has_permission = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="delete",
+            resource_type="reviews",
+        )
+
+        if not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "FORBIDDEN",
+                    "message": "You do not have permission to delete reviews. Requires 'review_admin' role or higher.",
+                },
+            )
+
         # Use composite key for precise cache operations
         deleted = await review_service.delete_review(
             pull_request_id=pull_request_id,
@@ -546,8 +613,6 @@ async def get_reviews_by_project(
     Returns:
         ReviewListResponse: List of reviews with pagination info
     """
-    import traceback
-
     try:
         reviews, total = await review_service.get_reviews_by_project(
             project_key, db, page, page_size
@@ -753,6 +818,7 @@ async def upsert_score(
     score_data: ReviewScoreCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     score_service: Annotated[ReviewScoreService, Depends(get_score_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> ReviewScoreResponse:
     """
     Create or update a pull request review score
@@ -786,6 +852,11 @@ async def upsert_score(
     - 9.0: "Good suggestion"
     - 10.0: "Must apply change"
 
+    ## Access Control
+
+    Requires 'create' or 'update' permission on 'scores' resource.
+    Typically granted to 'reviewer' role and above.
+
     Args:
         score_data: The score upsert payload containing:
             - pull_request_id: PR identifier
@@ -799,6 +870,7 @@ async def upsert_score(
             - reviewer_comments: Optional detailed feedback
         db: Database session
         score_service: Review score service instance
+        current_user: Authenticated user
 
     Returns:
         ReviewScoreResponse: The created/updated score with enriched information including:
@@ -808,15 +880,96 @@ async def upsert_score(
             - updated_date: When the score was last updated
 
     Raises:
+        HTTPException: 403 Forbidden if user lacks permission
         HTTPException: 200 OK on success
     """
     try:
-        score = await score_service.upsert_score(score_data, db, include_details=True)
+        # Check if user has permission to create/update scores
+        rbac_service = RBACService(db)
+
+        has_permission = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="create",
+            resource_type="scores",
+        )
+
+        if not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "FORBIDDEN",
+                    "message": "You do not have permission to submit scores. Requires 'reviewer' role or higher.",
+                },
+            )
+
+        git_username = await _get_git_username(current_user.id, db)
+        if not git_username:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "FORBIDDEN",
+                    "message": "You do not have a linked Bitbucket account and cannot submit scores.",
+                },
+            )
+
+        if score_data.reviewer != git_username:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "FORBIDDEN",
+                    "message": "You can only submit scores using your linked Bitbucket username.",
+                },
+            )
+
+        review_service = ReviewService()
+        review_base = await review_service.get_review_base_by_target(
+            db,
+            pull_request_id=score_data.pull_request_id,
+            pull_request_commit_id=score_data.pull_request_commit_id,
+            project_key=score_data.project_key,
+            repository_slug=score_data.repository_slug,
+            source_filename=score_data.source_filename,
+        )
+        if not review_base:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": "Review not found for the specified target.",
+                },
+            )
+
+        is_assigned = await review_service.is_user_assigned_to_review(
+            db,
+            pull_request_id=score_data.pull_request_id,
+            pull_request_commit_id=score_data.pull_request_commit_id,
+            project_key=score_data.project_key,
+            repository_slug=score_data.repository_slug,
+            source_filename=score_data.source_filename,
+            reviewer=git_username,
+        )
+        if not is_assigned:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "FORBIDDEN",
+                    "message": "You can only score reviews explicitly assigned to you.",
+                },
+            )
+
+        score = await score_service.upsert_score(
+            score_data,
+            db,
+            review_base_id=review_base.id,
+            include_details=True,
+        )
 
         # Return the Pydantic model directly - FastAPI will serialize it according to response_model
         # Note: Using fixed 200 OK status code as per response_model declaration
         return score
 
+    except HTTPException:
+        raise
     except Exception as e:
         error_traceback = traceback.format_exc()
         logger.error(f"Failed to upsert score: {str(e)}\n{error_traceback}")
@@ -1022,12 +1175,16 @@ async def delete_score(
     ),
     db: Annotated[AsyncSession, Depends(get_db_session)] = None,
     score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)] = None,
 ) -> None:
     """
     Soft delete a reviewer's score for a review target (mark as inactive)
 
-    The reviewer parameter acts as the current user (no auth system yet).
-    Only the score owner can delete their own score.
+    ## Access Control
+
+    Requires 'delete' permission on 'scores' resource.
+    Typically granted to 'review_admin' role and above.
+    Regular reviewers can only delete their own scores (checked in service layer).
 
     Args:
         reviewer: Reviewer username (acts as current user)
@@ -1037,14 +1194,53 @@ async def delete_score(
         source_filename: Optional filename (omit or null for PR-level)
         db: Database session
         score_service: Review score service instance
+        current_user: Authenticated user
 
     Returns:
         None: Successful deletion returns 204 No Content
 
     Raises:
+        HTTPException: 403 Forbidden if user lacks permission
         HTTPException: 404 if score not found or already deleted
     """
     try:
+        # Check if user has permission to delete scores
+        rbac_service = RBACService(db)
+
+        has_delete_permission = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="delete",
+            resource_type="scores",
+        )
+
+        # If user doesn't have delete permission, check if they're deleting their own score
+        if not has_delete_permission:
+            # Regular users can only delete their own scores
+            if reviewer != current_user.username:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You can only delete your own scores. Requires 'review_admin' role or higher to delete others' scores.",
+                    },
+                )
+
+            # User is deleting their own score, check if they have create permission (reviewer+)
+            has_create_permission = await rbac_service.check_permission(
+                auth_user_id=current_user.id,
+                action="create",
+                resource_type="scores",
+            )
+
+            if not has_create_permission:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You do not have permission to manage scores. Requires 'reviewer' role or higher.",
+                    },
+                )
+
         # Use reviewer as current_user (no auth system yet)
         deleted = await score_service.delete_score(
             pull_request_id=pull_request_id,
@@ -1084,12 +1280,15 @@ async def batch_delete_scores(
     request_data: dict,
     db: Annotated[AsyncSession, Depends(get_db_session)] = None,
     score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)] = None,
 ) -> dict:
     """
     Batch soft delete multiple scores (mark as inactive)
 
-    The current_user is extracted from the first score's reviewer field
-    (no auth system yet). All scores must belong to the same reviewer.
+    ## Access Control
+
+    Requires 'delete' permission on 'scores' resource.
+    Typically granted to 'review_admin' role and above.
 
     Args:
         request_data: JSON body containing:
@@ -1101,14 +1300,25 @@ async def batch_delete_scores(
                 - reviewer
         db: Database session
         score_service: Review score service instance
+        current_user: Authenticated user
 
     Returns:
         dict: Deletion results with counts
 
     Raises:
+        HTTPException: 403 Forbidden if user lacks permission
         HTTPException: 400 if invalid request, 500 on server error
     """
     try:
+        # Check if user has permission to delete scores
+        rbac_service = RBACService(db)
+
+        has_delete_permission = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="delete",
+            resource_type="scores",
+        )
+
         # Extract scores from request
         scores_to_delete = request_data.get("scores", [])
 
@@ -1118,10 +1328,10 @@ async def batch_delete_scores(
                 detail={"error": "BAD_REQUEST", "message": "No scores provided for deletion"},
             )
 
-        # Extract current_user from first score (all should be same reviewer)
-        current_user = scores_to_delete[0].get("reviewer")
+        # Extract reviewer username from first score (all should be same reviewer)
+        reviewer_username = scores_to_delete[0].get("reviewer")
 
-        if not current_user:
+        if not reviewer_username:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"error": "BAD_REQUEST", "message": "Reviewer field is required"},
@@ -1129,7 +1339,7 @@ async def batch_delete_scores(
 
         # Validate all scores have same reviewer
         for score_info in scores_to_delete:
-            if score_info.get("reviewer") != current_user:
+            if score_info.get("reviewer") != reviewer_username:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={
@@ -1138,11 +1348,39 @@ async def batch_delete_scores(
                     },
                 )
 
+        # If user doesn't have delete permission, check if they're deleting their own scores
+        if not has_delete_permission:
+            # Regular users can only delete their own scores
+            if reviewer_username != current_user.username:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You can only delete your own scores. Requires 'review_admin' role or higher to delete others' scores.",
+                    },
+                )
+
+            # User is deleting their own scores, check if they have create permission (reviewer+)
+            has_create_permission = await rbac_service.check_permission(
+                auth_user_id=current_user.id,
+                action="create",
+                resource_type="scores",
+            )
+
+            if not has_create_permission:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You do not have permission to manage scores. Requires 'reviewer' role or higher.",
+                    },
+                )
+
         # Perform batch deletion
         result = await score_service.delete_scores_batch(
             scores_to_delete=scores_to_delete,
             db=db,
-            current_user=current_user,
+            current_user=reviewer_username,
         )
 
         return {
@@ -1163,3 +1401,213 @@ async def batch_delete_scores(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to batch delete scores"},
         )
+
+
+@router.post("/assign", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
+async def assign_review_task(
+    assignment_data: ReviewAssignmentRequest,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+) -> ReviewResponse:
+    """
+    Assign a review task to a reviewer (requires review_admin role)
+
+    Creates a new review record with the specified reviewer.
+    Only users with 'assign' permission on 'reviews' can use this endpoint.
+
+    Args:
+        assignment_data: Assignment details
+        db: Database session
+        current_user: Authenticated user (must be review_admin)
+        review_service: Review service instance
+
+    Returns:
+        ReviewResponse: The created review
+
+    Raises:
+        ForbiddenException: If user lacks assign permission
+        NotFoundException: If assignee not found
+        HTTPException: 400 if assignee is not a reviewer
+    """
+    # Check permission - must have 'assign' permission (review_admin)
+    rbac_service = RBACService(db)
+    await rbac_service.require_permission(
+        auth_user_id=current_user.id,
+        action="assign",
+        resource_type="reviews",
+    )
+
+    # Verify assignee exists
+    stmt = select(User).where(User.username == assignment_data.assignee_username)
+    result = await db.execute(stmt)
+    assignee = result.scalar_one_or_none()
+
+    if not assignee:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Reviewer '{assignment_data.assignee_username}' not found",
+        )
+
+    # Verify assignee is a reviewer
+    if not assignee.is_reviewer:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User '{assignment_data.assignee_username}' is not marked as a reviewer",
+        )
+
+    # Check if review already exists (with NULL reviewer or matching commit)
+
+    # First, try to find existing review with NULL reviewer for this PR
+
+    stmt = (
+        select(PullRequestReviewBase)
+        .options(selectinload(PullRequestReviewBase.assignments))
+        .where(
+            PullRequestReviewBase.pull_request_id == assignment_data.pull_request_id,
+            PullRequestReviewBase.project_key == assignment_data.project_key,
+            PullRequestReviewBase.repository_slug == assignment_data.repository_slug,
+        )
+    )
+    result = await db.execute(stmt)
+    existing_review = next(
+        (
+            review_base
+            for review_base in result.scalars().unique().all()
+            if not review_base.assignments
+        ),
+        None,
+    )
+
+    if existing_review:
+        existing_review.pull_request_user = assignment_data.pull_request_user
+        existing_review.updated_date = datetime.now(UTC)
+
+        if assignment_data.pull_request_commit_id:
+            existing_review.pull_request_commit_id = assignment_data.pull_request_commit_id
+        if assignment_data.git_code_diff:
+            existing_review.git_code_diff = assignment_data.git_code_diff
+        if assignment_data.ai_suggestions:
+            existing_review.ai_suggestions = assignment_data.ai_suggestions
+
+        assignment = PullRequestReviewAssignment(
+            review_base_id=existing_review.id,
+            reviewer=assignment_data.assignee_username,
+            assigned_by=current_user.username,
+            assigned_date=datetime.now(UTC),
+            assignment_status="assigned",
+            reviewer_comments=assignment_data.reviewer_comments,
+        )
+        db.add(assignment)
+
+        await db.flush()
+        await db.refresh(assignment)
+
+        review = assignment.to_full_dict()
+        logger.info(
+            f"Updated existing review assignment: PR {assignment_data.pull_request_id} "
+            f"to {assignment_data.assignee_username} by {current_user.username}"
+        )
+    else:
+        # Create new review with assigned reviewer
+
+        review_data = ReviewCreate(
+            pull_request_id=assignment_data.pull_request_id,
+            project_key=assignment_data.project_key,
+            repository_slug=assignment_data.repository_slug,
+            reviewer=assignment_data.assignee_username,
+            pull_request_user=assignment_data.pull_request_user,
+            source_branch=assignment_data.source_branch,
+            target_branch=assignment_data.target_branch,
+            pull_request_status="open",
+            pull_request_commit_id=assignment_data.pull_request_commit_id,
+            git_code_diff=assignment_data.git_code_diff,
+            ai_suggestions=assignment_data.ai_suggestions,
+            reviewer_comments=assignment_data.reviewer_comments,
+        )
+
+        review_obj, is_created = await review_service.upsert_review(review_data, db)
+
+        # Update assignment tracking fields
+        stmt = (
+            select(PullRequestReviewAssignment)
+            .join(PullRequestReviewAssignment.review_base)
+            .options(selectinload(PullRequestReviewAssignment.review_base))
+            .where(
+                PullRequestReviewBase.pull_request_id == assignment_data.pull_request_id,
+                PullRequestReviewBase.project_key == assignment_data.project_key,
+                PullRequestReviewBase.repository_slug == assignment_data.repository_slug,
+                PullRequestReviewAssignment.reviewer == assignment_data.assignee_username,
+            )
+            .order_by(PullRequestReviewAssignment.id.desc())
+        )
+        result = await db.execute(stmt)
+        assignment = result.scalars().first()
+        if assignment:
+            assignment.assigned_by = current_user.username
+            assignment.assigned_date = datetime.now(UTC)
+            assignment.assignment_status = "assigned"
+            await db.flush()
+
+        review = assignment.to_full_dict() if assignment else review_obj.model_dump(mode="json")
+        logger.info(
+            f"Created new review with assignment: PR {assignment_data.pull_request_id} "
+            f"to {assignment_data.assignee_username} by {current_user.username}"
+        )
+
+    # Log audit trail
+    try:
+        audit_service = AuditService(db)
+        await audit_service.log_action(
+            auth_user_id=current_user.id,
+            action="assign_review",
+            resource_type="reviews",
+            resource_id=f"{assignment_data.project_key}/{assignment_data.repository_slug}/{assignment_data.pull_request_id}",
+            new_values={
+                "assigned_to": assignment_data.assignee_username,
+                "assigned_by": current_user.username,
+            },
+        )
+    except Exception as e:
+        logger.warning(f"Failed to log audit for task assignment: {e}")
+
+    logger.info(
+        f"Review task assigned: PR {assignment_data.pull_request_id} "
+        f"to {assignment_data.assignee_username} by {current_user.username}"
+    )
+
+    # Handle both ORM object and Pydantic model
+    if hasattr(review, "to_dict"):
+        review_data_dict = review.to_dict()
+    elif hasattr(review, "model_dump"):
+        review_data_dict = review.model_dump(mode="json")
+    else:
+        review_data_dict = dict(review)
+
+    return ReviewResponse(**review_data_dict)
+
+
+async def _get_git_username(auth_user_id: int, db: AsyncSession) -> str | None:
+    """Get bitbucket username linked to auth user
+
+    Args:
+        auth_user_id: Auth user ID
+        db: Database session
+
+    Returns:
+        Bitbucket username or None if not linked
+    """
+    # Get auth user
+    stmt = select(AuthUser).where(AuthUser.id == auth_user_id)
+    result = await db.execute(stmt)
+    auth_user = result.scalar_one_or_none()
+
+    if not auth_user or not auth_user.user_id:
+        return None
+
+    # Get linked bitbucket user
+    stmt = select(User).where(User.id == auth_user.user_id)
+    result = await db.execute(stmt)
+    git_user = result.scalar_one_or_none()
+
+    return git_user.username if git_user else None

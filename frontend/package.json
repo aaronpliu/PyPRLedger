@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "preview:test": "vite preview --mode test",
     "preview:prod": "vite preview --mode prod",
+    "type-check": "vue-tsc --noEmit",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
@@ -30,8 +31,10 @@
     "element-plus": "^2.13.6",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
+    "md-editor-v3": "^6.4.2",
     "pinia": "^3.0.4",
     "socket.io-client": "^4.8.3",
+    "ua-parser-js": "^2.0.9",
     "vue": "^3.5.32",
     "vue-echarts": "^8.0.1",
     "vue-i18n": "^11.3.1",

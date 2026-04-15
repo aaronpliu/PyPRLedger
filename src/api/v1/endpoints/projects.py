@@ -1,4 +1,5 @@
 import logging
+import traceback
 from datetime import datetime
 from typing import Annotated
 
@@ -128,8 +129,6 @@ async def list_projects(
             page_size=page_size,
         )
     except Exception as e:
-        import traceback
-
         error_traceback = traceback.format_exc()
         logger.error(f"Failed to list projects: {str(e)}\n{error_traceback}")
         metrics.increment_error(error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/projects")

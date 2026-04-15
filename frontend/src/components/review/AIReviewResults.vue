@@ -107,10 +107,10 @@ const getSeverityColor = (severity: string) => {
   const colors: Record<string, any> = {
     critical: 'danger',
     high: 'warning',
-    medium: '',
+    medium: 'info',
     low: 'success',
   }
-  return colors[severity] || ''
+  return colors[severity] || 'info'
 }
 
 const getCategoryColor = (category: string) => {
@@ -119,9 +119,9 @@ const getCategoryColor = (category: string) => {
     security: 'danger',
     performance: 'warning',
     style: 'info',
-    maintainability: '',
+    maintainability: 'info',
   }
-  return colors[category.toLowerCase()] || ''
+  return colors[category.toLowerCase()] || 'info'
 }
 </script>
 

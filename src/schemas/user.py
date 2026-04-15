@@ -91,7 +91,7 @@ class UserListResponse(BaseModel):
     items: list[UserResponse] = Field(default_factory=list, description="List of users")
     total: int = Field(..., description="Total number of users")
     page: int = Field(default=1, ge=1, description="Current page number")
-    page_size: int = Field(default=20, ge=1, le=100, description="Number of items per page")
+    page_size: int = Field(default=20, ge=1, le=500, description="Number of items per page")
 
     model_config = {
         "from_attributes": True,

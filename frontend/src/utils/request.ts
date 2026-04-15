@@ -1,7 +1,16 @@
 import axios from 'axios'
-import type { AxiosInstance, AxiosResponse } from 'axios'
+import type { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
+import { useAuthStore } from '@/stores/auth'
+
+type RetryableRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean
+}
+
+const AUTH_EXCLUDED_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout']
+let refreshPromise: Promise<string> | null = null
+let lastAuthFailureTimestamp = 0
 
 // Create axios instance
 const request: AxiosInstance = axios.create({
@@ -12,10 +21,83 @@ const request: AxiosInstance = axios.create({
   },
 })
 
+function normalizeStoredToken(value: string | null): string {
+  if (!value || value === 'undefined' || value === 'null') {
+    return ''
+  }
+  return value
+}
+
+function isAuthExcluded(url?: string): boolean {
+  return AUTH_EXCLUDED_PATHS.some((path) => url?.includes(path))
+}
+
+function decodeBase64Url(value: string): string {
+  const normalizedValue = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padding = normalizedValue.length % 4
+  const paddedValue = padding ? normalizedValue.padEnd(normalizedValue.length + (4 - padding), '=') : normalizedValue
+  return atob(paddedValue)
+}
+
+function shouldRefreshAccessToken(token: string): boolean {
+  try {
+    const payload = JSON.parse(decodeBase64Url(token.split('.')[1] || '')) as { exp?: number }
+    if (!payload.exp) {
+      return false
+    }
+    const now = Math.floor(Date.now() / 1000)
+    return payload.exp - now <= 60
+  } catch {
+    return false
+  }
+}
+
+async function redirectToLogin() {
+  const authStore = useAuthStore()
+  authStore.clearAuth()
+
+  const now = Date.now()
+  if (now - lastAuthFailureTimestamp > 5000) {
+    ElMessage.closeAll()
+    ElMessage.error('Your session expired. Please login again.')
+    lastAuthFailureTimestamp = now
+  }
+
+  if (router.currentRoute.value.path !== '/login') {
+    await router.replace('/login')
+  }
+}
+
+async function refreshAccessToken(): Promise<string> {
+  if (!refreshPromise) {
+    const authStore = useAuthStore()
+    refreshPromise = authStore.refreshSession().finally(() => {
+      refreshPromise = null
+    })
+  }
+
+  return refreshPromise
+}
+
 // Request interceptor - add JWT token
 request.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('access_token')
+  async (config) => {
+    if (isAuthExcluded(config.url)) {
+      return config
+    }
+
+    let token = normalizeStoredToken(localStorage.getItem('access_token'))
+    const refreshToken = normalizeStoredToken(localStorage.getItem('refresh_token'))
+
+    if (token && refreshToken && shouldRefreshAccessToken(token)) {
+      try {
+        token = await refreshAccessToken()
+      } catch (error) {
+        await redirectToLogin()
+        return Promise.reject(error)
+      }
+    }
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -31,17 +113,26 @@ request.interceptors.response.use(
   (response: AxiosResponse) => {
     return response.data
   },
-  (error) => {
+  async (error: AxiosError) => {
     const { response } = error
+    const originalRequest = error.config as RetryableRequestConfig | undefined
+    const responseData = response?.data as { detail?: string } | undefined
 
     if (response) {
       switch (response.status) {
         case 401:
-          // Token expired or invalid
-          ElMessage.error('Authentication failed. Please login again.')
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
-          router.push('/login')
+          if (originalRequest && !originalRequest._retry && !isAuthExcluded(originalRequest.url)) {
+            originalRequest._retry = true
+            try {
+              const token = await refreshAccessToken()
+              originalRequest.headers.Authorization = `Bearer ${token}`
+              return request(originalRequest)
+            } catch {
+              await redirectToLogin()
+            }
+          } else if (!isAuthExcluded(originalRequest?.url)) {
+            await redirectToLogin()
+          }
           break
 
         case 403:
@@ -57,7 +148,7 @@ request.interceptors.response.use(
           break
 
         default:
-          ElMessage.error(response.data?.detail || 'An error occurred.')
+          ElMessage.error(responseData?.detail || 'An error occurred.')
       }
     } else {
       ElMessage.error('Network error. Please check your connection.')

@@ -38,6 +38,19 @@ const routes: RouteRecordRaw[] = [
         name: 'ReviewDetail',
         component: () => import('@/views/reviews/ReviewDetailView.vue'),
       },
+      // Task Assignment routes (for review_admin)
+      {
+        path: 'task-assignment',
+        name: 'TaskAssignment',
+        component: () => import('@/views/reviews/TaskAssignmentView.vue'),
+        meta: { requiresAdmin: true },
+      },
+      {
+        path: 'task-assignment/:id',
+        name: 'TaskAssignmentDetail',
+        component: () => import('@/views/reviews/TaskAssignmentDetailView.vue'),
+        meta: { requiresAdmin: true },
+      },
       {
         path: 'profile',
         name: 'Profile',
@@ -73,9 +86,19 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/RoleManagementView.vue'),
       },
       {
+        path: 'delegations',
+        name: 'DelegationManagement',
+        component: () => import('@/views/admin/DelegationManagementView.vue'),
+      },
+      {
         path: 'audit',
         name: 'AuditLogs',
         component: () => import('@/views/admin/AuditLogView.vue'),
+      },
+      {
+        path: 'sessions',
+        name: 'SessionManagement',
+        component: () => import('@/views/admin/SessionManagementView.vue'),
       },
     ],
   },
@@ -99,8 +122,12 @@ const router = createRouter({
 })
 
 // Navigation guard
-router.beforeEach((to, _from) => {
+router.beforeEach(async (to, _from) => {
   const authStore = useAuthStore()
+
+  if (!authStore.isInitialized) {
+    await authStore.initAuth()
+  }
 
   // Check if route requires authentication
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {

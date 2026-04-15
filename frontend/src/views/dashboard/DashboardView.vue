@@ -78,7 +78,7 @@
         </div>
       </template>
       
-      <el-table :data="recentReviews" stripe style="width: 100%">
+      <el-table :data="recentReviews" style="width: 100%">
         <el-table-column label="Seq#" width="80">
           <template #default="{ $index }">
             {{ $index + 1 }}
@@ -109,18 +109,19 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="Status" width="120">
+        <el-table-column label="PR Status" width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.pull_request_status)">
               {{ row.pull_request_status }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Scores" width="100">
+        <el-table-column label="Scores" width="120">
           <template #default="{ row }">
             <div v-if="row.score_summary && row.score_summary.total_scores > 0">
-              <span class="avg-score">{{ row.score_summary.average_score?.toFixed(1) }}</span>
+              <span class="avg-score">{{ row.score_summary.max_score?.toFixed(1) || row.score_summary.average_score?.toFixed(1) }}</span>
               <span class="score-count">({{ row.score_summary.total_scores }})</span>
+              <el-tag v-if="row.score_summary.max_score" size="small" type="warning" style="margin-left: 4px; font-size: 0.7rem;">max</el-tag>
             </div>
             <span v-else class="text-secondary">No scores</span>
           </template>
@@ -194,7 +195,11 @@ const loadDashboardData = async () => {
     
     // Fetch first page to get total count
     const firstPage = await reviewsApi.getReviews({ page: 1, page_size: pageSize })
-    firstPage.items.forEach(r => allReviewers.add(r.reviewer))
+    firstPage.items.forEach(r => {
+      if (r.reviewer) {
+        allReviewers.add(r.reviewer)
+      }
+    })
     
     // Calculate total pages and fetch remaining
     const totalPages = Math.ceil(firstPage.total / pageSize)
@@ -207,7 +212,13 @@ const loadDashboardData = async () => {
       for (let i = 2; i <= pagesToFetch + 1; i++) {
         promises.push(
           reviewsApi.getReviews({ page: i, page_size: pageSize })
-            .then(data => data.items.forEach(r => allReviewers.add(r.reviewer)))
+            .then(data => {
+              data.items.forEach(r => {
+                if (r.reviewer) {
+                  allReviewers.add(r.reviewer)
+                }
+              })
+            })
             .catch(err => console.warn(`Failed to fetch page ${i}:`, err))
         )
       }

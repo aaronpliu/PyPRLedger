@@ -109,7 +109,7 @@
           </el-select>
         </el-form-item>
         
-        <el-form-item label="Status">
+        <el-form-item label="PR Status">
           <el-select v-model="statusFilter" placeholder="All Status" clearable style="width: 150px" @change="loadReviews">
             <el-option label="Open" value="open" />
             <el-option label="Merged" value="merged" />
@@ -133,7 +133,7 @@
           <el-dropdown @command="handleBulkStatusChange">
             <el-button size="small" type="warning">
               <el-icon><Edit /></el-icon>
-              Change Status
+              Change PR Status
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </el-button>
             <template #dropdown>
@@ -157,9 +157,7 @@
         ref="tableRef"
         :data="reviews"
         v-loading="loading"
-        stripe
         style="width: 100%"
-        @row-click="handleRowClick"
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55" fixed="left" />
@@ -209,10 +207,10 @@
         </el-table-column>
         
         <!-- Reviewer -->
-        <el-table-column label="Reviewer" width="150">
+        <el-table-column label="Reviewer" width="200">
           <template #default="{ row }">
             <div>
-              <div>{{ row.reviewer_info?.display_name || row.reviewer }}</div>
+              <div>{{ row.reviewer_info?.display_name || row.reviewer || 'Unassigned' }}</div>
               <div class="text-secondary" style="font-size: 0.8rem;">
                 {{ row.source_filename ? '📄 File-level' : '📋 PR-level' }}
               </div>
@@ -221,7 +219,7 @@
         </el-table-column>
         
         <!-- Status -->
-        <el-table-column prop="pull_request_status" label="Status" width="120">
+        <el-table-column prop="pull_request_status" label="PR Status" width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.pull_request_status)">
               {{ row.pull_request_status }}
@@ -234,8 +232,9 @@
           <template #default="{ row }">
             <div v-if="row.score_summary && row.score_summary.total_scores > 0">
               <div class="score-summary">
-                <span class="avg-score">{{ row.score_summary.average_score?.toFixed(1) }}</span>
+                <span class="avg-score">{{ row.score_summary.max_score?.toFixed(1) || row.score_summary.average_score?.toFixed(1) }}</span>
                 <span class="score-count">({{ row.score_summary.total_scores }})</span>
+                <el-tag v-if="row.score_summary.max_score" size="small" type="warning" style="margin-left: 4px; font-size: 0.7rem;">max</el-tag>
               </div>
             </div>
             <span v-else class="text-secondary">No scores</span>
@@ -259,7 +258,7 @@
         <!-- Actions -->
         <el-table-column label="Actions" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click.stop="viewReview(row.id)">
+            <el-button size="small" type="primary" @click.stop="viewReview(row)">
               View
             </el-button>
           </template>
@@ -345,17 +344,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
 import FilterBuilder from '@/components/common/FilterBuilder.vue'
 import ExportMenu from '@/components/common/ExportMenu.vue'
+import { usePermission } from '@/composables/usePermission'
+import { useReviewNavigationStore } from '@/stores/reviewNavigation'
 
 const router = useRouter()
+const { hasPermission } = usePermission()
+const reviewNavigationStore = useReviewNavigationStore()
+
+// Check if user is review admin
+const isReviewAdmin = computed(() => hasPermission('assign', 'reviews'))
 const loading = ref(false)
 const reviews = ref<Review[]>([])
 const total = ref(0)
@@ -383,13 +390,17 @@ const progressMessage = ref('')
 const processedCount = ref(0)
 const totalCount = ref(0)
 
+// Task assignment state - REMOVED: Use Task Assignment page instead
+// const reviewers = ref<any[]>([])
+// const batchReviewerUsername = ref('')
+
 // Filter fields configuration
 const filterFields = [
   { label: 'PR ID', value: 'pull_request_id' },
   { label: 'PR User', value: 'pull_request_user' },
   { label: 'Project Key', value: 'project_key' },
   { label: 'Reviewer', value: 'reviewer' },
-  { label: 'Status', value: 'pull_request_status' },
+  { label: 'PR Status', value: 'pull_request_status' },
   { label: 'Created Date', value: 'created_date' },
   { label: 'Updated Date', value: 'updated_date' },
   { label: 'Summary', value: 'reviewer_comments' },
@@ -541,12 +552,29 @@ const applyFilters = () => {
   total.value = result.length
 }
 
-const viewReview = (id: number) => {
-  router.push(`/reviews/${id}`)
-}
+const viewReview = (review: Review) => {
+  reviewNavigationStore.setItems(
+    reviews.value.map(item => ({
+      id: item.id,
+      projectKey: item.project_key,
+      repositorySlug: item.repository_slug,
+      pullRequestId: item.pull_request_id,
+      reviewer: item.reviewer || '',
+      sourceFilename: item.source_filename || '',
+    }))
+  )
 
-const handleRowClick = (row: Review) => {
-  viewReview(row.id)
+  router.push({
+    name: 'ReviewDetail',
+    params: { id: review.id },
+    query: {
+      projectKey: review.project_key,
+      repositorySlug: review.repository_slug,
+      pullRequestId: review.pull_request_id,
+      reviewer: review.reviewer || '',
+      sourceFilename: review.source_filename || '',
+    },
+  })
 }
 
 const confirmDelete = async (review: Review) => {
@@ -561,7 +589,11 @@ const confirmDelete = async (review: Review) => {
       }
     )
     
-    await reviewsApi.deleteReview(review.id)
+    await reviewsApi.deleteReview(
+      review.project_key,
+      review.repository_slug,
+      review.pull_request_id
+    )
     ElMessage.success('Review deleted successfully')
     loadReviews()
   } catch (error) {
@@ -625,12 +657,16 @@ const executeBulkDelete = async () => {
   
   try {
     for (let i = 0; i < idsToDelete.length; i++) {
-      const id = idsToDelete[i]
+      const review = selectedReviews.value[i]
       try {
-        await reviewsApi.deleteReview(id)
+        await reviewsApi.deleteReview(
+          review.project_key,
+          review.repository_slug,
+          review.pull_request_id
+        )
         successCount++
       } catch (error) {
-        console.error(`Failed to delete review ${id}:`, error)
+        console.error(`Failed to delete review ${review.id}:`, error)
         failCount++
       }
       
@@ -719,6 +755,7 @@ const closeProgressDialog = () => {
   showProgressDialog.value = false
 }
 
+// Load reviews when component mounts
 onMounted(() => {
   loadReviews()
 })
@@ -770,6 +807,11 @@ onMounted(() => {
   animation: slideDown 0.3s ease;
 }
 
+[data-theme="dark"] .bulk-actions-toolbar {
+  background: #1e293b;
+  border: 1px solid #334155;
+}
+
 @keyframes slideDown {
   from {
     opacity: 0;
@@ -801,6 +843,11 @@ onMounted(() => {
   border-radius: 4px;
   padding: 12px;
   background: #f5f7fa;
+}
+
+[data-theme="dark"] .delete-preview {
+  background: #1e293b;
+  border-color: #334155;
 }
 
 .preview-item {
@@ -957,5 +1004,105 @@ onMounted(() => {
 
 .banner-badge {
   flex-shrink: 0;
+}
+
+/* Dark theme fixes - ensure consistency across all components */
+html.dark {
+  /* Table */
+  --el-table-tr-bg-color: #0f172a;
+  --el-table-header-bg-color: #1e293b;
+  --el-table-row-hover-bg-color: #334155;
+  
+  /* Input and Select controls - match table body, not header */
+  --el-fill-color-blank: #0f172a;
+  --el-bg-color: #0f172a;
+  --el-bg-color-overlay: #1e293b;
+  --el-border-color: #334155;
+  --el-text-color-primary: #e2e8f0;
+  --el-text-color-regular: #cbd5e1;
+}
+
+html.dark .el-table--striped .el-table__body tr.el-table__row--striped td {
+  background-color: var(--el-table-striped-tr-bg-color) !important;
+}
+
+html.dark .el-table--striped .el-table__body tr.el-table__row--striped:hover td {
+  background-color: var(--el-table-row-hover-bg-color) !important;
+}
+
+html.dark .el-select-dropdown {
+  background-color: var(--el-bg-color-overlay) !important;
+  border-color: var(--el-border-color) !important;
+}
+
+html.dark .el-select-dropdown__item {
+  color: var(--el-text-color-primary) !important;
+}
+
+html.dark .el-select-dropdown__item.hover,
+html.dark .el-select-dropdown__item:hover {
+  background-color: var(--el-fill-color-light) !important;
+}
+
+html.dark .el-input__wrapper {
+  background-color: var(--el-fill-color-blank) !important;
+  box-shadow: 0 0 0 1px var(--el-border-color) inset !important;
+}
+
+html.dark .el-input__inner {
+  color: var(--el-text-color-primary) !important;
+}
+
+html.dark .el-input__placeholder {
+  color: #64748b !important;
+}
+
+/* Align all form controls background color */
+html.dark .el-select .el-input__wrapper {
+  background-color: #0f172a !important;
+}
+
+html.dark .el-form-item__label {
+  color: #cbd5e1 !important;
+}
+
+html.dark .el-checkbox__inner {
+  background-color: #0f172a !important;
+  border-color: #334155 !important;
+}
+
+html.dark .el-checkbox__input.is-checked .el-checkbox__inner {
+  background-color: #409eff !important;
+  border-color: #409eff !important;
+}
+
+html.dark .el-tag {
+  --el-tag-bg-color: rgba(64, 158, 255, 0.1);
+  --el-tag-border-color: rgba(64, 158, 255, 0.3);
+  --el-tag-text-color: #60a5fa;
+}
+
+html.dark .el-tag--warning {
+  --el-tag-bg-color: rgba(230, 162, 60, 0.1);
+  --el-tag-border-color: rgba(230, 162, 60, 0.3);
+  --el-tag-text-color: #fbbf24;
+}
+
+html.dark .el-tag--success {
+  --el-tag-bg-color: rgba(103, 194, 58, 0.1);
+  --el-tag-border-color: rgba(103, 194, 58, 0.3);
+  --el-tag-text-color: #4ade80;
+}
+
+html.dark .el-tag--info {
+  --el-tag-bg-color: rgba(144, 147, 153, 0.1);
+  --el-tag-border-color: rgba(144, 147, 153, 0.3);
+  --el-tag-text-color: #9ca3af;
+}
+
+html.dark .el-tag--danger {
+  --el-tag-bg-color: rgba(245, 108, 108, 0.1);
+  --el-tag-border-color: rgba(245, 108, 108, 0.3);
+  --el-tag-text-color: #f87171;
 }
 </style>

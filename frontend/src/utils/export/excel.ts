@@ -20,24 +20,28 @@ export function exportReviewsToExcel(
 
   // Prepare data
   const headers = includeHeaders ? [
-    'ID',
+    'Seq#',
     'PR ID',
-    'Project Key',
-    'Repository Slug',
+    'Project/Repo',
+    'PR User',
     'Reviewer',
-    'Status',
-    'Summary',
-    'Created Date',
-    'Updated Date',
+    'PR Status',
+    'Scores',
+    'Comments',
+    'Created',
+    'Updated',
   ] : []
 
-  const data = reviews.map(review => [
-    review.id,
+  const data = reviews.map((review, index) => [
+    index + 1,
     review.pull_request_id,
-    review.project_key,
-    review.repository_slug,
+    `${review.project_key} / ${review.repository_slug}`,
+    review.pull_request_user_info?.display_name || review.pull_request_user,
     review.reviewer_info?.display_name || review.reviewer,
     review.pull_request_status,
+    review.score_summary && review.score_summary.total_scores > 0
+      ? `${review.score_summary.average_score?.toFixed(1)} (${review.score_summary.total_scores})`
+      : 'No scores',
     review.reviewer_comments || '',
     dayjs(review.created_date).format('YYYY-MM-DD HH:mm:ss'),
     dayjs(review.updated_date).format('YYYY-MM-DD HH:mm:ss'),
@@ -51,11 +55,14 @@ export function exportReviewsToExcel(
 
   // Set column widths
   worksheet['!cols'] = [
-    { wch: 8 },   // ID
-    { wch: 60 },  // PR URL
-    { wch: 20 },  // Reviewer
+    { wch: 8 },   // Seq#
+    { wch: 35 },  // PR ID
+    { wch: 35 },  // Project/Repo
+    { wch: 25 },  // PR User
+    { wch: 25 },  // Reviewer
     { wch: 15 },  // Status
-    { wch: 40 },  // Summary
+    { wch: 18 },  // Scores
+    { wch: 50 },  // Comments
     { wch: 20 },  // Created
     { wch: 20 },  // Updated
   ]

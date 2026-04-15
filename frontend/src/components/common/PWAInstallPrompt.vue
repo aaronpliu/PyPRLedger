@@ -118,15 +118,6 @@ const handleAppInstalled = () => {
 
 const handleOnlineStatus = () => {
   isOffline.value = !navigator.onLine
-  
-  if (!isOffline.value) {
-    ElNotification({
-      title: 'Back Online',
-      message: 'You are now connected to the internet',
-      type: 'success',
-      duration: 2000,
-    })
-  }
 }
 
 const installApp = async () => {

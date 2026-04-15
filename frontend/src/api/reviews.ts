@@ -8,7 +8,7 @@ export interface Review {
   // Business key fields
   project_key: string
   repository_slug: string
-  reviewer: string
+  reviewer: string | null  // Can be null for pending assignment
   pull_request_user: string
   
   source_branch: string
@@ -17,6 +17,9 @@ export interface Review {
   source_filename?: string | null  // null for PR-level review
   ai_suggestions?: AIReviewSuggestions | null
   reviewer_comments?: string | null
+  assignment_status?: 'pending' | 'assigned' | 'in_progress' | 'completed' | string
+  assigned_by?: string | null
+  assigned_date?: string | null
   pull_request_status: string
   metadata?: Record<string, any> | null
   
@@ -50,6 +53,7 @@ export interface ReviewScoreSummary {
   source_filename?: string | null
   total_scores: number
   average_score?: number
+  max_score?: number | null
   scores: ReviewScoreResponse[]
 }
 
@@ -95,6 +99,20 @@ export interface ReviewUpdate {
   summary?: string | null
 }
 
+export interface ReviewAssignmentRequest {
+  pull_request_id: string
+  project_key: string
+  repository_slug: string
+  assignee_username: string
+  pull_request_user: string
+  source_branch: string
+  target_branch: string
+  pull_request_commit_id?: string | null
+  git_code_diff: string
+  ai_suggestions?: any
+  reviewer_comments?: string
+}
+
 // Reviews API
 // NOTE: Reviews are created by Bitbucket webhook, not from UI
 export const reviewsApi = {
@@ -107,9 +125,16 @@ export const reviewsApi = {
   getReviewByCompositeKey(
     projectKey: string,
     repositorySlug: string,
-    pullRequestId: string
+    pullRequestId: string,
+    params?: {
+      reviewer?: string
+      source_filename?: string
+    }
   ): Promise<{ items: Review[]; total: number }> {
-    return request.get(`/reviews/${encodeURIComponent(projectKey)}/${encodeURIComponent(repositorySlug)}/${encodeURIComponent(pullRequestId)}`)
+    return request.get(
+      `/reviews/${encodeURIComponent(projectKey)}/${encodeURIComponent(repositorySlug)}/${encodeURIComponent(pullRequestId)}`,
+      { params }
+    )
   },
 
   // Get review by ID - fetches from list and finds by ID
@@ -129,8 +154,15 @@ export const reviewsApi = {
     return request.put(`/reviews/${id}`, data)
   },
 
-  // Delete review
-  deleteReview(id: number): Promise<void> {
-    return request.delete(`/reviews/${id}`)
+  // Delete review using composite key
+  deleteReview(projectKey: string, repositorySlug: string, pullRequestId: string): Promise<void> {
+    return request.delete(`/reviews/${encodeURIComponent(projectKey)}/${encodeURIComponent(repositorySlug)}/${encodeURIComponent(pullRequestId)}`)
+  },
+
+  /**
+   * Assign a review task to a reviewer (requires review_admin role)
+   */
+  assignTask(data: ReviewAssignmentRequest): Promise<Review> {
+    return request.post('/reviews/assign', data)
   },
 }

@@ -1,6 +1,17 @@
 from fastapi import APIRouter
 
-from src.api.v1.endpoints import audit, auth, project_registry, projects, rbac, reviews, users
+from src import __version__
+from src.api.v1.endpoints import (
+    audit,
+    auth,
+    delegation,
+    project_registry,
+    projects,
+    rbac,
+    reviews,
+    task_assignment,  # Task assignment endpoints for review_admin
+    users,
+)
 
 
 api_router = APIRouter()
@@ -12,7 +23,12 @@ api_router.include_router(audit.router, tags=["audit-logs"])
 
 api_router.include_router(rbac.router, tags=["rbac-management"])
 
+api_router.include_router(delegation.router, prefix="/rbac/delegations", tags=["role-delegations"])
+
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
+
+# Task assignment endpoints (for review_admin to manage reviews)
+api_router.include_router(task_assignment.router, tags=["task-assignment"])
 
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 
@@ -24,14 +40,10 @@ api_router.include_router(project_registry.router, tags=["project-registry"])
 # API information endpoint
 @api_router.get("/info")
 async def api_info():
-    """Get API information"""
+    """Get API information including version"""
     return {
         "name": "Pull Request Code Review Result Storage System API",
-        "version": "1.0.0",
+        "version": __version__,
         "description": "FastAPI-based Pull Request Code Review Result Storage System",
-        "endpoints": {
-            "reviews": "/api/v1/reviews",
-            "users": "/api/v1/users",
-            "projects": "/api/v1/projects",
-        },
+        "docs": "/api/docs",
     }

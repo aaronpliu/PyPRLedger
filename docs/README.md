@@ -1,6 +1,6 @@
 Welcome to the PRLedger documentation directory. This folder contains comprehensive guides and technical documentation for the project.
 
-**Latest Version**: 1.5.0 - Vue.js Frontend Application (February 2026)
+**Latest Release**: API 1.6.0 and UI 1.1.0 (April 2026)
 
 ## 📚 Available Documentation
 
@@ -8,7 +8,7 @@ Welcome to the PRLedger documentation directory. This folder contains comprehens
 
 - **[README.md](../README.md)** - Main project documentation and quick start guide
 - **[CHANGELOG.md](../CHANGELOG.md)** - Version history and release notes
-- **What's New in v1.5.0?** - See [CHANGELOG.md](../CHANGELOG.md#150---2026-02-xx) for Vue.js Frontend details
+- **What's New in v1.6.0?** - See [CHANGELOG.md](../CHANGELOG.md#160---2026-04-13) for multi-reviewer review architecture and assignment workflow updates
 
 ### Core Documentation
 
@@ -53,25 +53,23 @@ Welcome to the PRLedger documentation directory. This folder contains comprehens
   - Release checklist
   - Troubleshooting tips
 
-## 🎯 What's New in v1.5.0?
+## 🎯 What's New in v1.6.0?
 
-The v1.5.0 release introduces the **Vue.js Frontend Application** - a complete rewrite using modern frameworks:
+The v1.6.0 API release and v1.1.0 UI release focus on the new multi-reviewer review model and assignment workflow:
 
 ### Key Features
-- **Modern Vue 3 Architecture**: Full TypeScript support with Composition API
-- **Enhanced Code Diff Viewer**: Professional Diff2Html integration with side-by-side and unified views
-- **Advanced Review Management**: Multi-reviewer tracking, real-time updates, export capabilities
-- **Analytics Dashboard**: Interactive charts with ECharts for score analysis and trends
+- **Multi-Reviewer Review Architecture**: Review data now separates shared PR review state from reviewer assignments
+- **Task Assignment Workflow**: Review admins can assign reviewers cleanly against the new base plus assignment model
+- **Role Delegation**: Delegated permissions support reviewer and admin workflows with audit coverage
+- **Version Visibility**: UI now displays backend and frontend release versions consistently
 
 ### Technical Highlights
-- Build system: Vite 7.3.2 with optimized bundling
-- UI framework: Element Plus 2.13.6 with responsive design
-- State management: Pinia 3.0.4
-- Routing: Vue Router 5.0.4
-- Internationalization: Vue I18n 11.3.1
-- Fixed critical diff rendering issues (line number scrolling)
+- Backend schema refactor to `pull_request_review_base` and `pull_request_review_assignment`
+- Alembic coverage for multi-reviewer and assignment permissions through migration 012
+- Vue frontend task-assignment and delegation management enhancements
+- Release metadata aligned across backend, frontend, and docs
 
-See [CHANGELOG.md](../CHANGELOG.md#150---2026-02-xx) for complete details.
+See [CHANGELOG.md](../CHANGELOG.md#160---2026-04-13) for complete details.
 
 ## 📖 Quick Links
 
@@ -82,7 +80,7 @@ See [CHANGELOG.md](../CHANGELOG.md#150---2026-02-xx) for complete details.
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | Understand the codebase layout |
 | [VERSIONING.md](VERSIONING.md) | Learn how to manage releases |
 | [FastAPI_code_review_system_design.md](FastAPI_code_review_system_design.md) | Deep dive into system architecture |
-| [CHANGELOG.md](../CHANGELOG.md) | Latest features and bug fixes (v1.5.0 released!) |
+| [CHANGELOG.md](../CHANGELOG.md) | Latest features and bug fixes (v1.6.0 / UI 1.1.0 released) |
 
 ## 🔗 External Resources
 
@@ -93,6 +91,6 @@ See [CHANGELOG.md](../CHANGELOG.md#150---2026-02-xx) for complete details.
 
 ---
 
-**Last Updated**: February 2026  
-**Backend Version**: 1.5.0 (see [pyproject.toml](../pyproject.toml)) or run `python scripts/bump_version.py show`  
-**Frontend Version**: 1.0.0 (see [frontend/package.json](../frontend/package.json))
+**Last Updated**: April 2026  
+**Backend Version**: 1.6.0 (see [pyproject.toml](../pyproject.toml)) or run `python scripts/bump_version.py show`  
+**Frontend Version**: 1.1.0 (see [frontend/package.json](../frontend/package.json))

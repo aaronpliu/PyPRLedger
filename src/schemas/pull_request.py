@@ -20,7 +20,12 @@ class ReviewBase(BaseModel):
     # Business keys (only required fields - API caller doesn't need to pass IDs)
     project_key: str = Field(..., min_length=1, max_length=32, description="Project key")
     repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
-    reviewer: str = Field(..., min_length=1, max_length=64, description="Reviewer username")
+    reviewer: str | None = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        description="Reviewer username (NULL for pending assignment)",
+    )
     pull_request_user: str = Field(
         ..., min_length=1, max_length=64, description="Pull request user username"
     )
@@ -95,6 +100,12 @@ class ReviewUpdate(BaseModel):
     reviewer_comments: str | None = Field(None, max_length=10000)
     pull_request_status: str | None = Field(None)
     metadata: dict[str, Any] | None = Field(None)
+    reviewer: str | None = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        description="Reviewer username (can be set to assign reviewer)",
+    )
 
     @field_validator("pull_request_status")
     def validate_status(cls, v):
@@ -197,6 +208,7 @@ class ReviewScoreSummary(BaseModel):
     repository_slug: str
     total_scores: int
     average_score: float
+    max_score: float | None = Field(None, description="Maximum score when multiple scores exist")
     scores: list[ReviewScoreResponse]
 
 
@@ -212,7 +224,12 @@ class ReviewResponse(BaseModel):
     # Business key fields - required top-level identifiers
     project_key: str = Field(..., min_length=1, max_length=32, description="Project key")
     repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
-    reviewer: str = Field(..., min_length=1, max_length=64, description="Reviewer username")
+    reviewer: str | None = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        description="Reviewer username (NULL for pending assignment)",
+    )
     pull_request_user: str = Field(
         ..., min_length=1, max_length=64, description="Pull request user username"
     )
@@ -225,6 +242,14 @@ class ReviewResponse(BaseModel):
     )
     ai_suggestions: dict[str, Any] | None = Field(None, description="AI-generated suggestions")
     reviewer_comments: str | None = Field(None, description="Reviewer's comments")
+    assigned_by: str | None = Field(None, description="Username of the user who assigned review")
+    assigned_date: datetime | None = Field(
+        None, description="Timestamp when the review was assigned"
+    )
+    assignment_status: str | None = Field(
+        None,
+        description="Assignment status for reviewer-specific review rows",
+    )
     pull_request_status: str = Field(..., description="Pull request status")
     metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
 
@@ -261,6 +286,9 @@ class ReviewResponse(BaseModel):
                 "repository_slug": "my-repo",
                 "reviewer": "john_doe",
                 "pull_request_user": "jane_smith",
+                "assigned_by": "review_admin",
+                "assigned_date": "2023-01-01T09:00:00",
+                "assignment_status": "assigned",
                 "source_branch": "feature/new-feature",
                 "target_branch": "main",
                 "git_code_diff": "diff --git a/file.py b/file.py\n...",
@@ -471,6 +499,12 @@ class ReviewFilter(BaseModel):
     score_max: float | None = Field(None, ge=0.0, le=10.0, description="Filter by maximum score")
     date_from: datetime | None = Field(None, description="Filter reviews created after this date")
     date_to: datetime | None = Field(None, description="Filter reviews created before this date")
+    visible_to_username: str | None = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        description="Filter reviews assigned to or raised by this username",
+    )
 
     @field_validator("pull_request_status")
     def validate_status(cls, v):
@@ -552,4 +586,41 @@ class ReviewTransition(BaseModel):
     model_config = {
         "from_attributes": True,
         "json_schema_extra": {"example": {"current_status": "open", "new_status": "merged"}},
+    }
+
+
+class ReviewAssignmentRequest(BaseModel):
+    """Schema for assigning review task to a reviewer"""
+
+    pull_request_id: str = Field(..., description="Pull request ID")
+    project_key: str = Field(..., min_length=1, max_length=32, description="Project key")
+    repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
+    assignee_username: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="Reviewer username to assign",
+    )
+    pull_request_user: str = Field(
+        ..., min_length=1, max_length=64, description="PR author username"
+    )
+    source_branch: str = Field(..., min_length=1, description="Source branch")
+    target_branch: str = Field(..., min_length=1, description="Target branch")
+    pull_request_commit_id: str | None = Field(None, description="Commit ID (optional)")
+    git_code_diff: str | None = Field(None, description="Git code diff content (optional)")
+    ai_suggestions: dict[str, Any] | None = Field(None, description="AI suggestions (optional)")
+    reviewer_comments: str | None = Field(None, description="Reviewer comments (optional)")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "pull_request_id": "123",
+                "project_key": "PROJ",
+                "repository_slug": "my-repo",
+                "assignee_username": "john_doe",
+                "pull_request_user": "jane_smith",
+                "source_branch": "feature/new-feature",
+                "target_branch": "main",
+            }
+        }
     }

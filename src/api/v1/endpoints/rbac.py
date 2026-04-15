@@ -5,11 +5,13 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
+from src.models.role import Role
 from src.schemas.rbac import (
     RoleAssignmentRequest,
     RoleAssignmentResponse,
@@ -39,9 +41,16 @@ async def list_roles(
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> list[RoleResponse]:
-    """List all roles (requires system admin)"""
-    # Check if user has system admin permission
-    await rbac_service.require_permission(current_user.id, "manage", "settings")
+    """List all roles (requires manage roles or manage settings permission)"""
+    # Check if user has permission to manage roles OR settings
+    has_permission = await rbac_service.check_permission(current_user.id, "manage", "roles")
+    if not has_permission:
+        has_permission = await rbac_service.check_permission(current_user.id, "manage", "settings")
+
+    if not has_permission:
+        from src.core.exceptions import ForbiddenException
+
+        raise ForbiddenException(message="You do not have permission to view roles")
 
     roles = await rbac_service.get_all_roles()
     return [
@@ -67,8 +76,16 @@ async def get_role(
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> RoleResponse:
-    """Get role details (requires system admin)"""
-    await rbac_service.require_permission(current_user.id, "manage", "settings")
+    """Get role details (requires manage roles or manage settings permission)"""
+    # Check if user has permission to manage roles OR settings
+    has_permission = await rbac_service.check_permission(current_user.id, "manage", "roles")
+    if not has_permission:
+        has_permission = await rbac_service.check_permission(current_user.id, "manage", "settings")
+
+    if not has_permission:
+        from src.core.exceptions import ForbiddenException
+
+        raise ForbiddenException(message="You do not have permission to view role details")
 
     role = await rbac_service.get_role_by_id(role_id)
     if not role:
@@ -96,10 +113,6 @@ async def create_role(
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> RoleResponse:
     """Create new role (requires system admin)"""
-    from sqlalchemy import select
-
-    from src.models.role import Role
-
     await rbac_service.require_permission(current_user.id, "manage", "settings")
 
     # Check if role name already exists
@@ -186,7 +199,19 @@ async def get_user_roles(
         await rbac_service.require_permission(current_user.id, "read", "users")
 
     assignments = await rbac_service.get_user_roles(auth_user_id)
-    return assignments
+    return [
+        RoleAssignmentResponse(
+            id=a["id"],
+            auth_user_id=a["auth_user_id"],
+            role_id=a["role_id"],
+            resource_type=a["resource_type"],
+            resource_id=a["resource_id"],
+            granted_by=a["granted_by"],
+            expires_at=a["expires_at"],
+            created_at=a["created_at"],
+        )
+        for a in assignments
+    ]
 
 
 @router.post(

@@ -4,26 +4,46 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
+from src.core.permissions import get_current_user_with_token
+from src.models.auth_user import AuthUser
 from src.schemas.auth import (
+    AuthSessionResponse,
     ChangePasswordRequest,
     LoginRequest,
+    LogoutRequest,
     RegisterRequest,
+    TokenRefreshRequest,
     TokenResponse,
     UserinfoResponse,
 )
 from src.services.auth_service import AuthService
+from src.services.rbac_service import RBACService
 
 
 router = APIRouter(prefix="/auth")
 
 
+def get_request_client_context(request: Request) -> tuple[str | None, str | None]:
+    """Extract client IP and user agent for session metadata."""
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    ip_address = forwarded_for.split(",")[0].strip() if forwarded_for else None
+    if not ip_address and request.client:
+        ip_address = request.client.host
+    return ip_address, request.headers.get("User-Agent")
+
+
 def get_auth_service(db: Annotated[AsyncSession, Depends(get_db_session)]) -> AuthService:
     """Dependency to get auth service instance"""
     return AuthService(db)
+
+
+def get_rbac_service(db: Annotated[AsyncSession, Depends(get_db_session)]) -> RBACService:
+    """Dependency to get RBAC service instance"""
+    return RBACService(db)
 
 
 @router.post(
@@ -33,11 +53,17 @@ def get_auth_service(db: Annotated[AsyncSession, Depends(get_db_session)]) -> Au
     description="Authenticate user with username and password, returns JWT token",
 )
 async def login(
+    request: Request,
     login_data: LoginRequest,
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> TokenResponse:
     """Login endpoint"""
-    return await auth_service.authenticate(login_data)
+    ip_address, user_agent = get_request_client_context(request)
+    return await auth_service.authenticate(
+        login_data,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
 
 
 @router.post(
@@ -48,11 +74,37 @@ async def login(
     status_code=status.HTTP_201_CREATED,
 )
 async def register(
+    request: Request,
     register_data: RegisterRequest,
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> TokenResponse:
     """Registration endpoint"""
-    return await auth_service.register(register_data)
+    ip_address, user_agent = get_request_client_context(request)
+    return await auth_service.register(
+        register_data,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Refresh access token",
+    description="Refresh the access token using a valid refresh token",
+)
+async def refresh_tokens(
+    request: Request,
+    refresh_request: TokenRefreshRequest,
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+) -> TokenResponse:
+    """Refresh token endpoint."""
+    ip_address, user_agent = get_request_client_context(request)
+    return await auth_service.refresh_tokens(
+        refresh_request.refresh_token,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
 
 
 @router.get(
@@ -84,6 +136,12 @@ async def get_current_user_info(
 
     try:
         auth_user = await auth_service.get_current_user(token)
+        ip_address, user_agent = get_request_client_context(request)
+        await auth_service.sync_session_client_context(
+            token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
         return await auth_service.get_user_info(auth_user)
     except Exception as e:
         raise HTTPException(
@@ -117,6 +175,12 @@ async def change_password(
 
     try:
         auth_user = await auth_service.get_current_user(token)
+        ip_address, user_agent = get_request_client_context(request)
+        await auth_service.sync_session_client_context(
+            token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
         await auth_service.change_password(
             auth_user,
             password_data.old_password,
@@ -133,12 +197,103 @@ async def change_password(
 @router.post(
     "/logout",
     summary="User logout",
-    description="Logout current user (client should discard token)",
+    description="Logout current user and revoke the active refresh session",
 )
-async def logout() -> dict[str, str]:
+async def logout(
+    request: Request,
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    logout_request: LogoutRequest | None = None,
+) -> dict[str, str]:
     """Logout endpoint
 
-    Note: With JWT tokens, logout is primarily client-side (discard token).
-    Server-side token blacklisting can be added later if needed.
+    Revokes the server-side refresh session so the current login can no longer
+    mint new access tokens.
     """
-    return {"message": "Logged out successfully. Please discard your token."}
+    authorization = request.headers.get("Authorization")
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+
+    await auth_service.logout(
+        token=token,
+        refresh_token=logout_request.refresh_token if logout_request else None,
+    )
+    return {"message": "Logged out successfully."}
+
+
+@router.get(
+    "/sessions/me",
+    response_model=list[AuthSessionResponse],
+    summary="List my active sessions",
+    description="List all active refresh sessions belonging to the current user",
+)
+async def list_my_sessions(
+    request: Request,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+) -> list[AuthSessionResponse]:
+    """List active sessions for the current user."""
+    authorization = request.headers.get("Authorization")
+    current_session_id: str | None = None
+
+    if authorization and authorization.startswith("Bearer "):
+        current_session_id = await auth_service.get_session_id_from_token(
+            authorization.split(" ")[1]
+        )
+
+    return await auth_service.list_sessions(
+        auth_user_id=current_user.id,
+        current_session_id=current_session_id,
+    )
+
+
+@router.get(
+    "/sessions",
+    response_model=list[AuthSessionResponse],
+    summary="List active sessions",
+    description="Administrative session inventory for active refresh sessions",
+)
+async def list_sessions(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+    auth_user_id: int | None = Query(
+        default=None,
+        description="Optional auth user ID filter",
+    ),
+) -> list[AuthSessionResponse]:
+    """List active sessions for operations and support."""
+    await rbac_service.require_permission(current_user.id, "manage", "users")
+    return await auth_service.list_sessions(auth_user_id=auth_user_id)
+
+
+@router.delete(
+    "/sessions/{session_id}",
+    summary="Revoke a session",
+    description="Administrative endpoint to revoke an active refresh session immediately",
+)
+async def revoke_session(
+    session_id: str,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict[str, str]:
+    """Revoke an active session by session id."""
+    await rbac_service.require_permission(current_user.id, "manage", "users")
+    await auth_service.revoke_session(session_id)
+    return {"message": "Session revoked successfully."}
+
+
+@router.delete(
+    "/sessions/me/{session_id}",
+    summary="Revoke one of my sessions",
+    description="Allow a user to revoke one of their own active sessions",
+)
+async def revoke_my_session(
+    session_id: str,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+) -> dict[str, str]:
+    """Revoke one of the current user's active sessions by session id."""
+    await auth_service.revoke_user_session(current_user.id, session_id)
+    return {"message": "Session revoked successfully."}

@@ -1,31 +1,44 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
-import type { User, LoginRequest, RegisterRequest } from '@/types'
+import type { User, LoginRequest, RegisterRequest, TokenResponse } from '@/types'
 import router from '@/router'
 // TODO: Import WebSocket service when backend implements Socket.IO
 // import { wsService } from '@/utils/websocket'
+
+const INVALID_STORED_TOKEN_VALUES = new Set(['', 'undefined', 'null'])
 
 export const useAuthStore = defineStore('auth', () => {
   // State
   const user = ref<User | null>(null)
   const accessToken = ref<string>('')
   const refreshTokenValue = ref<string>('')
+  const isInitialized = ref<boolean>(false)
+  let initPromise: Promise<void> | null = null
 
   // Getters
   const isAuthenticated = computed(() => !!accessToken.value)
   const currentUser = computed(() => user.value)
 
+  function normalizeStoredToken(value: string | null): string {
+    if (!value || INVALID_STORED_TOKEN_VALUES.has(value)) {
+      return ''
+    }
+    return value
+  }
+
+  function applyTokenResponse(response: TokenResponse) {
+    accessToken.value = response.access_token
+    refreshTokenValue.value = response.refresh_token
+    localStorage.setItem('access_token', response.access_token)
+    localStorage.setItem('refresh_token', response.refresh_token)
+  }
+
   // Actions
   async function login(credentials: LoginRequest) {
     try {
       const response = await authApi.login(credentials)
-      accessToken.value = response.access_token
-      refreshTokenValue.value = response.refresh_token
-
-      // Store tokens
-      localStorage.setItem('access_token', response.access_token)
-      localStorage.setItem('refresh_token', response.refresh_token)
+      applyTokenResponse(response)
 
       // Fetch user profile
       await fetchUserProfile()
@@ -46,11 +59,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function register(data: RegisterRequest) {
     try {
       const response = await authApi.register(data)
-      accessToken.value = response.access_token
-      refreshTokenValue.value = response.refresh_token
-
-      localStorage.setItem('access_token', response.access_token)
-      localStorage.setItem('refresh_token', response.refresh_token)
+      applyTokenResponse(response)
 
       await fetchUserProfile()
       return true
@@ -61,8 +70,10 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
+    const currentRefreshToken = refreshTokenValue.value
+
     try {
-      await authApi.logout()
+      await authApi.logout(currentRefreshToken || undefined)
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
@@ -71,6 +82,18 @@ export const useAuthStore = defineStore('auth', () => {
       clearAuth()
       router.push('/login')
     }
+  }
+
+  async function refreshSession() {
+    const currentRefreshToken = refreshTokenValue.value || normalizeStoredToken(localStorage.getItem('refresh_token'))
+    if (!currentRefreshToken) {
+      clearAuth()
+      throw new Error('Refresh token missing')
+    }
+
+    const response = await authApi.refreshToken(currentRefreshToken)
+    applyTokenResponse(response)
+    return response.access_token
   }
 
   async function fetchUserProfile() {
@@ -92,34 +115,49 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Initialize from localStorage
-  function initAuth() {
-    const token = localStorage.getItem('access_token')
-    const refresh = localStorage.getItem('refresh_token')
+  async function initAuth() {
+    if (initPromise) {
+      return initPromise
+    }
 
-    if (token && refresh) {
+    initPromise = (async () => {
+      const token = normalizeStoredToken(localStorage.getItem('access_token'))
+      const refresh = normalizeStoredToken(localStorage.getItem('refresh_token'))
+
+      if (!token || !refresh) {
+        clearAuth()
+        isInitialized.value = true
+        initPromise = null
+        return
+      }
+
       accessToken.value = token
       refreshTokenValue.value = refresh
-      fetchUserProfile().then(() => {
-        // TODO: Connect WebSocket when backend implements Socket.IO
-        // if (user.value) {
-        //   wsService.connect(user.value.id)
-        // }
-      }).catch(() => {
-        // If fetch fails, tokens are invalid
+
+      try {
+        await fetchUserProfile()
+      } catch {
         clearAuth()
-      })
-    }
+      } finally {
+        isInitialized.value = true
+        initPromise = null
+      }
+    })()
+
+    return initPromise
   }
 
   return {
     user,
     accessToken,
     refreshToken: refreshTokenValue,
+    isInitialized,
     isAuthenticated,
     currentUser,
     login,
     register,
     logout,
+    refreshSession,
     fetchUserProfile,
     clearAuth,
     initAuth,

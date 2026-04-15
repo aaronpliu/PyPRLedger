@@ -11,7 +11,11 @@ from src.core.database import Base
 
 if TYPE_CHECKING:
     from src.models.auth_user import AuthUser
-    from src.models.pull_request import PullRequestReview, PullRequestScore
+    from src.models.pull_request import (
+        PullRequestReviewAssignment,
+        PullRequestReviewBase,
+        PullRequestScore,
+    )
 
 
 class User(Base):
@@ -52,15 +56,20 @@ class User(Base):
     # Relationships
     # Link to authentication user (one-to-one, optional)
     auth_user: Mapped[AuthUser | None] = relationship(
-        "AuthUser", back_populates="bitbucket_user", foreign_keys="AuthUser.user_id"
+        "AuthUser", back_populates="git_user", foreign_keys="AuthUser.user_id"
     )
 
-    authored_reviews: Mapped[list[PullRequestReview]] = relationship(
-        foreign_keys="PullRequestReview.pull_request_user", back_populates="pull_request_user_rel"
+    authored_reviews: Mapped[list[PullRequestReviewBase]] = relationship(
+        foreign_keys="PullRequestReviewBase.pull_request_user",
+        back_populates="pull_request_user_rel",
     )
 
-    reviewed_reviews: Mapped[list[PullRequestReview]] = relationship(
-        foreign_keys="PullRequestReview.reviewer", back_populates="reviewer_rel"
+    review_assignments: Mapped[list[PullRequestReviewAssignment]] = relationship(
+        foreign_keys="PullRequestReviewAssignment.reviewer", back_populates="reviewer_rel"
+    )
+
+    assigned_reviews: Mapped[list[PullRequestReviewAssignment]] = relationship(
+        foreign_keys="PullRequestReviewAssignment.assigned_by", back_populates="assigned_by_rel"
     )
 
     # Score records given by this user

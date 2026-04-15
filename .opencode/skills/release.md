@@ -170,6 +170,15 @@ uv sync --all-extras
 - ✅ `uv.lock` file is modified
 - ✅ No dependency conflicts reported
 
+**Frontend Synchronization**:
+```bash
+cd frontend && npm install
+```
+
+**Validation**:
+- ✅ `package-lock.json` updated
+- ✅ No dependency conflicts reported
+
 **If errors occur**:
 - Report error details to user
 - Do NOT proceed to next step
@@ -237,59 +246,6 @@ git show v{new_version}
 ```
 
 **Next**: Proceed to Final Step.
-
----
-
-#### 🏁 Final Step: Manual Push Required
-
-**⚠️ IMPORTANT**: The AI will NOT execute any push commands.
-
-**Summary of Completed Actions**:
-- ✅ Version bumped to `{new_version}`
-- ✅ CHANGELOG.md updated
-- ✅ Documentation synchronized
-- ✅ Dependencies locked (`uv.lock`)
-- ✅ Changes committed
-- ✅ Git tag `v{new_version}` created
-
-**Remaining Manual Actions** (User must execute):
-
-1. **Review all changes one final time**:
-   ```bash
-   git log -1 --stat
-   git show v{new_version}
-   ```
-
-2. **Push commit to remote**:
-   ```bash
-   git push origin main
-   # or
-   git push origin <current-branch>
-   ```
-
-3. **Push tag to remote**:
-   ```bash
-   git push origin v{new_version}
-   ```
-
-4. **(Optional) Push all tags**:
-   ```bash
-   git push origin --tags
-   ```
-
-**Confirmation Prompt**:
-```
-🎉 Release preparation complete!
-
-Version: v{new_version}
-Tag: Created locally (not pushed)
-
-To complete the release, please manually execute:
-  1. git push origin <branch>
-  2. git push origin v{new_version}
-
-Would you like me to provide any additional information about this release?
-```
 
 ---
 

@@ -1,3 +1,4 @@
+import traceback
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -9,11 +10,12 @@ from fastapi_offline import FastAPIOffline
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from src import __version__
-from src.api.v1.api import api_router
+from src.api import api_router
 from src.core.config import settings
 from src.core.database import close_db, init_db
 from src.core.exceptions import AppException, ErrorCode
 from src.core.middleware import LoggingMiddleware, RateLimitMiddleware
+from src.utils.i18n import i18n
 from src.utils.log import get_logger, setup_logging
 from src.utils.metrics import MetricsCollector
 from src.utils.redis import close_redis, init_redis
@@ -83,8 +85,6 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
     """Custom application exception handler with i18n support"""
     # Detect language from request
-    from src.utils.i18n import i18n
-
     lang = i18n.get_language_from_request(request)
 
     # Get translated message
@@ -199,8 +199,6 @@ async def validation_exception_handler(
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """General exception handler"""
-    import traceback
-
     error_traceback = traceback.format_exc()
 
     # Log detailed error information with full stack trace
@@ -244,13 +242,3 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 async def health_check() -> dict:
     """Health check endpoint"""
     return {"status": "healthy", "version": __version__}
-
-
-@app.get("/")
-async def root() -> dict:
-    """Root path"""
-    return {
-        "message": "Pull Request Code Review Result Storage System API",
-        "version": __version__,
-        "docs": "/api/docs",
-    }

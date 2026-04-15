@@ -2,30 +2,43 @@
 
 This document describes how to manage versions in PRLedger.
 
-## Single Source of Truth
+## Version Sources
 
-The project version is maintained in **one place only**: `pyproject.toml`
+PRLedger now tracks backend and frontend versions separately:
+
+- **Backend/API version**: `pyproject.toml`
+- **Frontend/UI version**: `frontend/package.json`
 
 ```toml
 [project]
-name = "pycodereviewsaver"
-version = "1.0.0"  # ← This is the single source of truth
+name = "prledger"
+version = "1.6.0"  # ← Backend/API version source of truth
 ```
 
-All other locations (src/__init__.py, src/main.py, etc.) read the version dynamically from this file.
+```json
+{
+   "name": "frontend",
+   "version": "1.1.0"
+}
+```
+
+All backend runtime locations read from `pyproject.toml`, while the Vue frontend reads from `frontend/package.json` at build time.
 
 ## Automatic Version Detection
 
-The application automatically reads the version from `pyproject.toml` at runtime using Python's `importlib.metadata`:
+The backend automatically reads the version from `pyproject.toml` at runtime using Python's `tomllib`:
 
 ```python
 # src/__init__.py
-import importlib.metadata
+import tomllib
+from pathlib import Path
 
 try:
-    __version__ = importlib.metadata.version("pycodereviewsaver")
-except importlib.metadata.PackageNotFoundError:
-    __version__ = "0.1.0-dev"  # Fallback for development
+   pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+   with Path.open(pyproject_path, "rb") as f:
+      __version__ = tomllib.load(f).get("project", {}).get("version", "1.0.0-dev")
+except Exception:
+   __version__ = "1.0.0-dev"
 ```
 
 This ensures consistency across all parts of the application.
@@ -34,7 +47,7 @@ This ensures consistency across all parts of the application.
 
 ### Option 1: Using the Version Bump Script (Recommended)
 
-We provide a convenient script to manage versions:
+We provide a convenient script to manage the backend/API version:
 
 ```bash
 # Show current version
@@ -43,7 +56,7 @@ python scripts/bump_version.py show
 # Bump major version (1.0.0 -> 2.0.0)
 python scripts/bump_version.py major
 
-# Bump minor version (1.0.0 -> 1.1.0)
+# Bump minor version (1.5.0 -> 1.6.0)
 python scripts/bump_version.py minor
 
 # Bump patch version (1.0.0 -> 1.0.1)
@@ -55,11 +68,14 @@ python scripts/bump_version.py set 1.2.3
 
 ### Option 2: Manual Update
 
-Edit `pyproject.toml` directly:
+Edit `pyproject.toml` directly for the backend, and `frontend/package.json` directly for the UI:
 
 ```bash
-# Open pyproject.toml and update the version line
-version = "1.0.1"
+# Backend/API
+version = "1.6.0"
+
+# Frontend/UI
+"version": "1.1.0"
 ```
 
 ## Semantic Versioning
@@ -70,42 +86,45 @@ PRLedger follows [Semantic Versioning](https://semver.org/) (SemVer):
 - **MINOR** version for backwards-compatible features
 - **PATCH** version for backwards-compatible bug fixes
 
-Format: `MAJOR.MINOR.PATCH` (e.g., `1.0.0`)
+Format: `MAJOR.MINOR.PATCH` (e.g., `1.6.0`)
 
 ## Version Release Checklist
 
 When releasing a new version:
 
-1. **Update version** using the bump script
+1. **Update backend/API version** using the bump script
    ```bash
-   python scripts/bump_version.py minor
+   python scripts/bump_version.py set 1.6.0
    ```
 
-2. **Update CHANGELOG.md** with the new version and changes
-
-3. **Commit the changes**
+2. **Update frontend/UI version** in `frontend/package.json`
    ```bash
-   git add pyproject.toml CHANGELOG.md
-   git commit -m "Release version 1.1.0"
+   # Set package.json version to 1.1.0
    ```
 
-4. **Create a git tag**
+3. **Update CHANGELOG.md** with the new version and changes
+
+4. **Commit the changes**
    ```bash
-   git tag -a v1.1.0 -m "Version 1.1.0"
-   git push origin v1.1.0
+   git add pyproject.toml frontend/package.json CHANGELOG.md
+   git commit -m "Release v1.6.0"
    ```
 
-5. **Build and publish** (if applicable)
+5. **Create a git tag**
+   ```bash
+   git tag -a v1.6.0 -m "Version 1.6.0"
+   ```
+
+6. **Build and publish** (if applicable)
    ```bash
    pip install build twine
    python -m build
    twine upload dist/*
    ```
 
-6. **Update Docker image tags** (if using Docker)
+7. **Update Docker image tags** (if using Docker)
    ```bash
-   docker build -t pypreledger:1.1.0 -t pypreledger:latest .
-   docker push pypreledger:1.1.0
+   docker build -t pypreledger:1.6.0 -t pypreledger:latest .
    docker push pypreledger:latest
    ```
 

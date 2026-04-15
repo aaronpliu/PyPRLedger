@@ -1,4 +1,5 @@
 import logging
+import traceback
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +11,7 @@ from src.core.exceptions import (
     UserAlreadyExistsException,
     UserNotFoundException,
 )
+from src.models.auth_user import AuthUser
 from src.schemas.user import (
     UserCreate,
     UserListResponse,
@@ -78,7 +80,7 @@ async def list_users(
     is_reviewer: bool | None = Query(None, description="Filter by reviewer status"),
     username: str | None = Query(None, description="Filter by username (partial match)"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
+    page_size: int = Query(20, ge=1, le=500, description="Number of items per page"),
 ) -> UserListResponse:
     """
     List users with filtering and pagination
@@ -126,8 +128,6 @@ async def list_users(
             page_size=page_size,
         )
     except Exception as e:
-        import traceback
-
         error_traceback = traceback.format_exc()
         logger.error(f"Failed to list users: {str(e)}\n{error_traceback}")
         metrics.increment_error(error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/users")
@@ -234,13 +234,84 @@ async def get_reviewers(
             page=1,
             page_size=limit,
         )
-    except Exception:
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to get reviewers: {str(e)}\n{error_traceback}")
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/users/reviewers"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get reviewers"},
+        )
+
+
+@router.get("/auth-users", response_model=dict)
+async def list_auth_users(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    active: bool | None = Query(None, description="Filter by active status"),
+    username: str | None = Query(None, description="Filter by username (partial match)"),
+    limit: int = Query(500, ge=1, le=500, description="Maximum number of users to return"),
+) -> dict:
+    """
+    Get authentication users (for delegation and RBAC)
+
+    This endpoint returns AuthUser records (system login users), not Bitbucket users.
+    Used for role delegation and other RBAC operations.
+
+    Args:
+        active: Filter by active status
+        username: Filter by username (partial match)
+        limit: Maximum number of users to return
+        db: Database session
+
+    Returns:
+        dict: List of auth users with their Bitbucket linkage info
+    """
+    try:
+        from sqlalchemy import and_, select
+
+        # Build query
+        stmt = select(AuthUser)
+
+        # Apply filters
+        conditions = []
+        if active is not None:
+            conditions.append(AuthUser.is_active == active)
+        if username:
+            conditions.append(AuthUser.username.like(f"%{username}%"))
+
+        if conditions:
+            stmt = stmt.where(and_(*conditions))
+
+        # Order by username and limit
+        stmt = stmt.order_by(AuthUser.username).limit(limit)
+
+        result = await db.execute(stmt)
+        auth_users = result.scalars().all()
+
+        # Convert to response format with Bitbucket info
+        users_data = []
+        for auth_user in auth_users:
+            user_dict = auth_user.to_dict()
+            # Add roles information (will be populated by frontend if needed)
+            user_dict["roles"] = []  # Placeholder, can be enriched if needed
+            user_dict["git_user_id"] = auth_user.user_id  # Link to Bitbucket user
+            users_data.append(user_dict)
+
+        return {
+            "items": users_data,
+            "total": len(users_data),
+        }
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to list auth users: {str(e)}\n{error_traceback}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/users/auth-users"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to list auth users"},
         )
 
 

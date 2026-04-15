@@ -2,11 +2,13 @@
 export interface User {
   id: number
   username: string
-  email: string
+  email: string | null
   is_active: boolean
+  git_user_id: number | null
+  git_username: string | null
   last_login_at: string | null
   created_at: string
-  updated_at: string
+  roles: string[]
 }
 
 // Auth types
@@ -26,11 +28,24 @@ export interface TokenResponse {
   refresh_token: string
   token_type: string
   expires_in: number
+  refresh_expires_in: number
 }
 
 export interface PasswordChangeRequest {
   old_password: string
   new_password: string
+}
+
+export interface AuthSession {
+  session_id: string
+  auth_user_id: number
+  username: string
+  ip_address: string | null
+  user_agent: string | null
+  created_at: string
+  last_activity_at: string
+  expires_in_seconds: number
+  is_current: boolean
 }
 
 // RBAC types
@@ -46,7 +61,8 @@ export interface RoleAssignment {
   id: number
   auth_user_id: number
   role_id: number
-  resource_type: 'global' | 'project' | 'repository'
+  role_name?: string  // Added for display purposes
+  resource_type: ResourceType
   resource_id: string | null
   granted_by: number | null
   expires_at: string | null
@@ -55,10 +71,13 @@ export interface RoleAssignment {
 
 export interface RoleAssignmentRequest {
   role_id: number
-  resource_type: 'global' | 'project' | 'repository'
+  resource_type: ResourceType
   resource_id?: string | null
   expires_at?: string | null
 }
+
+// Define a common type for resource types
+export type ResourceType = 'global' | 'project' | 'repository';
 
 // Audit types
 export interface AuditLog {
