@@ -34,6 +34,7 @@ class UserinfoResponse(BaseModel):
     email: str | None = None
     is_active: bool
     bitbucket_user_id: int | None = None
+    bitbucket_username: str | None = None
     last_login_at: datetime | None = None
     created_at: datetime
     roles: list[str] = Field(

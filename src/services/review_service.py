@@ -622,6 +622,13 @@ class ReviewService:
             query = query.join(PullRequestReviewBase.assignments).where(
                 PullRequestReviewAssignment.reviewer == filters.reviewer
             )
+        if filters.visible_to_username:
+            query = query.outerjoin(PullRequestReviewBase.assignments).where(
+                or_(
+                    PullRequestReviewBase.pull_request_user == filters.visible_to_username,
+                    PullRequestReviewAssignment.reviewer == filters.visible_to_username,
+                )
+            )
         if filters.source_branch:
             query = query.where(PullRequestReviewBase.source_branch == filters.source_branch)
         if filters.target_branch:
@@ -698,6 +705,58 @@ class ReviewService:
                 logger.warning(f"Failed to cache review list: {str(e)}")
 
         return reviews, total
+
+    async def is_user_assigned_to_review(
+        self,
+        db: AsyncSession,
+        *,
+        pull_request_id: str,
+        project_key: str,
+        repository_slug: str,
+        source_filename: str | None,
+        reviewer: str,
+    ) -> bool:
+        query = (
+            select(PullRequestReviewAssignment.id)
+            .join(PullRequestReviewAssignment.review_base)
+            .where(
+                PullRequestReviewBase.pull_request_id == pull_request_id,
+                PullRequestReviewBase.project_key == project_key,
+                PullRequestReviewBase.repository_slug == repository_slug,
+                PullRequestReviewAssignment.reviewer == reviewer,
+            )
+        )
+
+        if source_filename is None:
+            query = query.where(PullRequestReviewBase.source_filename.is_(None))
+        else:
+            query = query.where(PullRequestReviewBase.source_filename == source_filename)
+
+        result = await db.execute(query.limit(1))
+        return result.scalar_one_or_none() is not None
+
+    async def get_review_base_by_target(
+        self,
+        db: AsyncSession,
+        *,
+        pull_request_id: str,
+        project_key: str,
+        repository_slug: str,
+        source_filename: str | None,
+    ) -> PullRequestReviewBase | None:
+        query = select(PullRequestReviewBase).where(
+            PullRequestReviewBase.pull_request_id == pull_request_id,
+            PullRequestReviewBase.project_key == project_key,
+            PullRequestReviewBase.repository_slug == repository_slug,
+        )
+
+        if source_filename is None:
+            query = query.where(PullRequestReviewBase.source_filename.is_(None))
+        else:
+            query = query.where(PullRequestReviewBase.source_filename == source_filename)
+
+        result = await db.execute(query.limit(1))
+        return result.scalar_one_or_none()
 
     async def update_review(
         self,

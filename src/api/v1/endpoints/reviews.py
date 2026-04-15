@@ -217,10 +217,9 @@ async def list_reviews(
             bitbucket_username = await _get_bitbucket_username(current_user.id, db)
 
             if bitbucket_username:
-                # Only allow viewing own reviews
-                filters.reviewer = bitbucket_username
+                filters.visible_to_username = bitbucket_username
                 logger.info(
-                    f"Regular user {current_user.username} filtered by reviewer={bitbucket_username}"
+                    f"Regular user {current_user.username} filtered by visible_to={bitbucket_username}"
                 )
             else:
                 # No linked bitbucket user - return empty list
@@ -900,6 +899,59 @@ async def upsert_score(
                 detail={
                     "error": "FORBIDDEN",
                     "message": "You do not have permission to submit scores. Requires 'reviewer' role or higher.",
+                },
+            )
+
+        bitbucket_username = await _get_bitbucket_username(current_user.id, db)
+        if not bitbucket_username:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "FORBIDDEN",
+                    "message": "You do not have a linked Bitbucket account and cannot submit scores.",
+                },
+            )
+
+        if score_data.reviewer != bitbucket_username:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "FORBIDDEN",
+                    "message": "You can only submit scores using your linked Bitbucket username.",
+                },
+            )
+
+        review_service = ReviewService()
+        review_base = await review_service.get_review_base_by_target(
+            db,
+            pull_request_id=score_data.pull_request_id,
+            project_key=score_data.project_key,
+            repository_slug=score_data.repository_slug,
+            source_filename=score_data.source_filename,
+        )
+        if not review_base:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": "Review not found for the specified target.",
+                },
+            )
+
+        is_assigned = await review_service.is_user_assigned_to_review(
+            db,
+            pull_request_id=score_data.pull_request_id,
+            project_key=score_data.project_key,
+            repository_slug=score_data.repository_slug,
+            source_filename=score_data.source_filename,
+            reviewer=bitbucket_username,
+        )
+        if not is_assigned:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "FORBIDDEN",
+                    "message": "You can only score reviews explicitly assigned to you.",
                 },
             )
 

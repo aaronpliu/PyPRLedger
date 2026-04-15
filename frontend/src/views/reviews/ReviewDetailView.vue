@@ -39,7 +39,7 @@
               </div>
               <el-space>
                 <!-- Add Score Button - Only show if user has permission -->
-                <template v-if="canCreateScore">
+                <template v-if="hasScorePermissionRole">
                   <el-tooltip
                     v-if="currentUserHasScore"
                     content="You already have a score. Use the 'Update' button in the Scores table below to modify it."
@@ -52,12 +52,15 @@
                       </el-button>
                     </span>
                   </el-tooltip>
-                  <el-button 
-                    v-else
-                    type="success" 
-                    size="small" 
-                    @click="showScoreDialog = true"
-                  >
+                  <el-tooltip v-else-if="!canCreateScore" :content="scoreActionDisabledReason" placement="top">
+                    <span>
+                      <el-button type="success" size="small" disabled>
+                        <el-icon><Plus /></el-icon>
+                        Add Score
+                      </el-button>
+                    </span>
+                  </el-tooltip>
+                  <el-button v-else type="success" size="small" @click="showScoreDialog = true">
                     <el-icon><Plus /></el-icon>
                     Add Score
                   </el-button>
@@ -156,7 +159,7 @@
             <div class="card-header">
               <span class="card-title">📊 Scores ({{ scores.length }})</span>
               <!-- Add Score Button - Only show if user has permission -->
-              <template v-if="canCreateScore">
+              <template v-if="hasScorePermissionRole">
                 <el-tooltip
                   v-if="currentUserHasScore"
                   content="You already have a score. Use the 'Update' button in the table to modify it."
@@ -169,12 +172,15 @@
                     </el-button>
                   </span>
                 </el-tooltip>
-                <el-button 
-                  v-else
-                  type="primary" 
-                  size="small" 
-                  @click="showScoreDialog = true"
-                >
+                <el-tooltip v-else-if="!canCreateScore" :content="scoreActionDisabledReason" placement="top">
+                  <span>
+                    <el-button type="primary" size="small" disabled>
+                      <el-icon><Plus /></el-icon>
+                      Add Score
+                    </el-button>
+                  </span>
+                </el-tooltip>
+                <el-button v-else type="primary" size="small" @click="showScoreDialog = true">
                   <el-icon><Plus /></el-icon>
                   Add Score
                 </el-button>
@@ -212,7 +218,7 @@
                      - reviewer: can only update their own score (hide others')
                 -->
                 <el-button 
-                  v-if="canDeleteAnyScore || (canCreateScore && canEditScore(row))"
+                  v-if="canDeleteAnyScore || (hasScorePermissionRole && canEditScore(row))"
                   size="small" 
                   type="primary" 
                   @click="editScore(row)"
@@ -224,7 +230,7 @@
                      - reviewer: can only delete their own score
                 -->
                 <el-button 
-                  v-if="canDeleteAnyScore || (canCreateScore && canEditScore(row))"
+                  v-if="canDeleteAnyScore || (hasScorePermissionRole && canEditScore(row))"
                   size="small" 
                   type="danger" 
                   @click="deleteScore(row)"
@@ -354,17 +360,47 @@ const isDarkTheme = computed(() => {
 
 // Check if current user already has a score
 const currentUserHasScore = computed(() => {
-  const currentUsername = authStore.currentUser?.username
-  if (!currentUsername || !review.value) return false
-  return scores.value.some(s => s.reviewer === currentUsername)
+  if (!effectiveReviewerUsername.value || !review.value) return false
+  return scores.value.some(s => s.reviewer === effectiveReviewerUsername.value)
 })
 
 // Check if current user has permission to create/update scores
 // Requires 'reviewer' role or higher (has 'create' permission on 'scores')
-const canCreateScore = computed(() => {
+const hasScorePermissionRole = computed(() => {
   const roles = authStore.user?.roles || []
-  // reviewer, review_admin, system_admin have create permission
   return roles.includes('reviewer') || roles.includes('review_admin') || roles.includes('system_admin')
+})
+
+const effectiveReviewerUsername = computed(() => {
+  return authStore.currentUser?.bitbucket_username || null
+})
+
+const canCreateScore = computed(() => {
+  return hasScorePermissionRole.value && !!effectiveReviewerUsername.value && isCurrentReviewAssignedToUser.value
+})
+
+const isCurrentReviewAssignedToUser = computed(() => {
+  if (!review.value || !effectiveReviewerUsername.value) {
+    return false
+  }
+
+  return review.value.reviewer === effectiveReviewerUsername.value
+})
+
+const scoreActionDisabledReason = computed(() => {
+  if (!hasScorePermissionRole.value) {
+    return 'You do not have permission to submit scores.'
+  }
+
+  if (!effectiveReviewerUsername.value) {
+    return 'Link your account to a Bitbucket user before submitting scores.'
+  }
+
+  if (!review.value?.reviewer) {
+    return 'This review is visible because you raised the PR, but scoring is only allowed after review admin assigns it to you.'
+  }
+
+  return 'You can only score reviews that are assigned to your linked Bitbucket user.'
 })
 
 // Check if current user has permission to delete scores
@@ -652,14 +688,12 @@ const loadReview = async () => {
     )
     
     // Debug info
-    ElMessage.info(`Loaded ${scores.value.length} score(s) for ${review.value.source_filename ? 'file-level' : 'PR-level'} review`)
-    
     // Set score form defaults
     scoreForm.pull_request_id = review.value.pull_request_id
     scoreForm.pull_request_commit_id = review.value.pull_request_commit_id || ''
     scoreForm.project_key = review.value.project_key
     scoreForm.repository_slug = review.value.repository_slug
-    scoreForm.reviewer = authStore.currentUser?.username || ''
+    scoreForm.reviewer = effectiveReviewerUsername.value || ''
     scoreForm.source_filename = review.value.source_filename || null
   } catch (error) {
     console.error('Failed to load review:', error)
@@ -738,13 +772,11 @@ const editScore = (score: Score) => {
 }
 
 const canEditScore = (score: Score): boolean => {
-  const currentUsername = authStore.currentUser?.username
-  return currentUsername === score.reviewer
+  return effectiveReviewerUsername.value === score.reviewer
 }
 
 const canDeleteScore = (score: Score): boolean => {
-  const currentUsername = authStore.currentUser?.username
-  return currentUsername === score.reviewer
+  return effectiveReviewerUsername.value === score.reviewer
 }
 
 const deleteScore = async (score: Score) => {
@@ -816,8 +848,14 @@ const handleCloseDialog = () => {
 // Watch for dialog open to set reviewer
 watch(showScoreDialog, (isOpen) => {
   if (isOpen && review.value) {
+    if (!canCreateScore.value) {
+      ElMessage.warning(scoreActionDisabledReason.value)
+      showScoreDialog.value = false
+      return
+    }
+
     // Always set reviewer to current user
-    const currentUsername = authStore.currentUser?.username || ''
+    const currentUsername = effectiveReviewerUsername.value || ''
     scoreForm.reviewer = currentUsername
     
     // Check if current user already has a score for this review

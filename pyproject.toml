@@ -79,7 +79,9 @@ Changelog = "https://github.com/aaronpliu/PyPRLedger/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
+    "aiosqlite>=0.22.1",
     "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
     "ruff>=0.15.7",
 ]
 

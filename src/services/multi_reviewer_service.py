@@ -1,10 +1,13 @@
+from __future__ import annotations
+
+
 """Service for managing multi-reviewer pull request reviews"""
 
 import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -34,6 +37,7 @@ class MultiReviewerService:
         page_size: int = 20,
         project_key: str | None = None,
         reviewer: str | None = None,
+        visible_to_username: str | None = None,
         status: str | None = None,
     ) -> tuple[list[ReviewWithAssignmentsResponse], int]:
         """
@@ -62,6 +66,13 @@ class MultiReviewerService:
             stmt = stmt.join(PullRequestReviewBase.assignments).where(
                 PullRequestReviewAssignment.reviewer == reviewer
             )
+        if visible_to_username:
+            stmt = stmt.outerjoin(PullRequestReviewBase.assignments).where(
+                or_(
+                    PullRequestReviewBase.pull_request_user == visible_to_username,
+                    PullRequestReviewAssignment.reviewer == visible_to_username,
+                )
+            )
 
         # Get total count
         count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -73,7 +84,7 @@ class MultiReviewerService:
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
 
         result = await db.execute(stmt)
-        bases = result.scalars().all()
+        bases = result.scalars().unique().all()
 
         # Convert to response models
         reviews = []

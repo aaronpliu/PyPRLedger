@@ -488,6 +488,12 @@ class ReviewFilter(BaseModel):
     score_max: float | None = Field(None, ge=0.0, le=10.0, description="Filter by maximum score")
     date_from: datetime | None = Field(None, description="Filter reviews created after this date")
     date_to: datetime | None = Field(None, description="Filter reviews created before this date")
+    visible_to_username: str | None = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        description="Filter reviews assigned to or raised by this username",
+    )
 
     @field_validator("pull_request_status")
     def validate_status(cls, v):

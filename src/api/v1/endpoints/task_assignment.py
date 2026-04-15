@@ -3,11 +3,13 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
+from src.models.user import User
 from src.schemas.review import (
     AssignReviewerRequest,
     ReviewListResponse,
@@ -220,11 +222,15 @@ async def get_my_tasks(
 ) -> ReviewListResponse:
     """Get reviews assigned to current user"""
     try:
+        bitbucket_username = await _get_bitbucket_username(current_user.id, db)
+        if not bitbucket_username:
+            return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
+
         reviews, total = await service.get_reviews(
             db=db,
             page=page,
             page_size=page_size,
-            reviewer=current_user.username,
+            visible_to_username=bitbucket_username,
         )
 
         return ReviewListResponse(
@@ -238,3 +244,17 @@ async def get_my_tasks(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": str(e)},
         )
+
+
+async def _get_bitbucket_username(auth_user_id: int, db: AsyncSession) -> str | None:
+    stmt = select(AuthUser).where(AuthUser.id == auth_user_id)
+    result = await db.execute(stmt)
+    auth_user = result.scalar_one_or_none()
+
+    if not auth_user or not auth_user.user_id:
+        return None
+
+    stmt = select(User).where(User.id == auth_user.user_id)
+    result = await db.execute(stmt)
+    bitbucket_user = result.scalar_one_or_none()
+    return bitbucket_user.username if bitbucket_user else None

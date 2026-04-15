@@ -489,12 +489,20 @@ class AuthService:
         # Extract unique role names
         roles = list({assignment["role_name"] for assignment in role_assignments})
 
+        bitbucket_username = None
+        if auth_user.user_id:
+            stmt = select(User).where(User.id == auth_user.user_id)
+            result = await self.db.execute(stmt)
+            bitbucket_user = result.scalar_one_or_none()
+            bitbucket_username = bitbucket_user.username if bitbucket_user else None
+
         return UserinfoResponse(
             id=auth_user.id,
             username=auth_user.username,
             email=auth_user.email,
             is_active=auth_user.is_active,
             bitbucket_user_id=auth_user.user_id,
+            bitbucket_username=bitbucket_username,
             last_login_at=auth_user.last_login_at,
             created_at=auth_user.created_at,
             roles=roles,
