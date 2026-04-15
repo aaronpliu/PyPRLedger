@@ -145,7 +145,7 @@ function downloadFile(blob: Blob, filename: string) {
 /**
  * Export selected reviews based on format
  */
-export function exportSelectedReviews(
+export async function exportSelectedReviews(
   reviews: Review[],
   format: 'csv' | 'json' | 'excel' | 'pdf',
   selectedIds?: number[]
@@ -166,15 +166,13 @@ export function exportSelectedReviews(
       break
     case 'excel':
       // Lazy import to avoid bundling issues
-      import('./excel').then(({ exportReviewsToExcel }) => {
-        exportReviewsToExcel(dataToExport)
-      })
+      const { exportReviewsToExcel } = await import('./excel')
+      await exportReviewsToExcel(dataToExport)
       break
     case 'pdf':
       // Lazy import to avoid bundling issues
-      import('./pdf').then(({ exportReviewsToPDF }) => {
-        exportReviewsToPDF(dataToExport)
-      })
+      const { exportReviewsToPDF } = await import('./pdf')
+      await exportReviewsToPDF(dataToExport)
       break
     default:
       console.error(`Unsupported export format: ${format}`)
