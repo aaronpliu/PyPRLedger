@@ -242,6 +242,14 @@ class ReviewResponse(BaseModel):
     )
     ai_suggestions: dict[str, Any] | None = Field(None, description="AI-generated suggestions")
     reviewer_comments: str | None = Field(None, description="Reviewer's comments")
+    assigned_by: str | None = Field(None, description="Username of the user who assigned review")
+    assigned_date: datetime | None = Field(
+        None, description="Timestamp when the review was assigned"
+    )
+    assignment_status: str | None = Field(
+        None,
+        description="Assignment status for reviewer-specific review rows",
+    )
     pull_request_status: str = Field(..., description="Pull request status")
     metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
 
@@ -278,6 +286,9 @@ class ReviewResponse(BaseModel):
                 "repository_slug": "my-repo",
                 "reviewer": "john_doe",
                 "pull_request_user": "jane_smith",
+                "assigned_by": "review_admin",
+                "assigned_date": "2023-01-01T09:00:00",
+                "assignment_status": "assigned",
                 "source_branch": "feature/new-feature",
                 "target_branch": "main",
                 "git_code_diff": "diff --git a/file.py b/file.py\n...",

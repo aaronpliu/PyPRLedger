@@ -74,7 +74,7 @@
             <template #default="{ row }">
               <el-dropdown @command="(cmd: string) => handleUpdateStatus(row.id, cmd)">
                 <el-tag :type="getAssignmentStatusType(row.assignment_status)" class="clickable">
-                  {{ row.assignment_status }}
+                  {{ formatAssignmentStatusLabel(row.assignment_status) }}
                   <el-icon class="el-icon--right"><ArrowDown /></el-icon>
                 </el-tag>
                 <template #dropdown>
@@ -306,6 +306,21 @@ const getAssignmentStatusType = (status: string) => {
       return 'primary'
     default:
       return 'info'
+  }
+}
+
+const formatAssignmentStatusLabel = (status: string) => {
+  switch (status) {
+    case 'in_progress':
+      return 'In Progress'
+    case 'assigned':
+      return 'Assigned'
+    case 'pending':
+      return 'Pending'
+    case 'completed':
+      return 'Completed'
+    default:
+      return status
   }
 }
 

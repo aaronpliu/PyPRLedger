@@ -327,6 +327,7 @@ import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
 import { scoresApi } from '@/api/scores'
+import { taskAssignmentApi } from '@/api/taskAssignment'
 import type { Review } from '@/api/reviews'
 import type { Score, ScoreCreate } from '@/api/scores'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -552,6 +553,8 @@ const scoreRules: FormRules = {
   ],
 }
 
+const lastAutoProgressAssignmentId = ref<number | null>(null)
+
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
 }
@@ -678,6 +681,8 @@ const loadReview = async () => {
     if (!review.value) {
       throw new Error('Review not found')
     }
+
+    await markReviewInProgressOnOpen(review.value)
     
     // Load scores using composite key (match the review's level)
     scores.value = await scoresApi.getScoresByReview(
@@ -701,6 +706,33 @@ const loadReview = async () => {
     router.push('/reviews')
   } finally {
     loading.value = false
+  }
+}
+
+const markReviewInProgressOnOpen = async (reviewData: Review) => {
+  const currentUsername = effectiveReviewerUsername.value
+
+  if (!currentUsername || reviewData.reviewer !== currentUsername) {
+    return
+  }
+
+  if (reviewData.assignment_status !== 'assigned') {
+    return
+  }
+
+  if (lastAutoProgressAssignmentId.value === reviewData.id) {
+    return
+  }
+
+  try {
+    lastAutoProgressAssignmentId.value = reviewData.id
+    await taskAssignmentApi.updateAssignmentStatus(reviewData.id, {
+      assignment_status: 'in_progress',
+    })
+    reviewData.assignment_status = 'in_progress'
+  } catch (error) {
+    lastAutoProgressAssignmentId.value = null
+    console.warn('Failed to mark review as in progress on open:', error)
   }
 }
 
@@ -874,6 +906,18 @@ watch(showScoreDialog, (isOpen) => {
     }
   }
 })
+
+watch(
+  () => [review.value?.id, review.value?.reviewer, review.value?.assignment_status, effectiveReviewerUsername.value],
+  async () => {
+    if (!review.value) {
+      return
+    }
+
+    await markReviewInProgressOnOpen(review.value)
+  },
+  { immediate: true }
+)
 
 // Watch for theme changes and force re-render of MdEditor
 watch(isDarkTheme, () => {

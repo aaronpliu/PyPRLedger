@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
+from src.models.pull_request import PullRequestReviewAssignment
 from src.models.user import User
 from src.schemas.review import (
     AssignReviewerRequest,
@@ -17,6 +18,7 @@ from src.schemas.review import (
     UpdateAssignmentStatusRequest,
 )
 from src.services.multi_reviewer_service import MultiReviewerService
+from src.services.rbac_service import RBACService
 
 
 router = APIRouter(prefix="/task-assignment", tags=["task-assignment"])
@@ -161,9 +163,49 @@ async def update_assignment_status(
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> dict:
     """Update assignment status (reviewer can update their own status, admin can update any)"""
-    # TODO: Add permission check
-
     try:
+        stmt = select(PullRequestReviewAssignment).where(
+            PullRequestReviewAssignment.id == assignment_id
+        )
+        result = await db.execute(stmt)
+        assignment = result.scalar_one_or_none()
+
+        if not assignment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "NOT_FOUND", "message": "Assignment not found"},
+            )
+
+        rbac_service = RBACService(db)
+        is_review_admin = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="assign",
+            resource_type="reviews",
+        )
+        git_username = await _get_git_username(current_user.id, db)
+
+        if not is_review_admin:
+            if not git_username or assignment.reviewer != git_username:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You can only update assignment status for tasks assigned to you.",
+                    },
+                )
+
+            if request.assignment_status != "in_progress":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "Assigned reviewers can only mark their own tasks as in_progress.",
+                    },
+                )
+
+            if assignment.assignment_status == "completed":
+                return {"message": "Status unchanged", "assignment": assignment.to_dict()}
+
         result = await service.update_assignment_status(
             db=db,
             assignment_id=assignment_id,
