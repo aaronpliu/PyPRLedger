@@ -63,6 +63,7 @@ class RoleAssignmentResponse(BaseModel):
     id: int
     auth_user_id: int
     role_id: int
+    role_name: str | None = Field(None, description="Name of the assigned role")
     resource_type: str
     resource_id: str | None
     granted_by: int | None

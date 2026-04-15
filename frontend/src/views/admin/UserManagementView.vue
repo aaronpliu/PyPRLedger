@@ -42,6 +42,27 @@
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="username" label="Username" width="150" />
         <el-table-column prop="email" label="Email" min-width="200" />
+        <el-table-column label="Roles" min-width="180">
+          <template #default="{ row }">
+            <el-tag 
+              v-if="row.roles && row.roles.length > 0"
+              v-for="role in row.roles.slice(0, 2)" 
+              :key="role"
+              size="small"
+              style="margin-right: 4px; margin-bottom: 4px;"
+            >
+              {{ role }}
+            </el-tag>
+            <span v-else class="text-muted">No Role</span>
+            <el-tag 
+              v-if="row.roles && row.roles.length > 2"
+              size="small"
+              type="info"
+            >
+              +{{ row.roles.length - 2 }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="is_active" label="Status" width="120">
           <template #default="{ row }">
             <el-tag :type="row.is_active ? 'success' : 'danger'">
@@ -161,9 +182,9 @@
           
           <el-form-item label="Scope">
             <el-radio-group v-model="roleForm.resource_type">
-              <el-radio label="global">Global</el-radio>
-              <el-radio label="project">Project</el-radio>
-              <el-radio label="repository">Repository</el-radio>
+              <el-radio value="global">Global</el-radio>
+              <el-radio value="project">Project</el-radio>
+              <el-radio value="repository">Repository</el-radio>
             </el-radio-group>
           </el-form-item>
           
@@ -196,6 +217,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import { rbacApi } from '@/api/rbac'
+import { usersApi } from '@/api/users'
 import type { ResourceType, Role, RoleAssignment } from '@/types'
 
 const { t } = useI18n()
@@ -274,11 +296,31 @@ const formatDate = (dateStr: string) => {
 const loadUsers = async () => {
   loading.value = true
   try {
-    // TODO: Implement actual API call
-    // For now, using mock data
-    users.value = []
-    total.value = 0
+    // Fetch auth users from backend API
+    const fetchedUsers = await usersApi.getAllUsers(500)
+    
+    // Apply client-side filtering based on search query and status filter
+    let filteredUsers = fetchedUsers
+    
+    if (searchQuery.value) {
+      const query = searchQuery.value.toLowerCase()
+      filteredUsers = filteredUsers.filter(user => 
+        user.username?.toLowerCase().includes(query) ||
+        user.email?.toLowerCase().includes(query)
+      )
+    }
+    
+    if (statusFilter.value !== null) {
+      filteredUsers = filteredUsers.filter(user => user.is_active === statusFilter.value)
+    }
+    
+    // Apply pagination
+    total.value = filteredUsers.length
+    const start = (currentPage.value - 1) * pageSize.value
+    const end = start + pageSize.value
+    users.value = filteredUsers.slice(start, end)
   } catch (error) {
+    console.error('Failed to load users:', error)
     ElMessage.error('Failed to load users')
   } finally {
     loading.value = false
@@ -444,5 +486,10 @@ onMounted(() => {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+
+.text-muted {
+  color: #909399;
+  font-size: 13px;
 }
 </style>

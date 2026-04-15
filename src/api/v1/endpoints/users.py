@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.core.database import get_db_session
 from src.core.exceptions import (
@@ -12,6 +13,7 @@ from src.core.exceptions import (
     UserNotFoundException,
 )
 from src.models.auth_user import AuthUser
+from src.models.rbac import UserRoleAssignment
 from src.schemas.user import (
     UserCreate,
     UserListResponse,
@@ -266,13 +268,15 @@ async def list_auth_users(
         db: Database session
 
     Returns:
-        dict: List of auth users with their Bitbucket linkage info
+        dict: List of auth users with their role summaries
     """
     try:
         from sqlalchemy import and_, select
 
-        # Build query
-        stmt = select(AuthUser)
+        # Build query with eager loading of role assignments
+        stmt = select(AuthUser).options(
+            selectinload(AuthUser.role_assignments).selectinload(UserRoleAssignment.role)
+        )
 
         # Apply filters
         conditions = []
@@ -290,12 +294,19 @@ async def list_auth_users(
         result = await db.execute(stmt)
         auth_users = result.scalars().all()
 
-        # Convert to response format with Bitbucket info
+        # Convert to response format with role summaries
         users_data = []
         for auth_user in auth_users:
             user_dict = auth_user.to_dict()
-            # Add roles information (will be populated by frontend if needed)
-            user_dict["roles"] = []  # Placeholder, can be enriched if needed
+
+            # Extract role names for display
+            role_names = []
+            for assignment in auth_user.role_assignments:
+                if assignment.role:
+                    role_names.append(assignment.role.name)
+
+            user_dict["roles"] = role_names
+            user_dict["role_display"] = ", ".join(role_names) if role_names else "No Role"
             user_dict["git_user_id"] = auth_user.user_id  # Link to Bitbucket user
             users_data.append(user_dict)
 
