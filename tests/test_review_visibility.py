@@ -252,12 +252,66 @@ async def _test_review_service_lists_assigned_and_self_raised_reviews(
         self_raised_unassigned.pull_request_id,
     }
     assert any(review["reviewer"] == alice.username for review in reviews)
-    assert any(review["reviewer"] == bob.username for review in reviews)
-    assert any(review["reviewer"] is None for review in reviews)
+    assert not any(review["reviewer"] == bob.username for review in reviews)
+    assert sum(1 for review in reviews if review["reviewer"] is None) == 2
 
 
 def test_review_service_lists_assigned_and_self_raised_reviews():
     anyio.run(_run_with_test_session, _test_review_service_lists_assigned_and_self_raised_reviews)
+
+
+async def _test_review_service_hides_sibling_assignment_rows_for_reviewer(
+    db_session: AsyncSession,
+) -> None:
+    suffix = uuid4().hex[:8]
+    project, repository = await _create_project_repository(db_session, suffix)
+
+    alice = await _create_bitbucket_user(
+        db_session, suffix=suffix, username=f"alice-{suffix}", is_reviewer=True
+    )
+    bob = await _create_bitbucket_user(
+        db_session, suffix=suffix, username=f"bob-{suffix}", is_reviewer=True
+    )
+    carol = await _create_bitbucket_user(
+        db_session, suffix=suffix, username=f"carol-{suffix}", is_reviewer=False
+    )
+
+    shared_review = await _create_review_base(
+        db_session,
+        project=project,
+        repository=repository,
+        pull_request_id=f"pr-shared-{suffix}",
+        commit_id=f"e{suffix}5",
+        owner_username=carol.username,
+        source_filename="src/shared.py",
+    )
+    await _assign_review(db_session, review_base=shared_review, reviewer_username=alice.username)
+    await _assign_review(db_session, review_base=shared_review, reviewer_username=bob.username)
+    await db_session.commit()
+
+    service = ReviewService()
+    reviews, total = await service.list_reviews(
+        ReviewFilter(visible_to_username=alice.username),
+        db_session,
+        page=1,
+        page_size=20,
+        use_cache=False,
+    )
+
+    shared_reviews = [
+        review for review in reviews if review["pull_request_id"] == shared_review.pull_request_id
+    ]
+
+    assert total == 1
+    assert len(shared_reviews) == 1
+    assert shared_reviews[0]["reviewer"] == alice.username
+
+
+def test_review_service_hides_sibling_assignment_rows_for_reviewer():
+    anyio.run(
+        _run_with_test_session,
+        _test_review_service_hides_sibling_assignment_rows_for_reviewer,
+    )
 
 
 async def _test_multi_reviewer_service_my_tasks_rule_uses_owner_or_assignment(

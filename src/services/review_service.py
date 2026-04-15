@@ -178,6 +178,7 @@ class ReviewService:
     def _flatten_reviews(
         bases: list[PullRequestReviewBase],
         reviewer: str | None = None,
+        visible_to_username: str | None = None,
     ) -> list[dict[str, Any]]:
         reviews: list[dict[str, Any]] = []
 
@@ -187,6 +188,26 @@ class ReviewService:
                 assignments = [
                     assignment for assignment in assignments if assignment.reviewer == reviewer
                 ]
+
+            if visible_to_username:
+                # A matched review base can have multiple reviewer assignments. For a regular
+                # reviewer, only return their own assignment rows; if they raised the PR, return
+                # a single owner row instead of leaking sibling reviewer assignments.
+                visible_assignments = [
+                    assignment
+                    for assignment in assignments
+                    if assignment.reviewer == visible_to_username
+                ]
+
+                if visible_assignments:
+                    reviews.extend(
+                        ReviewService._serialize_review(base, assignment)
+                        for assignment in visible_assignments
+                    )
+                elif reviewer is None and base.pull_request_user == visible_to_username:
+                    reviews.append(ReviewService._serialize_review(base))
+
+                continue
 
             if assignments:
                 reviews.extend(
@@ -686,7 +707,9 @@ class ReviewService:
         query = query.order_by(desc(PullRequestReviewBase.created_date)).distinct()
         result = await db.execute(query)
         bases = result.scalars().unique().all()
-        flattened_reviews = self._flatten_reviews(list(bases), filters.reviewer)
+        flattened_reviews = self._flatten_reviews(
+            list(bases), filters.reviewer, filters.visible_to_username
+        )
         total = len(flattened_reviews)
         start = (page - 1) * page_size
         end = start + page_size
