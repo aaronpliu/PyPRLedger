@@ -1438,6 +1438,22 @@ async def assign_review_task(
         resource_type="reviews",
     )
 
+    # Get the Git username from the associated User record
+    git_username = await _get_git_username(current_user.id, db)
+
+    if not git_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "BAD_REQUEST",
+                "message": f"User '{current_user.username}' does not have an associated Git account. "
+                f"All users (including system admins) must have a Git account to assign review tasks. "
+                f"Please contact your administrator to create a Git user account linked to this system account.",
+                "hint": "To fix this, create a User record in the 'user' table with a username, "
+                f"then link it to AuthUser (id={current_user.id}) by setting auth_user.user_id",
+            },
+        )
+
     # Verify assignee exists
     stmt = select(User).where(User.username == assignment_data.assignee_username)
     result = await db.execute(stmt)
@@ -1493,7 +1509,7 @@ async def assign_review_task(
         assignment = PullRequestReviewAssignment(
             review_base_id=existing_review.id,
             reviewer=assignment_data.assignee_username,
-            assigned_by=current_user.username,
+            assigned_by=git_username,
             assigned_date=datetime.now(UTC),
             assignment_status="assigned",
             reviewer_comments=assignment_data.reviewer_comments,
@@ -1506,7 +1522,7 @@ async def assign_review_task(
         review = assignment.to_full_dict()
         logger.info(
             f"Updated existing review assignment: PR {assignment_data.pull_request_id} "
-            f"to {assignment_data.assignee_username} by {current_user.username}"
+            f"to {assignment_data.assignee_username} by {git_username}"
         )
     else:
         # Create new review with assigned reviewer
@@ -1544,7 +1560,7 @@ async def assign_review_task(
         result = await db.execute(stmt)
         assignment = result.scalars().first()
         if assignment:
-            assignment.assigned_by = current_user.username
+            assignment.assigned_by = git_username
             assignment.assigned_date = datetime.now(UTC)
             assignment.assignment_status = "assigned"
             await db.flush()
@@ -1552,7 +1568,7 @@ async def assign_review_task(
         review = assignment.to_full_dict() if assignment else review_obj.model_dump(mode="json")
         logger.info(
             f"Created new review with assignment: PR {assignment_data.pull_request_id} "
-            f"to {assignment_data.assignee_username} by {current_user.username}"
+            f"to {assignment_data.assignee_username} by {git_username}"
         )
 
     # Log audit trail
