@@ -45,23 +45,36 @@
         <el-table-column prop="email" label="Email" min-width="200" />
         <el-table-column label="Roles" min-width="180">
           <template #default="{ row }">
-            <el-tag 
-              v-if="row.roles && row.roles.length > 0"
-              v-for="role in row.roles.slice(0, 2)" 
-              :key="role"
-              size="small"
-              style="margin-right: 4px; margin-bottom: 4px;"
-            >
-              {{ role }}
-            </el-tag>
-            <span v-else class="text-muted">No Role</span>
-            <el-tag 
-              v-if="row.roles && row.roles.length > 2"
-              size="small"
-              type="info"
-            >
-              +{{ row.roles.length - 2 }}
-            </el-tag>
+            <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+              <el-tag 
+                v-if="row.roles && row.roles.length > 0"
+                v-for="role in row.roles.slice(0, 2)" 
+                :key="role"
+                size="small"
+              >
+                {{ role }}
+              </el-tag>
+              <span v-else class="text-muted">No Role</span>
+              <el-tag 
+                v-if="row.roles && row.roles.length > 2"
+                size="small"
+                type="info"
+              >
+                +{{ row.roles.length - 2 }}
+              </el-tag>
+              
+              <!-- Delegated Role Badge -->
+              <el-tooltip 
+                v-if="hasDelegatedRole(row.id)"
+                content="Has delegated role(s)"
+                placement="top"
+              >
+                <el-tag size="small" type="warning" effect="plain">
+                  <el-icon><Share /></el-icon>
+                  Delegated
+                </el-tag>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="is_active" label="Status" width="120">
@@ -214,7 +227,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Plus, Search, Share } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -234,6 +247,9 @@ const searchQuery = ref('')
 const statusFilter = ref<boolean | null>(null)
 const showCreateDialog = ref(false)
 const createFormRef = ref<FormInstance>()
+
+// Delegation tracking
+const usersWithDelegations = ref<Set<number>>(new Set())
 
 // Role management state
 const showRoleDialog = ref(false)
@@ -296,6 +312,32 @@ const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
 }
 
+// Check if user has delegated roles
+const hasDelegatedRole = (userId: number): boolean => {
+  return usersWithDelegations.value.has(userId)
+}
+
+// Load delegation information for a user
+const loadUserDelegations = async (userId: number) => {
+  try {
+    const delegations = await rbacApi.getUserDelegations(userId, 'received', false)
+    // Filter only active delegations (not expired and not revoked)
+    const activeDelegations = delegations.filter(d => 
+      d.is_delegated && 
+      (!d.expires_at || new Date(d.expires_at) > new Date()) &&
+      !d.revoked_at
+    )
+    
+    if (activeDelegations.length > 0) {
+      usersWithDelegations.value.add(userId)
+    } else {
+      usersWithDelegations.value.delete(userId)
+    }
+  } catch (error) {
+    console.error(`Failed to load delegations for user ${userId}:`, error)
+  }
+}
+
 const handleSearchClear = () => {
   searchQuery.value = ''
   loadUsers()
@@ -316,6 +358,11 @@ const loadUsers = async () => {
     const start = (currentPage.value - 1) * pageSize.value
     const end = start + pageSize.value
     users.value = fetchedUsers.slice(start, end)
+    
+    // Load delegation information for displayed users
+    await Promise.all(
+      users.value.map(user => loadUserDelegations(user.id))
+    )
   } catch (error) {
     console.error('Failed to load users:', error)
     ElMessage.error('Failed to load users')
