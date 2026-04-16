@@ -40,26 +40,35 @@
       <el-header class="admin-header">
         <div class="header-right">
           <!-- Global Search -->
-          <GlobalSearch />
+          <div class="header-item">
+            <GlobalSearch />
+          </div>
 
           <!-- Notification Bell -->
-          <NotificationBell />
+          <div class="header-item">
+            <NotificationBell />
+          </div>
 
           <!-- Theme Switcher -->
-          <ThemeSwitcher />
+          <div class="header-item">
+            <ThemeSwitcher />
+          </div>
 
-          <el-dropdown @command="handleCommand">
-            <span class="user-info">
-              {{ authStore.user?.username }}
-              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="home">Back to Home</el-dropdown-item>
-                <el-dropdown-item command="logout" divided>Logout</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <!-- User Dropdown -->
+          <div class="header-item user-dropdown-wrapper">
+            <el-dropdown @command="handleCommand">
+              <span class="user-info">
+                {{ authStore.user?.username }}
+                <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="home">Back to Home</el-dropdown-item>
+                  <el-dropdown-item command="logout" divided>Logout</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </div>
       </el-header>
 
@@ -123,20 +132,39 @@ const handleCommand = (command: string) => {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  padding: 0 20px;
+  padding: 0 24px;
+  height: 60px;
 }
 
 .header-right {
   display: flex;
   align-items: center;
+  gap: 16px;
+}
+
+.header-item {
+  display: flex;
+  align-items: center;
+}
+
+.user-dropdown-wrapper {
+  margin-left: 8px;
 }
 
 .user-info {
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   color: var(--el-text-color-primary);
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  font-weight: 500;
+}
+
+.user-info:hover {
+  background-color: var(--el-fill-color-light);
 }
 
 .admin-main {
