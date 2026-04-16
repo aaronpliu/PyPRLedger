@@ -21,7 +21,9 @@
     "error": "Error",
     "confirm": "Confirm",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "noData": "No Data Available",
+    "viewAll": "View All"
   },
   "auth": {
     "login_title": "Login to PR Ledger",

@@ -21,7 +21,9 @@
     "error": "错误",
     "confirm": "确认",
     "yes": "是",
-    "no": "否"
+    "no": "否",
+    "noData": "暂无数据",
+    "viewAll": "查看全部"
   },
   "auth": {
     "login_title": "登录到 PR Ledger",
