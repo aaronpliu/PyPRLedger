@@ -212,6 +212,44 @@ async def get_active_projects(
         )
 
 
+@router.get("/all", response_model=list[dict])
+async def list_all_projects(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    project_service: Annotated[ProjectService, Depends(get_project_service)],
+) -> list[dict]:
+    """
+    List all projects without pagination
+
+    This endpoint returns all projects in a single request, which is useful for
+    dropdown menus, reference data, or when pagination is not needed.
+
+    Returns:
+        List of all project dictionaries with id, project_id, project_name, project_key, etc.
+    """
+    try:
+        # Use list_projects with a large page size to get all projects
+        from src.schemas.project import ProjectFilter
+
+        filters = ProjectFilter()
+        projects, _ = await project_service.list_projects(
+            db=db,
+            filters=filters,
+            page=1,
+            page_size=10000,  # Large enough to get all projects
+        )
+
+        return [p.to_dict() for p in projects]
+    except Exception as e:
+        logger.error(f"Failed to list all projects: {str(e)}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/projects/all"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to list all projects"},
+        )
+
+
 @router.get("/search", response_model=ProjectListResponse)
 async def search_projects(
     db: Annotated[AsyncSession, Depends(get_db_session)],

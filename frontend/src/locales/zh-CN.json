@@ -117,6 +117,8 @@
     "user_management": "用户管理",
     "role_management": "角色管理",
     "back_to_home": "返回首页",
+    "projectRegistry": "项目注册表",
+    "manageProjects": "管理项目",
     "dashboard": {
       "totalUsers": "用户总数",
       "totalRoles": "角色总数",

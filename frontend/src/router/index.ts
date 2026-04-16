@@ -105,6 +105,11 @@ const routes: RouteRecordRaw[] = [
         name: 'SessionManagement',
         component: () => import('@/views/admin/SessionManagementView.vue'),
       },
+      {
+        path: 'project-registry',
+        name: 'ProjectRegistryManagement',
+        component: () => import('@/views/admin/ProjectRegistryManagementView.vue'),
+      },
     ],
   },
 

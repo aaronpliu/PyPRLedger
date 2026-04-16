@@ -116,6 +116,8 @@
     "user_management": "User Management",
     "role_management": "Role Management",
     "back_to_home": "Back to Home",
+    "projectRegistry": "Project Registry",
+    "manageProjects": "Manage Projects",
     "dashboard": {
       "totalUsers": "Total Users",
       "totalRoles": "Total Roles",
