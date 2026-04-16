@@ -16,13 +16,13 @@
               style="border: none"
               aria-label="Main menu"
             >
-              <el-menu-item index="/">Dashboard</el-menu-item>
-              <el-menu-item index="/reviews">Reviews</el-menu-item>
-              <el-menu-item v-if="isAdmin" index="/task-assignment">Task Assignment</el-menu-item>
+              <el-menu-item index="/">{{ t('menu.dashboard') }}</el-menu-item>
+              <el-menu-item index="/reviews">{{ t('menu.reviews') }}</el-menu-item>
+              <el-menu-item v-if="isAdmin" index="/task-assignment">{{ t('menu.taskAssignment') }}</el-menu-item>
               <el-sub-menu index="/scores">
-                <template #title>Scores</template>
-                <el-menu-item index="/scores">Score List</el-menu-item>
-                <el-menu-item index="/scores/analytics">Analytics</el-menu-item>
+                <template #title>{{ t('menu.scores') }}</template>
+                <el-menu-item index="/scores">{{ t('menu.scoreList') }}</el-menu-item>
+                <el-menu-item index="/scores/analytics">{{ t('menu.analytics') }}</el-menu-item>
               </el-sub-menu>
             </el-menu>
           </nav>

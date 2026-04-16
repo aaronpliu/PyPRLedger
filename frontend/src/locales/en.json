@@ -23,7 +23,23 @@
     "yes": "Yes",
     "no": "No",
     "noData": "No Data Available",
-    "viewAll": "View All"
+    "viewAll": "View All",
+    "backToHome": "Back to Home"
+  },
+  "menu": {
+    "dashboard": "Dashboard",
+    "reviews": "Reviews",
+    "taskAssignment": "Task Assignment",
+    "scores": "Scores",
+    "scoreList": "Score List",
+    "analytics": "Analytics",
+    "adminPanel": "Admin Panel",
+    "users": "Users",
+    "roles": "Roles",
+    "delegations": "Delegations",
+    "auditLogs": "Audit Logs",
+    "sessions": "Sessions",
+    "projectRegistry": "Project Registry"
   },
   "auth": {
     "login_title": "Login to PR Ledger",

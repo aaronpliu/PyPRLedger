@@ -3,7 +3,7 @@
     <!-- Sidebar -->
     <el-aside width="200px" class="admin-sidebar">
       <div class="sidebar-header">
-        <h2>Admin Panel</h2>
+        <h2>{{ t('menu.adminPanel') }}</h2>
       </div>
       <el-menu
         :default-active="activeMenu"
@@ -14,31 +14,31 @@
       >
         <el-menu-item index="/admin">
           <el-icon><DataAnalysis /></el-icon>
-          <span>Dashboard</span>
+          <span>{{ t('menu.dashboard') }}</span>
         </el-menu-item>
         <el-menu-item index="/admin/users">
           <el-icon><User /></el-icon>
-          <span>Users</span>
+          <span>{{ t('menu.users') }}</span>
         </el-menu-item>
         <el-menu-item index="/admin/roles">
           <el-icon><Lock /></el-icon>
-          <span>Roles</span>
+          <span>{{ t('menu.roles') }}</span>
         </el-menu-item>
         <el-menu-item index="/admin/delegations">
           <el-icon><Share /></el-icon>
-          <span>Delegations</span>
+          <span>{{ t('menu.delegations') }}</span>
         </el-menu-item>
         <el-menu-item index="/admin/audit">
           <el-icon><Document /></el-icon>
-          <span>Audit Logs</span>
+          <span>{{ t('menu.auditLogs') }}</span>
         </el-menu-item>
         <el-menu-item index="/admin/sessions">
           <el-icon><Monitor /></el-icon>
-          <span>Sessions</span>
+          <span>{{ t('menu.sessions') }}</span>
         </el-menu-item>
         <el-menu-item index="/admin/project-registry">
           <el-icon><Folder /></el-icon>
-          <span>Project Registry</span>
+          <span>{{ t('menu.projectRegistry') }}</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
@@ -71,8 +71,8 @@
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="home">Back to Home</el-dropdown-item>
-                  <el-dropdown-item command="logout" divided>Logout</el-dropdown-item>
+                  <el-dropdown-item command="home">{{ t('common.backToHome') }}</el-dropdown-item>
+                  <el-dropdown-item command="logout" divided>{{ t('common.logout') }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -92,11 +92,13 @@ import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { User, Lock, Share, Document, Monitor, ArrowDown, DataAnalysis, Folder } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 
+const { t } = useI18n()
 const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()

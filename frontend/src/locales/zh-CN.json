@@ -23,7 +23,23 @@
     "yes": "是",
     "no": "否",
     "noData": "暂无数据",
-    "viewAll": "查看全部"
+    "viewAll": "查看全部",
+    "backToHome": "返回首页"
+  },
+  "menu": {
+    "dashboard": "仪表板",
+    "reviews": "代码审查",
+    "taskAssignment": "任务分配",
+    "scores": "评分",
+    "scoreList": "评分列表",
+    "analytics": "分析",
+    "adminPanel": "管理面板",
+    "users": "用户",
+    "roles": "角色",
+    "delegations": "委托",
+    "auditLogs": "审计日志",
+    "sessions": "会话",
+    "projectRegistry": "项目注册表"
   },
   "auth": {
     "login_title": "登录到 PR Ledger",
