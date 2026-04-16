@@ -698,20 +698,36 @@ class RBACService:
             user_ids.add(assignment.delegator_id)
             user_ids.add(assignment.auth_user_id)  # delegatee
 
-        # Fetch usernames in batch
-        username_map = {}
+        # Fetch usernames and display_names in batch
+        # AuthUser doesn't have display_name, so we need to join with User table
+        user_info_map = {}
         if user_ids:
-            user_stmt = select(AuthUser).where(AuthUser.id.in_(user_ids))
+            # Join AuthUser with User to get display_name
+            from src.models.user import User as BitbucketUser
+
+            user_stmt = (
+                select(AuthUser, BitbucketUser)
+                .outerjoin(BitbucketUser, AuthUser.user_id == BitbucketUser.id)
+                .where(AuthUser.id.in_(user_ids))
+            )
             user_result = await self.db.execute(user_stmt)
-            users = user_result.scalars().all()
-            username_map = {user.id: user.username for user in users}
+            user_pairs = user_result.all()
+
+            for auth_user, bitbucket_user in user_pairs:
+                user_info_map[auth_user.id] = {
+                    "username": auth_user.username,
+                    "display_name": bitbucket_user.display_name if bitbucket_user else "",
+                }
 
         return [
             {
                 "id": assignment.id,
                 "auth_user_id": assignment.auth_user_id,  # delegatee
-                "delegatee_username": username_map.get(
-                    assignment.auth_user_id, f"User {assignment.auth_user_id}"
+                "delegatee_username": user_info_map.get(assignment.auth_user_id, {}).get(
+                    "username", f"User {assignment.auth_user_id}"
+                ),
+                "delegatee_display_name": user_info_map.get(assignment.auth_user_id, {}).get(
+                    "display_name", ""
                 ),
                 "role_id": assignment.role_id,
                 "role_name": role.name,
@@ -719,8 +735,11 @@ class RBACService:
                 "resource_id": assignment.resource_id,
                 "granted_by": assignment.granted_by,
                 "delegator_id": assignment.delegator_id,
-                "delegator_username": username_map.get(
-                    assignment.delegator_id, f"User {assignment.delegator_id}"
+                "delegator_username": user_info_map.get(assignment.delegator_id, {}).get(
+                    "username", f"User {assignment.delegator_id}"
+                ),
+                "delegator_display_name": user_info_map.get(assignment.delegator_id, {}).get(
+                    "display_name", ""
                 ),
                 "is_delegated": assignment.is_delegated,
                 "delegation_status": assignment.delegation_status,

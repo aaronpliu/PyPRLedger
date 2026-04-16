@@ -54,14 +54,20 @@
           </template>
         </el-table-column>
         <el-table-column prop="resource_type" label="Resource Type" width="120" />
-        <el-table-column label="Delegator" width="120">
+        <el-table-column label="Delegator" width="180">
           <template #default="{ row }">
-            User #{{ row.delegator_id }}
+            <div class="user-info-cell">
+              <div v-if="row.delegator_display_name" class="display-name">{{ row.delegator_display_name }}</div>
+              <div class="username">{{ row.delegator_username || `User ${row.delegator_id}` }}</div>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="Delegatee" width="120">
+        <el-table-column label="Delegatee" width="180">
           <template #default="{ row }">
-            User #{{ row.auth_user_id }}
+            <div class="user-info-cell">
+              <div v-if="row.delegatee_display_name" class="display-name">{{ row.delegatee_display_name }}</div>
+              <div class="username">{{ row.delegatee_username || `User ${row.auth_user_id}` }}</div>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="Status" width="120">
@@ -321,4 +327,19 @@ onMounted(() => {
   font-size: 24px;
   font-weight: bold;
 }
+
+.user-info-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.user-info-cell .display-name {
+  font-weight: bold;
+}
+
+.user-info-cell .username {
+  color: var(--el-text-color-secondary);
+}
+
 </style>

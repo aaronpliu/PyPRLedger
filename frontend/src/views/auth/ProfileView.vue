@@ -173,9 +173,12 @@
                     </template>
                   </el-table-column>
                   <el-table-column prop="resource_type" label="Resource Type" width="120" />
-                  <el-table-column label="Delegator" width="150">
+                  <el-table-column label="Delegator" width="180">
                     <template #default="{ row }">
-                      <span>{{ row.delegator_username || `User ${row.delegator_id}` }}</span>
+                      <div class="user-info-cell">
+                        <div v-if="row.delegator_display_name" class="display-name">{{ row.delegator_display_name }}</div>
+                        <div class="username">{{ row.delegator_username || `User ${row.delegator_id}` }}</div>
+                      </div>
                     </template>
                   </el-table-column>
                   <el-table-column label="Status" width="120">
@@ -214,9 +217,12 @@
                     </template>
                   </el-table-column>
                   <el-table-column prop="resource_type" label="Resource Type" width="120" />
-                  <el-table-column label="Delegatee" width="150">
+                  <el-table-column label="Delegatee" width="180">
                     <template #default="{ row }">
-                      <span>{{ row.delegatee_username || `User ${row.auth_user_id}` }}</span>
+                      <div class="user-info-cell">
+                        <div v-if="row.delegatee_display_name" class="display-name">{{ row.delegatee_display_name }}</div>
+                        <div class="username">{{ row.delegatee_username || `User ${row.auth_user_id}` }}</div>
+                      </div>
                     </template>
                   </el-table-column>
                   <el-table-column label="Status" width="120">
@@ -897,5 +903,24 @@ h3 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.user-info-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.display-name {
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.username {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.4;
 }
 </style>

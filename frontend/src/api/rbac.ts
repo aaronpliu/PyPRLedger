@@ -17,6 +17,7 @@ export interface DelegationResponse {
   id: number
   auth_user_id: number
   delegatee_username?: string | null
+  delegatee_display_name?: string | null
   role_id: number
   role_name?: string | null
   resource_type: string
@@ -24,6 +25,7 @@ export interface DelegationResponse {
   granted_by?: number | null
   delegator_id?: number | null
   delegator_username?: string | null
+  delegator_display_name?: string | null
   is_delegated: boolean
   delegation_status?: string | null
   delegation_scope?: Record<string, string[]> | null
