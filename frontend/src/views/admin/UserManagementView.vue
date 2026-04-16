@@ -113,7 +113,7 @@
 
     <!-- Create User Dialog -->
     <el-dialog v-model="showCreateDialog" title="Add New User" width="600px">
-      <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="120px">
+      <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="140px" class="user-form">
         <el-form-item label="Username" prop="username">
           <el-input v-model="createForm.username" placeholder="Enter username" />
         </el-form-item>
@@ -132,10 +132,12 @@
       </el-form>
       
       <template #footer>
-        <el-button @click="showCreateDialog = false">Cancel</el-button>
-        <el-button type="primary" :loading="creating" @click="handleCreate">
-          Create User
-        </el-button>
+        <span class="dialog-footer">
+          <el-button @click="showCreateDialog = false">Cancel</el-button>
+          <el-button type="primary" :loading="creating" @click="handleCreate">
+            Create User
+          </el-button>
+        </span>
       </template>
     </el-dialog>
 
@@ -486,5 +488,15 @@ onMounted(() => {
 .text-muted {
   color: #909399;
   font-size: 13px;
+}
+
+.user-form {
+  padding-right: 20px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 </style>
