@@ -19,7 +19,8 @@
             placeholder="Search by username or email"
             clearable
             style="width: 300px"
-            @clear="loadUsers"
+            @clear="handleSearchClear"
+            @keyup.enter="loadUsers"
           >
             <template #append>
               <el-button @click="loadUsers">
@@ -293,32 +294,26 @@ const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
 }
 
+const handleSearchClear = () => {
+  searchQuery.value = ''
+  loadUsers()
+}
+
 const loadUsers = async () => {
   loading.value = true
   try {
-    // Fetch auth users from backend API
-    const fetchedUsers = await usersApi.getAllUsers(500)
+    // Build filter parameters for server-side filtering
+    const activeFilter = statusFilter.value === null ? undefined : statusFilter.value
+    const usernameFilter = searchQuery.value || undefined
     
-    // Apply client-side filtering based on search query and status filter
-    let filteredUsers = fetchedUsers
+    // Fetch auth users from backend API with filters
+    const fetchedUsers = await usersApi.getAllUsers(500, activeFilter, usernameFilter)
     
-    if (searchQuery.value) {
-      const query = searchQuery.value.toLowerCase()
-      filteredUsers = filteredUsers.filter(user => 
-        user.username?.toLowerCase().includes(query) ||
-        user.email?.toLowerCase().includes(query)
-      )
-    }
-    
-    if (statusFilter.value !== null) {
-      filteredUsers = filteredUsers.filter(user => user.is_active === statusFilter.value)
-    }
-    
-    // Apply pagination
-    total.value = filteredUsers.length
+    // Apply pagination on the filtered results
+    total.value = fetchedUsers.length
     const start = (currentPage.value - 1) * pageSize.value
     const end = start + pageSize.value
-    users.value = filteredUsers.slice(start, end)
+    users.value = fetchedUsers.slice(start, end)
   } catch (error) {
     console.error('Failed to load users:', error)
     ElMessage.error('Failed to load users')
