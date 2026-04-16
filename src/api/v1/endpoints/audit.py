@@ -75,11 +75,11 @@ async def list_audit_logs(
 
     # Query logs
     logs, total = await audit_service.get_audit_logs(
-        actor_id=actor_id,
+        auth_user_id=actor_id,
         resource_type=resource_type,
         resource_id=resource_id,
         action=action,
-        status=status_filter,
+        response_status=int(status_filter) if status_filter and status_filter.isdigit() else None,
         start_date=parsed_start_date,
         end_date=parsed_end_date,
         limit=limit,
@@ -93,7 +93,7 @@ async def list_audit_logs(
         "logs": [
             AuditLogResponse(
                 id=log.id,
-                actor_id=log.actor_id,
+                auth_user_id=log.auth_user_id,
                 action=log.action,
                 resource_type=log.resource_type,
                 resource_id=log.resource_id,
@@ -101,9 +101,12 @@ async def list_audit_logs(
                 new_values=log.new_values,
                 ip_address=log.ip_address,
                 user_agent=log.user_agent,
-                status=log.status,
+                request_method=log.request_method,
+                request_path=log.request_path,
+                response_status=log.response_status,
+                execution_time_ms=log.execution_time_ms,
                 error_message=log.error_message,
-                timestamp=log.timestamp.isoformat(),
+                created_at=log.created_at.isoformat(),
             )
             for log in logs
         ],
@@ -136,7 +139,7 @@ async def get_audit_log(
 
     return AuditLogResponse(
         id=log.id,
-        actor_id=log.actor_id,
+        auth_user_id=log.auth_user_id,
         action=log.action,
         resource_type=log.resource_type,
         resource_id=log.resource_id,
@@ -144,9 +147,12 @@ async def get_audit_log(
         new_values=log.new_values,
         ip_address=log.ip_address,
         user_agent=log.user_agent,
-        status=log.status,
+        request_method=log.request_method,
+        request_path=log.request_path,
+        response_status=log.response_status,
+        execution_time_ms=log.execution_time_ms,
         error_message=log.error_message,
-        timestamp=log.timestamp.isoformat(),
+        created_at=log.created_at.isoformat(),
     )
 
 
