@@ -43,9 +43,16 @@ export const authApi = {
   },
 
   // List active sessions for administration
-  getSessions(authUserId?: number): Promise<AuthSession[]> {
+  getSessions(authUserId?: number, username?: string): Promise<AuthSession[]> {
+    const params: any = {}
+    if (authUserId !== undefined) {
+      params.auth_user_id = authUserId
+    }
+    if (username) {
+      params.username = username
+    }
     return request.get('/auth/sessions', {
-      params: authUserId ? { auth_user_id: authUserId } : undefined,
+      params: Object.keys(params).length > 0 ? params : undefined,
     })
   },
 

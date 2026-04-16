@@ -37,6 +37,7 @@ async def list_audit_logs(
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     audit_service: Annotated[AuditService, Depends(get_audit_service)],
     actor_id: int | None = Query(None, description="Filter by actor user ID"),
+    username: str | None = Query(None, description="Filter by username (partial match)"),
     resource_type: str | None = Query(None, description="Filter by resource type"),
     resource_id: str | None = Query(None, description="Filter by specific resource ID"),
     action: str | None = Query(None, description="Filter by action type"),
@@ -76,6 +77,7 @@ async def list_audit_logs(
     # Query logs
     logs, total = await audit_service.get_audit_logs(
         auth_user_id=actor_id,
+        username=username,
         resource_type=resource_type,
         resource_id=resource_id,
         action=action,

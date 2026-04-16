@@ -13,8 +13,8 @@
 
       <!-- Filters -->
       <el-form :inline="true" class="filter-form">
-        <el-form-item label="User">
-          <el-input v-model="filters.auth_user_id" placeholder="User ID" clearable style="width: 150px" />
+        <el-form-item label="Username">
+          <el-input v-model="filters.username" placeholder="Search by username" clearable style="width: 200px" />
         </el-form-item>
         
         <el-form-item label="Action">
@@ -189,7 +189,7 @@ const selectedLog = ref<AuditLog | null>(null)
 const dateRange = ref<[Date, Date] | null>(null)
 
 const filters = reactive({
-  auth_user_id: null as number | null,
+  username: null as string | null,
   action: null as string | null,
   resource_type: null as string | null,
   response_status: null as number | null,
@@ -243,7 +243,20 @@ const loadAuditLogs = async () => {
     const params: any = {
       limit: pageSize.value,
       offset: (currentPage.value - 1) * pageSize.value,
-      ...filters,
+    }
+
+    // Add filters only if they have values
+    if (filters.username) {
+      params.username = filters.username
+    }
+    if (filters.action) {
+      params.action = filters.action
+    }
+    if (filters.resource_type) {
+      params.resource_type = filters.resource_type
+    }
+    if (filters.response_status) {
+      params.status = filters.response_status.toString()
     }
 
     if (dateRange.value && dateRange.value.length === 2) {
