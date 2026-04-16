@@ -85,8 +85,14 @@ class DelegationRevoke(BaseModel):
 class DelegationListQuery(BaseModel):
     """Query parameters for listing delegations"""
 
-    delegator_id: int | None = Field(None, description="Filter by delegator")
-    delegatee_id: int | None = Field(None, description="Filter by delegatee")
+    delegator_id: int | None = Field(None, description="Filter by delegator user ID")
+    delegator_username: str | None = Field(
+        None, description="Filter by delegator username (partial match)"
+    )
+    delegatee_id: int | None = Field(None, description="Filter by delegatee user ID")
+    delegatee_username: str | None = Field(
+        None, description="Filter by delegatee username (partial match)"
+    )
     status: str | None = Field(
         None,
         description="Filter by status (active/expired/revoked/pending)",

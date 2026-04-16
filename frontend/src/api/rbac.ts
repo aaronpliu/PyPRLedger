@@ -43,7 +43,9 @@ export interface DelegationRevoke {
 
 export interface DelegationListQuery {
   delegator_id?: number | null
+  delegator_username?: string | null
   delegatee_id?: number | null
+  delegatee_username?: string | null
   status?: string | null
   include_expired?: boolean
 }

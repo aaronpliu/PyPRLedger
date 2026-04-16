@@ -143,13 +143,16 @@ async def list_delegations(
 
     **Query Parameters**:
     - `delegator_id`: Filter by delegator user ID
+    - `delegator_username`: Filter by delegator username (partial match)
     - `delegatee_id`: Filter by delegatee user ID
+    - `delegatee_username`: Filter by delegatee username (partial match)
     - `status`: Filter by status (active/expired/revoked/pending)
     - `include_expired`: Include expired/revoked delegations (default: false)
 
     **Examples**:
     - GET /delegations?delegator_id=1  (delegations I created)
     - GET /delegations?delegatee_id=2  (delegations I received)
+    - GET /delegations?delegator_username=john  (filter by username)
     - GET /delegations?status=active   (only active delegations)
     - GET /delegations?include_expired=true  (include history)
     """
@@ -167,12 +170,19 @@ async def list_delegations(
 
             raise ForbiddenException(message="You can only view your own delegations")
         # Force filter to current user
-        if not query.delegator_id and not query.delegatee_id:
+        if (
+            not query.delegator_id
+            and not query.delegatee_id
+            and not query.delegator_username
+            and not query.delegatee_username
+        ):
             query.delegatee_id = current_user.id
 
     delegations = await rbac_service.get_delegations(
         delegator_id=query.delegator_id,
         delegatee_id=query.delegatee_id,
+        delegator_username=query.delegator_username,
+        delegatee_username=query.delegatee_username,
         status=query.status,
         include_expired=query.include_expired,
     )

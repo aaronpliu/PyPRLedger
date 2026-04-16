@@ -654,14 +654,18 @@ class RBACService:
         self,
         delegator_id: int | None = None,
         delegatee_id: int | None = None,
+        delegator_username: str | None = None,
+        delegatee_username: str | None = None,
         status: str | None = None,
         include_expired: bool = False,
     ) -> list[dict]:
         """Get delegation list with filters
 
         Args:
-            delegator_id: Filter by delegator
-            delegatee_id: Filter by delegatee
+            delegator_id: Filter by delegator user ID
+            delegatee_id: Filter by delegatee user ID
+            delegator_username: Filter by delegator username (partial match)
+            delegatee_username: Filter by delegatee username (partial match)
             status: Filter by status (active/expired/revoked/pending)
             include_expired: Include expired/revoked delegations
 
@@ -680,6 +684,27 @@ class RBACService:
             stmt = stmt.where(UserRoleAssignment.delegator_id == delegator_id)
         if delegatee_id:
             stmt = stmt.where(UserRoleAssignment.auth_user_id == delegatee_id)
+
+        # Handle username-based filtering
+        if delegator_username or delegatee_username:
+            # Join with AuthUser to filter by username
+            stmt = stmt.join(AuthUser, UserRoleAssignment.delegator_id == AuthUser.id, isouter=True)
+
+            if delegator_username:
+                stmt = stmt.where(AuthUser.username.ilike(f"%{delegator_username}%"))
+
+            if delegatee_username:
+                # Need another join for delegatee
+                from sqlalchemy.orm import aliased
+
+                delegatee_auth_user = aliased(AuthUser)
+                stmt = stmt.join(
+                    delegatee_auth_user,
+                    UserRoleAssignment.auth_user_id == delegatee_auth_user.id,
+                    isouter=True,
+                )
+                stmt = stmt.where(delegatee_auth_user.username.ilike(f"%{delegatee_username}%"))
+
         if status:
             stmt = stmt.where(UserRoleAssignment.delegation_status == status)
 
