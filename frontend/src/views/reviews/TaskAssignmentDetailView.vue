@@ -44,10 +44,10 @@
           </el-button>
         </div>
 
-        <el-table :data="review.reviewers" stripe border>
-          <el-table-column prop="id" label="ID" width="80" />
+        <el-table :data="review.reviewers" stripe border header-align="center">
+          <el-table-column prop="id" label="ID" width="80" align="center" />
           
-          <el-table-column label="Reviewer" min-width="150">
+          <el-table-column label="Reviewer" min-width="150" align="center">
             <template #default="{ row }">
               <div class="reviewer-info">
                 <strong>{{ row.reviewer }}</strong>
@@ -58,19 +58,19 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="Assigned By" width="150">
+          <el-table-column label="Assigned By" width="150" align="center">
             <template #default="{ row }">
               {{ row.assigned_by || 'N/A' }}
             </template>
           </el-table-column>
 
-          <el-table-column label="Assigned Date" width="180">
+          <el-table-column label="Assigned Date" width="180" align="center">
             <template #default="{ row }">
               {{ row.assigned_date ? formatDate(row.assigned_date) : 'N/A' }}
             </template>
           </el-table-column>
 
-          <el-table-column label="Status" width="120">
+          <el-table-column label="Status" width="120" align="center">
             <template #default="{ row }">
               <el-dropdown @command="(cmd: string) => handleUpdateStatus(row.id, cmd)">
                 <el-tag :type="getAssignmentStatusType(row.assignment_status)" class="clickable">
@@ -79,23 +79,26 @@
                 </el-tag>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="pending">Pending</el-dropdown-item>
-                    <el-dropdown-item command="assigned">Assigned</el-dropdown-item>
-                    <el-dropdown-item command="in_progress">In Progress</el-dropdown-item>
-                    <el-dropdown-item command="completed">Completed</el-dropdown-item>
+                    <el-dropdown-item command="pending">{{ t('reviews.pending') }}</el-dropdown-item>
+                    <el-dropdown-item command="assigned">{{ t('reviews.assigned') }}</el-dropdown-item>
+                    <el-dropdown-item command="in_progress">{{ t('reviews.in_progress') }}</el-dropdown-item>
+                    <el-dropdown-item command="completed">{{ t('reviews.completed') }}</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
             </template>
           </el-table-column>
 
-          <el-table-column label="Comments" min-width="200">
+          <el-table-column label="Comments" min-width="200" align="left">
             <template #default="{ row }">
-              {{ row.reviewer_comments || '-' }}
+              <span v-if="row.reviewer_comments">{{ row.reviewer_comments }}</span>
+              <span v-else class="status-description">
+                {{ getAssignmentStatusDescription(row.assignment_status) }}
+              </span>
             </template>
           </el-table-column>
 
-          <el-table-column label="Actions" width="100" fixed="right">
+          <el-table-column label="Actions" width="100" fixed="right" align="center">
             <template #default="{ row }">
               <el-button
                 size="small"
@@ -215,11 +218,13 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Back, ArrowDown } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 // State
 const loading = ref(false)
@@ -310,18 +315,11 @@ const getAssignmentStatusType = (status: string) => {
 }
 
 const formatAssignmentStatusLabel = (status: string) => {
-  switch (status) {
-    case 'in_progress':
-      return 'In Progress'
-    case 'assigned':
-      return 'Assigned'
-    case 'pending':
-      return 'Pending'
-    case 'completed':
-      return 'Completed'
-    default:
-      return status
-  }
+  return t(`reviews.${status}`, status)
+}
+
+const getAssignmentStatusDescription = (status: string) => {
+  return t(`reviews.assignment_status_descriptions.${status}`, status)
 }
 
 // Go back
@@ -450,6 +448,12 @@ onMounted(() => {
 .empty-reviewers {
   color: var(--el-text-color-secondary);
   font-size: 13px;
+}
+
+.status-description {
+  color: var(--el-text-color-secondary);
+  font-style: italic;
+  font-size: 12px;
 }
 
 .ai-section {

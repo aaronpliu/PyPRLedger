@@ -83,7 +83,14 @@
     "delete_failed": "删除审查失败",
     "completed": "已完成",
     "in_progress": "进行中",
-    "pending": "待处理"
+    "pending": "待处理",
+    "assigned": "已分配",
+    "assignment_status_descriptions": {
+      "pending": "审查任务尚未分配给任何审查者",
+      "assigned": "任务已由审查管理员分配给审查者",
+      "in_progress": "审查者已查看任务但尚未提交评分",
+      "completed": "审查者已完成此审查的评分"
+    }
   },
   "scores": {
     "scores_management": "评分管理",

@@ -127,16 +127,21 @@
         <el-table-column label="Reviewers" min-width="260">
           <template #default="{ row }">
             <div class="reviewers-list">
-              <el-tag
+              <el-tooltip
                 v-for="reviewer in row.reviewers"
                 :key="reviewer.id"
-                :type="getReviewerTagType(reviewer.assignment_status)"
-                size="small"
-                style="margin: 2px"
+                :content="getAssignmentStatusDescription(reviewer.assignment_status)"
+                placement="top"
               >
-                {{ reviewer.reviewer }}
-                <span v-if="reviewer.assignment_status === 'completed'" class="status-icon">✓</span>
-              </el-tag>
+                <el-tag
+                  :type="getReviewerTagType(reviewer.assignment_status)"
+                  size="small"
+                  style="margin: 2px; cursor: help"
+                >
+                  {{ reviewer.reviewer }}
+                  <span v-if="reviewer.assignment_status === 'completed'" class="status-icon">✓</span>
+                </el-tag>
+              </el-tooltip>
               <el-button
                 v-if="row.reviewers.length === 0"
                 type="primary"
@@ -327,11 +332,13 @@ import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, ArrowUp, Refresh, Search } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
 import { projectsApi, type ProjectSummary } from '@/api/projects'
 
 const router = useRouter()
+const { t } = useI18n()
 
 // State
 const loading = ref(false)
@@ -534,6 +541,11 @@ const getReviewerTagType = (status: string) => {
     default:
       return 'info'
   }
+}
+
+// Get assignment status description
+const getAssignmentStatusDescription = (status: string) => {
+  return t(`reviews.assignment_status_descriptions.${status}`, status)
 }
 
 // Get progress percentage

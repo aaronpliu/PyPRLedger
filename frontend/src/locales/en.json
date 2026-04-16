@@ -83,7 +83,14 @@
     "delete_failed": "Failed to delete review",
     "completed": "Completed",
     "in_progress": "In Progress",
-    "pending": "Pending"
+    "pending": "Pending",
+    "assigned": "Assigned",
+    "assignment_status_descriptions": {
+      "pending": "Review task has not been assigned to any reviewer yet",
+      "assigned": "Task has been assigned to a reviewer by the review admin",
+      "in_progress": "Reviewer has viewed the task but has not submitted a score yet",
+      "completed": "Reviewer has completed scoring for this review"
+    }
   },
   "scores": {
     "scores_management": "Scores Management",
