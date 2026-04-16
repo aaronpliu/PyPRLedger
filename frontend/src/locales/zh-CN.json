@@ -116,7 +116,20 @@
     "audit_logs": "审计日志",
     "user_management": "用户管理",
     "role_management": "角色管理",
-    "back_to_home": "返回首页"
+    "back_to_home": "返回首页",
+    "dashboard": {
+      "totalUsers": "用户总数",
+      "totalRoles": "角色总数",
+      "activeDelegations": "活跃委托",
+      "activeSessions": "活跃会话",
+      "quickActions": "快捷操作",
+      "manageUsers": "管理用户",
+      "manageRoles": "管理角色",
+      "manageDelegations": "管理委托",
+      "viewAuditLogs": "查看审计日志",
+      "manageSessions": "管理会话",
+      "recentAuditLogs": "最近审计日志"
+    }
   },
   "errors": {
     "forbidden": "403 禁止访问",

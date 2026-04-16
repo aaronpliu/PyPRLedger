@@ -115,7 +115,20 @@
     "audit_logs": "Audit Logs",
     "user_management": "User Management",
     "role_management": "Role Management",
-    "back_to_home": "Back to Home"
+    "back_to_home": "Back to Home",
+    "dashboard": {
+      "totalUsers": "Total Users",
+      "totalRoles": "Total Roles",
+      "activeDelegations": "Active Delegations",
+      "activeSessions": "Active Sessions",
+      "quickActions": "Quick Actions",
+      "manageUsers": "Manage Users",
+      "manageRoles": "Manage Roles",
+      "manageDelegations": "Manage Delegations",
+      "viewAuditLogs": "View Audit Logs",
+      "manageSessions": "Manage Sessions",
+      "recentAuditLogs": "Recent Audit Logs"
+    }
   },
   "errors": {
     "forbidden": "403 Forbidden",

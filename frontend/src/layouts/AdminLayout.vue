@@ -12,6 +12,10 @@
         text-color="var(--el-text-color-regular)"
         active-text-color="var(--el-color-primary)"
       >
+        <el-menu-item index="/admin">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>Dashboard</span>
+        </el-menu-item>
         <el-menu-item index="/admin/users">
           <el-icon><User /></el-icon>
           <span>Users</span>
@@ -82,7 +86,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { User, Lock, Share, Document, Monitor, ArrowDown } from '@element-plus/icons-vue'
+import { User, Lock, Share, Document, Monitor, ArrowDown, DataAnalysis } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import NotificationBell from '@/components/common/NotificationBell.vue'
