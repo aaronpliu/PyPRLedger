@@ -197,41 +197,20 @@ const renderDiff = () => {
   position: relative !important;
 }
 
-/* Ensure diff2html uses its own theme, not affected by global dark mode */
-:deep(.d2h-wrapper),
-:deep(.d2h-file-header),
-:deep(.d2h-file-wrapper) {
-  background-color: var(--el-bg-color);
-  transition: background-color 0.3s ease;
+/* 
+ * CRITICAL: Let diff2html control ALL backgrounds via its colorScheme config.
+ * Do NOT set any background colors here - they will conflict with diff2html's native theming.
+ * Only fix positioning issues and make highlight.js transparent.
+ */
+
+/* Make highlight.js syntax highlighting transparent - only colorize text */
+:deep(.d2h-code-line-ctn .hljs) {
+  background: transparent !important;
+  padding: 0 !important;
 }
 
-/* Light theme specific styles */
-[data-theme='light'] :deep(.d2h-file-header) {
-  background-color: #f6f8fa;
-  border-bottom: 1px solid #e1e4e8;
-}
-
-[data-theme='light'] :deep(.d2h-file-wrapper) {
-  background-color: #ffffff;
-  border: 1px solid #e1e4e8;
-}
-
-[data-theme='light'] :deep(.d2h-code-line-ctn) {
-  background-color: #ffffff;
-}
-
-/* Dark theme specific styles */
-[data-theme='dark'] :deep(.d2h-file-header) {
-  background-color: #2d333b;
-  border-bottom: 1px solid #444c56;
-}
-
-[data-theme='dark'] :deep(.d2h-file-wrapper) {
-  background-color: #1e293b;
-  border: 1px solid #444c56;
-}
-
-[data-theme='dark'] :deep(.d2h-code-line-ctn) {
-  background-color: #1e293b;
+/* Ensure code elements don't add extra backgrounds */
+:deep(.d2h-code-line-ctn code) {
+  background: transparent !important;
 }
 </style>
