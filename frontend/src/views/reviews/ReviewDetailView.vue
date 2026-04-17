@@ -189,9 +189,20 @@
           </template>
 
           <el-table :data="scores" stripe>
-            <el-table-column prop="reviewer" label="Reviewer" width="150">
+            <el-table-column prop="reviewer" label="Reviewer" width="200">
               <template #default="{ row }">
-                {{ row.reviewer_info?.display_name || row.reviewer }}
+                <div class="reviewer-cell">
+                  <span>{{ row.reviewer_info?.display_name || row.reviewer }}</span>
+                  <el-tag 
+                    v-if="row.reviewer === review?.reviewer" 
+                    size="small" 
+                    type="primary" 
+                    effect="plain"
+                    class="primary-reviewer-badge"
+                  >
+                    Primary Reviewer
+                  </el-tag>
+                </div>
               </template>
             </el-table-column>
             <el-table-column prop="score" label="Score" width="120">
@@ -214,11 +225,11 @@
             <el-table-column label="Actions" width="180">
               <template #default="{ row }">
                 <!-- Update button: 
-                     - review_admin+: can update any score
-                     - reviewer: can only update their own score (hide others')
+                     - reviewer: can only update their own score
+                     - review_admin: CANNOT update others' scores (only delete)
                 -->
                 <el-button 
-                  v-if="canDeleteAnyScore || (hasScorePermissionRole && canEditScore(row))"
+                  v-if="hasScorePermissionRole && canEditScore(row)"
                   size="small" 
                   type="primary" 
                   @click="editScore(row)"
@@ -376,15 +387,33 @@ const effectiveReviewerUsername = computed(() => {
   return authStore.currentUser?.git_username || null
 })
 
+// Can create/update score if:
+// 1. User has reviewer+ role AND
+// 2. User has a linked Git username AND
+// 3. Either:
+//    a. User is the assigned reviewer for this review, OR
+//    b. User already has a score for this review (can update their own)
 const canCreateScore = computed(() => {
-  return hasScorePermissionRole.value && !!effectiveReviewerUsername.value && isCurrentReviewAssignedToUser.value
+  if (!hasScorePermissionRole.value || !effectiveReviewerUsername.value) {
+    return false
+  }
+
+  // If user already has a score, they can always update it
+  if (currentUserHasScore.value) {
+    return true
+  }
+
+  // Otherwise, check if user is the assigned reviewer
+  return isCurrentReviewAssignedToUser.value
 })
 
+// Check if current user is assigned as the reviewer for this review
 const isCurrentReviewAssignedToUser = computed(() => {
   if (!review.value || !effectiveReviewerUsername.value) {
     return false
   }
 
+  // Check if user is the assigned reviewer
   return review.value.reviewer === effectiveReviewerUsername.value
 })
 
@@ -401,7 +430,11 @@ const scoreActionDisabledReason = computed(() => {
     return 'This review is visible because you raised the PR, but scoring is only allowed after review admin assigns it to you.'
   }
 
-  return 'You can only score reviews that are assigned to your linked Bitbucket user.'
+  if (!isCurrentReviewAssignedToUser.value && !currentUserHasScore.value) {
+    return 'You can only score reviews that are assigned to your linked Bitbucket user.'
+  }
+
+  return ''
 })
 
 // Check if current user has permission to delete scores
@@ -1491,38 +1524,6 @@ watch(
   color: var(--el-text-color-secondary);
   border-radius: 4px;
 }
-</style>
-
-<style>
-/* Global styles for dark mode descriptions - must be non-scoped */
-[data-theme='dark'] .el-descriptions__cell.is-bordered-content {
-  color: #cbd5e1 !important;
-}
-
-[data-theme='dark'] .el-descriptions__cell.is-bordered-content strong,
-[data-theme='dark'] .el-descriptions__cell.is-bordered-content span:not(.el-tag):not(.el-avatar),
-[data-theme='dark'] .el-descriptions__cell.is-bordered-content div:not([class*="el-"]) {
-  color: #cbd5e1 !important;
-}
-
-[data-theme='dark'] .summary-text {
-  color: #cbd5e1 !important;
-}
-
-/* Force all text nodes to be visible */
-[data-theme='dark'] td.el-descriptions__content {
-  color: #cbd5e1 !important;
-}
-
-/* Ultimate fallback - target everything */
-[data-theme='dark'] .el-descriptions table tbody tr td {
-  color: #cbd5e1 !important;
-  background-color: #0f172a !important;
-}
-
-[data-theme='dark'] .el-descriptions table tbody tr td * {
-  color: inherit !important;
-}
 
 /* MdEditor global dark mode overrides */
 [data-theme='dark'] .md-editor {
@@ -1530,10 +1531,17 @@ watch(
   --md-color: #cbd5e1 !important;
 }
 
-[data-theme='dark'] .md-editor textarea,
-[data-theme='dark'] .md-editor .md-editor-content,
-[data-theme='dark'] .md-editor .md-editor-preview {
-  background-color: #1e293b !important;
-  color: #cbd5e1 !important;
+/* Reviewer cell with badge */
+.reviewer-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.primary-reviewer-badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  white-space: nowrap;
 }
 </style>
