@@ -77,22 +77,19 @@
 
     <!-- Main content -->
     <el-main class="layout-main" role="main">
-      <router-view />
-    </el-main>
-
-    <!-- Footer -->
-    <el-footer class="layout-footer" role="contentinfo">
-      <div class="footer-content">
-        <div class="footer-left">
+      <div class="page-wrapper">
+        <router-view />
+        
+        <!-- Page-level version info (shown at bottom of each page) -->
+        <div class="page-version-info">
           <span class="copyright">{{ COPYRIGHT }}</span>
-        </div>
-        <div class="footer-right">
+          <span class="version-separator">|</span>
           <span class="version-info">
             UI v{{ UI_VERSION }} | API v{{ apiVersion }}
           </span>
         </div>
       </div>
-    </el-footer>
+    </el-main>
   </el-container>
 </template>
 
@@ -230,30 +227,37 @@ const handleLanguageChange = (lang: string) => {
 .layout-main {
   padding: 20px;
   background: var(--el-bg-color-page);
-}
-
-.layout-footer {
-  height: 40px;
-  padding: 0 20px;
-  background: var(--el-bg-color);
-  border-top: 1px solid var(--el-border-color);
-}
-
-.footer-content {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 100%;
+  flex-direction: column;
+  min-height: calc(100vh - 60px); /* Subtract header height */
+}
+
+.page-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.page-version-info {
+  margin-top: auto;
+  padding-top: 20px;
+  text-align: center;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+  opacity: 0.7;
 }
 
 .copyright {
   font-weight: 500;
 }
 
+.version-separator {
+  margin: 0 8px;
+  opacity: 0.5;
+}
+
 .version-info {
   font-family: monospace;
-  opacity: 0.8;
 }
 </style>

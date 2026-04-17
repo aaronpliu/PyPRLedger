@@ -81,14 +81,25 @@
       </el-header>
 
       <el-main class="admin-main">
-        <router-view />
+        <div class="page-wrapper">
+          <router-view />
+          
+          <!-- Page-level version info (shown at bottom of each page) -->
+          <div class="page-version-info">
+            <span class="copyright">{{ COPYRIGHT }}</span>
+            <span class="version-separator">|</span>
+            <span class="version-info">
+              UI v{{ UI_VERSION }} | API v{{ apiVersion }}
+            </span>
+          </div>
+        </div>
       </el-main>
     </el-container>
   </el-container>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { User, Lock, Share, Document, Monitor, ArrowDown, DataAnalysis, Folder } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -97,11 +108,20 @@ import { ElMessage } from 'element-plus'
 import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
+import { UI_VERSION, COPYRIGHT, fetchApiVersion } from '@/config/versions'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
+
+// API version state
+const apiVersion = ref<string>('loading...')
+
+// Fetch API version on mount
+onMounted(async () => {
+  apiVersion.value = await fetchApiVersion()
+})
 
 const activeMenu = computed(() => route.path)
 
@@ -180,5 +200,37 @@ const handleCommand = (command: string) => {
 .admin-main {
   background: var(--el-bg-color-page);
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 60px); /* Subtract header height */
+}
+
+.page-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.page-version-info {
+  margin-top: auto;
+  padding-top: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  opacity: 0.7;
+}
+
+.copyright {
+  font-weight: 500;
+}
+
+.version-separator {
+  margin: 0 8px;
+  opacity: 0.5;
+}
+
+.version-info {
+  font-family: monospace;
 }
 </style>
