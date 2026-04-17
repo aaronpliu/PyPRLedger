@@ -165,6 +165,7 @@ const renderDiff = () => {
     diffContainer.value.innerHTML = ''
     diff2htmlUi = new Diff2HtmlUI(diffContainer.value, processedDiff, configuration, hljs)
     diff2htmlUi.draw()
+    diff2htmlUi.highlightCode()
   } catch (error) {
     console.error('Failed to render diff:', error)
     console.error('Diff that caused error:', props.diff.substring(0, 500))
@@ -187,7 +188,13 @@ const renderDiff = () => {
   overflow: auto;
 }
 
-/* Fix line number positioning */
+/* 
+ * CRITICAL FIXES ONLY - Match diff2html official demo behavior
+ * The demo works perfectly with minimal CSS, so we should too.
+ * Only fix the known positioning bug, nothing else.
+ */
+
+/* Fix 1: Line number positioning bug (known diff2html issue) */
 :deep(.d2h-code-linenumber),
 :deep(.d2h-code-side-linenumber) {
   position: relative !important;
@@ -197,20 +204,11 @@ const renderDiff = () => {
   position: relative !important;
 }
 
-/* 
- * CRITICAL: Let diff2html control ALL backgrounds via its colorScheme config.
- * Do NOT set any background colors here - they will conflict with diff2html's native theming.
- * Only fix positioning issues and make highlight.js transparent.
+/* That's it! Let diff2html handle everything else including:
+ * - Backgrounds (via colorScheme config)
+ * - Spacing and padding
+ * - Font families
+ * - Syntax highlighting colors
+ * - Theme switching
  */
-
-/* Make highlight.js syntax highlighting transparent - only colorize text */
-:deep(.d2h-code-line-ctn .hljs) {
-  background: transparent !important;
-  padding: 0 !important;
-}
-
-/* Ensure code elements don't add extra backgrounds */
-:deep(.d2h-code-line-ctn code) {
-  background: transparent !important;
-}
 </style>
