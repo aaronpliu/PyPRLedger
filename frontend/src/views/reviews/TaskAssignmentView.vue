@@ -93,7 +93,11 @@
         :cell-style="getCellStyle"
         :row-class-name="getRowClassName"
       >
-        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column label="Seq#" width="80">
+          <template #default="{ $index }">
+            {{ $index + 1 }}
+          </template>
+        </el-table-column>
         
         <el-table-column label="PR Info" min-width="220">
           <template #default="{ row }">
