@@ -90,7 +90,8 @@
         table-layout="auto"
         class="task-assignment-table"
         :header-cell-style="{ textAlign: 'center' }"
-        :cell-style="{ verticalAlign: 'middle' }"
+        :cell-style="getCellStyle"
+        :row-class-name="getRowClassName"
       >
         <el-table-column prop="id" label="ID" width="80" />
         
@@ -610,6 +611,39 @@ const handleAssignReviewer = async (review: ReviewV2) => {
   await loadAvailableReviewers(review)
 }
 
+// Determine if a review is unassigned (no reviewers or all pending)
+const isUnassigned = (review: ReviewV2): boolean => {
+  // No reviewers at all
+  if (!review.reviewers || review.reviewers.length === 0) {
+    return true
+  }
+  
+  // All reviewers are in 'pending' status
+  const hasActiveReviewers = review.reviewers.some(
+    r => r.assignment_status !== 'pending'
+  )
+  return !hasActiveReviewers
+}
+
+// Get row class name for styling unassigned tasks
+const getRowClassName = ({ row }: { row: ReviewV2 }): string => {
+  return isUnassigned(row) ? 'unassigned-row' : ''
+}
+
+// Get cell style - applies inline styles to override stripe pattern
+const getCellStyle = ({ row }: { row: ReviewV2 }) => {
+  if (!isUnassigned(row)) return { verticalAlign: 'middle' }
+  
+  // Use amber colors per project specification for "needs attention" status
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+  
+  // Amber-100 for light theme, Amber-800 for dark theme (better contrast with light text)
+  return {
+    verticalAlign: 'middle',
+    backgroundColor: isDark ? '#78350f' : '#fef3c7',
+  }
+}
+
 // Submit assignment
 const submitAssignment = async () => {
   if (!assignForm.value.reviewer || !selectedReview.value) return
@@ -813,5 +847,15 @@ onMounted(() => {
 .empty-reviewers {
   color: var(--el-text-color-secondary);
   font-size: 13px;
+}
+
+/* Unassigned task row highlighting - backup CSS in case inline styles don't apply */
+/* This ensures coverage even if Element Plus re-renders cells */
+:deep(.task-assignment-table.el-table--striped .el-table__body tr.unassigned-row td.el-table__cell) {
+  background-color: #fef3c7 !important; /* Amber-100 for light theme */
+}
+
+[data-theme='dark'] :deep(.task-assignment-table.el-table--striped .el-table__body tr.unassigned-row td.el-table__cell) {
+  background-color: #78350f !important; /* Amber-800 for dark theme - better contrast with light text */
 }
 </style>
