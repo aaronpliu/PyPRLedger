@@ -95,7 +95,7 @@
       >
         <el-table-column label="Seq#" width="80">
           <template #default="{ $index }">
-            {{ $index + 1 }}
+            {{ (currentPage - 1) * pageSize + $index + 1 }}
           </template>
         </el-table-column>
         
@@ -259,7 +259,7 @@
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
-        :total="displayedTotal"
+        :total="total"
         :page-sizes="[10, 20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
         @size-change="loadReviews"
@@ -348,6 +348,7 @@ const { t } = useI18n()
 // State
 const loading = ref(false)
 const allReviews = ref<ReviewV2[]>([]) // Store all reviews for client-side filtering
+const total = ref(0) // Total count from API
 const currentPage = ref(1)
 const pageSize = ref(20)
 
@@ -382,15 +383,20 @@ const availableReviewers = ref<ReviewerUser[]>([])
 const loadReviews = async () => {
   loading.value = true
   try {
+    // When filters are active, fetch all data to enable proper client-side filtering
+    const hasActiveFilters = searchQuery.value || projectFilter.value || prUserFilter.value || 
+                            reviewerFilter.value || scoredFilter.value || severityFilter.value
+    
     const params: any = {
-      page: currentPage.value,
-      page_size: pageSize.value,
+      page: hasActiveFilters ? 1 : currentPage.value,
+      page_size: hasActiveFilters ? 1000 : pageSize.value, // Fetch all when filtering
     }
     if (projectFilter.value) params.project_key = projectFilter.value
     if (statusFilter.value) params.status = statusFilter.value
 
     const response = await taskAssignmentApi.getReviews(params)
     allReviews.value = response.items // Store all reviews
+    total.value = response.total // Store total count from API
   } catch (error) {
     console.error('Failed to load reviews:', error)
     ElMessage.error('Failed to load reviews')

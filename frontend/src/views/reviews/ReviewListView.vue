@@ -426,10 +426,16 @@ const getStatusType = (status: string) => {
 const loadReviews = async () => {
   loading.value = true
   try {
-    const data = await reviewsApi.getReviews({
-      page: currentPage.value,
-      page_size: pageSize.value,
-    })
+    // When filters are active, fetch all data to enable proper client-side filtering
+    const hasActiveFilters = searchQuery.value || prUserFilter.value || reviewerFilter.value || 
+                            scoredFilter.value || severityFilter.value || advancedFilters.value.length > 0
+    
+    const requestData = {
+      page: hasActiveFilters ? 1 : currentPage.value,
+      page_size: hasActiveFilters ? 1000 : pageSize.value, // Fetch all when filtering
+    }
+    
+    const data = await reviewsApi.getReviews(requestData)
     allReviews.value = data.items
     total.value = data.total
     applyFilters()
@@ -549,7 +555,14 @@ const applyFilters = () => {
   
   filteredReviews.value = result
   reviews.value = result
-  total.value = result.length
+  
+  // Only update total if filters are active (client-side filtering scenario)
+  // Otherwise, keep the API's total count for proper pagination
+  const hasActiveFilters = searchQuery.value || prUserFilter.value || reviewerFilter.value || 
+                          scoredFilter.value || severityFilter.value || advancedFilters.value.length > 0
+  if (hasActiveFilters) {
+    total.value = result.length
+  }
 }
 
 const viewReview = (review: Review) => {
