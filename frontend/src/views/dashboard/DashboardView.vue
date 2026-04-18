@@ -142,12 +142,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { Document, TrendCharts, User, Clock } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import { scoresApi } from '@/api/scores'
 import type { Review } from '@/api/reviews'
 import dayjs from 'dayjs'
+
+// Responsive page size calculation for recent reviews table
+const calculateRecentReviewsCount = () => {
+  const windowHeight = window.innerHeight
+  // Dashboard has cards above the table, reserve ~550px for header, stats cards, and margins
+  const availableHeight = windowHeight - 550
+  const rowHeight = 52 // Average row height in pixels
+  return Math.max(5, Math.min(30, Math.floor(availableHeight / rowHeight)))
+}
+
+const recentReviewsCount = ref(calculateRecentReviewsCount())
+
+// Update count on window resize
+const handleResize = () => {
+  recentReviewsCount.value = calculateRecentReviewsCount()
+}
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
 
 const loading = ref(false)
 const recentReviews = ref<Review[]>([])
@@ -178,8 +202,8 @@ const getStatusType = (status: string) => {
 const loadDashboardData = async () => {
   loading.value = true
   try {
-    // Load recent reviews
-    const reviewsData = await reviewsApi.getReviews({ page: 1, page_size: 10 })
+    // Load recent reviews with responsive count
+    const reviewsData = await reviewsApi.getReviews({ page: 1, page_size: recentReviewsCount.value })
     recentReviews.value = reviewsData.items
     stats.value.totalReviews = reviewsData.total
     stats.value.pendingReviews = reviewsData.items.filter(r => r.pull_request_status === 'pending').length

@@ -333,7 +333,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, ArrowUp, Refresh, Search } from '@element-plus/icons-vue'
@@ -345,12 +345,27 @@ import { projectsApi, type ProjectSummary } from '@/api/projects'
 const router = useRouter()
 const { t } = useI18n()
 
+// Responsive page size calculation
+const calculatePageSize = () => {
+  const windowHeight = window.innerHeight
+  // Reserve space for header, filters, pagination, and margins (~400px)
+  const availableHeight = windowHeight - 400
+  const rowHeight = 52 // Average row height in pixels
+  return Math.max(10, Math.min(100, Math.floor(availableHeight / rowHeight)))
+}
+
+const pageSize = ref(calculatePageSize())
+
+// Update page size on window resize
+const handleResize = () => {
+  pageSize.value = calculatePageSize()
+}
+
 // State
 const loading = ref(false)
 const allReviews = ref<ReviewV2[]>([]) // Store all reviews for client-side filtering
 const total = ref(0) // Total count from API
 const currentPage = ref(1)
-const pageSize = ref(20)
 
 // Filters
 const searchQuery = ref('')
@@ -675,8 +690,13 @@ const submitAssignment = async () => {
 }
 
 onMounted(() => {
+  window.addEventListener('resize', handleResize)
   loadProjects()
   loadReviews()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 

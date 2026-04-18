@@ -330,7 +330,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
@@ -347,13 +347,28 @@ const router = useRouter()
 const { hasPermission } = usePermission()
 const reviewNavigationStore = useReviewNavigationStore()
 
+// Responsive page size calculation
+const calculatePageSize = () => {
+  const windowHeight = window.innerHeight
+  // Reserve space for header, filters, pagination, and margins (~400px)
+  const availableHeight = windowHeight - 400
+  const rowHeight = 52 // Average row height in pixels
+  return Math.max(10, Math.min(100, Math.floor(availableHeight / rowHeight)))
+}
+
+const pageSize = ref(calculatePageSize())
+
+// Update page size on window resize
+const handleResize = () => {
+  pageSize.value = calculatePageSize()
+}
+
 // Check if user is review admin
 const isReviewAdmin = computed(() => hasPermission('assign', 'reviews'))
 const loading = ref(false)
 const reviews = ref<Review[]>([])
 const total = ref(0)
 const currentPage = ref(1)
-const pageSize = ref(20)
 const searchQuery = ref('')
 const statusFilter = ref('')
 const prUserFilter = ref('')
@@ -756,7 +771,12 @@ const closeProgressDialog = () => {
 
 // Load reviews when component mounts
 onMounted(() => {
+  window.addEventListener('resize', handleResize)
   loadReviews()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
 })
 </script>
 
