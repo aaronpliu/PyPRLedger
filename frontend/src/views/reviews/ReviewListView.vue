@@ -59,6 +59,26 @@
           </el-input>
         </el-form-item>
         
+        <el-form-item label="App Name">
+          <el-select
+            v-model="appFilter"
+            placeholder="Select apps"
+            clearable
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            style="width: 200px"
+            @change="applyFilters"
+          >
+            <el-option
+              v-for="app in availableApps"
+              :key="app.app_name"
+              :label="app.app_name"
+              :value="app.app_name"
+            />
+          </el-select>
+        </el-form-item>
+        
         <el-form-item label="PR User">
           <el-input
             v-model="prUserFilter"
@@ -150,6 +170,16 @@
         <el-table-column label="Seq#" width="80">
           <template #default="{ $index }">
             {{ (currentPage - 1) * pageSize + $index + 1 }}
+          </template>
+        </el-table-column>
+        
+        <!-- App Name -->
+        <el-table-column label="App Name" width="150">
+          <template #default="{ row }">
+            <el-tag v-if="row.app_name && row.app_name !== 'Unknown'" type="primary" size="small">
+              {{ row.app_name }}
+            </el-tag>
+            <span v-else class="text-secondary">Unknown</span>
           </template>
         </el-table-column>
         
@@ -342,6 +372,8 @@ import FilterBuilder from '@/components/common/FilterBuilder.vue'
 import ExportMenu from '@/components/common/ExportMenu.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useReviewNavigationStore } from '@/stores/reviewNavigation'
+import { projectRegistryApi } from '@/api/projectRegistry'
+import type { AppInfo } from '@/api/projectRegistry'
 
 const router = useRouter()
 const { hasPermission } = usePermission()
@@ -371,6 +403,8 @@ const total = ref(0)
 const currentPage = ref(1)
 const searchQuery = ref('')
 const statusFilter = ref('')
+const appFilter = ref<string[]>([])
+const availableApps = ref<AppInfo[]>([])
 const prUserFilter = ref('')
 const reviewerFilter = ref('')
 const scoredFilter = ref('')
@@ -478,6 +512,14 @@ const applyFilters = () => {
     result = result.filter(review => 
       review.pull_request_user?.toLowerCase().includes(prUser) ||
       review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
+    )
+  }
+  
+  // Apply app name filter (multi-select)
+  if (appFilter.value && appFilter.value.length > 0) {
+    const selectedApps = appFilter.value.map(app => app.toLowerCase())
+    result = result.filter(review => 
+      review.app_name && selectedApps.includes(review.app_name.toLowerCase())
     )
   }
   
@@ -769,10 +811,21 @@ const closeProgressDialog = () => {
   showProgressDialog.value = false
 }
 
+// Fetch available apps for filter dropdown
+const loadAvailableApps = async () => {
+  try {
+    const apps = await projectRegistryApi.listApps()
+    availableApps.value = apps
+  } catch (error) {
+    console.error('Failed to load available apps:', error)
+  }
+}
+
 // Load reviews when component mounts
 onMounted(() => {
   window.addEventListener('resize', handleResize)
   loadReviews()
+  loadAvailableApps()
 })
 
 onUnmounted(() => {
@@ -911,7 +964,7 @@ onUnmounted(() => {
 
 .progress-detail {
   font-size: 14px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 /* PR Info Cell Styles */

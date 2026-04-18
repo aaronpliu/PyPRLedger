@@ -30,6 +30,25 @@
           </el-select>
         </el-form-item>
         
+        <el-form-item label="App Name">
+          <el-select
+            v-model="appFilter"
+            placeholder="Select apps"
+            clearable
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            style="width: 200px"
+          >
+            <el-option
+              v-for="app in availableApps"
+              :key="app.app_name"
+              :label="app.app_name"
+              :value="app.app_name"
+            />
+          </el-select>
+        </el-form-item>
+        
         <el-form-item label="PR User">
           <el-input
             v-model="prUserFilter"
@@ -96,6 +115,16 @@
         <el-table-column label="Seq#" width="80">
           <template #default="{ $index }">
             {{ (currentPage - 1) * pageSize + $index + 1 }}
+          </template>
+        </el-table-column>
+        
+        <!-- App Name -->
+        <el-table-column label="App Name" width="150">
+          <template #default="{ row }">
+            <el-tag v-if="row.app_name && row.app_name !== 'Unknown'" type="primary" size="small">
+              {{ row.app_name }}
+            </el-tag>
+            <span v-else class="text-secondary">Unknown</span>
           </template>
         </el-table-column>
         
@@ -341,6 +370,8 @@ import { useI18n } from 'vue-i18n'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
 import { projectsApi, type ProjectSummary } from '@/api/projects'
+import { projectRegistryApi } from '@/api/projectRegistry'
+import type { AppInfo } from '@/api/projectRegistry'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -370,6 +401,8 @@ const currentPage = ref(1)
 // Filters
 const searchQuery = ref('')
 const projectFilter = ref('')
+const appFilter = ref<string[]>([])
+const availableApps = ref<AppInfo[]>([])
 const prUserFilter = ref('')
 const reviewerFilter = ref('')
 const scoredFilter = ref('')
@@ -457,6 +490,14 @@ const displayedReviews = computed(() => {
     result = result.filter(review => 
       review.pull_request_user?.toLowerCase().includes(prUser) ||
       review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
+    )
+  }
+  
+  // Apply app name filter (multi-select)
+  if (appFilter.value && appFilter.value.length > 0) {
+    const selectedApps = appFilter.value.map(app => app.toLowerCase())
+    result = result.filter(review => 
+      review.app_name && selectedApps.includes(review.app_name.toLowerCase())
     )
   }
   
@@ -689,10 +730,21 @@ const submitAssignment = async () => {
   }
 }
 
+// Fetch available apps for filter dropdown
+const loadAvailableApps = async () => {
+  try {
+    const apps = await projectRegistryApi.listApps()
+    availableApps.value = apps
+  } catch (error) {
+    console.error('Failed to load available apps:', error)
+  }
+}
+
 onMounted(() => {
   window.addEventListener('resize', handleResize)
   loadProjects()
   loadReviews()
+  loadAvailableApps()
 })
 
 onUnmounted(() => {

@@ -25,6 +25,7 @@ export interface ReviewV2 {
   pull_request_commit_id?: string | null
   project_key: string
   repository_slug: string
+  app_name?: string
   pull_request_user?: string | null
   pull_request_user_info?: {
     username: string
