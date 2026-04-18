@@ -226,7 +226,12 @@
         <el-table-column label="Reviewer" width="200">
           <template #default="{ row }">
             <div>
-              <div>{{ row.reviewer_info?.display_name || row.reviewer || 'Unassigned' }}</div>
+              <div v-if="row.reviewer || row.reviewer_info?.display_name">
+                {{ row.reviewer_info?.display_name || row.reviewer }}
+              </div>
+              <el-tag v-else type="warning" effect="dark" size="small">
+                ⚠️ Unassigned
+              </el-tag>
               <div class="text-secondary" style="font-size: 0.8rem;">
                 {{ row.source_filename ? '📄 File-level' : '📋 PR-level' }}
               </div>
