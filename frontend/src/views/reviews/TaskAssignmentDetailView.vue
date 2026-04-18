@@ -143,8 +143,30 @@
         <!-- Code Diff -->
         <el-divider />
         <div v-if="review.git_code_diff" class="diff-section">
-          <h3>Code Diff</h3>
-          <pre class="code-diff">{{ review.git_code_diff }}</pre>
+          <div class="diff-header">
+            <h3>Code Diff</h3>
+            <div class="view-toggle-buttons">
+              <el-button
+                :type="outputFormat === 'line-by-line' ? 'primary' : 'default'"
+                size="small"
+                @click="outputFormat = 'line-by-line'"
+              >
+                Line by Line
+              </el-button>
+              <el-button
+                :type="outputFormat === 'side-by-side' ? 'primary' : 'default'"
+                size="small"
+                @click="outputFormat = 'side-by-side'"
+              >
+                Side by Side
+              </el-button>
+            </div>
+          </div>
+          <CodeDiffViewer
+            :diff="review.git_code_diff"
+            :output-format="outputFormat"
+            @update:output-format="outputFormat = $event"
+          />
         </div>
       </div>
     </el-card>
@@ -221,6 +243,7 @@ import { Back, ArrowDown } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
+import CodeDiffViewer from '@/components/review/CodeDiffViewer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -229,6 +252,7 @@ const { t } = useI18n()
 // State
 const loading = ref(false)
 const review = ref<ReviewV2 | null>(null)
+const outputFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
 
 // Assign dialog
 const assignDialogVisible = ref(false)
@@ -315,7 +339,18 @@ const getAssignmentStatusType = (status: string) => {
 }
 
 const formatAssignmentStatusLabel = (status: string) => {
-  return t(`reviews.${status}`, status)
+  switch (status) {
+    case 'in_progress':
+      return 'In Progress'
+    case 'assigned':
+      return 'Assigned'
+    case 'pending':
+      return 'Pending'
+    case 'completed':
+      return 'Completed'
+    default:
+      return status
+  }
 }
 
 const getAssignmentStatusDescription = (status: string) => {
@@ -472,12 +507,15 @@ onMounted(() => {
   margin-top: 20px;
 }
 
-.code-diff {
-  background: var(--el-fill-color-light);
-  padding: 16px;
-  border-radius: 4px;
-  overflow-x: auto;
-  font-size: 12px;
-  line-height: 1.5;
+.diff-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.view-toggle-buttons {
+  display: flex;
+  gap: 8px;
 }
 </style>
