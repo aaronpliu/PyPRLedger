@@ -80,23 +80,62 @@
         </el-form-item>
         
         <el-form-item label="PR User">
-          <el-input
+          <el-select
             v-model="prUserFilter"
-            placeholder="Filter by PR user"
+            placeholder="Select or type name"
             clearable
-            style="width: 180px"
-            @input="applyFilters"
-          />
+            filterable
+            remote
+            :remote-method="searchPRUsers"
+            :loading="prUsersLoading"
+            style="width: 200px"
+            @change="applyFilters"
+          >
+            <el-option
+              v-for="user in availablePRUsers"
+              :key="user.username"
+              :label="user.display_name || user.username"
+              :value="user.username"
+            >
+              <span>{{ user.display_name }}</span>
+              <span class="text-secondary" style="margin-left: 8px; font-size: 0.85em;">
+                ({{ user.username }})
+              </span>
+            </el-option>
+          </el-select>
         </el-form-item>
         
         <el-form-item label="Reviewer">
-          <el-input
+          <el-select
             v-model="reviewerFilter"
-            placeholder="Filter by reviewer"
+            placeholder="Select or type name"
             clearable
-            style="width: 180px"
-            @input="applyFilters"
-          />
+            filterable
+            remote
+            :remote-method="searchReviewers"
+            :loading="reviewersLoading"
+            style="width: 200px"
+            @change="applyFilters"
+          >
+            <el-option
+              v-for="reviewer in availableReviewers"
+              :key="reviewer.username"
+              :label="reviewer.display_name || reviewer.username"
+              :value="reviewer.username"
+            >
+              <span>{{ reviewer.display_name }}</span>
+              <span class="text-secondary" style="margin-left: 8px; font-size: 0.85em;">
+                ({{ reviewer.username }})
+              </span>
+            </el-option>
+            <el-option
+              key="__unassigned__"
+              label="⚠️ Unassigned"
+              value="__unassigned__"
+            >
+              <span style="color: #E6A23C; font-weight: 600;">⚠️ Unassigned</span>
+            </el-option>
+          </el-select>
         </el-form-item>
         
         <el-form-item label="Scored">
@@ -379,6 +418,7 @@ import { usePermission } from '@/composables/usePermission'
 import { useReviewNavigationStore } from '@/stores/reviewNavigation'
 import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
+import { usersApi, type ReviewerUser } from '@/api/users'
 
 const router = useRouter()
 const { hasPermission } = usePermission()
@@ -411,7 +451,11 @@ const statusFilter = ref('')
 const appFilter = ref<string[]>([])
 const availableApps = ref<AppInfo[]>([])
 const prUserFilter = ref('')
+const availablePRUsers = ref<ReviewerUser[]>([])
+const prUsersLoading = ref(false)
 const reviewerFilter = ref('')
+const availableReviewers = ref<ReviewerUser[]>([])
+const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
 const advancedFilters = ref<Filter[]>([])
@@ -530,11 +574,19 @@ const applyFilters = () => {
   
   // Apply reviewer filter
   if (reviewerFilter.value) {
-    const reviewer = reviewerFilter.value.toLowerCase()
-    result = result.filter(review => 
-      review.reviewer?.toLowerCase().includes(reviewer) ||
-      review.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
-    )
+    // Special handling for unassigned option
+    if (reviewerFilter.value === '__unassigned__') {
+      result = result.filter(review => 
+        !review.reviewer && !review.reviewer_info?.display_name
+      )
+    } else {
+      // Normal text search for assigned reviewers
+      const reviewer = reviewerFilter.value.toLowerCase()
+      result = result.filter(review => 
+        review.reviewer?.toLowerCase().includes(reviewer) ||
+        review.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
+      )
+    }
   }
   
   // Apply scored filter
@@ -826,11 +878,77 @@ const loadAvailableApps = async () => {
   }
 }
 
+// Load all users for PR User filter dropdown
+const loadPRUsers = async () => {
+  try {
+    prUsersLoading.value = true
+    const users = await usersApi.getAllBitbucketUsers(500)
+    availablePRUsers.value = users
+  } catch (error) {
+    console.error('Failed to load PR users:', error)
+  } finally {
+    prUsersLoading.value = false
+  }
+}
+
+// Search PR users remotely as user types
+const searchPRUsers = async (query: string) => {
+  if (!query) {
+    await loadPRUsers()
+    return
+  }
+  
+  try {
+    prUsersLoading.value = true
+    // Use backend username filtering for better performance
+    const users = await usersApi.getAllBitbucketUsers(500, query)
+    availablePRUsers.value = users
+  } catch (error) {
+    console.error('Failed to search PR users:', error)
+  } finally {
+    prUsersLoading.value = false
+  }
+}
+
+// Load all users for filter dropdown (not just reviewers)
+const loadReviewers = async () => {
+  try {
+    reviewersLoading.value = true
+    const users = await usersApi.getAllBitbucketUsers(500)
+    availableReviewers.value = users
+  } catch (error) {
+    console.error('Failed to load users:', error)
+  } finally {
+    reviewersLoading.value = false
+  }
+}
+
+// Search users remotely as user types
+const searchReviewers = async (query: string) => {
+  if (!query) {
+    await loadReviewers()
+    return
+  }
+  
+  try {
+    reviewersLoading.value = true
+    // Use backend username filtering for better performance
+    const users = await usersApi.getAllBitbucketUsers(500, query)
+    availableReviewers.value = users
+  } catch (error) {
+    console.error('Failed to search users:', error)
+  } finally {
+    reviewersLoading.value = false
+  }
+}
+
 // Load reviews when component mounts
 onMounted(() => {
   window.addEventListener('resize', handleResize)
   loadReviews()
   loadAvailableApps()
+  loadPRUsers()
+  loadReviewers()
 })
 
 onUnmounted(() => {
