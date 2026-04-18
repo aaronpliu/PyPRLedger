@@ -3,7 +3,10 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <h2>Code Reviews</h2>
+          <div class="header-title-group">
+            <h2>Code Reviews</h2>
+            <el-tag type="success" effect="dark" size="small" class="ai-badge">AI-Powered</el-tag>
+          </div>
           <div class="header-actions">
             <ExportMenu
               :data="reviews"
@@ -16,23 +19,6 @@
           </div>
         </div>
       </template>
-
-      <!-- Info Banner -->
-      <div class="info-banner">
-        <div class="banner-icon">
-          <el-icon :size="24"><Cpu /></el-icon>
-        </div>
-        <div class="banner-content">
-          <div class="banner-title">AI-Powered PR Reviews</div>
-          <div class="banner-description">
-            Pull request reviews are automatically collected from Bitbucket webhooks and analyzed by AI. 
-            You can view reviews and add/update scores based on your permissions.
-          </div>
-        </div>
-        <div class="banner-badge">
-          <el-tag type="success" effect="dark" size="small">Automated</el-tag>
-        </div>
-      </div>
 
       <!-- Filters -->
       <FilterBuilder
@@ -785,9 +771,19 @@ onMounted(() => {
   align-items: center;
 }
 
+.header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .card-header h2 {
   margin: 0;
   font-size: 20px;
+}
+
+.ai-badge {
+  margin-top: 2px; /* Optional: slight adjustment for vertical alignment */
 }
 
 .header-actions {
@@ -954,69 +950,6 @@ onMounted(() => {
 .score-count {
   font-size: 0.85rem;
   color: var(--el-text-color-secondary);
-}
-
-/* Info Banner Styles */
-.info-banner {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
-  background: var(--el-color-info-light-9);
-  border: 1px solid var(--el-color-info-light-7);
-  border-radius: 8px;
-  color: var(--el-text-color-primary);
-  transition: all 0.3s ease;
-}
-
-[data-theme="dark"] .info-banner {
-  background: rgba(64, 158, 255, 0.1);
-  border-color: rgba(64, 158, 255, 0.3);
-}
-
-.info-banner:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-[data-theme="dark"] .info-banner:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.banner-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  background: var(--el-color-info);
-  border-radius: 50%;
-  color: white;
-}
-
-.banner-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.banner-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  color: var(--el-text-color-primary);
-}
-
-.banner-description {
-  font-size: 0.9rem;
-  color: var(--el-text-color-secondary);
-  line-height: 1.5;
-}
-
-.banner-badge {
-  flex-shrink: 0;
 }
 
 /* Dark theme fixes - ensure consistency across all components */
