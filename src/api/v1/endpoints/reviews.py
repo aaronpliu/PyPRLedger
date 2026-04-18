@@ -288,6 +288,68 @@ async def get_review_statistics(
         )
 
 
+@router.get("/ai-review/{ai_review_id}")
+async def get_review_by_ai_review_id(
+    ai_review_id: str,
+    source_filename: str | None = Query(
+        None,
+        alias="file",
+        description="Filter by source filename (required for file-level reviews)",
+    ),
+    db: AsyncSession = Depends(get_db_session),
+    current_user: AuthUser = Depends(get_current_user_with_token),
+) -> ReviewResponse:
+    """
+    Retrieve review by AI review identifier.
+
+    This endpoint enables:
+    1. Retrieving previous AI suggestions for feedback loops
+    2. Referencing specific AI reviews in git comments
+    3. Verifying if code changes addressed AI suggestions
+
+    Args:
+        ai_review_id: Unique AI review identifier (e.g., ai_rev_abc123def456)
+        source_filename: Optional file filter (recommended for file-level reviews)
+
+    Returns:
+        Complete review information including AI suggestions
+
+    Example:
+        GET /api/v1/reviews/ai-review/ai_rev_abc123def456
+        GET /api/v1/reviews/ai-review/ai_rev_abc123def456?file=src/cart.py
+    """
+    from src.utils.log import get_logger
+
+    logger = get_logger(__name__)
+    logger.info(f"Retrieving review by AI ID: {ai_review_id}, file: {source_filename}")
+
+    # Build query to find review base by AI review ID
+    query = select(PullRequestReviewBase).where(PullRequestReviewBase.ai_review_id == ai_review_id)
+
+    # Apply file filter if provided
+    if source_filename is not None:
+        query = query.where(PullRequestReviewBase.source_filename == source_filename)
+    else:
+        # For PR-level reviews, source_filename is NULL
+        query = query.where(PullRequestReviewBase.source_filename.is_(None))
+
+    result = await db.execute(query)
+    review_base = result.scalar_one_or_none()
+
+    if not review_base:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No review found with AI review ID: {ai_review_id}",
+        )
+
+    # Serialize the review base
+    review_dict = review_base.to_dict()
+
+    logger.info(f"Successfully retrieved review by AI ID {ai_review_id}")
+
+    return ReviewResponse(**review_dict)
+
+
 @router.get("/{project_key}/{repository_slug}/{pull_request_id}", response_model=ReviewListResponse)
 async def get_review(
     project_key: Annotated[str, Path(min_length=1, max_length=32, description="Project key")],

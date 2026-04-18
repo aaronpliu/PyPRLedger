@@ -66,6 +66,9 @@ class PullRequestReviewBase(Base):
         name="metadata",
     )
 
+    # AI Review Identifier - unique ID for tracking AI suggestions per PR
+    ai_review_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
     project: Mapped[Project] = relationship(
         foreign_keys=[project_key], back_populates="pull_request_reviews"
     )
@@ -122,6 +125,7 @@ class PullRequestReviewBase(Base):
             "ai_suggestions": self.ai_suggestions,
             "pull_request_status": self.pull_request_status,
             "metadata": self.review_metadata,
+            "ai_review_id": self.ai_review_id,
             "created_date": (
                 self.created_date.isoformat()
                 if isinstance(self.created_date, datetime)
@@ -153,6 +157,7 @@ class PullRequestReviewBase(Base):
             ai_suggestions=data.get("ai_suggestions"),
             pull_request_status=data.get("pull_request_status"),
             review_metadata=data.get("metadata"),
+            ai_review_id=data.get("ai_review_id"),
         )
 
     def update(self, data: dict[str, Any]) -> None:

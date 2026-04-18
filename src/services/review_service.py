@@ -32,6 +32,7 @@ from src.schemas.pull_request import (
 from src.services.entity_sync_service import EntitySyncService
 from src.services.project_registry_service import ProjectRegistryService
 from src.services.review_score_service import ReviewScoreService
+from src.utils.ai_review_utils import generate_ai_review_id
 from src.utils.metrics import MetricsCollector
 from src.utils.redis import get_redis_client
 
@@ -284,6 +285,14 @@ class ReviewService:
         base.ai_suggestions = review_data.ai_suggestions
         base.pull_request_status = review_data.pull_request_status
         base.review_metadata = review_data.metadata
+
+        # Generate AI review ID if not already set (per PR, stable across re-reviews)
+        if not base.ai_review_id:
+            base.ai_review_id = generate_ai_review_id(
+                project_key=review_data.project_key,
+                repository_slug=review_data.repository_slug,
+                pull_request_commit_id=review_data.pull_request_commit_id,
+            )
 
     @staticmethod
     def _populate_assignment(
