@@ -37,6 +37,7 @@ export interface ReviewV2 {
   ai_suggestions?: any | null
   pull_request_status: string
   metadata?: Record<string, any> | null
+  ai_review_id?: string | null
   created_date: string
   updated_date: string
   

@@ -58,6 +58,24 @@
             </template>
           </el-table-column>
 
+          <el-table-column label="AI Review ID" min-width="200" align="center">
+            <template #default>
+              <div v-if="review.ai_review_id" class="ai-review-id-cell">
+                <el-tag size="small" type="info">
+                  {{ review.ai_review_id }}
+                </el-tag>
+                <el-button
+                  size="small"
+                  text
+                  @click="copyToClipboard(review.ai_review_id!)"
+                >
+                  <el-icon><CopyDocument /></el-icon>
+                </el-button>
+              </div>
+              <span v-else class="empty-value">N/A</span>
+            </template>
+          </el-table-column>
+
           <el-table-column label="Assigned By" width="150" align="center">
             <template #default="{ row }">
               {{ row.assigned_by || 'N/A' }}
@@ -115,7 +133,23 @@
         <!-- AI Suggestions -->
         <el-divider />
         <div v-if="review.ai_suggestions" class="ai-section">
-          <h3>AI Suggestions</h3>
+          <div class="ai-header">
+            <h3>
+              AI Review Result
+              <el-tag v-if="review.ai_review_id" size="small" type="info" style="margin-left: 8px">
+                {{ review.ai_review_id }}
+              </el-tag>
+            </h3>
+            <el-button
+              v-if="review.ai_review_id"
+              size="small"
+              text
+              @click="copyToClipboard(review.ai_review_id)"
+            >
+              <el-icon><CopyDocument /></el-icon>
+              Copy ID
+            </el-button>
+          </div>
           <el-alert
             v-if="review.ai_suggestions.overall_assessment"
             :title="review.ai_suggestions.overall_assessment"
@@ -239,7 +273,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Back, ArrowDown } from '@element-plus/icons-vue'
+import { Back, ArrowDown, CopyDocument } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
@@ -429,6 +463,14 @@ const handleRemoveReviewer = async (reviewer: string) => {
   }
 }
 
+const copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('Copied to clipboard')
+  }).catch(() => {
+    ElMessage.error('Failed to copy to clipboard')
+  })
+}
+
 onMounted(() => {
   loadReview()
 })
@@ -493,6 +535,31 @@ onMounted(() => {
 
 .ai-section {
   margin-top: 20px;
+}
+
+.ai-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.ai-header h3 {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+
+.ai-review-id-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.empty-value {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .code-snippet {

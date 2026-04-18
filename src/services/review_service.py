@@ -1602,6 +1602,7 @@ class ReviewService:
             "reviewer_comments": review_dict.get("reviewer_comments"),
             "pull_request_status": review_dict["pull_request_status"],
             "metadata": review_dict.get("metadata"),
+            "ai_review_id": review_dict.get("ai_review_id"),
             "created_date": review_dict["created_date"],
             "updated_date": review_dict["updated_date"],
             "project": project,

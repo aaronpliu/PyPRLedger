@@ -143,8 +143,23 @@
           <!-- AI Review Column -->
           <el-col :xs="24" :sm="24" :md="review.ai_suggestions ? 10 : 0" :lg="review.ai_suggestions ? 10 : 0" :xl="review.ai_suggestions ? 9 : 0" v-if="review.ai_suggestions">
             <div class="analysis-column">
-              <div class="analysis-column-header">
-                🤖 AI Review Results
+              <div class="analysis-column-header ai-review-header">
+                <span class="ai-review-title">
+                  🤖 AI Review Result
+                  <el-tag v-if="review.ai_review_id" size="small" type="info" style="margin-left: 8px">
+                    {{ review.ai_review_id }}
+                  </el-tag>
+                </span>
+                <el-button
+                  v-if="review.ai_review_id"
+                  size="small"
+                  text
+                  @click="copyToClipboard(review.ai_review_id!)"
+                  class="copy-ai-id-btn"
+                >
+                  <el-icon><CopyDocument /></el-icon>
+                  Copy ID
+                </el-button>
               </div>
               <div class="analysis-column-body">
                 <AIReviewResults :suggestions="review.ai_suggestions" />
@@ -203,6 +218,23 @@
                     Primary Reviewer
                   </el-tag>
                 </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="AI Review ID" min-width="200" align="center">
+              <template #default>
+                <div v-if="review?.ai_review_id" class="ai-review-id-cell">
+                  <el-tag size="small" type="info">
+                    {{ review.ai_review_id }}
+                  </el-tag>
+                  <el-button
+                    size="small"
+                    text
+                    @click="copyToClipboard(review.ai_review_id!)"
+                  >
+                    <el-icon><CopyDocument /></el-icon>
+                  </el-button>
+                </div>
+                <span v-else class="empty-value">N/A</span>
               </template>
             </el-table-column>
             <el-table-column prop="score" label="Score" width="120">
@@ -333,7 +365,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
@@ -590,6 +622,14 @@ const lastAutoProgressAssignmentId = ref<number | null>(null)
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
+}
+
+const copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('Copied to clipboard')
+  }).catch(() => {
+    ElMessage.error('Failed to copy to clipboard')
+  })
 }
 
 const getStatusType = (status: string) => {
@@ -1251,6 +1291,37 @@ watch(
   background-clip: text;
   margin-top: 12px;
   text-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+/* AI Review ID Styles */
+.ai-review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.ai-review-title {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.copy-ai-id-btn {
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.ai-review-id-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.empty-value {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 /* Element Plus enhancements */
