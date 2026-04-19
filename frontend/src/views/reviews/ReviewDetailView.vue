@@ -83,7 +83,19 @@
           <el-collapse-transition>
             <el-descriptions v-if="isInfoExpanded" :column="3" border size="default">
               <el-descriptions-item label="PR ID" label-align="right">
-                <el-tag type="info" size="small">{{ review.pull_request_id }}</el-tag>
+                <a 
+                  v-if="review && getPrUrl(review)" 
+                  :href="getPrUrl(review) || undefined" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  class="pr-link"
+                >
+                  <el-tag type="info" size="small">
+                    {{ review.pull_request_id }}
+                    <el-icon style="margin-left: 4px;"><Link /></el-icon>
+                  </el-tag>
+                </a>
+                <el-tag v-else type="info" size="small">{{ review?.pull_request_id }}</el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="Commit ID" v-if="review.pull_request_commit_id" label-align="right">
                 <el-tag type="success" size="small">{{ review.pull_request_commit_id.substring(0, 8) }}</el-tag>
@@ -365,7 +377,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
@@ -382,11 +394,13 @@ import ScoreRangeGuide from '@/components/review/ScoreRangeGuide.vue'
 import AIReviewResults from '@/components/review/AIReviewResults.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useReviewNavigationStore, type ReviewNavigationItem } from '@/stores/reviewNavigation'
+import { usePrUrl } from '@/composables/usePrUrl'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const reviewNavigationStore = useReviewNavigationStore()
+const { getPrUrl } = usePrUrl()
 const loading = ref(false)
 const addingScore = ref(false)
 const review = ref<Review | null>(null)
@@ -1060,19 +1074,27 @@ watch(
   align-items: center;
 }
 
-.card-title-wrapper {
-  display: flex;
+/* PR Link Styles */
+.pr-link {
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+  display: inline-flex;
   align-items: center;
-  user-select: none;
 }
 
-.collapse-icon {
-  font-size: 16px;
-  color: var(--el-text-color-secondary);
+.pr-link:hover {
+  opacity: 0.8;
 }
 
-.collapse-icon.is-collapsed {
-  transform: rotate(-90deg);
+.pr-link :deep(.el-tag) {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pr-link:hover :deep(.el-tag) {
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
 }
 
 .card-title {

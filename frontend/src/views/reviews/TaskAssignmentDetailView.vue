@@ -15,7 +15,19 @@
       <div v-if="review" class="detail-content">
         <!-- PR Information -->
         <el-descriptions title="PR Information" :column="2" border>
-          <el-descriptions-item label="PR ID">{{ review.pull_request_id }}</el-descriptions-item>
+          <el-descriptions-item label="PR ID">
+            <a 
+              v-if="review && getPrUrl(review)" 
+              :href="getPrUrl(review) || undefined" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              class="pr-link"
+            >
+              {{ review.pull_request_id }}
+              <el-icon style="margin-left: 4px;"><Link /></el-icon>
+            </a>
+            <span v-else>{{ review?.pull_request_id }}</span>
+          </el-descriptions-item>
           <el-descriptions-item label="Commit ID">{{ review.pull_request_commit_id || 'N/A' }}</el-descriptions-item>
           <el-descriptions-item label="Project">{{ review.project_key }}</el-descriptions-item>
           <el-descriptions-item label="Repository">{{ review.repository_slug }}</el-descriptions-item>
@@ -273,15 +285,17 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Back, ArrowDown, CopyDocument } from '@element-plus/icons-vue'
+import { Back, ArrowDown, CopyDocument, Link } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
 import CodeDiffViewer from '@/components/review/CodeDiffViewer.vue'
+import { usePrUrl } from '@/composables/usePrUrl'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const { getPrUrl } = usePrUrl()
 
 // State
 const loading = ref(false)
@@ -512,6 +526,21 @@ onMounted(() => {
 
 .clickable {
   cursor: pointer;
+}
+
+/* PR Link Styles */
+.pr-link {
+  text-decoration: none;
+  color: var(--el-color-primary);
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pr-link:hover {
+  opacity: 0.7;
+  text-decoration: underline;
 }
 
 .current-reviewers {

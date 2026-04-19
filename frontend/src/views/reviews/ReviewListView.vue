@@ -103,7 +103,19 @@
           <template #default="{ row }">
             <div class="pr-info-cell">
               <div class="pr-id">
-                <el-tag size="small" type="info">{{ row.pull_request_id }}</el-tag>
+                <a 
+                  v-if="getPrUrl(row)" 
+                  :href="getPrUrl(row) || undefined" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  class="pr-link"
+                >
+                  <el-tag size="small" type="info" effect="plain">
+                    {{ row.pull_request_id }}
+                    <el-icon style="margin-left: 4px;"><Link /></el-icon>
+                  </el-tag>
+                </a>
+                <el-tag v-else size="small" type="info">{{ row.pull_request_id }}</el-tag>
                 <span v-if="row.pull_request_commit_id" class="commit-id">
                   🔖 {{ row.pull_request_commit_id.substring(0, 8) }}
                 </span>
@@ -282,7 +294,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu } from '@element-plus/icons-vue'
+import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu, Link } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -295,10 +307,12 @@ import { useReviewNavigationStore } from '@/stores/reviewNavigation'
 import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
 import { usersApi, type ReviewerUser } from '@/api/users'
+import { usePrUrl } from '@/composables/usePrUrl'
 
 const router = useRouter()
 const { hasPermission } = usePermission()
 const reviewNavigationStore = useReviewNavigationStore()
+const { getPrUrl } = usePrUrl()
 
 // Responsive page size calculation
 const calculatePageSize = () => {
@@ -946,6 +960,27 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* PR Link Styles */
+.pr-link {
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+}
+
+.pr-link:hover {
+  opacity: 0.8;
+}
+
+.pr-link :deep(.el-tag) {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pr-link:hover :deep(.el-tag) {
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
 }
 
 .commit-id {

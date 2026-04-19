@@ -70,7 +70,19 @@
         <el-table-column label="PR Info" min-width="220">
           <template #default="{ row }">
             <div class="pr-info" :title="`${row.pull_request_id} | ${row.project_key}/${row.repository_slug}`">
-              <div class="pr-id">{{ row.pull_request_id }}</div>
+              <div class="pr-id">
+                <a 
+                  v-if="getPrUrl(row)" 
+                  :href="getPrUrl(row) || undefined" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  class="pr-link"
+                >
+                  {{ row.pull_request_id }}
+                  <el-icon style="margin-left: 4px; font-size: 0.85em;"><Link /></el-icon>
+                </a>
+                <span v-else>{{ row.pull_request_id }}</span>
+              </div>
               <div class="pr-project">{{ row.project_key }}/{{ row.repository_slug }}</div>
             </div>
           </template>
@@ -304,7 +316,7 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, ArrowUp, Refresh, Search } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, Refresh, Search, Link } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
@@ -312,9 +324,11 @@ import { projectsApi, type ProjectSummary } from '@/api/projects'
 import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
 import FilterPopover from '@/components/common/FilterPopover.vue'
+import { usePrUrl } from '@/composables/usePrUrl'
 
 const router = useRouter()
 const { t } = useI18n()
+const { getPrUrl } = usePrUrl()
 
 // Responsive page size calculation
 const calculatePageSize = () => {
@@ -901,6 +915,20 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* PR Link Styles */
+.pr-id .pr-link {
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pr-id .pr-link:hover {
+  opacity: 0.7;
+  text-decoration: underline;
 }
 
 .pr-project {

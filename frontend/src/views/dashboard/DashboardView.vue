@@ -113,7 +113,19 @@
           <template #default="{ row }">
             <div class="pr-info-cell">
               <div class="pr-id">
-                <el-tag size="small" type="info">{{ row.pull_request_id }}</el-tag>
+                <a 
+                  v-if="getPrUrl(row)" 
+                  :href="getPrUrl(row) || undefined" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  class="pr-link"
+                >
+                  <el-tag size="small" type="info" effect="plain">
+                    {{ row.pull_request_id }}
+                    <el-icon style="margin-left: 4px;"><Link /></el-icon>
+                  </el-tag>
+                </a>
+                <el-tag v-else size="small" type="info">{{ row.pull_request_id }}</el-tag>
               </div>
               <div class="project-repo">
                 <strong>{{ row.project_key }}</strong> / {{ row.repository_slug }}
@@ -182,7 +194,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { TrendCharts, Refresh } from '@element-plus/icons-vue'
+import { TrendCharts, Refresh, Link } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import { reviewsApi } from '@/api/reviews'
@@ -647,6 +659,17 @@ const getStatusType = (status: string) => {
   return types[status] || 'info'
 }
 
+// Generate PR URL for external navigation
+const getPrUrl = (review: Review): string | null => {
+  if (!review.project?.project_url || !review.repository_slug || !review.pull_request_commit_id) {
+    return null
+  }
+  
+  // Construct URL: <project_url>/repos/<repository_slug>/commits/<commit_id>
+  const baseUrl = review.project.project_url.replace(/\/$/, '') // Remove trailing slash
+  return `${baseUrl}/repos/${review.repository_slug}/commits/${review.pull_request_commit_id}`
+}
+
 onMounted(() => {
   initCharts()
   window.addEventListener('resize', handleResize)
@@ -737,6 +760,27 @@ onUnmounted(() => {
 .pr-id {
   display: flex;
   align-items: center;
+}
+
+/* PR Link Styles */
+.pr-link {
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+}
+
+.pr-link:hover {
+  opacity: 0.8;
+}
+
+.pr-link :deep(.el-tag) {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pr-link:hover :deep(.el-tag) {
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
 }
 
 .project-repo {

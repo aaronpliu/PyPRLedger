@@ -29,7 +29,15 @@ export interface Review {
   
   // Embedded entity information
   app_name?: string
-  project?: Record<string, any> | null
+  project?: {
+    id: number
+    project_id: number
+    project_name: string
+    project_key: string
+    project_url: string
+    created_date: string
+    updated_date: string
+  } | null
   repository?: Record<string, any> | null
   pull_request_user_info?: Record<string, any> | null
   reviewer_info?: Record<string, any> | null
