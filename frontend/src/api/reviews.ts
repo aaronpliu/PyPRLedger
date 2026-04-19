@@ -173,4 +173,77 @@ export const reviewsApi = {
   getStats(params?: { project_key?: string }): Promise<any> {
     return request.get('/reviews/statistics', { params })
   },
+
+  /**
+   * Get reviewer activity trends (assigned + self-raised PRs)
+   */
+  getReviewerActivityTrends(params?: { period?: 'daily' | 'weekly' | 'monthly'; days?: number }): Promise<{
+    period: string
+    days: number
+    username: string
+    trends: Array<{
+      date: string
+      assigned_reviews: number
+      self_raised_prs: number
+      total: number
+    }>
+  }> {
+    return request.get('/reviews/trends/reviewer-activity', { params })
+  },
+
+  /**
+   * Get score trends by current reviewer
+   */
+  getScoreTrends(params?: { period?: 'daily' | 'weekly' | 'monthly'; days?: number }): Promise<{
+    period: string
+    days: number
+    username: string
+    trends: Array<{
+      date: string
+      average_score: number
+      score_count: number
+      min_score: number
+      max_score: number
+    }>
+  }> {
+    return request.get('/reviews/trends/score-trends', { params })
+  },
+
+  /**
+   * Get project and repository activity trends
+   */
+  getProjectRepoActivityTrends(params?: { period?: 'daily' | 'weekly' | 'monthly'; days?: number }): Promise<{
+    period: string
+    days: number
+    username: string
+    trends: Array<{
+      date: string
+      unique_projects: number
+      unique_repositories: number
+    }>
+  }> {
+    return request.get('/reviews/trends/project-repo-activity', { params })
+  },
+
+  /**
+   * Get good suggestions trends (high-quality scores)
+   */
+  getGoodSuggestionsTrends(params?: { 
+    period?: 'daily' | 'weekly' | 'monthly'
+    days?: number
+    threshold?: number
+  }): Promise<{
+    period: string
+    days: number
+    threshold: number
+    username: string
+    trends: Array<{
+      date: string
+      good_suggestions: number
+      total_scores: number
+      percentage: number
+    }>
+  }> {
+    return request.get('/reviews/trends/good-suggestions', { params })
+  },
 }
