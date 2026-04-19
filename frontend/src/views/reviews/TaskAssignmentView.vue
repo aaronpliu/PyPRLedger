@@ -3,142 +3,42 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>Task Assignment Management</span>
-          <el-tag type="info">Review Admin Only</el-tag>
+          <div class="header-title-group">
+            <h2>Task Assignment Management</h2>
+            <el-tag type="info">Review Admin Only</el-tag>
+          </div>
+          <div class="header-actions">
+            <el-button @click="loadReviews">
+              <el-icon><Refresh /></el-icon>
+              Refresh
+            </el-button>
+          </div>
         </div>
       </template>
 
       <!-- Filters -->
-      <el-form :inline="true" class="filter-form">
-        <el-form-item label="Search">
-          <el-input
-            v-model="searchQuery"
-            placeholder="Filter by PR ID, reviewer, or project"
-            clearable
-            style="width: 300px"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-        </el-form-item>
+      <FilterPopover
+        v-model:search-query="searchQuery"
+        v-model:app-filter="appFilter"
+        v-model:project-filter="projectFilter"
+        v-model:pr-user-filter="prUserFilter"
+        v-model:reviewer-filter="reviewerFilter"
+        v-model:scored-filter="scoredFilter"
+        v-model:severity-filter="severityFilter"
+        v-model:status-filter="statusFilter"
+        :app-options="availableApps"
+        :project-options="projects"
+        :pr-user-options="availablePRUsers"
+        :reviewer-options="availableReviewers"
+        :pr-users-loading="prUsersLoading"
+        :reviewers-loading="reviewersLoading"
+        show-project-filter
+        @apply="loadReviews"
+        @reset="handleResetFilters"
+        @search-pr-users="searchPRUsers"
+        @search-reviewers="searchReviewers"
+      />
         
-        <el-form-item label="Project">
-          <el-select v-model="projectFilter" placeholder="All Projects" clearable style="width: 200px" @change="loadReviews">
-            <el-option label="All Projects" value="" />
-            <el-option v-for="proj in projects" :key="proj.project_key" :label="proj.project_name" :value="proj.project_key" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="App Name">
-          <el-select
-            v-model="appFilter"
-            placeholder="Select apps"
-            clearable
-            multiple
-            collapse-tags
-            collapse-tags-tooltip
-            style="width: 200px"
-          >
-            <el-option
-              v-for="app in availableApps"
-              :key="app.app_name"
-              :label="app.app_name"
-              :value="app.app_name"
-            />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="PR User">
-          <el-select
-            v-model="prUserFilter"
-            placeholder="Select or type name"
-            clearable
-            filterable
-            remote
-            :remote-method="searchPRUsers"
-            :loading="prUsersLoading"
-            style="width: 200px"
-          >
-            <el-option
-              v-for="user in availablePRUsers"
-              :key="user.username"
-              :label="user.display_name || user.username"
-              :value="user.username"
-            >
-              <span>{{ user.display_name }}</span>
-              <span class="text-secondary" style="margin-left: 8px; font-size: 0.85em;">
-                ({{ user.username }})
-              </span>
-            </el-option>
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Reviewer">
-          <el-select
-            v-model="reviewerFilter"
-            placeholder="Select or type name"
-            clearable
-            filterable
-            remote
-            :remote-method="searchReviewers"
-            :loading="reviewersLoading"
-            style="width: 200px"
-          >
-            <el-option
-              v-for="user in availableReviewers"
-              :key="user.username"
-              :label="user.display_name || user.username"
-              :value="user.username"
-            >
-              <span>{{ user.display_name }}</span>
-              <span class="text-secondary" style="margin-left: 8px; font-size: 0.85em;">
-                ({{ user.username }})
-              </span>
-            </el-option>
-            <el-option
-              key="__unassigned__"
-              label="⚠️ Unassigned"
-              value="__unassigned__"
-            >
-              <span style="color: #E6A23C; font-weight: 600;">⚠️ Unassigned</span>
-            </el-option>
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Scored">
-          <el-select v-model="scoredFilter" placeholder="All" clearable style="width: 120px">
-            <el-option label="Scored" value="yes" />
-            <el-option label="Not Scored" value="no" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Severity">
-          <el-select v-model="severityFilter" placeholder="All" clearable style="width: 140px">
-            <el-option label="Critical" value="critical" />
-            <el-option label="High" value="high" />
-            <el-option label="Medium" value="medium" />
-            <el-option label="Low" value="low" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="PR Status">
-          <el-select v-model="statusFilter" placeholder="All Status" clearable style="width: 150px" @change="loadReviews">
-            <el-option label="Open" value="open" />
-            <el-option label="Merged" value="merged" />
-            <el-option label="Closed" value="closed" />
-            <el-option label="Draft" value="draft" />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item>
-          <el-button type="primary" @click="loadReviews">
-            <el-icon><Refresh /></el-icon>
-            Refresh
-          </el-button>
-        </el-form-item>
-      </el-form>
-
       <!-- Reviews Table -->
       <el-table
         :data="displayedReviews"
@@ -401,7 +301,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, ArrowUp, Refresh, Search } from '@element-plus/icons-vue'
@@ -411,6 +311,7 @@ import { usersApi, type ReviewerUser } from '@/api/users'
 import { projectsApi, type ProjectSummary } from '@/api/projects'
 import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
+import FilterPopover from '@/components/common/FilterPopover.vue'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -473,20 +374,25 @@ const assignForm = ref({
 const loadReviews = async () => {
   loading.value = true
   try {
-    // When filters are active, fetch all data to enable proper client-side filtering
-    const hasActiveFilters = searchQuery.value || projectFilter.value || prUserFilter.value || 
-                            reviewerFilter.value || scoredFilter.value || severityFilter.value
-    
     const params: any = {
-      page: hasActiveFilters ? 1 : currentPage.value,
-      page_size: hasActiveFilters ? 1000 : pageSize.value, // Fetch all when filtering
+      page: currentPage.value,
+      page_size: pageSize.value,
     }
+    
+    // Add filter parameters supported by task-assignment API
+    // Note: task-assignment API only supports project_key, reviewer, and status
     if (projectFilter.value) params.project_key = projectFilter.value
+    if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+      params.reviewer = reviewerFilter.value
+    }
     if (statusFilter.value) params.status = statusFilter.value
 
     const response = await taskAssignmentApi.getReviews(params)
-    allReviews.value = response.items // Store all reviews
-    total.value = response.total // Store total count from API
+    allReviews.value = response.items
+    total.value = response.total
+    
+    // Client-side filtering for unsupported fields (search, app, prUser, scored, severity, unassigned)
+    // Handled automatically by displayedReviews computed property
   } catch (error) {
     console.error('Failed to load reviews:', error)
     ElMessage.error('Failed to load reviews')
@@ -510,10 +416,22 @@ const loadProjects = async () => {
   }
 }
 
+const handleResetFilters = () => {
+  searchQuery.value = ''
+  appFilter.value = []
+  prUserFilter.value = ''
+  reviewerFilter.value = ''
+  scoredFilter.value = ''
+  severityFilter.value = ''
+  statusFilter.value = ''
+  projectFilter.value = ''
+  loadReviews()
+}
+
 const displayedReviews = computed(() => {
   let result = [...allReviews.value]
   
-  // Apply search filter
+  // Apply search filter (text search not supported by backend)
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     result = result.filter(review => {
@@ -526,7 +444,15 @@ const displayedReviews = computed(() => {
     })
   }
   
-  // Apply PR user filter (check from reviewers or metadata)
+  // Apply app name filter (not supported by task-assignment API)
+  if (appFilter.value && appFilter.value.length > 0) {
+    const selectedApps = appFilter.value.map(app => app.toLowerCase())
+    result = result.filter(review => 
+      review.app_name && selectedApps.includes(review.app_name.toLowerCase())
+    )
+  }
+  
+  // Apply PR user filter (not supported by task-assignment API)
   if (prUserFilter.value) {
     const prUser = prUserFilter.value.toLowerCase()
     result = result.filter(review => 
@@ -535,35 +461,15 @@ const displayedReviews = computed(() => {
     )
   }
   
-  // Apply app name filter (multi-select)
-  if (appFilter.value && appFilter.value.length > 0) {
-    const selectedApps = appFilter.value.map(app => app.toLowerCase())
+  // Apply reviewer filter for unassigned (not supported by backend)
+  if (reviewerFilter.value === '__unassigned__') {
     result = result.filter(review => 
-      review.app_name && selectedApps.includes(review.app_name.toLowerCase())
+      !review.reviewers || review.reviewers.length === 0 ||
+      review.reviewers.every(r => !r.reviewer && !r.reviewer_info?.display_name)
     )
   }
   
-  // Apply reviewer filter
-  if (reviewerFilter.value) {
-    // Special handling for unassigned option
-    if (reviewerFilter.value === '__unassigned__') {
-      result = result.filter(review => 
-        !review.reviewers || review.reviewers.length === 0 ||
-        review.reviewers.every(r => !r.reviewer && !r.reviewer_info?.display_name)
-      )
-    } else {
-      // Normal text search for assigned reviewers
-      const reviewer = reviewerFilter.value.toLowerCase()
-      result = result.filter(review => 
-        review.reviewers?.some(r => 
-          r.reviewer?.toLowerCase().includes(reviewer) ||
-          r.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
-        )
-      )
-    }
-  }
-  
-  // Apply scored filter (check if has scores in metadata)
+  // Apply scored filter (not supported by backend)
   if (scoredFilter.value === 'yes') {
     result = result.filter(review => 
       review.metadata?.has_scores || review.completed_reviewers > 0
@@ -574,7 +480,7 @@ const displayedReviews = computed(() => {
     )
   }
   
-  // Apply severity filter (check AI suggestions)
+  // Apply severity filter (not supported by backend)
   if (severityFilter.value) {
     const targetSeverity = severityFilter.value
     result = result.filter(review => {
@@ -855,6 +761,21 @@ const searchReviewers = async (query: string) => {
   }
 }
 
+// Watch for filter changes and reload data
+watch(
+  [searchQuery, appFilter, projectFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter],
+  () => {
+    // Debounce the reload to avoid multiple rapid requests
+    clearTimeout(filterChangeTimeout)
+    filterChangeTimeout = setTimeout(() => {
+      loadReviews()
+    }, 300)
+  },
+  { deep: true }
+)
+
+let filterChangeTimeout: ReturnType<typeof setTimeout>
+
 onMounted(() => {
   window.addEventListener('resize', handleResize)
   loadProjects()
@@ -866,6 +787,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  clearTimeout(filterChangeTimeout)
 })
 </script>
 
@@ -880,8 +802,26 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.filter-form {
-  margin-bottom: 20px;
+.header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-title-group h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-section {
+  margin-bottom: 16px;
 }
 
 .task-assignment-table :deep(th.el-table__cell) {

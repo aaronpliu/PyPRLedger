@@ -21,148 +21,24 @@
       </template>
 
       <!-- Filters -->
-      <FilterBuilder
-        v-show="showAdvancedFilters"
-        :available-fields="filterFields"
-        @filters-change="handleFiltersChange"
-        @apply-preset="handleApplyPreset"
+      <FilterPopover
+        v-model:search-query="searchQuery"
+        v-model:app-filter="appFilter"
+        v-model:pr-user-filter="prUserFilter"
+        v-model:reviewer-filter="reviewerFilter"
+        v-model:scored-filter="scoredFilter"
+        v-model:severity-filter="severityFilter"
+        v-model:status-filter="statusFilter"
+        :app-options="availableApps"
+        :pr-user-options="availablePRUsers"
+        :reviewer-options="availableReviewers"
+        :pr-users-loading="prUsersLoading"
+        :reviewers-loading="reviewersLoading"
+        @apply="applyFilters"
+        @reset="handleResetFilters"
+        @search-pr-users="searchPRUsers"
+        @search-reviewers="searchReviewers"
       />
-      
-      <!-- Toggle Advanced Filters Button -->
-      <div style="margin-bottom: 16px;">
-        <el-button 
-          size="small" 
-          @click="showAdvancedFilters = !showAdvancedFilters"
-          :type="showAdvancedFilters ? 'primary' : ''"
-        >
-          <el-icon><Search /></el-icon>
-          {{ showAdvancedFilters ? 'Hide' : 'Show' }} Advanced Filters
-          <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-        </el-button>
-        <el-tag v-if="advancedFilters.length > 0" type="success" style="margin-left: 8px;">
-          {{ advancedFilters.length }} filter{{ advancedFilters.length > 1 ? 's' : '' }} active
-        </el-tag>
-      </div>
-
-      <el-form :inline="true" class="filter-form">
-        <el-form-item label="Search">
-          <el-input
-            v-model="searchQuery"
-            placeholder="Filter by PR ID, reviewer, or project"
-            clearable
-            style="width: 300px"
-            @input="handleSearch"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-        </el-form-item>
-        
-        <el-form-item label="App Name">
-          <el-select
-            v-model="appFilter"
-            placeholder="Select apps"
-            clearable
-            multiple
-            collapse-tags
-            collapse-tags-tooltip
-            style="width: 200px"
-            @change="applyFilters"
-          >
-            <el-option
-              v-for="app in availableApps"
-              :key="app.app_name"
-              :label="app.app_name"
-              :value="app.app_name"
-            />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="PR User">
-          <el-select
-            v-model="prUserFilter"
-            placeholder="Select or type name"
-            clearable
-            filterable
-            remote
-            :remote-method="searchPRUsers"
-            :loading="prUsersLoading"
-            style="width: 200px"
-            @change="applyFilters"
-          >
-            <el-option
-              v-for="user in availablePRUsers"
-              :key="user.username"
-              :label="user.display_name || user.username"
-              :value="user.username"
-            >
-              <span>{{ user.display_name }}</span>
-              <span class="text-secondary" style="margin-left: 8px; font-size: 0.85em;">
-                ({{ user.username }})
-              </span>
-            </el-option>
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Reviewer">
-          <el-select
-            v-model="reviewerFilter"
-            placeholder="Select or type name"
-            clearable
-            filterable
-            remote
-            :remote-method="searchReviewers"
-            :loading="reviewersLoading"
-            style="width: 200px"
-            @change="applyFilters"
-          >
-            <el-option
-              v-for="reviewer in availableReviewers"
-              :key="reviewer.username"
-              :label="reviewer.display_name || reviewer.username"
-              :value="reviewer.username"
-            >
-              <span>{{ reviewer.display_name }}</span>
-              <span class="text-secondary" style="margin-left: 8px; font-size: 0.85em;">
-                ({{ reviewer.username }})
-              </span>
-            </el-option>
-            <el-option
-              key="__unassigned__"
-              label="⚠️ Unassigned"
-              value="__unassigned__"
-            >
-              <span style="color: #E6A23C; font-weight: 600;">⚠️ Unassigned</span>
-            </el-option>
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Scored">
-          <el-select v-model="scoredFilter" placeholder="All" clearable style="width: 120px" @change="applyFilters">
-            <el-option label="Scored" value="yes" />
-            <el-option label="Not Scored" value="no" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Severity">
-          <el-select v-model="severityFilter" placeholder="All" clearable style="width: 140px" @change="applyFilters">
-            <el-option label="Critical" value="critical" />
-            <el-option label="High" value="high" />
-            <el-option label="Medium" value="medium" />
-            <el-option label="Low" value="low" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="PR Status">
-          <el-select v-model="statusFilter" placeholder="All Status" clearable style="width: 150px" @change="loadReviews">
-            <el-option label="Open" value="open" />
-            <el-option label="Merged" value="merged" />
-            <el-option label="Closed" value="closed" />
-            <el-option label="Draft" value="draft" />
-          </el-select>
-        </el-form-item>
-      </el-form>
 
       <!-- Bulk Actions Toolbar -->
       <div v-if="selectedReviews.length > 0" class="bulk-actions-toolbar">
@@ -412,7 +288,7 @@ import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
-import FilterBuilder from '@/components/common/FilterBuilder.vue'
+import FilterPopover from '@/components/common/FilterPopover.vue'
 import ExportMenu from '@/components/common/ExportMenu.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useReviewNavigationStore } from '@/stores/reviewNavigation'
@@ -458,8 +334,6 @@ const availableReviewers = ref<ReviewerUser[]>([])
 const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
-const advancedFilters = ref<Filter[]>([])
-const showAdvancedFilters = ref(false)
 const tableRef = ref()
 
 // Bulk operation state
@@ -477,18 +351,6 @@ const totalCount = ref(0)
 // Task assignment state - REMOVED: Use Task Assignment page instead
 // const reviewers = ref<any[]>([])
 // const batchReviewerUsername = ref('')
-
-// Filter fields configuration
-const filterFields = [
-  { label: 'PR ID', value: 'pull_request_id' },
-  { label: 'PR User', value: 'pull_request_user' },
-  { label: 'Project Key', value: 'project_key' },
-  { label: 'Reviewer', value: 'reviewer' },
-  { label: 'PR Status', value: 'pull_request_status' },
-  { label: 'Created Date', value: 'created_date' },
-  { label: 'Updated Date', value: 'updated_date' },
-  { label: 'Summary', value: 'reviewer_comments' },
-]
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
@@ -510,21 +372,31 @@ const getStatusType = (status: string) => {
 const loadReviews = async () => {
   loading.value = true
   try {
-    // When filters are active, fetch all data to enable proper client-side filtering
-    const hasActiveFilters = searchQuery.value || prUserFilter.value || reviewerFilter.value || 
-                            scoredFilter.value || severityFilter.value || advancedFilters.value.length > 0
-    
-    const requestData = {
-      page: hasActiveFilters ? 1 : currentPage.value,
-      page_size: hasActiveFilters ? 1000 : pageSize.value, // Fetch all when filtering
+    const params: any = {
+      page: currentPage.value,
+      page_size: pageSize.value,
     }
     
-    const data = await reviewsApi.getReviews(requestData)
+    // Add filter parameters for server-side filtering (only supported fields)
+    if (appFilter.value && appFilter.value.length > 0) params.app_names = appFilter.value.join(',')
+    if (prUserFilter.value) params.pull_request_user = prUserFilter.value
+    if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+      params.reviewer = reviewerFilter.value
+    }
+    if (statusFilter.value) params.pull_request_status = statusFilter.value
+
+    console.log('Loading reviews with params:', params)
+    const data = await reviewsApi.getReviews(params)
+    console.log('Reviews loaded:', data.items.length, 'items')
     allReviews.value = data.items
     total.value = data.total
+    
+    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned reviewer)
     applyFilters()
-  } catch (error) {
-    ElMessage.error('Failed to load reviews')
+  } catch (error: any) {
+    console.error('Failed to load reviews:', error)
+    console.error('Error details:', error.response?.data || error.message)
+    ElMessage.error(`Failed to load reviews: ${error.response?.data?.detail || error.message}`)
   } finally {
     loading.value = false
   }
@@ -534,7 +406,14 @@ const loadReviews = async () => {
 const allReviews = ref<Review[]>([])
 const filteredReviews = ref<Review[]>([])
 
-const handleSearch = () => {
+const handleResetFilters = () => {
+  searchQuery.value = ''
+  appFilter.value = []
+  prUserFilter.value = ''
+  reviewerFilter.value = ''
+  scoredFilter.value = ''
+  severityFilter.value = ''
+  statusFilter.value = ''
   applyFilters()
 }
 
@@ -620,46 +499,13 @@ const applyFilters = () => {
     result = result.filter(review => review.pull_request_status === statusFilter.value)
   }
   
-  // Apply advanced filters
-  if (advancedFilters.value.length > 0) {
-    result = result.filter(review => {
-      // All advanced filters must match (AND logic)
-      return advancedFilters.value.every(filter => {
-        const fieldValue = (review as any)[filter.field]
-        if (!fieldValue) return false
-        
-        const value = String(fieldValue).toLowerCase()
-        const filterValue = filter.value.toLowerCase()
-        
-        switch (filter.operator) {
-          case 'eq':
-            return value === filterValue
-          case 'neq':
-            return value !== filterValue
-          case 'contains':
-            return value.includes(filterValue)
-          case 'gt':
-            return parseFloat(value) > parseFloat(filter.value)
-          case 'lt':
-            return parseFloat(value) < parseFloat(filter.value)
-          case 'in':
-            // Support comma-separated values
-            const values = filter.value.split(',').map(v => v.trim().toLowerCase())
-            return values.includes(value)
-          default:
-            return true
-        }
-      })
-    })
-  }
-  
   filteredReviews.value = result
   reviews.value = result
   
   // Only update total if filters are active (client-side filtering scenario)
   // Otherwise, keep the API's total count for proper pagination
-  const hasActiveFilters = searchQuery.value || prUserFilter.value || reviewerFilter.value || 
-                          scoredFilter.value || severityFilter.value || advancedFilters.value.length > 0
+  const hasActiveFilters = searchQuery.value || appFilter.value?.length > 0 || prUserFilter.value || reviewerFilter.value || 
+                          scoredFilter.value || severityFilter.value || statusFilter.value
   if (hasActiveFilters) {
     total.value = result.length
   }
@@ -714,24 +560,6 @@ const confirmDelete = async (review: Review) => {
       ElMessage.error('Failed to delete review')
     }
   }
-}
-
-// Filter handlers
-interface Filter {
-  field: string
-  operator: string
-  value: string
-}
-
-const handleFiltersChange = (filters: Filter[]) => {
-  console.log('Advanced filters changed:', filters)
-  advancedFilters.value = filters
-  applyFilters()
-}
-
-const handleApplyPreset = (preset: any) => {
-  console.log('Applied preset:', preset)
-  ElMessage.success(`Applied preset: ${preset.name}`)
 }
 
 // Bulk operation handlers
@@ -942,6 +770,21 @@ const searchReviewers = async (query: string) => {
   }
 }
 
+// Watch for filter changes and reload data
+watch(
+  [searchQuery, appFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter],
+  () => {
+    // Debounce the reload to avoid multiple rapid requests
+    clearTimeout(filterChangeTimeout)
+    filterChangeTimeout = setTimeout(() => {
+      loadReviews()
+    }, 300)
+  },
+  { deep: true }
+)
+
+let filterChangeTimeout: ReturnType<typeof setTimeout>
+
 // Load reviews when component mounts
 onMounted(() => {
   window.addEventListener('resize', handleResize)
@@ -953,6 +796,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  clearTimeout(filterChangeTimeout)
 })
 </script>
 
