@@ -162,12 +162,24 @@
           </template>
         </el-table-column>
       </el-table>
+      
+      <!-- Load More Button -->
+      <div class="load-more-container" v-if="hasMoreReviews">
+        <el-button 
+          type="primary" 
+          @click="loadMoreReviews" 
+          :loading="loadingMore"
+          plain
+        >
+          {{ t('dashboard.load_more') }} ({{ recentReviews.length }} / {{ totalReviews }})
+        </el-button>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { TrendCharts, Refresh } from '@element-plus/icons-vue'
@@ -208,6 +220,15 @@ const loadingCharts = ref({
 
 // Recent reviews
 const recentReviews = ref<Review[]>([])
+const currentPage = ref(1)
+const pageSize = ref(10)
+const totalReviews = ref(0)
+const loadingMore = ref(false)
+
+// Computed property for showing load more button
+const hasMoreReviews = computed(() => {
+  return recentReviews.value.length < totalReviews.value
+})
 
 // Trend data
 const trendData = ref({
@@ -576,16 +597,41 @@ const loadTrendData = async () => {
 }
 
 // Load recent reviews
-const loadRecentReviews = async () => {
+const loadRecentReviews = async (reset = true) => {
+  if (reset) {
+    currentPage.value = 1
+    recentReviews.value = []
+  }
+  
   loading.value = true
   try {
-    const reviewsData = await reviewsApi.getReviews({ page: 1, page_size: 10 })
-    recentReviews.value = reviewsData.items
+    const reviewsData = await reviewsApi.getReviews({ 
+      page: currentPage.value, 
+      page_size: pageSize.value 
+    })
+    
+    if (reset) {
+      recentReviews.value = reviewsData.items
+    } else {
+      // Append new items to existing list
+      recentReviews.value = [...recentReviews.value, ...reviewsData.items]
+    }
+    
+    totalReviews.value = reviewsData.total
   } catch (error) {
     console.error('Failed to load recent reviews:', error)
+    ElMessage.error(t('dashboard.failed_load_reviews'))
   } finally {
     loading.value = false
   }
+}
+
+// Load more reviews
+const loadMoreReviews = async () => {
+  loadingMore.value = true
+  currentPage.value++
+  await loadRecentReviews(false) // Don't reset, append to existing
+  loadingMore.value = false
 }
 
 const formatDate = (dateStr: string) => {
@@ -670,6 +716,15 @@ onUnmounted(() => {
 .header-actions {
   display: flex;
   gap: 8px;
+}
+
+/* Load More Button Container */
+.load-more-container {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  padding: 12px 0;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 /* PR Info Cell Styles */

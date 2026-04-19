@@ -114,7 +114,9 @@
     "failed_load_activity": "Failed to load activity trends",
     "failed_load_scores": "Failed to load score trends",
     "failed_load_projects": "Failed to load project/repo trends",
-    "failed_load_suggestions": "Failed to load suggestions trends"
+    "failed_load_suggestions": "Failed to load suggestions trends",
+    "failed_load_reviews": "Failed to load recent reviews",
+    "load_more": "Load More"
   },
   "reviews": {
     "code_reviews": "Code Reviews",

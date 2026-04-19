@@ -114,7 +114,9 @@
     "failed_load_activity": "加载活动趋势失败",
     "failed_load_scores": "加载评分趋势失败",
     "failed_load_projects": "加载项目/仓库趋势失败",
-    "failed_load_suggestions": "加载建议趋势失败"
+    "failed_load_suggestions": "加载建议趋势失败",
+    "failed_load_reviews": "加载最近审查失败",
+    "load_more": "加载更多"
   },
   "reviews": {
     "code_reviews": "代码审查",

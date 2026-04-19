@@ -114,7 +114,9 @@
     "failed_load_activity": "載入活動趨勢失敗",
     "failed_load_scores": "載入評分趨勢失敗",
     "failed_load_projects": "載入專案/儲存庫趨勢失敗",
-    "failed_load_suggestions": "載入建議趨勢失敗"
+    "failed_load_suggestions": "載入建議趨勢失敗",
+    "failed_load_reviews": "載入最近審查失敗",
+    "load_more": "載入更多"
   },
   "reviews": {
     "code_reviews": "程式碼審查",
