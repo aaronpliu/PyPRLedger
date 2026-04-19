@@ -69,9 +69,9 @@ const routes: RouteRecordRaw[] = [
     ],
   },
 
-  // Admin routes
+  // Admin routes (changed from /admin to /myadmin)
   {
-    path: '/admin',
+    path: '/myadmin',
     component: () => import('@/layouts/AdminLayout.vue'),
     meta: { requiresAuth: true, requiresAdmin: true },
     children: [
@@ -144,12 +144,16 @@ router.beforeEach(async (to, _from) => {
     return '/login'
   }
 
-  // Check if route requires admin
+  // Check if route requires admin (system_admin only)
   if (to.meta.requiresAdmin) {
-    // TODO: Implement admin check based on user roles
-    // For now, allow access if authenticated
     if (!authStore.isAuthenticated) {
       return '/login'
+    }
+
+    // Check if user has system_admin role
+    const userRoles = authStore.user?.roles || []
+    if (!userRoles.includes('system_admin')) {
+      return '/403'
     }
   }
 

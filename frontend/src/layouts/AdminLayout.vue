@@ -12,31 +12,31 @@
         text-color="var(--el-text-color-regular)"
         active-text-color="var(--el-color-primary)"
       >
-        <el-menu-item index="/admin">
+        <el-menu-item index="/myadmin">
           <el-icon><DataAnalysis /></el-icon>
           <span>{{ t('menu.dashboard') }}</span>
         </el-menu-item>
-        <el-menu-item index="/admin/users">
+        <el-menu-item index="/myadmin/users">
           <el-icon><User /></el-icon>
           <span>{{ t('menu.users') }}</span>
         </el-menu-item>
-        <el-menu-item index="/admin/roles">
+        <el-menu-item index="/myadmin/roles">
           <el-icon><Lock /></el-icon>
           <span>{{ t('menu.roles') }}</span>
         </el-menu-item>
-        <el-menu-item index="/admin/delegations">
+        <el-menu-item index="/myadmin/delegations">
           <el-icon><Share /></el-icon>
           <span>{{ t('menu.delegations') }}</span>
         </el-menu-item>
-        <el-menu-item index="/admin/audit">
+        <el-menu-item index="/myadmin/audit">
           <el-icon><Document /></el-icon>
           <span>{{ t('menu.auditLogs') }}</span>
         </el-menu-item>
-        <el-menu-item index="/admin/sessions">
+        <el-menu-item index="/myadmin/sessions">
           <el-icon><Monitor /></el-icon>
           <span>{{ t('menu.sessions') }}</span>
         </el-menu-item>
-        <el-menu-item index="/admin/project-registry">
+        <el-menu-item index="/myadmin/project-registry">
           <el-icon><Folder /></el-icon>
           <span>{{ t('menu.projectRegistry') }}</span>
         </el-menu-item>

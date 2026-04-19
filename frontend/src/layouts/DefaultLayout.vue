@@ -67,6 +67,10 @@
             <template #dropdown>
               <el-dropdown-menu role="menu" aria-label="User options">
                 <el-dropdown-item command="profile" role="menuitem">{{ t('common.profile') }}</el-dropdown-item>
+                <el-dropdown-item v-if="isSystemAdmin" command="admin" role="menuitem">
+                  <el-icon><Lock /></el-icon>
+                  {{ t('menu.adminPanel') }}
+                </el-dropdown-item>
                 <el-dropdown-item command="logout" divided role="menuitem">{{ t('common.logout') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -96,7 +100,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { User, ArrowDown } from '@element-plus/icons-vue'
+import { User, ArrowDown, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -147,12 +151,20 @@ const isAdmin = computed(() => {
   return userRoles.includes('review_admin') || userRoles.includes('system_admin')
 })
 
+// Check if user is system_admin (only for accessing /myadmin)
+const isSystemAdmin = computed(() => {
+  const userRoles = authStore.user?.roles || []
+  return userRoles.includes('system_admin')
+})
+
 const handleCommand = (command: string) => {
   if (command === 'logout') {
     authStore.logout()
     ElMessage.success(t('auth.logout_success'))
   } else if (command === 'profile') {
     router.push('/profile')
+  } else if (command === 'admin') {
+    router.push('/myadmin')
   }
 }
 
