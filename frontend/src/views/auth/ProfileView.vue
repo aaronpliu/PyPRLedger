@@ -7,331 +7,337 @@
         </div>
       </template>
 
-      <el-tabs v-model="activeTab" type="border-card">
+      <el-tabs v-model="activeTab" type="border-card" class="profile-tabs">
         <!-- User Info Tab -->
         <el-tab-pane label="User Info" name="info">
-          <!-- Compact user info grid -->
-          <el-row :gutter="16" style="margin-bottom: 20px;">
-            <el-col :span="12">
-              <div class="info-item">
-                <label>Username:</label>
-                <span>{{ authStore.user?.username }}</span>
-              </div>
-            </el-col>
-            <el-col :span="12">
-              <div class="info-item">
-                <label>Email:</label>
-                <span>{{ authStore.user?.email || 'N/A' }}</span>
-              </div>
-            </el-col>
-          </el-row>
-          
-          <el-row :gutter="16" style="margin-bottom: 20px;">
-            <el-col :span="12">
-              <div class="info-item">
-                <label>Status:</label>
-                <el-tag :type="authStore.user?.is_active ? 'success' : 'danger'" size="small">
-                  {{ authStore.user?.is_active ? 'Active' : 'Inactive' }}
-                </el-tag>
-              </div>
-            </el-col>
-            <el-col :span="12">
-              <div class="info-item">
-                <label>Last Login:</label>
-                <span>{{ authStore.user?.last_login_at ? formatDate(authStore.user.last_login_at) : 'Never' }}</span>
-              </div>
-            </el-col>
-          </el-row>
-          
-          <el-row :gutter="16" style="margin-bottom: 20px;">
-            <el-col :span="12">
-              <div class="info-item">
-                <label>Member Since:</label>
-                <span>{{ authStore.user?.created_at ? formatDate(authStore.user.created_at) : 'N/A' }}</span>
-              </div>
-            </el-col>
-            <el-col :span="12">
-              <div class="info-item">
-                <label>Roles:</label>
-                <div class="roles-header">
-                  <div v-if="authStore.user?.roles && authStore.user.roles.length > 0" class="roles-container">
-                    <el-tag
-                      v-for="role in authStore.user.roles"
-                      :key="role"
-                      :type="getRoleTagType(role)"
-                      size="small"
-                      style="margin-right: 4px;"
-                    >
-                      {{ formatRoleName(role) }}
-                    </el-tag>
-                  </div>
-                  <el-tag v-else type="info" size="small">No roles</el-tag>
-                  
-                  <!-- Popover for viewer-only users -->
-                  <el-popover
-                    v-if="isViewerOnly"
-                    placement="top"
-                    :width="350"
-                    trigger="click"
-                  >
-                    <template #reference>
-                      <el-button
-                        link
-                        type="warning"
-                        size="small"
-                        style="margin-left: 4px;"
-                      >
-                        <el-icon><InfoFilled /></el-icon>
-                      </el-button>
-                    </template>
-                    <div class="viewer-tips-content">
-                      <h4 style="margin: 0 0 12px 0; color: var(--el-color-warning);">
-                        <el-icon style="vertical-align: middle; margin-right: 4px;"><WarningFilled /></el-icon>
-                        Viewer Role Limitations
-                      </h4>
-                      <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
-                        <li>You can only <strong>view</strong> code reviews and scores</li>
-                        <li>You <strong>cannot</strong> add or update scores</li>
-                        <li>You <strong>cannot</strong> add comments to reviews</li>
-                        <li>You <strong>cannot</strong> be assigned review tasks</li>
-                      </ul>
-                      <el-divider style="margin: 12px 0;" />
-                      <p style="margin: 0; color: var(--el-text-color-secondary); font-size: 13px;">
-                        💡 To gain full reviewer permissions, please contact a system administrator to upgrade your role.
-                      </p>
-                    </div>
-                  </el-popover>
+          <div class="tab-content">
+            <!-- Compact user info grid -->
+            <el-row :gutter="16" style="margin-bottom: 20px;">
+              <el-col :span="12">
+                <div class="info-item">
+                  <label>Username:</label>
+                  <span>{{ authStore.user?.username }}</span>
                 </div>
-              </div>
-            </el-col>
-          </el-row>
+              </el-col>
+              <el-col :span="12">
+                <div class="info-item">
+                  <label>Email:</label>
+                  <span>{{ authStore.user?.email || 'N/A' }}</span>
+                </div>
+              </el-col>
+            </el-row>
+            
+            <el-row :gutter="16" style="margin-bottom: 20px;">
+              <el-col :span="12">
+                <div class="info-item">
+                  <label>Status:</label>
+                  <el-tag :type="authStore.user?.is_active ? 'success' : 'danger'" size="small">
+                    {{ authStore.user?.is_active ? 'Active' : 'Inactive' }}
+                  </el-tag>
+                </div>
+              </el-col>
+              <el-col :span="12">
+                <div class="info-item">
+                  <label>Last Login:</label>
+                  <span>{{ authStore.user?.last_login_at ? formatDate(authStore.user.last_login_at) : 'Never' }}</span>
+                </div>
+              </el-col>
+            </el-row>
+            
+            <el-row :gutter="16" style="margin-bottom: 20px;">
+              <el-col :span="12">
+                <div class="info-item">
+                  <label>Member Since:</label>
+                  <span>{{ authStore.user?.created_at ? formatDate(authStore.user.created_at) : 'N/A' }}</span>
+                </div>
+              </el-col>
+              <el-col :span="12">
+                <div class="info-item">
+                  <label>Roles:</label>
+                  <div class="roles-header">
+                    <div v-if="authStore.user?.roles && authStore.user.roles.length > 0" class="roles-container">
+                      <el-tag
+                        v-for="role in authStore.user.roles"
+                        :key="role"
+                        :type="getRoleTagType(role)"
+                        size="small"
+                        style="margin-right: 4px;"
+                      >
+                        {{ formatRoleName(role) }}
+                      </el-tag>
+                    </div>
+                    <el-tag v-else type="info" size="small">No roles</el-tag>
+                    
+                    <!-- Popover for viewer-only users -->
+                    <el-popover
+                      v-if="isViewerOnly"
+                      placement="top"
+                      :width="350"
+                      trigger="click"
+                    >
+                      <template #reference>
+                        <el-button
+                          link
+                          type="warning"
+                          size="small"
+                          style="margin-left: 4px;"
+                        >
+                          <el-icon><InfoFilled /></el-icon>
+                        </el-button>
+                      </template>
+                      <div class="viewer-tips-content">
+                        <h4 style="margin: 0 0 12px 0; color: var(--el-color-warning);">
+                          <el-icon style="vertical-align: middle; margin-right: 4px;"><WarningFilled /></el-icon>
+                          Viewer Role Limitations
+                        </h4>
+                        <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
+                          <li>You can only <strong>view</strong> code reviews and scores</li>
+                          <li>You <strong>cannot</strong> add or update scores</li>
+                          <li>You <strong>cannot</strong> add comments to reviews</li>
+                          <li>You <strong>cannot</strong> be assigned review tasks</li>
+                        </ul>
+                        <el-divider style="margin: 12px 0;" />
+                        <p style="margin: 0; color: var(--el-text-color-secondary); font-size: 13px;">
+                          💡 To gain full reviewer permissions, please contact a system administrator to upgrade your role.
+                        </p>
+                      </div>
+                    </el-popover>
+                  </div>
+                </div>
+              </el-col>
+            </el-row>
 
-          <!-- Change Password Section -->
-          <el-divider />
-          <h3>Change Password</h3>
-          <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="140px" class="password-form">
-            <el-form-item label="Current Password" prop="old_password">
-              <el-input
-                v-model="passwordForm.old_password"
-                type="password"
-                placeholder="Enter current password"
-                show-password
-              />
-            </el-form-item>
-            
-            <el-form-item label="New Password" prop="new_password">
-              <el-input
-                v-model="passwordForm.new_password"
-                type="password"
-                placeholder="Enter new password"
-                show-password
-              />
-            </el-form-item>
-            
-            <el-form-item label="Confirm Password" prop="confirm_password">
-              <el-input
-                v-model="passwordForm.confirm_password"
-                type="password"
-                placeholder="Confirm new password"
-                show-password
-              />
-            </el-form-item>
-            
-            <el-form-item>
-              <el-button type="primary" :loading="changingPassword" @click="handleChangePassword">
-                Change Password
-              </el-button>
-            </el-form-item>
-          </el-form>
+            <!-- Change Password Section -->
+            <el-divider />
+            <h3>Change Password</h3>
+            <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="140px" class="password-form">
+              <el-form-item label="Current Password" prop="old_password">
+                <el-input
+                  v-model="passwordForm.old_password"
+                  type="password"
+                  placeholder="Enter current password"
+                  show-password
+                />
+              </el-form-item>
+              
+              <el-form-item label="New Password" prop="new_password">
+                <el-input
+                  v-model="passwordForm.new_password"
+                  type="password"
+                  placeholder="Enter new password"
+                  show-password
+                />
+              </el-form-item>
+              
+              <el-form-item label="Confirm Password" prop="confirm_password">
+                <el-input
+                  v-model="passwordForm.confirm_password"
+                  type="password"
+                  placeholder="Confirm new password"
+                  show-password
+                />
+              </el-form-item>
+              
+              <el-form-item>
+                <el-button type="primary" :loading="changingPassword" @click="handleChangePassword">
+                  Change Password
+                </el-button>
+              </el-form-item>
+            </el-form>
+          </div>
         </el-tab-pane>
 
         <!-- Role Delegations Tab -->
         <el-tab-pane label="Role Delegations" name="delegations">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <h3 style="margin: 0;">My Delegations</h3>
-            <el-button 
-              v-if="canManageDelegations"
-              type="primary" 
-              size="small"
-              @click="showCreateDialog = true"
-            >
-              <el-icon><Plus /></el-icon>
-              Create Delegation
-            </el-button>
-          </div>
-          
-          <el-tabs v-model="delegationDirection" type="card" style="margin-bottom: 20px;">
-            <el-tab-pane label="Received" name="received">
-              <div v-loading="loadingReceived">
-                <el-empty v-if="receivedDelegations.length === 0" description="No delegations received" />
-                <el-table v-else :data="receivedDelegations" stripe style="width: 100%">
-                  <el-table-column prop="role_name" label="Role" width="150">
-                    <template #default="{ row }">
-                      <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
-                        {{ row.role_name || `Role ${row.role_id}` }}
-                      </el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="resource_type" label="Resource Type" width="120" />
-                  <el-table-column label="Delegator" width="180">
-                    <template #default="{ row }">
-                      <div class="user-info-cell">
-                        <div v-if="row.delegator_display_name" class="display-name">{{ row.delegator_display_name }}</div>
-                        <div class="username">{{ row.delegator_username || `User ${row.delegator_id}` }}</div>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="Status" width="120">
-                    <template #default="{ row }">
-                      <el-tag :type="getStatusType(row.delegation_status)">
-                        {{ formatStatus(row.delegation_status) }}
-                      </el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="Valid Period" min-width="200">
-                    <template #default="{ row }">
-                      <div v-if="row.starts_at && row.expires_at">
-                        {{ formatDate(row.starts_at) }} → {{ formatDate(row.expires_at) }}
-                      </div>
-                      <span v-else>-</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="Reason" min-width="200">
-                    <template #default="{ row }">
-                      {{ row.delegation_reason || '-' }}
-                    </template>
-                  </el-table-column>
-                </el-table>
-              </div>
-            </el-tab-pane>
+          <div class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h3 style="margin: 0;">My Delegations</h3>
+              <el-button 
+                v-if="canManageDelegations"
+                type="primary" 
+                size="small"
+                @click="showCreateDialog = true"
+              >
+                <el-icon><Plus /></el-icon>
+                Create Delegation
+              </el-button>
+            </div>
+            
+            <el-tabs v-model="delegationDirection" type="card" class="delegation-tabs">
+              <el-tab-pane label="Received" name="received">
+                <div v-loading="loadingReceived">
+                  <el-empty v-if="receivedDelegations.length === 0" description="No delegations received" />
+                  <el-table v-else :data="receivedDelegations" stripe style="width: 100%" height="300">
+                    <el-table-column prop="role_name" label="Role" width="150">
+                      <template #default="{ row }">
+                        <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
+                          {{ row.role_name || `Role ${row.role_id}` }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column prop="resource_type" label="Resource Type" width="120" />
+                    <el-table-column label="Delegator" width="180">
+                      <template #default="{ row }">
+                        <div class="user-info-cell">
+                          <div v-if="row.delegator_display_name" class="display-name">{{ row.delegator_display_name }}</div>
+                          <div class="username">{{ row.delegator_username || `User ${row.delegator_id}` }}</div>
+                        </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="Status" width="120">
+                      <template #default="{ row }">
+                        <el-tag :type="getStatusType(row.delegation_status)">
+                          {{ formatStatus(row.delegation_status) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="Valid Period" min-width="200">
+                      <template #default="{ row }">
+                        <div v-if="row.starts_at && row.expires_at">
+                          {{ formatDate(row.starts_at) }} → {{ formatDate(row.expires_at) }}
+                        </div>
+                        <span v-else>-</span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="Reason" min-width="200">
+                      <template #default="{ row }">
+                        {{ row.delegation_reason || '-' }}
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+              </el-tab-pane>
 
-            <el-tab-pane label="Sent" name="sent">
-              <div v-loading="loadingSent">
-                <el-empty v-if="sentDelegations.length === 0" description="No delegations sent" />
-                <el-table v-else :data="sentDelegations" stripe style="width: 100%">
-                  <el-table-column prop="role_name" label="Role" width="150">
-                    <template #default="{ row }">
-                      <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
-                        {{ row.role_name || `Role ${row.role_id}` }}
-                      </el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="resource_type" label="Resource Type" width="120" />
-                  <el-table-column label="Delegatee" width="180">
-                    <template #default="{ row }">
-                      <div class="user-info-cell">
-                        <div v-if="row.delegatee_display_name" class="display-name">{{ row.delegatee_display_name }}</div>
-                        <div class="username">{{ row.delegatee_username || `User ${row.auth_user_id}` }}</div>
-                      </div>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="Status" width="120">
-                    <template #default="{ row }">
-                      <el-tag :type="getStatusType(row.delegation_status)">
-                        {{ formatStatus(row.delegation_status) }}
-                      </el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="Valid Period" min-width="200">
-                    <template #default="{ row }">
-                      <div v-if="row.starts_at && row.expires_at">
-                        {{ formatDate(row.starts_at) }} → {{ formatDate(row.expires_at) }}
-                      </div>
-                      <span v-else>-</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="Actions" width="120" fixed="right">
-                    <template #default="{ row }">
-                      <el-button
-                        v-if="row.delegation_status === 'active' || row.delegation_status === 'pending'"
-                        size="small"
-                        type="danger"
-                        @click="handleRevokeDelegation(row.id)"
-                      >
-                        Revoke
-                      </el-button>
-                      <span v-else style="color: var(--el-text-color-secondary);">-</span>
-                    </template>
-                  </el-table-column>
-                </el-table>
-              </div>
-            </el-tab-pane>
-          </el-tabs>
+              <el-tab-pane label="Sent" name="sent">
+                <div v-loading="loadingSent">
+                  <el-empty v-if="sentDelegations.length === 0" description="No delegations sent" />
+                  <el-table v-else :data="sentDelegations" stripe style="width: 100%" height="300">
+                    <el-table-column prop="role_name" label="Role" width="150">
+                      <template #default="{ row }">
+                        <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
+                          {{ row.role_name || `Role ${row.role_id}` }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column prop="resource_type" label="Resource Type" width="120" />
+                    <el-table-column label="Delegatee" width="180">
+                      <template #default="{ row }">
+                        <div class="user-info-cell">
+                          <div v-if="row.delegatee_display_name" class="display-name">{{ row.delegatee_display_name }}</div>
+                          <div class="username">{{ row.delegatee_username || `User ${row.auth_user_id}` }}</div>
+                        </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="Status" width="120">
+                      <template #default="{ row }">
+                        <el-tag :type="getStatusType(row.delegation_status)">
+                          {{ formatStatus(row.delegation_status) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="Valid Period" min-width="200">
+                      <template #default="{ row }">
+                        <div v-if="row.starts_at && row.expires_at">
+                          {{ formatDate(row.starts_at) }} → {{ formatDate(row.expires_at) }}
+                        </div>
+                        <span v-else>-</span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="Actions" width="120" fixed="right">
+                      <template #default="{ row }">
+                        <el-button
+                          v-if="row.delegation_status === 'active' || row.delegation_status === 'pending'"
+                          size="small"
+                          type="danger"
+                          @click="handleRevokeDelegation(row.id)"
+                        >
+                          Revoke
+                        </el-button>
+                        <span v-else style="color: var(--el-text-color-secondary);">-</span>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+              </el-tab-pane>
+            </el-tabs>
+          </div>
         </el-tab-pane>
 
         <el-tab-pane label="My Sessions" name="sessions">
-          <div class="sessions-header">
-            <div>
-              <h3>Active Sessions</h3>
-              <p class="sessions-subtitle">
-                Revoke any session you no longer trust. Revoking the current session will log you out immediately.
-              </p>
+          <div class="tab-content">
+            <div class="sessions-header">
+              <div>
+                <h3>Active Sessions</h3>
+                <p class="sessions-subtitle">
+                  Revoke any session you no longer trust. Revoking the current session will log you out immediately.
+                </p>
+              </div>
+              <el-button type="primary" size="small" :loading="loadingSessions" @click="loadSessions">
+                Refresh
+              </el-button>
             </div>
-            <el-button type="primary" size="small" :loading="loadingSessions" @click="loadSessions">
-              Refresh
-            </el-button>
+
+            <el-table :data="sessions" v-loading="loadingSessions" stripe style="width: 100%" height="400">
+              <el-table-column label="Session" min-width="220">
+                <template #default="{ row }">
+                  <div class="session-id-cell">
+                    <span class="session-id">{{ row.session_id }}</span>
+                    <el-tag v-if="row.is_current" size="small" type="success">Current</el-tag>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="Created" width="180">
+                <template #default="{ row }">
+                  {{ formatDate(row.created_at) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="Last Activity" width="180">
+                <template #default="{ row }">
+                  {{ formatDate(row.last_activity_at) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="IP" width="140">
+                <template #default="{ row }">
+                  {{ row.ip_address || '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="User Agent" min-width="240">
+                <template #default="{ row }">
+                  <div class="device-cell" :title="getDeviceDetails(row.user_agent).rawUserAgent || ''">
+                    <div class="device-label-row">
+                      <el-icon class="device-icon"><component :is="getDeviceIcon(row.user_agent)" /></el-icon>
+                      <span class="device-label">{{ getDeviceDetails(row.user_agent).label }}</span>
+                      <el-tag v-if="row.is_current" size="small" type="primary">This device</el-tag>
+                    </div>
+                    <div class="device-meta">
+                      {{ getDeviceDetails(row.user_agent).browserLabel }} · {{ getDeviceDetails(row.user_agent).osLabel }}
+                    </div>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="Idle Timeout Remaining" width="180">
+                <template #default="{ row }">
+                  <el-tag :type="getSessionExpiryType(row.expires_in_seconds)">
+                    {{ formatDuration(row.expires_in_seconds) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="Actions" width="140" fixed="right">
+                <template #default="{ row }">
+                  <el-button
+                    size="small"
+                    type="danger"
+                    :loading="revokingSessionId === row.session_id"
+                    @click="handleRevokeSession(row.session_id, row.is_current)"
+                  >
+                    Revoke
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+
+            <el-empty v-if="!loadingSessions && sessions.length === 0" description="No active sessions found" />
           </div>
-
-          <el-table :data="sessions" v-loading="loadingSessions" stripe style="width: 100%">
-            <el-table-column label="Session" min-width="220">
-              <template #default="{ row }">
-                <div class="session-id-cell">
-                  <span class="session-id">{{ row.session_id }}</span>
-                  <el-tag v-if="row.is_current" size="small" type="success">Current</el-tag>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="Created" width="180">
-              <template #default="{ row }">
-                {{ formatDate(row.created_at) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="Last Activity" width="180">
-              <template #default="{ row }">
-                {{ formatDate(row.last_activity_at) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="IP" width="140">
-              <template #default="{ row }">
-                {{ row.ip_address || '-' }}
-              </template>
-            </el-table-column>
-            <el-table-column label="User Agent" min-width="240">
-              <template #default="{ row }">
-                <div class="device-cell" :title="getDeviceDetails(row.user_agent).rawUserAgent || ''">
-                  <div class="device-label-row">
-                    <el-icon class="device-icon"><component :is="getDeviceIcon(row.user_agent)" /></el-icon>
-                    <span class="device-label">{{ getDeviceDetails(row.user_agent).label }}</span>
-                    <el-tag v-if="row.is_current" size="small" type="primary">This device</el-tag>
-                  </div>
-                  <div class="device-meta">
-                    {{ getDeviceDetails(row.user_agent).browserLabel }} · {{ getDeviceDetails(row.user_agent).osLabel }}
-                  </div>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="Idle Timeout Remaining" width="180">
-              <template #default="{ row }">
-                <el-tag :type="getSessionExpiryType(row.expires_in_seconds)">
-                  {{ formatDuration(row.expires_in_seconds) }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="Actions" width="140" fixed="right">
-              <template #default="{ row }">
-                <el-button
-                  size="small"
-                  type="danger"
-                  :loading="revokingSessionId === row.session_id"
-                  @click="handleRevokeSession(row.session_id, row.is_current)"
-                >
-                  Revoke
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-
-          <el-empty v-if="!loadingSessions && sessions.length === 0" description="No active sessions found" />
         </el-tab-pane>
       </el-tabs>
     </el-card>
@@ -758,12 +764,13 @@ onMounted(() => {
 
 <style scoped>
 .profile-container {
-  max-width: 900px;
-  margin: 0 auto;
+  max-width: 1000px;
+  margin: 20px auto;
+  min-height: 700px;
 }
 
 .profile-card {
-  padding: 16px;
+  height: 100%;
 }
 
 .card-header {
@@ -774,29 +781,44 @@ onMounted(() => {
   font-weight: bold;
 }
 
+.profile-tabs {
+  height: calc(100% - 50px);
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 0;
+  min-height: 550px;
+}
+
 /* Compact info item layout */
 .info-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 0;
+  padding: 8px 0;
 }
 
 .info-item label {
   font-weight: 600;
   color: var(--el-text-color-regular);
-  min-width: 100px;
+  min-width: 120px;
   flex-shrink: 0;
 }
 
 .info-item span {
   color: var(--el-text-color-primary);
+  word-break: break-word;
 }
 
 h3 {
-  margin: 16px 0 12px 0;
+  margin: 20px 0 16px 0;
   color: var(--el-text-color-primary);
   font-size: 16px;
+  font-weight: 600;
 }
 
 /* Fix el-descriptions theme compatibility */
@@ -852,13 +874,14 @@ h3 {
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .sessions-subtitle {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   color: var(--el-text-color-secondary);
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .session-id-cell {
@@ -869,7 +892,7 @@ h3 {
 
 .session-id {
   font-family: 'Consolas', 'Courier New', monospace;
-  font-size: 12px;
+  font-size: 13px;
   word-break: break-all;
 }
 
@@ -908,13 +931,13 @@ h3 {
 .user-info-cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .display-name {
   font-weight: 500;
   color: var(--el-text-color-primary);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.4;
 }
 
@@ -922,5 +945,57 @@ h3 {
   color: var(--el-text-color-secondary);
   font-size: 12px;
   line-height: 1.4;
+}
+
+/* Ensure tables have proper spacing */
+:deep(.el-table) {
+  font-size: 14px;
+}
+
+:deep(.el-table th) {
+  padding: 12px 0;
+  font-weight: 600;
+}
+
+:deep(.el-table td) {
+  padding: 12px 0;
+}
+
+/* Improve delegation tabs spacing */
+:deep(.el-tabs--card > .el-tabs__header) {
+  margin-bottom: 16px;
+}
+
+:deep(.el-tabs--card > .el-tabs__header .el-tabs__item) {
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+/* Nested tabs inside delegations */
+.delegation-tabs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.el-tab-pane .el-tabs__content) {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Ensure tables in delegation tabs have fixed height */
+:deep(.el-tab-pane:nth-child(1) .el-table),
+:deep(.el-tab-pane:nth-child(2) .el-table) {
+  height: 300px !important;
+}
+
+/* Ensure table in sessions tab has fixed height */
+:deep(.el-tab-pane[name="sessions"] .el-table) {
+  height: 400px !important;
+}
+
+/* Empty state container styling */
+:deep(.el-empty) {
+  margin: 30px auto;
 }
 </style>
