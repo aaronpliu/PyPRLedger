@@ -172,7 +172,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Download, Search } from '@element-plus/icons-vue'
 import { auditApi } from '@/api/audit'
-import type { AuditLog, AuditStats } from '@/types'
+import type { AuditLog, AuditStats, AuditLogQuery } from '@/types'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
@@ -240,7 +240,7 @@ const getSuccessRate = () => {
 const loadAuditLogs = async () => {
   loading.value = true
   try {
-    const params: any = {
+    const params: AuditLogQuery = {
       limit: pageSize.value,
       offset: (currentPage.value - 1) * pageSize.value,
     }
@@ -256,7 +256,7 @@ const loadAuditLogs = async () => {
       params.resource_type = filters.resource_type
     }
     if (filters.response_status) {
-      params.status = filters.response_status.toString()
+      params.response_status = filters.response_status
     }
 
     if (dateRange.value && dateRange.value.length === 2) {
@@ -278,7 +278,7 @@ const loadAuditLogs = async () => {
 }
 
 const resetFilters = () => {
-  filters.auth_user_id = null
+  filters.username = null
   filters.action = null
   filters.resource_type = null
   filters.response_status = null

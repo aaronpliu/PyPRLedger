@@ -235,7 +235,7 @@ const loadStats = async () => {
 const loadRecentAuditLogs = async () => {
   loadingAuditLogs.value = true
   try {
-    const response = await auditApi.getLogs({ page: 1, page_size: 5 })
+    const response = await auditApi.getLogs({ limit: 5, offset: 0 })
     recentAuditLogs.value = response.logs || []
   } catch (error) {
     console.error('Failed to load audit logs:', error)
