@@ -483,7 +483,7 @@ const handleConfirm = () => {
   emit('update:severityFilter', localSeverityFilter.value)
   emit('update:statusFilter', localStatusFilter.value)
   
-  // Close popover and trigger apply
+  // Close popover and trigger data reload
   popoverVisible.value = false
   emit('apply')
 }
@@ -503,7 +503,7 @@ const handleCancel = () => {
 }
 
 const handleReset = () => {
-  // Clear all filters
+  // Clear all filters (watchers will emit updates automatically)
   localSearchQuery.value = ''
   localAppFilter.value = []
   localProjectFilter.value = ''
@@ -521,33 +521,49 @@ const handleRemoveFilter = (key: string) => {
   switch (key) {
     case 'app':
       localAppFilter.value = []
-      emit('update:appFilter', [])
       break
     case 'project':
       localProjectFilter.value = ''
-      emit('update:projectFilter', '')
       break
     case 'prUser':
       localPRUserFilter.value = ''
-      emit('update:prUserFilter', '')
       break
     case 'reviewer':
       localReviewerFilter.value = ''
-      emit('update:reviewerFilter', '')
       break
     case 'scored':
       localScoredFilter.value = ''
-      emit('update:scoredFilter', '')
       break
     case 'severity':
       localSeverityFilter.value = ''
-      emit('update:severityFilter', '')
       break
     case 'status':
       localStatusFilter.value = ''
-      emit('update:statusFilter', '')
       break
   }
+  // Updates will be synced when popover closes or confirm is clicked
+  // But we trigger apply to refresh data immediately if needed, 
+  // relying on parent to read current prop values which might need explicit update if not using v-model sync on close
+  
+  // To ensure consistency with "Apply on Confirm/Hide", we should probably just update local state here.
+  // If immediate update is required for tag removal UX, parent must handle it.
+  // However, strictly following "only apply on Confirm or hide", we just update local state.
+  // The tags will re-render based on local state anyway.
+  
+  // If the parent needs to know about the change immediately to update the list, 
+  // we might need to call handleConfirm logic or similar. 
+  // But usually removing a tag implies applying the filter.
+  // Let's trigger a confirm-like update to ensure parent state matches.
+  
+  emit('update:searchQuery', localSearchQuery.value)
+  emit('update:appFilter', [...localAppFilter.value])
+  emit('update:projectFilter', localProjectFilter.value)
+  emit('update:prUserFilter', localPRUserFilter.value)
+  emit('update:reviewerFilter', localReviewerFilter.value)
+  emit('update:scoredFilter', localScoredFilter.value)
+  emit('update:severityFilter', localSeverityFilter.value)
+  emit('update:statusFilter', localStatusFilter.value)
+  
   emit('apply')
 }
 
@@ -560,9 +576,8 @@ const searchReviewers = (query: string) => {
 }
 
 const handlePopoverHide = () => {
-  // When popover hides (e.g., by clicking outside or losing focus),
-  // sync the current local values to parent without triggering apply
-  // This allows users to continue selecting filters without auto-applying
+  // When popover hides (clicking outside or pressing Escape),
+  // sync current local values to parent so filters persist
   emit('update:searchQuery', localSearchQuery.value)
   emit('update:appFilter', localAppFilter.value)
   emit('update:projectFilter', localProjectFilter.value)
