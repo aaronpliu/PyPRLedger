@@ -27,15 +27,23 @@
         
         <el-form-item label="Project">
           <el-select v-model="projectFilter" placeholder="All Projects" clearable style="width: 200px" @change="loadAnalytics">
-            <el-option label="Project A" value="project-a" />
-            <el-option label="Project B" value="project-b" />
+            <el-option
+              v-for="option in projectOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
           </el-select>
         </el-form-item>
         
         <el-form-item label="Reviewer">
           <el-select v-model="reviewerFilter" placeholder="All Reviewers" clearable style="width: 200px" @change="loadAnalytics">
-            <el-option label="John Doe" value="john" />
-            <el-option label="Jane Smith" value="jane" />
+            <el-option
+              v-for="option in reviewerOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
           </el-select>
         </el-form-item>
         
@@ -55,10 +63,6 @@
               <div class="summary-info">
                 <div class="summary-value">{{ summary.avgScore.toFixed(1) }}</div>
                 <div class="summary-label">Average Score</div>
-                <div class="summary-trend" :class="summary.scoreTrend >= 0 ? 'up' : 'down'">
-                  <el-icon><component :is="summary.scoreTrend >= 0 ? CaretTop : CaretBottom" /></el-icon>
-                  {{ Math.abs(summary.scoreTrend) }}%
-                </div>
               </div>
             </div>
           </el-card>
@@ -73,10 +77,6 @@
               <div class="summary-info">
                 <div class="summary-value">{{ summary.totalReviews }}</div>
                 <div class="summary-label">Total Reviews</div>
-                <div class="summary-trend up">
-                  <el-icon><CaretTop /></el-icon>
-                  12%
-                </div>
               </div>
             </div>
           </el-card>
@@ -86,11 +86,11 @@
           <el-card shadow="hover" class="summary-card">
             <div class="summary-content">
               <div class="summary-icon" style="background: #e6a23c">
-                <el-icon size="32"><User /></el-icon>
+                <el-icon size="32"><Calendar /></el-icon>
               </div>
               <div class="summary-info">
-                <div class="summary-value">{{ summary.activeReviewers }}</div>
-                <div class="summary-label">Active Reviewers</div>
+                <div class="summary-value">{{ summary.reviewsThisWeek }}</div>
+                <div class="summary-label">Reviews This Week</div>
               </div>
             </div>
           </el-card>
@@ -103,8 +103,8 @@
                 <el-icon size="32"><Star /></el-icon>
               </div>
               <div class="summary-info">
-                <div class="summary-value">{{ summary.totalScores }}</div>
-                <div class="summary-label">Total Scores</div>
+                <div class="summary-value">{{ summary.reviewsToday }}</div>
+                <div class="summary-label">Reviews Today</div>
               </div>
             </div>
           </el-card>
@@ -113,25 +113,11 @@
 
       <!-- Charts Grid -->
       <el-row :gutter="20" class="charts-grid">
-        <!-- Score Trend Line Chart -->
-        <el-col :span="24">
-          <el-card shadow="hover">
-            <LineChart
-              title="Score Trend Over Time"
-              :data="trendData"
-              color="#409eff"
-              height="300px"
-            />
-          </el-card>
-        </el-col>
-      </el-row>
-
-      <el-row :gutter="20" class="charts-grid">
-        <!-- Category Distribution Bar Chart -->
+        <!-- PR Status Distribution Bar Chart -->
         <el-col :span="12">
           <el-card shadow="hover">
             <BarChart
-              title="Score Distribution by Category"
+              title="Pull Request Status Distribution"
               :data="categoryData"
               color="#67c23a"
               height="300px"
@@ -143,23 +129,9 @@
         <el-col :span="12">
           <el-card shadow="hover">
             <PieChart
-              title="Review Status Distribution"
+              title="Review Status Breakdown"
               :data="statusData"
               height="300px"
-            />
-          </el-card>
-        </el-col>
-      </el-row>
-
-      <el-row :gutter="20" class="charts-grid">
-        <!-- Reviewer Performance Radar Chart -->
-        <el-col :span="24">
-          <el-card shadow="hover">
-            <RadarChart
-              title="Reviewer Performance Comparison"
-              :indicators="radarIndicators"
-              :data="radarData"
-              height="400px"
             />
           </el-card>
         </el-col>
@@ -170,12 +142,15 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { Refresh, TrendCharts, Document, User, Star, CaretTop, CaretBottom } from '@element-plus/icons-vue'
-import LineChart from '@/components/charts/LineChart.vue'
+import { Refresh, TrendCharts, Document, Calendar, Star } from '@element-plus/icons-vue'
 import BarChart from '@/components/charts/BarChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
-import RadarChart from '@/components/charts/RadarChart.vue'
+import { reviewsApi } from '@/api/reviews'
+import { scoresApi } from '@/api/scores'
+import { usersApi } from '@/api/users'
+import { projectsApi } from '@/api/projects'
 import dayjs from 'dayjs'
+import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
 const dateRange = ref<[Date, Date] | null>(null)
@@ -186,79 +161,78 @@ const reviewerFilter = ref('')
 const summary = reactive({
   avgScore: 0,
   totalReviews: 0,
-  activeReviewers: 0,
-  totalScores: 0,
-  scoreTrend: 0,
+  reviewsToday: 0,
+  reviewsThisWeek: 0,
 })
 
 // Chart data
-const trendData = ref<Array<{ date: string; value: number }>>([])
 const categoryData = ref<Array<{ name: string; value: number }>>([])
 const statusData = ref<Array<{ name: string; value: number }>>([])
-const radarIndicators = ref<Array<{ name: string; max: number }>>([])
-const radarData = ref<Array<{ name: string; value: number[] }>>([])
+
+// Filter options
+const projectOptions = ref<Array<{ label: string; value: string }>>([])
+const reviewerOptions = ref<Array<{ label: string; value: string }>>([])
+
+const loadFilterOptions = async () => {
+  try {
+    // Load projects
+    const projectsResponse = await projectsApi.listProjects({ page_size: 100 })
+    projectOptions.value = (projectsResponse.items || []).map((p) => ({
+      label: p.project_name,
+      value: p.project_key,
+    }))
+
+    // Load reviewers
+    const reviewersResponse = await usersApi.getReviewers(100)
+    reviewerOptions.value = (reviewersResponse.items || []).map((r) => ({
+      label: r.display_name || r.username,
+      value: r.username,
+    }))
+  } catch (error) {
+    console.error('Failed to load filter options:', error)
+  }
+}
 
 const loadAnalytics = async () => {
   loading.value = true
   try {
-    // TODO: Replace with actual API calls
-    // Mock data for demonstration
+    // Fetch review statistics
+    const stats = await reviewsApi.getStats({
+      project_key: projectFilter.value || undefined,
+    })
+
+    // Update summary cards with real data
+    summary.avgScore = stats.average_score || 0
+    summary.totalReviews = stats.total_reviews || 0
+    summary.reviewsToday = stats.reviews_today || 0
+    summary.reviewsThisWeek = stats.reviews_this_week || 0
     
-    // Summary
-    summary.avgScore = 85.5
-    summary.totalReviews = 156
-    summary.activeReviewers = 12
-    summary.totalScores = 624
-    summary.scoreTrend = 5.2
-
-    // Trend data (last 30 days)
-    trendData.value = Array.from({ length: 30 }, (_, i) => ({
-      date: dayjs().subtract(29 - i, 'day').format('MM-DD'),
-      value: 75 + Math.random() * 20,
-    }))
-
-    // Category distribution
+    // Calculate open/merged/closed distribution
+    const openCount = stats.open_reviews || 0
+    const mergedCount = stats.merged_reviews || 0
+    const closedCount = stats.closed_reviews || 0
+    
+    // Category distribution - PR status breakdown
     categoryData.value = [
-      { name: 'Code Quality', value: 88 },
-      { name: 'Performance', value: 75 },
-      { name: 'Security', value: 92 },
-      { name: 'Maintainability', value: 82 },
-      { name: 'Documentation', value: 70 },
+      { name: 'Open', value: openCount },
+      { name: 'Merged', value: mergedCount },
+      { name: 'Closed', value: closedCount },
     ]
 
-    // Status distribution
-    statusData.value = [
-      { name: 'Completed', value: 120 },
-      { name: 'In Progress', value: 25 },
-      { name: 'Pending', value: 11 },
-    ]
-
-    // Radar chart - reviewer comparison
-    radarIndicators.value = [
-      { name: 'Code Quality', max: 100 },
-      { name: 'Performance', max: 100 },
-      { name: 'Security', max: 100 },
-      { name: 'Maintainability', max: 100 },
-      { name: 'Documentation', max: 100 },
-      { name: 'Testing', max: 100 },
-    ]
-
-    radarData.value = [
-      {
-        name: 'John Doe',
-        value: [85, 78, 90, 82, 75, 88],
-      },
-      {
-        name: 'Jane Smith',
-        value: [90, 85, 88, 90, 85, 92],
-      },
-      {
-        name: 'Bob Wilson',
-        value: [78, 82, 85, 75, 80, 78],
-      },
-    ]
+    // Status distribution - calculate percentages for pie chart
+    const totalPRs = openCount + mergedCount + closedCount
+    if (totalPRs > 0) {
+      statusData.value = [
+        { name: 'Open', value: openCount },
+        { name: 'Merged', value: mergedCount },
+        { name: 'Closed', value: closedCount },
+      ]
+    } else {
+      statusData.value = []
+    }
   } catch (error) {
     console.error('Failed to load analytics:', error)
+    ElMessage.error('Failed to load analytics data')
   } finally {
     loading.value = false
   }
@@ -276,6 +250,7 @@ const resetFilters = () => {
 }
 
 onMounted(() => {
+  loadFilterOptions()
   loadAnalytics()
 })
 </script>
@@ -294,6 +269,7 @@ onMounted(() => {
 .card-header h2 {
   margin: 0;
   font-size: 20px;
+  color: var(--el-text-color-primary);
 }
 
 .filter-form {
@@ -331,13 +307,13 @@ onMounted(() => {
 .summary-value {
   font-size: 28px;
   font-weight: bold;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin-bottom: 4px;
 }
 
 .summary-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-bottom: 4px;
 }
 

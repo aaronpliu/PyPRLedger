@@ -166,4 +166,11 @@ export const reviewsApi = {
   assignTask(data: ReviewAssignmentRequest): Promise<Review> {
     return request.post('/reviews/assign', data)
   },
+
+  /**
+   * Get review statistics
+   */
+  getStats(params?: { project_key?: string }): Promise<any> {
+    return request.get('/reviews/statistics', { params })
+  },
 }
