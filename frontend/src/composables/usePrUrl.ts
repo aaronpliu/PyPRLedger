@@ -1,4 +1,8 @@
 import type { Review } from '@/api/reviews'
+import type { ReviewV2 } from '@/api/taskAssignment'
+
+// Union type for all review types that have project information
+type ReviewWithProject = Review | ReviewV2
 
 /**
  * Generate PR URL for external navigation to Bitbucket/GitHub
@@ -6,7 +10,7 @@ import type { Review } from '@/api/reviews'
  * @returns Full PR URL or null if required fields are missing
  */
 export function usePrUrl() {
-  const getPrUrl = (review: Review): string | null => {
+  const getPrUrl = (review: ReviewWithProject): string | null => {
     if (!review.project?.project_url || !review.repository_slug || !review.pull_request_commit_id) {
       return null
     }

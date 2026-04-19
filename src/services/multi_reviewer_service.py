@@ -49,6 +49,7 @@ class MultiReviewerService:
         """
         # Build base query
         stmt = select(PullRequestReviewBase).options(
+            selectinload(PullRequestReviewBase.project),  # Load project for PR URL
             selectinload(PullRequestReviewBase.assignments).selectinload(
                 PullRequestReviewAssignment.reviewer_rel
             ),
@@ -99,6 +100,10 @@ class MultiReviewerService:
         for base in bases:
             # Get base dict from model
             base_dict = base.to_dict()
+
+            # Add project information for PR URL generation
+            if hasattr(base, "project") and base.project:
+                base_dict["project"] = base.project.to_dict()
 
             # Add pull_request_user_info if available
             if base.pull_request_user_rel:
@@ -159,6 +164,7 @@ class MultiReviewerService:
         stmt = (
             select(PullRequestReviewBase)
             .options(
+                selectinload(PullRequestReviewBase.project),  # Load project for PR URL
                 selectinload(PullRequestReviewBase.assignments).selectinload(
                     PullRequestReviewAssignment.reviewer_rel
                 ),
@@ -289,6 +295,10 @@ class MultiReviewerService:
     def _base_to_response(self, base: PullRequestReviewBase) -> ReviewWithAssignmentsResponse:
         """Convert base model to response with assignments"""
         base_dict = base.to_dict()
+
+        # Add project information for PR URL generation
+        if hasattr(base, "project") and base.project:
+            base_dict["project"] = base.project.to_dict()
 
         if base.pull_request_user_rel:
             base_dict["pull_request_user_info"] = {

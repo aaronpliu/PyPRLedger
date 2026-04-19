@@ -27,6 +27,9 @@ class ReviewBaseResponse(BaseModel):
     created_date: datetime
     updated_date: datetime
 
+    # Embedded project information for PR URL generation
+    project: dict[str, Any] | None = None
+
     model_config = {"from_attributes": True}
 
 

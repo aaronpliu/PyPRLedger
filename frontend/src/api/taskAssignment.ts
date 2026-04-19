@@ -42,6 +42,17 @@ export interface ReviewV2 {
   created_date: string
   updated_date: string
   
+  // Embedded project information for PR URL generation
+  project?: {
+    id: number
+    project_id: number
+    project_name: string
+    project_key: string
+    project_url: string
+    created_date: string
+    updated_date: string
+  } | null
+  
   // Multi-reviewer fields
   reviewers: ReviewerAssignment[]
   total_reviewers: number
