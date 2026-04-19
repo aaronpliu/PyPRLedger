@@ -38,18 +38,18 @@ const routes: RouteRecordRaw[] = [
         name: 'ReviewDetail',
         component: () => import('@/views/reviews/ReviewDetailView.vue'),
       },
-      // Task Assignment routes (for review_admin)
+      // Task Assignment routes (for review_admin or system_admin)
       {
         path: 'task-assignment',
         name: 'TaskAssignment',
         component: () => import('@/views/reviews/TaskAssignmentView.vue'),
-        meta: { requiresAdmin: true },
+        meta: { requiresReviewAdmin: true },
       },
       {
         path: 'task-assignment/:id',
         name: 'TaskAssignmentDetail',
         component: () => import('@/views/reviews/TaskAssignmentDetailView.vue'),
-        meta: { requiresAdmin: true },
+        meta: { requiresReviewAdmin: true },
       },
       {
         path: 'profile',
@@ -153,6 +153,20 @@ router.beforeEach(async (to, _from) => {
     // Check if user has system_admin role
     const userRoles = authStore.user?.roles || []
     if (!userRoles.includes('system_admin')) {
+      return '/403'
+    }
+  }
+
+  // Check if route requires review_admin (review_admin or system_admin)
+  if (to.meta.requiresReviewAdmin) {
+    if (!authStore.isAuthenticated) {
+      return '/login'
+    }
+
+    // Check if user has review_admin or system_admin role
+    const userRoles = authStore.user?.roles || []
+    const hasReviewAdminRole = userRoles.includes('review_admin') || userRoles.includes('system_admin')
+    if (!hasReviewAdminRole) {
       return '/403'
     }
   }
