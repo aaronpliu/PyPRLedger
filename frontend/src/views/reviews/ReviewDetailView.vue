@@ -2,7 +2,7 @@
   <div class="review-detail" v-loading="loading">
     <el-page-header @back="$router.back()" title="Back">
       <template #content>
-        <span class="page-title">Review Details</span>
+        <span class="header-content-title">Review Details</span>
       </template>
       <template #extra>
         <div class="detail-navigation-actions">
@@ -28,10 +28,9 @@
         <el-card class="info-card" shadow="hover">
           <template #header>
             <div class="card-header">
-              <div class="card-title-wrapper" @click="toggleInfoCollapse" style="cursor: pointer; flex: 1;">
+              <div class="card-title-wrapper" @click="toggleInfoCollapse">
                 <el-icon 
                   :class="['collapse-icon', { 'is-collapsed': !isInfoExpanded }]" 
-                  style="margin-right: 8px; transition: transform 0.3s;"
                 >
                   <ArrowDown />
                 </el-icon>
@@ -305,10 +304,12 @@
     <el-dialog 
       v-model="showScoreDialog" 
       :title="editingScore ? 'Update Score' : 'Add Score'" 
-      width="900px"
+      width="1100px"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
       show-close
+      top="5vh"
+      class="score-dialog"
     >
       <!-- Quick Score Buttons -->
       <QuickScoreButtons @select="handleQuickScoreSelect" />
@@ -327,7 +328,7 @@
               <el-icon><User /></el-icon>
             </template>
           </el-input>
-          <div style="font-size: 0.8rem; color: var(--el-text-color-secondary); margin-top: 4px;">
+          <div class="form-item-hint">
             Score will be attributed to your account
           </div>
         </el-form-item>
@@ -355,10 +356,10 @@
             language="en-US"
             preview-theme="vuepress"
             code-theme="atom"
-            style="height: 400px; border-radius: 6px; overflow: hidden;"
+            class="score-md-editor"
             placeholder="Add your comments here... (supports Markdown)"
           />
-          <div class="editor-hint" style="margin-top: 8px;">
+          <div class="editor-hint">
             💡 Supports Markdown formatting. Use the toolbar above or type directly.
           </div>
         </el-form-item>
@@ -1031,10 +1032,38 @@ watch(
   min-height: calc(100vh - 60px);
 }
 
-.page-title {
+.header-content-title {
   font-size: 18px;
   font-weight: 600;
   color: var(--el-text-color-primary);
+}
+
+.card-title-wrapper {
+  cursor: pointer;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.collapse-icon {
+  margin-right: 8px;
+  transition: transform 0.3s;
+}
+
+.form-item-hint {
+  font-size: 0.8rem;
+  color: var(--el-text-color-secondary);
+  margin-top: 4px;
+}
+
+.score-md-editor {
+  height: 400px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.editor-hint {
+  margin-top: 8px;
 }
 
 .detail-navigation-actions {
@@ -1616,6 +1645,36 @@ watch(
   font-size: 0.75rem;
   color: var(--el-text-color-secondary);
   border-radius: 4px;
+  margin-top: 8px;
+}
+
+/* Score Dialog Styles */
+.score-dialog :deep(.el-dialog__body) {
+  max-height: calc(90vh - 120px);
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.score-md-editor {
+  height: 450px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--el-border-color);
+}
+
+/* Ensure editor content area scrolls properly */
+.score-md-editor :deep(.md-editor-content) {
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+/* Dark theme scrollbar for editor */
+[data-theme='dark'] .score-md-editor :deep(.md-editor-content)::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+[data-theme='dark'] .score-md-editor :deep(.md-editor-content)::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
 /* MdEditor global dark mode overrides */
