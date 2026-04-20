@@ -135,7 +135,7 @@ async def get_reviewer_activity_trends(
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     period: str = Query(
-        "weekly", regex="^(daily|weekly|monthly)$", description="Time period aggregation"
+        "weekly", pattern="^(daily|weekly|monthly)$", description="Time period aggregation"
     ),
     days: int = Query(90, ge=1, le=365, description="Number of days to look back"),
 ) -> dict:
@@ -251,7 +251,7 @@ async def get_score_trends(
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     period: str = Query(
-        "weekly", regex="^(daily|weekly|monthly)$", description="Time period aggregation"
+        "weekly", pattern="^(daily|weekly|monthly)$", description="Time period aggregation"
     ),
     days: int = Query(90, ge=1, le=365, description="Number of days to look back"),
 ) -> dict:
