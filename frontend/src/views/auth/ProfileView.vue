@@ -31,9 +31,11 @@
               <el-col :span="12">
                 <div class="info-item">
                   <label>Status:</label>
-                  <el-tag :type="authStore.user?.is_active ? 'success' : 'danger'" size="small">
-                    {{ authStore.user?.is_active ? 'Active' : 'Inactive' }}
-                  </el-tag>
+                  <div class="status-container">
+                    <el-tag :type="authStore.user?.is_active ? 'success' : 'danger'" size="small">
+                      {{ authStore.user?.is_active ? 'Active' : 'Inactive' }}
+                    </el-tag>
+                  </div>
                 </div>
               </el-col>
               <el-col :span="12">
@@ -149,7 +151,7 @@
 
         <!-- Role Delegations Tab -->
         <el-tab-pane label="Role Delegations" name="delegations">
-          <div class="tab-content">
+          <div class="tab-content delegation-tab-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
               <h3 style="margin: 0;">My Delegations</h3>
               <el-button 
@@ -165,9 +167,9 @@
             
             <el-tabs v-model="delegationDirection" type="card" class="delegation-tabs">
               <el-tab-pane label="Received" name="received">
-                <div v-loading="loadingReceived">
+                <div v-loading="loadingReceived" class="delegation-table-wrapper">
                   <el-empty v-if="receivedDelegations.length === 0" description="No delegations received" />
-                  <el-table v-else :data="receivedDelegations" stripe style="width: 100%" height="300">
+                  <el-table v-else :data="receivedDelegations" stripe style="width: 100%">
                     <el-table-column prop="role_name" label="Role" width="150">
                       <template #default="{ row }">
                         <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
@@ -209,9 +211,9 @@
               </el-tab-pane>
 
               <el-tab-pane label="Sent" name="sent">
-                <div v-loading="loadingSent">
+                <div v-loading="loadingSent" class="delegation-table-wrapper">
                   <el-empty v-if="sentDelegations.length === 0" description="No delegations sent" />
-                  <el-table v-else :data="sentDelegations" stripe style="width: 100%" height="300">
+                  <el-table v-else :data="sentDelegations" stripe style="width: 100%">
                     <el-table-column prop="role_name" label="Role" width="150">
                       <template #default="{ row }">
                         <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
@@ -264,7 +266,7 @@
         </el-tab-pane>
 
         <el-tab-pane label="My Sessions" name="sessions">
-          <div class="tab-content">
+          <div class="tab-content sessions-tab-content">
             <div class="sessions-header">
               <div>
                 <h3>Active Sessions</h3>
@@ -277,7 +279,7 @@
               </el-button>
             </div>
 
-            <el-table :data="sessions" v-loading="loadingSessions" stripe style="width: 100%" height="400">
+            <el-table :data="sessions" v-loading="loadingSessions" stripe style="width: 100%">
               <el-table-column label="Session" min-width="220">
                 <template #default="{ row }">
                   <div class="session-id-cell">
@@ -764,13 +766,15 @@ onMounted(() => {
 
 <style scoped>
 .profile-container {
-  max-width: 1000px;
+  width: 1100px;
+  max-width: 95vw;
   margin: 20px auto;
-  min-height: 700px;
 }
 
 .profile-card {
-  height: 100%;
+  height: 750px;
+  display: flex;
+  flex-direction: column;
 }
 
 .card-header {
@@ -782,16 +786,28 @@ onMounted(() => {
 }
 
 .profile-tabs {
-  height: calc(100% - 50px);
+  flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+/* Fix Element Plus tabs structure */
+:deep(.el-tabs__content) {
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+}
+
+:deep(.el-tab-pane) {
+  height: 100%;
+  overflow: hidden;
 }
 
 .tab-content {
-  flex: 1;
+  height: 100%;
   overflow-y: auto;
-  padding: 16px 0;
-  min-height: 550px;
+  padding: 20px;
 }
 
 /* Compact info item layout */
@@ -812,6 +828,23 @@ onMounted(() => {
 .info-item span {
   color: var(--el-text-color-primary);
   word-break: break-word;
+  overflow-wrap: break-word;
+  flex: 1;
+  line-height: 1.5;
+}
+
+/* Compact status tag styling */
+.status-container {
+  display: inline-flex;
+  align-items: center;
+}
+
+.status-container .el-tag--small {
+  padding: 2px 8px;
+  height: 22px;
+  line-height: 18px;
+  font-size: 12px;
+  border-radius: 3px;
 }
 
 h3 {
@@ -971,27 +1004,56 @@ h3 {
   font-size: 14px;
 }
 
-/* Nested tabs inside delegations */
+/* Nested tabs inside delegations - use flex layout */
 .delegation-tabs {
-  flex: 1;
+  height: calc(100% - 60px);
   display: flex;
   flex-direction: column;
 }
 
-:deep(.el-tab-pane .el-tabs__content) {
+:deep(.delegation-tabs > .el-tabs__content) {
   flex: 1;
+  overflow: hidden;
+  padding: 0;
+}
+
+:deep(.delegation-tabs .el-tab-pane) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Wrapper for delegation tables with flex layout */
+.delegation-table-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
-/* Ensure tables in delegation tabs have fixed height */
-:deep(.el-tab-pane:nth-child(1) .el-table),
-:deep(.el-tab-pane:nth-child(2) .el-table) {
-  height: 300px !important;
+/* Tables in delegation tabs with flexible height */
+:deep(.delegation-tabs .el-table) {
+  flex: 1;
+  min-height: 350px;
 }
 
-/* Ensure table in sessions tab has fixed height */
+/* Sessions tab content with flex layout */
+.sessions-tab-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.sessions-subtitle {
+  margin: 8px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Table in sessions tab with flexible height */
 :deep(.el-tab-pane[name="sessions"] .el-table) {
-  height: 400px !important;
+  flex: 1;
+  min-height: 450px;
 }
 
 /* Empty state container styling */
