@@ -1,3 +1,4 @@
+import asyncio
 import traceback
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -12,9 +13,10 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from src import __version__
 from src.api import api_router
 from src.core.config import settings
-from src.core.database import close_db, init_db
+from src.core.database import close_db, get_session_maker, init_db
 from src.core.exceptions import AppException, ErrorCode
 from src.core.middleware import LoggingMiddleware, RateLimitMiddleware
+from src.services.rbac_service import RBACService
 from src.utils.i18n import i18n
 from src.utils.log import get_logger, setup_logging
 from src.utils.metrics import MetricsCollector
@@ -29,6 +31,43 @@ logger = get_logger(__name__)
 # Initialize metrics collector
 metrics_collector = MetricsCollector()
 
+# Background task management
+background_tasks: list[asyncio.Task] = []
+
+
+async def delegation_status_cleanup_task():
+    """Background task to automatically update delegation statuses in real-time
+
+    This task runs continuously and checks for:
+    1. Pending delegations that should become active (starts_at <= now)
+    2. Active delegations that should expire (expires_at <= now)
+
+    Runs every 5 minutes by default.
+    """
+    cleanup_interval = 300  # 5 minutes
+    session_maker = get_session_maker()
+
+    while True:
+        try:
+            async with session_maker() as db:
+                rbac_service = RBACService(db)
+
+                # Update expired delegations (active -> expired)
+                expired_count = await rbac_service.update_expired_delegations()
+                if expired_count > 0:
+                    logger.info(f"Auto-updated {expired_count} expired delegations")
+
+                # Activate pending delegations (pending -> active)
+                activated_count = await rbac_service.activate_pending_delegations()
+                if activated_count > 0:
+                    logger.info(f"Auto-activated {activated_count} pending delegations")
+
+        except Exception as e:
+            logger.error(f"Error in delegation status cleanup task: {e}", exc_info=True)
+
+        # Wait before next check
+        await asyncio.sleep(cleanup_interval)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
@@ -38,12 +77,30 @@ async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
     await init_db()
     await init_redis()
     metrics_collector.startup()
+
+    # Start background tasks
+    logger.info("Starting background tasks...")
+    delegation_cleanup = asyncio.create_task(delegation_status_cleanup_task())
+    background_tasks.append(delegation_cleanup)
+    logger.info("Background delegation cleanup task started (interval: 5 minutes)")
+
     logger.info("Application started successfully")
 
     yield
 
     # Shutdown operations
     logger.info("Shutting down application...")
+
+    # Cancel background tasks
+    logger.info("Cancelling background tasks...")
+    for task in background_tasks:
+        task.cancel()
+
+    # Wait for tasks to finish
+    if background_tasks:
+        await asyncio.gather(*background_tasks, return_exceptions=True)
+        logger.info("All background tasks cancelled")
+
     await close_db()
     await close_redis()
     metrics_collector.shutdown()

@@ -428,6 +428,80 @@ class TestRoleDelegation:
         assert delegation.delegation_status == "pending"
 
     @pytest.mark.asyncio
+    async def test_activate_pending_delegations(
+        self,
+        db: AsyncSession,
+        rbac_service: RBACService,
+        test_roles: dict[str, Role],
+        test_users: dict[str, AuthUser],
+    ):
+        """Test automatic activation of pending delegations when start time is reached"""
+        from sqlalchemy import select
+
+        admin_user = test_users["admin_user"]
+        junior_user = test_users["junior_user"]
+        reviewer_role = test_roles["reviewer"]
+
+        await rbac_service.assign_role(
+            auth_user_id=admin_user.id,
+            role_id=reviewer_role.id,
+            resource_type="global",
+            resource_id=None,
+        )
+
+        # Create delegation with past start time (should be activated)
+        past_start = datetime.now(UTC) - timedelta(hours=1)
+        delegation = await rbac_service.delegate_role(
+            delegator_id=admin_user.id,
+            delegatee_id=junior_user.id,
+            role_id=reviewer_role.id,
+            resource_type="global",
+            resource_id=None,
+            delegation_scope={"reviews": ["read"]},
+            starts_at=past_start,
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+
+        # Verify it was created as active (since start time is in the past)
+        assert delegation.delegation_status == "active"
+
+        # Now test manual pending -> active transition
+        # Create a delegation and manually set it to pending
+        future_start = datetime.now(UTC) + timedelta(days=1)
+        delegation2 = await rbac_service.delegate_role(
+            delegator_id=admin_user.id,
+            delegatee_id=junior_user.id,
+            role_id=reviewer_role.id,
+            resource_type="project",
+            resource_id="TEST-PROJ",
+            delegation_scope={"reviews": ["read"]},
+            starts_at=future_start,
+            expires_at=future_start + timedelta(days=30),
+        )
+
+        # Verify it's pending
+        assert delegation2.delegation_status == "pending"
+
+        # Manually update starts_at to past to simulate time passing
+        stmt = select(UserRoleAssignment).where(UserRoleAssignment.id == delegation2.id)
+        result = await db.execute(stmt)
+        assignment = result.scalar_one()
+        assignment.starts_at = datetime.now(UTC) - timedelta(hours=1)
+        await db.commit()
+
+        # Activate pending delegations
+        count = await rbac_service.activate_pending_delegations()
+
+        assert count >= 1
+
+        # Verify status changed to active
+        stmt = select(UserRoleAssignment).where(UserRoleAssignment.id == delegation2.id)
+        result = await db.execute(stmt)
+        updated = result.scalar_one()
+
+        assert updated.delegation_status == "active"
+
+    @pytest.mark.asyncio
     async def test_prevent_duplicate_active_delegation(
         self,
         db: AsyncSession,

@@ -35,6 +35,13 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
+# Alias for backward compatibility
+@pytest.fixture(scope="function")
+async def db(db_session) -> AsyncGenerator[AsyncSession, None]:
+    """Alias for db_session - backward compatibility"""
+    yield db_session
+
+
 @pytest.fixture
 async def async_client(db_session) -> AsyncClient:
     """Create async test client"""

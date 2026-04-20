@@ -814,6 +814,41 @@ class RBACService:
 
         return count
 
+    async def activate_pending_delegations(self) -> int:
+        """Activate pending delegations whose start time has been reached
+
+        This should be called periodically (e.g., via background task) to mark
+        pending delegations as 'active' when their starts_at time is reached.
+
+        Returns:
+            Number of delegations activated
+        """
+        from datetime import UTC
+        from datetime import datetime as dt
+
+        now = dt.now(UTC)
+
+        stmt = select(UserRoleAssignment).where(
+            and_(
+                UserRoleAssignment.is_delegated == True,
+                UserRoleAssignment.delegation_status == "pending",
+                UserRoleAssignment.starts_at <= now,
+            )
+        )
+        result = await self.db.execute(stmt)
+        pending_assignments = result.scalars().all()
+
+        count = 0
+        for assignment in pending_assignments:
+            assignment.delegation_status = "active"
+            count += 1
+
+        if count > 0:
+            await self.db.commit()
+            logger.info(f"Activated {count} pending delegations")
+
+        return count
+
     # ========================================================================
     # Delegation Helper Methods
     # ========================================================================
