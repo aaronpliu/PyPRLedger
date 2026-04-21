@@ -25,7 +25,9 @@
     "noData": "暂无数据",
     "viewAll": "查看全部",
     "backToHome": "返回首页",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "enabled": "启用",
+    "disabled": "禁用"
   },
   "menu": {
     "dashboard": "仪表板",

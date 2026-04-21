@@ -37,9 +37,9 @@
           </el-button>
         </el-form-item>
         
-        <div class="register-link">
-          Don't have an account? 
-          <router-link to="/register">Register</router-link>
+        <div class="register-link" v-if="registrationEnabled">
+          {{ t('auth.dont_have_account') }} 
+          <router-link to="/register">{{ t('common.register') }}</router-link>
         </div>
       </el-form>
     </el-card>
@@ -47,17 +47,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { rbacApi } from '@/api/rbac'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const registrationEnabled = ref(true)
+
+// Check if registration is enabled
+onMounted(async () => {
+  try {
+    const response = await rbacApi.getRegistrationEnabled()
+    registrationEnabled.value = response.registration_enabled
+  } catch (error) {
+    console.error('Failed to check registration status:', error)
+    // Default to enabled if check fails
+    registrationEnabled.value = true
+  }
+})
 
 const form = reactive({
   username: '',

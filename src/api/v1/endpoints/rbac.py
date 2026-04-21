@@ -288,3 +288,68 @@ async def revoke_role_from_user(
         )
 
     return {"message": "Role revoked successfully"}
+
+
+# ============================================================================
+# System Settings Endpoints
+# ============================================================================
+
+
+@router.get(
+    "/settings/registration-enabled",
+    response_model=dict,
+    summary="Check if user registration is enabled",
+    description="Returns whether new user registration is currently allowed (public endpoint)",
+)
+async def get_registration_enabled(
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict:
+    """Check if registration is enabled (public endpoint, no auth required)"""
+    from src.utils.redis import get_redis_client
+
+    redis_client = get_redis_client()
+    try:
+        value = await redis_client.get("system:settings:registration_enabled")
+        # Default to True if not set
+        is_enabled = value != "false"
+        return {"registration_enabled": is_enabled}
+    except Exception:
+        # If Redis fails, default to enabled
+        return {"registration_enabled": True}
+
+
+@router.put(
+    "/settings/registration-enabled",
+    response_model=dict,
+    summary="Update registration enabled setting",
+    description="Enable or disable new user registration (requires system admin)",
+)
+async def update_registration_enabled(
+    setting_data: dict,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict:
+    """Update registration enabled setting (requires manage settings permission)"""
+    # Check if user has permission to manage settings
+    await rbac_service.require_permission(current_user.id, "manage", "settings")
+
+    from src.utils.redis import get_redis_client
+
+    redis_client = get_redis_client()
+    enabled = setting_data.get("registration_enabled", True)
+
+    try:
+        await redis_client.setex(
+            "system:settings:registration_enabled",
+            86400 * 365,  # Cache for 1 year
+            str(enabled).lower(),
+        )
+        return {
+            "message": "Registration setting updated successfully",
+            "registration_enabled": enabled,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update registration setting: {str(e)}",
+        )

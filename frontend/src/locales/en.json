@@ -25,7 +25,9 @@
     "noData": "No Data Available",
     "viewAll": "View All",
     "backToHome": "Back to Home",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
   },
   "menu": {
     "dashboard": "Dashboard",
@@ -186,7 +188,16 @@
       "manageDelegations": "Manage Delegations",
       "viewAuditLogs": "View Audit Logs",
       "manageSessions": "Manage Sessions",
+      "systemSettings": "System Settings",
       "recentAuditLogs": "Recent Audit Logs"
+    },
+    "systemSettings": {
+      "title": "System Settings",
+      "registrationEnabled": "User Registration",
+      "registrationEnabledDesc": "Allow new users to create accounts. When disabled, only administrators can create new user accounts.",
+      "loadFailed": "Failed to load system settings",
+      "saveSuccess": "Settings saved successfully",
+      "saveFailed": "Failed to save settings"
     }
   },
   "errors": {

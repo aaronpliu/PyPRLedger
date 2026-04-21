@@ -1,6 +1,6 @@
 <template>
   <div class="register-container">
-    <el-card class="register-card">
+    <el-card class="register-card" v-if="registrationEnabled">
       <h2 class="register-title">Create Account</h2>
       
       <el-form :model="form" :rules="rules" ref="formRef" label-width="0">
@@ -63,21 +63,49 @@
         </div>
       </el-form>
     </el-card>
+    
+    <el-card class="register-card" v-else>
+      <el-result icon="warning" title="Registration Disabled">
+        <template #sub-title>
+          <p>User registration is currently disabled by the system administrator.</p>
+          <p>Please contact your administrator to create an account for you.</p>
+        </template>
+        <template #extra>
+          <el-button type="primary" @click="$router.push('/login')">
+            Back to Login
+          </el-button>
+        </template>
+      </el-result>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { rbacApi } from '@/api/rbac'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const registrationEnabled = ref(true)
+
+// Check if registration is enabled
+onMounted(async () => {
+  try {
+    const response = await rbacApi.getRegistrationEnabled()
+    registrationEnabled.value = response.registration_enabled
+  } catch (error) {
+    console.error('Failed to check registration status:', error)
+    // Default to enabled if check fails
+    registrationEnabled.value = true
+  }
+})
 
 const form = reactive({
   username: '',

@@ -110,6 +110,11 @@ const routes: RouteRecordRaw[] = [
         name: 'ProjectRegistryManagement',
         component: () => import('@/views/admin/ProjectRegistryManagementView.vue'),
       },
+      {
+        path: 'settings',
+        name: 'SystemSettings',
+        component: () => import('@/views/admin/SystemSettingsView.vue'),
+      },
     ],
   },
 

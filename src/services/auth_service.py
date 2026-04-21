@@ -247,8 +247,23 @@ class AuthService:
             TokenResponse with JWT token
 
         Raises:
-            AppException: If username already exists
+            AppException: If username already exists or registration is disabled
         """
+        # Check if registration is enabled
+        try:
+            reg_enabled_value = await self.redis_client.get("system:settings:registration_enabled")
+            if reg_enabled_value == "false":
+                raise AppException(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    message="User registration is currently disabled",
+                    status_code=403,
+                )
+        except AppException:
+            raise
+        except Exception as e:
+            logger.warning(f"Failed to check registration setting, defaulting to enabled: {e}")
+            # Continue with registration if Redis check fails
+
         # Check if username already exists
         stmt = select(AuthUser).where(AuthUser.username == register_data.username)
         result = await self.db.execute(stmt)

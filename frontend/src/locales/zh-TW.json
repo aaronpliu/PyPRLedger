@@ -25,7 +25,9 @@
     "noData": "暫無資料",
     "viewAll": "查看全部",
     "backToHome": "返回首頁",
-    "refresh": "重新整理"
+    "refresh": "重新整理",
+    "enabled": "啟用",
+    "disabled": "停用"
   },
   "menu": {
     "dashboard": "儀表板",

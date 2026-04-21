@@ -92,6 +92,10 @@
               <el-icon><Monitor /></el-icon>
               {{ t('admin.dashboard.manageSessions') }}
             </el-button>
+            <el-button type="danger" @click="$router.push('/myadmin/settings')">
+              <el-icon><Setting /></el-icon>
+              {{ t('admin.dashboard.systemSettings') }}
+            </el-button>
           </div>
         </el-card>
       </el-col>
@@ -160,7 +164,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { User, Lock, Share, Monitor, Document } from '@element-plus/icons-vue'
+import { User, Lock, Share, Monitor, Document, Setting } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { usersApi } from '@/api/users'
 import { rbacApi } from '@/api/rbac'

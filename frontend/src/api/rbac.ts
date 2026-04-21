@@ -126,4 +126,16 @@ export const rbacApi = {
   cleanupExpiredDelegations(): Promise<{ message: string; updated_count: number }> {
     return request.post('/rbac/delegations/cleanup-expired')
   },
+
+  // ===== System Settings APIs =====
+
+  // Get registration enabled setting
+  getRegistrationEnabled(): Promise<{ registration_enabled: boolean }> {
+    return request.get('/rbac/settings/registration-enabled')
+  },
+
+  // Update registration enabled setting
+  updateRegistrationEnabled(enabled: boolean): Promise<{ message: string; registration_enabled: boolean }> {
+    return request.put('/rbac/settings/registration-enabled', { registration_enabled: enabled })
+  },
 }
