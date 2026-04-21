@@ -42,7 +42,8 @@
     "delegations": "委托",
     "auditLogs": "审计日志",
     "sessions": "会话",
-    "projectRegistry": "项目注册表"
+    "projectRegistry": "项目注册表",
+    "systemSettings": "系统设置"
   },
   "auth": {
     "login_title": "登录到 PR Ledger",
