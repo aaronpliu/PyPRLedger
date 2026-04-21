@@ -34,10 +34,10 @@
         :reviewer-options="availableReviewers"
         :pr-users-loading="prUsersLoading"
         :reviewers-loading="reviewersLoading"
-        @apply="applyFilters"
-        @reset="handleResetFilters"
         @search-pr-users="searchPRUsers"
         @search-reviewers="searchReviewers"
+        @apply="applyFilters"
+        @reset="handleResetFilters"
       />
 
       <!-- Bulk Actions Toolbar -->
@@ -342,9 +342,11 @@ const appFilter = ref<string[]>([])
 const availableApps = ref<AppInfo[]>([])
 const prUserFilter = ref('')
 const availablePRUsers = ref<ReviewerUser[]>([])
+const allPRUsers = ref<ReviewerUser[]>([]) // Cache for client-side filtering
 const prUsersLoading = ref(false)
 const reviewerFilter = ref('')
 const availableReviewers = ref<ReviewerUser[]>([])
+const allReviewers = ref<ReviewerUser[]>([]) // Cache for client-side filtering
 const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
@@ -720,12 +722,15 @@ const loadAvailableApps = async () => {
   }
 }
 
-// Load all users for PR User filter dropdown
+// Load all PR users for filter dropdown (active users only)
 const loadPRUsers = async () => {
   try {
     prUsersLoading.value = true
+    // Fetch all active users once - cache for client-side filtering
     const users = await usersApi.getAllBitbucketUsers(500)
-    availablePRUsers.value = users
+    const activeUsers = users.filter(u => u.active !== false)
+    allPRUsers.value = activeUsers
+    availablePRUsers.value = activeUsers
   } catch (error) {
     console.error('Failed to load PR users:', error)
   } finally {
@@ -733,55 +738,52 @@ const loadPRUsers = async () => {
   }
 }
 
-// Search PR users remotely as user types
-const searchPRUsers = async (query: string) => {
-  if (!query) {
-    await loadPRUsers()
+// Search PR users - PURE client-side filtering, NO API call
+const searchPRUsers = (query: string) => {
+  if (!query || query.trim() === '') {
+    // If no query, show all cached users
+    availablePRUsers.value = allPRUsers.value
     return
   }
   
-  try {
-    prUsersLoading.value = true
-    // Use backend username filtering for better performance
-    const users = await usersApi.getAllBitbucketUsers(500, query)
-    availablePRUsers.value = users
-  } catch (error) {
-    console.error('Failed to search PR users:', error)
-  } finally {
-    prUsersLoading.value = false
-  }
+  // Client-side filtering from cached data - NO API call
+  const queryLower = query.toLowerCase()
+  availablePRUsers.value = allPRUsers.value.filter(user => 
+    user.username.toLowerCase().includes(queryLower) ||
+    (user.display_name && user.display_name.toLowerCase().includes(queryLower))
+  )
 }
 
-// Load all users for filter dropdown (not just reviewers)
+// Load all reviewers for filter dropdown using dedicated endpoint
 const loadReviewers = async () => {
   try {
     reviewersLoading.value = true
-    const users = await usersApi.getAllBitbucketUsers(500)
-    availableReviewers.value = users
+    // Use dedicated /users/reviewers endpoint - returns active reviewers only
+    const response = await usersApi.getReviewers(500)
+    const reviewers = response.items || []
+    allReviewers.value = reviewers
+    availableReviewers.value = reviewers
   } catch (error) {
-    console.error('Failed to load users:', error)
+    console.error('Failed to load reviewers:', error)
   } finally {
     reviewersLoading.value = false
   }
 }
 
-// Search users remotely as user types
-const searchReviewers = async (query: string) => {
-  if (!query) {
-    await loadReviewers()
+// Search reviewers - PURE client-side filtering, NO API call
+const searchReviewers = (query: string) => {
+  if (!query || query.trim() === '') {
+    // If no query, show all cached reviewers
+    availableReviewers.value = allReviewers.value
     return
   }
   
-  try {
-    reviewersLoading.value = true
-    // Use backend username filtering for better performance
-    const users = await usersApi.getAllBitbucketUsers(500, query)
-    availableReviewers.value = users
-  } catch (error) {
-    console.error('Failed to search users:', error)
-  } finally {
-    reviewersLoading.value = false
-  }
+  // Client-side filtering from cached data - NO API call
+  const queryLower = query.toLowerCase()
+  availableReviewers.value = allReviewers.value.filter(user => 
+    user.username.toLowerCase().includes(queryLower) ||
+    (user.display_name && user.display_name.toLowerCase().includes(queryLower))
+  )
 }
 
 // Watch for filter changes and reload data

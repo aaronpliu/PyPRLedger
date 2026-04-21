@@ -26,8 +26,6 @@
           :placeholder="placeholder"
           clearable
           :style="{ width: searchWidth }"
-          @input="handleSearchInput"
-          @keyup.enter="handleEnter"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
@@ -102,7 +100,7 @@
             </el-select>
           </div>
 
-          <!-- PR User (Remote Search) -->
+          <!-- PR User (Client-side Filter) -->
           <div v-if="showPRUserFilter" class="filter-item">
             <label class="filter-label">PR User</label>
             <el-select
@@ -110,9 +108,6 @@
               placeholder="Select or type name"
               clearable
               filterable
-              remote
-              :remote-method="searchPRUsers"
-              :loading="prUsersLoading"
               style="width: 100%"
             >
               <el-option
@@ -129,7 +124,7 @@
             </el-select>
           </div>
 
-          <!-- Reviewer (Remote Search with Unassigned) -->
+          <!-- Reviewer (Client-side Filter) -->
           <div v-if="showReviewerFilter" class="filter-item">
             <label class="filter-label">Reviewer</label>
             <el-select
@@ -137,9 +132,6 @@
               placeholder="Select or type name"
               clearable
               filterable
-              remote
-              :remote-method="searchReviewers"
-              :loading="reviewersLoading"
               style="width: 100%"
             >
               <el-option
@@ -152,13 +144,6 @@
                 <span class="text-secondary" style="margin-left: 8px; font-size: 0.85em">
                   ({{ user.username }})
                 </span>
-              </el-option>
-              <el-option
-                key="__unassigned__"
-                label="⚠️ Unassigned"
-                value="__unassigned__"
-              >
-                <span style="color: #e6a23c; font-weight: 600">⚠️ Unassigned</span>
               </el-option>
             </el-select>
           </div>
@@ -322,8 +307,6 @@ const emit = defineEmits<{
   'update:statusFilter': [value: string]
   apply: []
   reset: []
-  searchPRUsers: [query: string]
-  searchReviewers: [query: string]
 }>()
 
 // Local state for two-way binding
@@ -463,15 +446,6 @@ const activeFilterTags = computed(() => {
 })
 
 // Event handlers
-const handleSearchInput = (value: string) => {
-  emit('update:searchQuery', value)
-}
-
-const handleEnter = () => {
-  // Optional: Auto-apply on Enter key
-  // handleApply()
-}
-
 const handleConfirm = () => {
   // Sync all local values to parent
   emit('update:searchQuery', localSearchQuery.value)
@@ -565,14 +539,6 @@ const handleRemoveFilter = (key: string) => {
   emit('update:statusFilter', localStatusFilter.value)
   
   emit('apply')
-}
-
-const searchPRUsers = (query: string) => {
-  emit('searchPRUsers', query)
-}
-
-const searchReviewers = (query: string) => {
-  emit('searchReviewers', query)
 }
 
 const handlePopoverHide = () => {

@@ -165,6 +165,9 @@ class EntitySyncService:
         # Auto-associate with auth_user if exists
         await self._auto_associate_auth_user(user)
 
+        # Invalidate user list cache since a new user was created
+        await self._invalidate_user_list_cache()
+
         return user
 
     async def sync_all_entities(
@@ -221,6 +224,12 @@ class EntitySyncService:
 
         # Create the association
         auth_user.user_id = git_user.id
+
+        # Auto-set is_reviewer=1 when auth user binds to git user
+        if not git_user.is_reviewer:
+            git_user.is_reviewer = True
+            logger.info(f"Auto-set is_reviewer=True for git user {git_user.username}")
+
         await self.db.flush()
 
         logger.info(f"Auto-associated auth_user {auth_user.id} with Bitbucket user {git_user.id}")
@@ -384,3 +393,16 @@ class EntitySyncService:
             )
         except Exception as e:
             logger.warning(f"Failed to log role upgrade audit: {e}")
+
+    async def _invalidate_user_list_cache(self) -> None:
+        """Invalidate user list cache when users are created or updated"""
+        try:
+            from src.core.redis_client import get_redis_client
+
+            redis_client = get_redis_client()
+            keys = await redis_client.keys("users:list:*")
+            if keys:
+                await redis_client.delete(*keys)
+                logger.debug(f"Invalidated {len(keys)} user list cache entries")
+        except Exception as e:
+            logger.warning(f"Failed to invalidate user list cache: {str(e)}")
