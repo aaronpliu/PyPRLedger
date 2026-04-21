@@ -204,6 +204,7 @@ async def get_user_roles(
             id=a["id"],
             auth_user_id=a["auth_user_id"],
             role_id=a["role_id"],
+            role_name=a.get("role_name"),
             resource_type=a["resource_type"],
             resource_id=a["resource_id"],
             granted_by=a["granted_by"],

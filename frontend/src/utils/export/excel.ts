@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import type { Review } from '@/api/reviews'
 import dayjs from 'dayjs'
 
@@ -8,7 +8,44 @@ export interface ExcelExportOptions {
   includeHeaders?: boolean
 }
 
-export function exportReviewsToExcel(
+/**
+ * Helper function to trigger file download in browser
+ */
+async function downloadWorkbook(workbook: ExcelJS.Workbook, filename: string) {
+  const buffer = await workbook.xlsx.writeBuffer()
+  const blob = new Blob([buffer], { 
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+  })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.style.display = 'none'
+  
+  document.body.appendChild(link)
+  link.click()
+  
+  // Cleanup
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * Helper function to apply header styling
+ */
+function styleHeaderRow(row: ExcelJS.Row, color: string) {
+  row.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: color },
+    }
+    cell.alignment = { horizontal: 'center', vertical: 'middle' }
+  })
+}
+
+export async function exportReviewsToExcel(
   reviews: Review[],
   options: ExcelExportOptions = {}
 ) {
@@ -18,80 +55,61 @@ export function exportReviewsToExcel(
     includeHeaders = true,
   } = options
 
-  // Prepare data
-  const headers = includeHeaders ? [
-    'Seq#',
-    'PR ID',
-    'Project/Repo',
-    'PR User',
-    'Reviewer',
-    'PR Status',
-    'Scores',
-    'Comments',
-    'Created',
-    'Updated',
-  ] : []
+  // Create workbook
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'PyPRLedger'
+  workbook.created = new Date()
 
-  const data = reviews.map((review, index) => [
-    index + 1,
-    review.pull_request_id,
-    `${review.project_key} / ${review.repository_slug}`,
-    review.pull_request_user_info?.display_name || review.pull_request_user,
-    review.reviewer_info?.display_name || review.reviewer,
-    review.pull_request_status,
-    review.score_summary && review.score_summary.total_scores > 0
-      ? `${review.score_summary.average_score?.toFixed(1)} (${review.score_summary.total_scores})`
-      : 'No scores',
-    review.reviewer_comments || '',
-    dayjs(review.created_date).format('YYYY-MM-DD HH:mm:ss'),
-    dayjs(review.updated_date).format('YYYY-MM-DD HH:mm:ss'),
-  ])
+  // Add Reviews worksheet
+  const reviewWorksheet = workbook.addWorksheet(sheetName)
 
-  // Combine headers and data
-  const worksheetData = includeHeaders ? [headers, ...data] : data
-
-  // Create worksheet
-  const worksheet = XLSX.utils.aoa_to_sheet(worksheetData)
-
-  // Set column widths
-  worksheet['!cols'] = [
-    { wch: 8 },   // Seq#
-    { wch: 35 },  // PR ID
-    { wch: 35 },  // Project/Repo
-    { wch: 25 },  // PR User
-    { wch: 25 },  // Reviewer
-    { wch: 15 },  // Status
-    { wch: 18 },  // Scores
-    { wch: 50 },  // Comments
-    { wch: 20 },  // Created
-    { wch: 20 },  // Updated
+  // Define columns
+  const columns = [
+    { header: 'Seq#', key: 'seq', width: 8 },
+    { header: 'PR ID', key: 'prId', width: 35 },
+    { header: 'Project/Repo', key: 'projectRepo', width: 35 },
+    { header: 'PR User', key: 'prUser', width: 25 },
+    { header: 'Reviewer', key: 'reviewer', width: 25 },
+    { header: 'PR Status', key: 'status', width: 15 },
+    { header: 'Scores', key: 'scores', width: 18 },
+    { header: 'Comments', key: 'comments', width: 50 },
+    { header: 'Created', key: 'created', width: 20 },
+    { header: 'Updated', key: 'updated', width: 20 },
   ]
 
-  // Style header row
-  if (includeHeaders) {
-    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1')
-    for (let C = range.s.c; C <= range.e.c; ++C) {
-      const address = XLSX.utils.encode_col(C) + '1'
-      if (!worksheet[address]) continue
-      worksheet[address].s = {
-        font: { bold: true, color: { rgb: 'FFFFFF' } },
-        fill: { fgColor: { rgb: '409EFF' } },
-        alignment: { horizontal: 'center' },
-      }
-    }
+  reviewWorksheet.columns = columns
+
+  // Prepare data
+  const data = reviews.map((review, index) => ({
+    seq: index + 1,
+    prId: review.pull_request_id,
+    projectRepo: `${review.project_key} / ${review.repository_slug}`,
+    prUser: review.pull_request_user_info?.display_name || review.pull_request_user,
+    reviewer: review.reviewer_info?.display_name || review.reviewer,
+    status: review.pull_request_status,
+    scores: review.score_summary && review.score_summary.total_scores > 0
+      ? `${review.score_summary.average_score?.toFixed(1)} (${review.score_summary.total_scores})`
+      : 'No scores',
+    comments: review.reviewer_comments || '',
+    created: dayjs(review.created_date).format('YYYY-MM-DD HH:mm:ss'),
+    updated: dayjs(review.updated_date).format('YYYY-MM-DD HH:mm:ss'),
+  }))
+
+  // Add rows
+  data.forEach(item => {
+    reviewWorksheet.addRow(item)
+  })
+
+  // Style header row if included
+  if (includeHeaders && reviewWorksheet.getRow(1)) {
+    styleHeaderRow(reviewWorksheet.getRow(1), 'FF409EFF')
   }
 
-  // Create workbook
-  const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName)
-
-  // Add summary sheet
-  const summaryData = [
-    ['Review Export Summary'],
-    ['Generated At', dayjs().format('YYYY-MM-DD HH:mm:ss')],
-    ['Total Reviews', reviews.length],
-    ['', ''],
-    ['Status Breakdown'],
+  // Add Summary worksheet
+  const summaryWorksheet = workbook.addWorksheet('Summary')
+  summaryWorksheet.columns = [
+    { header: '', key: 'label', width: 25 },
+    { header: '', key: 'value', width: 15 },
   ]
 
   const statusCounts = reviews.reduce((acc, review) => {
@@ -100,19 +118,23 @@ export function exportReviewsToExcel(
     return acc
   }, {} as Record<string, number>)
 
+  summaryWorksheet.addRows([
+    { label: 'Review Export Summary', value: '' },
+    { label: 'Generated At', value: dayjs().format('YYYY-MM-DD HH:mm:ss') },
+    { label: 'Total Reviews', value: reviews.length },
+    { label: '', value: '' },
+    { label: 'Status Breakdown', value: '' },
+  ])
+
   Object.entries(statusCounts).forEach(([status, count]) => {
-    summaryData.push([status, count])
+    summaryWorksheet.addRow({ label: status, value: count })
   })
 
-  const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryData)
-  summaryWorksheet['!cols'] = [{ wch: 25 }, { wch: 15 }]
-  XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Summary')
-
-  // Save file
-  XLSX.writeFile(workbook, filename)
+  // Download the file
+  await downloadWorkbook(workbook, filename)
 }
 
-export function exportScoresToExcel(
+export async function exportScoresToExcel(
   scores: any[],
   options: ExcelExportOptions = {}
 ) {
@@ -121,82 +143,69 @@ export function exportScoresToExcel(
     sheetName = 'Scores',
   } = options
 
+  // Create workbook
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'PyPRLedger'
+  workbook.created = new Date()
+
+  // Add Scores worksheet
+  const scoresWorksheet = workbook.addWorksheet(sheetName)
+
+  // Define columns
+  scoresWorksheet.columns = [
+    { header: 'ID', key: 'id', width: 8 },
+    { header: 'Review ID', key: 'reviewId', width: 12 },
+    { header: 'Category', key: 'category', width: 20 },
+    { header: 'Score', key: 'score', width: 10 },
+    { header: 'Max Score', key: 'maxScore', width: 12 },
+    { header: 'Weight', key: 'weight', width: 10 },
+    { header: 'Comment', key: 'comment', width: 40 },
+    { header: 'Created By', key: 'createdBy', width: 20 },
+    { header: 'Created At', key: 'createdAt', width: 20 },
+  ]
+
   // Prepare data
-  const headers = [
-    'ID',
-    'Review ID',
-    'Category',
-    'Score',
-    'Max Score',
-    'Weight',
-    'Comment',
-    'Created By',
-    'Created At',
-  ]
+  const data = scores.map(score => ({
+    id: score.id,
+    reviewId: score.review_id,
+    category: score.category || 'N/A',
+    score: score.score ?? 'N/A',
+    maxScore: score.max_score ?? 100,
+    weight: score.weight ?? 1.0,
+    comment: score.comment || '',
+    createdBy: score.created_by || 'N/A',
+    createdAt: dayjs(score.created_at).format('YYYY-MM-DD HH:mm:ss'),
+  }))
 
-  const data = scores.map(score => [
-    score.id,
-    score.review_id,
-    score.category || 'N/A',
-    score.score ?? 'N/A',
-    score.max_score ?? 100,
-    score.weight ?? 1.0,
-    score.comment || '',
-    score.created_by || 'N/A',
-    dayjs(score.created_at).format('YYYY-MM-DD HH:mm:ss'),
-  ])
-
-  const worksheetData = [headers, ...data]
-
-  // Create worksheet
-  const worksheet = XLSX.utils.aoa_to_sheet(worksheetData)
-
-  // Set column widths
-  worksheet['!cols'] = [
-    { wch: 8 },   // ID
-    { wch: 12 },  // Review ID
-    { wch: 20 },  // Category
-    { wch: 10 },  // Score
-    { wch: 12 },  // Max Score
-    { wch: 10 },  // Weight
-    { wch: 40 },  // Comment
-    { wch: 20 },  // Created By
-    { wch: 20 },  // Created At
-  ]
+  // Add rows
+  data.forEach(item => {
+    scoresWorksheet.addRow(item)
+  })
 
   // Style header row
-  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1')
-  for (let C = range.s.c; C <= range.e.c; ++C) {
-    const address = XLSX.utils.encode_col(C) + '1'
-    if (!worksheet[address]) continue
-    worksheet[address].s = {
-      font: { bold: true, color: { rgb: 'FFFFFF' } },
-      fill: { fgColor: { rgb: '67C23A' } },
-      alignment: { horizontal: 'center' },
-    }
+  if (scoresWorksheet.getRow(1)) {
+    styleHeaderRow(scoresWorksheet.getRow(1), 'FF67C23A')
   }
 
-  // Create workbook
-  const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName)
-
-  // Add statistics sheet
-  const statsData = [
-    ['Score Statistics'],
-    ['Generated At', dayjs().format('YYYY-MM-DD HH:mm:ss')],
-    ['Total Scores', scores.length],
-    ['', ''],
-    ['Average Score', calculateAverageScore(scores)],
-    ['Min Score', calculateMinScore(scores)],
-    ['Max Score', calculateMaxScore(scores)],
+  // Add Statistics worksheet
+  const statsWorksheet = workbook.addWorksheet('Statistics')
+  statsWorksheet.columns = [
+    { header: '', key: 'label', width: 25 },
+    { header: '', key: 'value', width: 15 },
   ]
 
-  const statsWorksheet = XLSX.utils.aoa_to_sheet(statsData)
-  statsWorksheet['!cols'] = [{ wch: 25 }, { wch: 15 }]
-  XLSX.utils.book_append_sheet(workbook, statsWorksheet, 'Statistics')
+  statsWorksheet.addRows([
+    { label: 'Score Statistics', value: '' },
+    { label: 'Generated At', value: dayjs().format('YYYY-MM-DD HH:mm:ss') },
+    { label: 'Total Scores', value: scores.length },
+    { label: '', value: '' },
+    { label: 'Average Score', value: calculateAverageScore(scores) },
+    { label: 'Min Score', value: calculateMinScore(scores) },
+    { label: 'Max Score', value: calculateMaxScore(scores) },
+  ])
 
-  // Save file
-  XLSX.writeFile(workbook, filename)
+  // Download the file
+  await downloadWorkbook(workbook, filename)
 }
 
 function calculateAverageScore(scores: any[]): number {

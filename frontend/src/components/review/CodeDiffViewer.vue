@@ -165,6 +165,7 @@ const renderDiff = () => {
     diffContainer.value.innerHTML = ''
     diff2htmlUi = new Diff2HtmlUI(diffContainer.value, processedDiff, configuration, hljs)
     diff2htmlUi.draw()
+    diff2htmlUi.highlightCode()
   } catch (error) {
     console.error('Failed to render diff:', error)
     console.error('Diff that caused error:', props.diff.substring(0, 500))
@@ -187,7 +188,13 @@ const renderDiff = () => {
   overflow: auto;
 }
 
-/* Fix line number positioning */
+/* 
+ * CRITICAL FIXES ONLY - Match diff2html official demo behavior
+ * The demo works perfectly with minimal CSS, so we should too.
+ * Only fix the known positioning bug, nothing else.
+ */
+
+/* Fix 1: Line number positioning bug (known diff2html issue) */
 :deep(.d2h-code-linenumber),
 :deep(.d2h-code-side-linenumber) {
   position: relative !important;
@@ -197,41 +204,11 @@ const renderDiff = () => {
   position: relative !important;
 }
 
-/* Ensure diff2html uses its own theme, not affected by global dark mode */
-:deep(.d2h-wrapper),
-:deep(.d2h-file-header),
-:deep(.d2h-file-wrapper) {
-  background-color: var(--el-bg-color);
-  transition: background-color 0.3s ease;
-}
-
-/* Light theme specific styles */
-[data-theme='light'] :deep(.d2h-file-header) {
-  background-color: #f6f8fa;
-  border-bottom: 1px solid #e1e4e8;
-}
-
-[data-theme='light'] :deep(.d2h-file-wrapper) {
-  background-color: #ffffff;
-  border: 1px solid #e1e4e8;
-}
-
-[data-theme='light'] :deep(.d2h-code-line-ctn) {
-  background-color: #ffffff;
-}
-
-/* Dark theme specific styles */
-[data-theme='dark'] :deep(.d2h-file-header) {
-  background-color: #2d333b;
-  border-bottom: 1px solid #444c56;
-}
-
-[data-theme='dark'] :deep(.d2h-file-wrapper) {
-  background-color: #1e293b;
-  border: 1px solid #444c56;
-}
-
-[data-theme='dark'] :deep(.d2h-code-line-ctn) {
-  background-color: #1e293b;
-}
+/* That's it! Let diff2html handle everything else including:
+ * - Backgrounds (via colorScheme config)
+ * - Spacing and padding
+ * - Font families
+ * - Syntax highlighting colors
+ * - Theme switching
+ */
 </style>

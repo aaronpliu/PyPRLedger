@@ -14,6 +14,7 @@ class ReviewBaseResponse(BaseModel):
     pull_request_commit_id: str | None = None
     project_key: str
     repository_slug: str
+    app_name: str | None = None  # Virtual column resolved from project registry
     pull_request_user: str
     pull_request_user_info: dict[str, Any] | None = None
     source_filename: str | None = None
@@ -25,6 +26,9 @@ class ReviewBaseResponse(BaseModel):
     metadata: dict[str, Any] | None = None
     created_date: datetime
     updated_date: datetime
+
+    # Embedded project information for PR URL generation
+    project: dict[str, Any] | None = None
 
     model_config = {"from_attributes": True}
 

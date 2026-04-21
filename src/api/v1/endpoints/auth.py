@@ -261,10 +261,14 @@ async def list_sessions(
         default=None,
         description="Optional auth user ID filter",
     ),
+    username: str | None = Query(
+        default=None,
+        description="Optional username filter (partial match, case-insensitive)",
+    ),
 ) -> list[AuthSessionResponse]:
     """List active sessions for operations and support."""
     await rbac_service.require_permission(current_user.id, "manage", "users")
-    return await auth_service.list_sessions(auth_user_id=auth_user_id)
+    return await auth_service.list_sessions(auth_user_id=auth_user_id, username=username)
 
 
 @router.delete(

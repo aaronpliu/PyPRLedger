@@ -252,6 +252,9 @@ class ReviewResponse(BaseModel):
     )
     pull_request_status: str = Field(..., description="Pull request status")
     metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
+    ai_review_id: str | None = Field(
+        None, description="Unique AI review identifier for tracking and retrieval"
+    )
 
     created_date: datetime = Field(..., description="Record creation timestamp")
     updated_date: datetime = Field(..., description="Record last update timestamp")

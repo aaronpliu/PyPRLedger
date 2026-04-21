@@ -18,6 +18,7 @@ from src.schemas.review import (
     ReviewBaseResponse,
     ReviewWithAssignmentsResponse,
 )
+from src.services.project_registry_service import ProjectRegistryService
 from src.utils.metrics import MetricsCollector
 
 
@@ -48,6 +49,7 @@ class MultiReviewerService:
         """
         # Build base query
         stmt = select(PullRequestReviewBase).options(
+            selectinload(PullRequestReviewBase.project),  # Load project for PR URL
             selectinload(PullRequestReviewBase.assignments).selectinload(
                 PullRequestReviewAssignment.reviewer_rel
             ),
@@ -86,11 +88,72 @@ class MultiReviewerService:
         result = await db.execute(stmt)
         bases = result.scalars().unique().all()
 
-        # Convert to response models
+        # Collect unique project-repo pairs for batch app_name resolution
+        project_repo_pairs = [(base.project_key, base.repository_slug) for base in bases]
+
+        # Batch resolve app_names
+        registry_service = ProjectRegistryService()
+        app_name_mapping = await registry_service.get_app_names_batch(project_repo_pairs, db)
+
+        # Convert to response models with app_name
         reviews = []
         for base in bases:
-            review_dict = self._base_to_response(base)
-            reviews.append(review_dict)
+            # Get base dict from model
+            base_dict = base.to_dict()
+
+            # Add project information for PR URL generation
+            if hasattr(base, "project") and base.project:
+                base_dict["project"] = base.project.to_dict()
+
+            # Add pull_request_user_info if available
+            if base.pull_request_user_rel:
+                base_dict["pull_request_user_info"] = {
+                    "username": base.pull_request_user_rel.username,
+                    "display_name": base.pull_request_user_rel.display_name,
+                }
+
+            # Process assignments
+            assignments = []
+            completed = 0
+            pending = 0
+
+            for assignment in base.assignments:
+                assign_dict = assignment.to_dict()
+
+                # Add reviewer info
+                if assignment.reviewer_rel:
+                    assign_dict["reviewer_info"] = {
+                        "username": assignment.reviewer_rel.username,
+                        "display_name": assignment.reviewer_rel.display_name,
+                    }
+
+                # Add assigned_by info
+                if assignment.assigned_by_rel:
+                    assign_dict["assigned_by_info"] = {
+                        "username": assignment.assigned_by_rel.username,
+                        "display_name": assignment.assigned_by_rel.display_name,
+                    }
+
+                assignments.append(assign_dict)
+
+                if assignment.assignment_status == "completed":
+                    completed += 1
+                else:
+                    pending += 1
+
+            # Add app_name from project registry
+            pair_key = (base.project_key, base.repository_slug)
+            base_dict["app_name"] = app_name_mapping.get(pair_key, "Unknown")
+
+            # Create response object
+            review_response = ReviewWithAssignmentsResponse(
+                **base_dict,
+                reviewers=assignments,
+                total_reviewers=len(assignments),
+                completed_reviewers=completed,
+                pending_reviewers=pending,
+            )
+            reviews.append(review_response)
 
         return reviews, total
 
@@ -101,6 +164,7 @@ class MultiReviewerService:
         stmt = (
             select(PullRequestReviewBase)
             .options(
+                selectinload(PullRequestReviewBase.project),  # Load project for PR URL
                 selectinload(PullRequestReviewBase.assignments).selectinload(
                     PullRequestReviewAssignment.reviewer_rel
                 ),
@@ -231,6 +295,10 @@ class MultiReviewerService:
     def _base_to_response(self, base: PullRequestReviewBase) -> ReviewWithAssignmentsResponse:
         """Convert base model to response with assignments"""
         base_dict = base.to_dict()
+
+        # Add project information for PR URL generation
+        if hasattr(base, "project") and base.project:
+            base_dict["project"] = base.project.to_dict()
 
         if base.pull_request_user_rel:
             base_dict["pull_request_user_info"] = {

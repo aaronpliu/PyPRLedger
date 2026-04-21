@@ -13,8 +13,8 @@
 
       <!-- Filters -->
       <el-form :inline="true" class="filter-form">
-        <el-form-item label="User">
-          <el-input v-model="filters.auth_user_id" placeholder="User ID" clearable style="width: 150px" />
+        <el-form-item label="Username">
+          <el-input v-model="filters.username" placeholder="Search by username" clearable style="width: 200px" />
         </el-form-item>
         
         <el-form-item label="Action">
@@ -172,7 +172,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { Download, Search } from '@element-plus/icons-vue'
 import { auditApi } from '@/api/audit'
-import type { AuditLog, AuditStats } from '@/types'
+import type { AuditLog, AuditStats, AuditLogQuery } from '@/types'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
@@ -189,7 +189,7 @@ const selectedLog = ref<AuditLog | null>(null)
 const dateRange = ref<[Date, Date] | null>(null)
 
 const filters = reactive({
-  auth_user_id: null as number | null,
+  username: null as string | null,
   action: null as string | null,
   resource_type: null as string | null,
   response_status: null as number | null,
@@ -240,10 +240,23 @@ const getSuccessRate = () => {
 const loadAuditLogs = async () => {
   loading.value = true
   try {
-    const params: any = {
+    const params: AuditLogQuery = {
       limit: pageSize.value,
       offset: (currentPage.value - 1) * pageSize.value,
-      ...filters,
+    }
+
+    // Add filters only if they have values
+    if (filters.username) {
+      params.username = filters.username
+    }
+    if (filters.action) {
+      params.action = filters.action
+    }
+    if (filters.resource_type) {
+      params.resource_type = filters.resource_type
+    }
+    if (filters.response_status) {
+      params.response_status = filters.response_status
     }
 
     if (dateRange.value && dateRange.value.length === 2) {
@@ -265,7 +278,7 @@ const loadAuditLogs = async () => {
 }
 
 const resetFilters = () => {
-  filters.auth_user_id = null
+  filters.username = null
   filters.action = null
   filters.resource_type = null
   filters.response_status = null

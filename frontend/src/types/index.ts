@@ -99,7 +99,8 @@ export interface AuditLog {
 }
 
 export interface AuditLogQuery {
-  auth_user_id?: number | null
+  actor_id?: number | null
+  username?: string | null
   resource_type?: string | null
   resource_id?: string | null
   action?: string | null

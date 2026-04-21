@@ -3,84 +3,42 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>Task Assignment Management</span>
-          <el-tag type="info">Review Admin Only</el-tag>
+          <div class="header-title-group">
+            <h2>Task Assignment Management</h2>
+            <el-tag type="info">Review Admin Only</el-tag>
+          </div>
+          <div class="header-actions">
+            <el-button @click="loadReviews">
+              <el-icon><Refresh /></el-icon>
+              Refresh
+            </el-button>
+          </div>
         </div>
       </template>
 
       <!-- Filters -->
-      <el-form :inline="true" class="filter-form">
-        <el-form-item label="Search">
-          <el-input
-            v-model="searchQuery"
-            placeholder="Filter by PR ID, reviewer, or project"
-            clearable
-            style="width: 300px"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-        </el-form-item>
+      <FilterPopover
+        v-model:search-query="searchQuery"
+        v-model:app-filter="appFilter"
+        v-model:project-filter="projectFilter"
+        v-model:pr-user-filter="prUserFilter"
+        v-model:reviewer-filter="reviewerFilter"
+        v-model:scored-filter="scoredFilter"
+        v-model:severity-filter="severityFilter"
+        v-model:status-filter="statusFilter"
+        :app-options="availableApps"
+        :project-options="projects"
+        :pr-user-options="availablePRUsers"
+        :reviewer-options="availableReviewers"
+        :pr-users-loading="prUsersLoading"
+        :reviewers-loading="reviewersLoading"
+        show-project-filter
+        @apply="loadReviews"
+        @reset="handleResetFilters"
+        @search-pr-users="searchPRUsers"
+        @search-reviewers="searchReviewers"
+      />
         
-        <el-form-item label="Project">
-          <el-select v-model="projectFilter" placeholder="All Projects" clearable style="width: 200px" @change="loadReviews">
-            <el-option label="All Projects" value="" />
-            <el-option v-for="proj in projects" :key="proj.project_key" :label="proj.project_name" :value="proj.project_key" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="PR User">
-          <el-input
-            v-model="prUserFilter"
-            placeholder="Filter by PR user"
-            clearable
-            style="width: 180px"
-          />
-        </el-form-item>
-        
-        <el-form-item label="Reviewer">
-          <el-input
-            v-model="reviewerFilter"
-            placeholder="Filter by reviewer"
-            clearable
-            style="width: 180px"
-          />
-        </el-form-item>
-        
-        <el-form-item label="Scored">
-          <el-select v-model="scoredFilter" placeholder="All" clearable style="width: 120px">
-            <el-option label="Scored" value="yes" />
-            <el-option label="Not Scored" value="no" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Severity">
-          <el-select v-model="severityFilter" placeholder="All" clearable style="width: 140px">
-            <el-option label="Critical" value="critical" />
-            <el-option label="High" value="high" />
-            <el-option label="Medium" value="medium" />
-            <el-option label="Low" value="low" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="PR Status">
-          <el-select v-model="statusFilter" placeholder="All Status" clearable style="width: 150px" @change="loadReviews">
-            <el-option label="Open" value="open" />
-            <el-option label="Merged" value="merged" />
-            <el-option label="Closed" value="closed" />
-            <el-option label="Draft" value="draft" />
-          </el-select>
-        </el-form-item>
-
-        <el-form-item>
-          <el-button type="primary" @click="loadReviews">
-            <el-icon><Refresh /></el-icon>
-            Refresh
-          </el-button>
-        </el-form-item>
-      </el-form>
-
       <!-- Reviews Table -->
       <el-table
         :data="displayedReviews"
@@ -90,14 +48,41 @@
         table-layout="auto"
         class="task-assignment-table"
         :header-cell-style="{ textAlign: 'center' }"
-        :cell-style="{ verticalAlign: 'middle' }"
+        :cell-style="getCellStyle"
+        :row-class-name="getRowClassName"
       >
-        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column label="Seq#" width="80">
+          <template #default="{ $index }">
+            {{ (currentPage - 1) * pageSize + $index + 1 }}
+          </template>
+        </el-table-column>
+        
+        <!-- App Name -->
+        <el-table-column label="App Name" width="150">
+          <template #default="{ row }">
+            <el-tag v-if="row.app_name && row.app_name !== 'Unknown'" type="primary" size="small">
+              {{ row.app_name }}
+            </el-tag>
+            <span v-else class="text-secondary">Unknown</span>
+          </template>
+        </el-table-column>
         
         <el-table-column label="PR Info" min-width="220">
           <template #default="{ row }">
             <div class="pr-info" :title="`${row.pull_request_id} | ${row.project_key}/${row.repository_slug}`">
-              <div class="pr-id">{{ row.pull_request_id }}</div>
+              <div class="pr-id">
+                <a 
+                  v-if="getPrUrl(row)" 
+                  :href="getPrUrl(row) || undefined" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  class="pr-link"
+                >
+                  {{ row.pull_request_id }}
+                  <el-icon style="margin-left: 4px; font-size: 0.85em;"><Link /></el-icon>
+                </a>
+                <span v-else>{{ row.pull_request_id }}</span>
+              </div>
               <div class="pr-project">{{ row.project_key }}/{{ row.repository_slug }}</div>
             </div>
           </template>
@@ -127,16 +112,21 @@
         <el-table-column label="Reviewers" min-width="260">
           <template #default="{ row }">
             <div class="reviewers-list">
-              <el-tag
+              <el-tooltip
                 v-for="reviewer in row.reviewers"
                 :key="reviewer.id"
-                :type="getReviewerTagType(reviewer.assignment_status)"
-                size="small"
-                style="margin: 2px"
+                :content="getAssignmentStatusDescription(reviewer.assignment_status)"
+                placement="top"
               >
-                {{ reviewer.reviewer }}
-                <span v-if="reviewer.assignment_status === 'completed'" class="status-icon">✓</span>
-              </el-tag>
+                <el-tag
+                  :type="getReviewerTagType(reviewer.assignment_status)"
+                  size="small"
+                  style="margin: 2px; cursor: help"
+                >
+                  {{ reviewer.reviewer }}
+                  <span v-if="reviewer.assignment_status === 'completed'" class="status-icon">✓</span>
+                </el-tag>
+              </el-tooltip>
               <el-button
                 v-if="row.reviewers.length === 0"
                 type="primary"
@@ -249,7 +239,7 @@
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
-        :total="displayedTotal"
+        :total="total"
         :page-sizes="[10, 20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
         @size-change="loadReviews"
@@ -323,27 +313,56 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, ArrowUp, Refresh, Search } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, Refresh, Search, Link } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
 import { projectsApi, type ProjectSummary } from '@/api/projects'
+import { projectRegistryApi } from '@/api/projectRegistry'
+import type { AppInfo } from '@/api/projectRegistry'
+import FilterPopover from '@/components/common/FilterPopover.vue'
+import { usePrUrl } from '@/composables/usePrUrl'
 
 const router = useRouter()
+const { t } = useI18n()
+const { getPrUrl } = usePrUrl()
+
+// Responsive page size calculation
+const calculatePageSize = () => {
+  const windowHeight = window.innerHeight
+  // Reserve space for header, filters, pagination, and margins (~400px)
+  const availableHeight = windowHeight - 400
+  const rowHeight = 52 // Average row height in pixels
+  return Math.max(10, Math.min(100, Math.floor(availableHeight / rowHeight)))
+}
+
+const pageSize = ref(calculatePageSize())
+
+// Update page size on window resize
+const handleResize = () => {
+  pageSize.value = calculatePageSize()
+}
 
 // State
 const loading = ref(false)
 const allReviews = ref<ReviewV2[]>([]) // Store all reviews for client-side filtering
+const total = ref(0) // Total count from API
 const currentPage = ref(1)
-const pageSize = ref(20)
 
 // Filters
 const searchQuery = ref('')
 const projectFilter = ref('')
+const appFilter = ref<string[]>([])
+const availableApps = ref<AppInfo[]>([])
 const prUserFilter = ref('')
+const availablePRUsers = ref<ReviewerUser[]>([])
+const prUsersLoading = ref(false)
 const reviewerFilter = ref('')
+const availableReviewers = ref<ReviewerUser[]>([])
+const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
 const statusFilter = ref('')
@@ -364,7 +383,6 @@ const loadingReviewers = ref(false)
 const assignForm = ref({
   reviewer: '',
 })
-const availableReviewers = ref<ReviewerUser[]>([])
 
 // Load reviews
 const loadReviews = async () => {
@@ -374,11 +392,21 @@ const loadReviews = async () => {
       page: currentPage.value,
       page_size: pageSize.value,
     }
+    
+    // Add filter parameters supported by task-assignment API
+    // Note: task-assignment API only supports project_key, reviewer, and status
     if (projectFilter.value) params.project_key = projectFilter.value
+    if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+      params.reviewer = reviewerFilter.value
+    }
     if (statusFilter.value) params.status = statusFilter.value
 
     const response = await taskAssignmentApi.getReviews(params)
-    allReviews.value = response.items // Store all reviews
+    allReviews.value = response.items
+    total.value = response.total
+    
+    // Client-side filtering for unsupported fields (search, app, prUser, scored, severity, unassigned)
+    // Handled automatically by displayedReviews computed property
   } catch (error) {
     console.error('Failed to load reviews:', error)
     ElMessage.error('Failed to load reviews')
@@ -402,10 +430,22 @@ const loadProjects = async () => {
   }
 }
 
+const handleResetFilters = () => {
+  searchQuery.value = ''
+  appFilter.value = []
+  prUserFilter.value = ''
+  reviewerFilter.value = ''
+  scoredFilter.value = ''
+  severityFilter.value = ''
+  statusFilter.value = ''
+  projectFilter.value = ''
+  loadReviews()
+}
+
 const displayedReviews = computed(() => {
   let result = [...allReviews.value]
   
-  // Apply search filter
+  // Apply search filter (text search not supported by backend)
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     result = result.filter(review => {
@@ -418,7 +458,15 @@ const displayedReviews = computed(() => {
     })
   }
   
-  // Apply PR user filter (check from reviewers or metadata)
+  // Apply app name filter (not supported by task-assignment API)
+  if (appFilter.value && appFilter.value.length > 0) {
+    const selectedApps = appFilter.value.map(app => app.toLowerCase())
+    result = result.filter(review => 
+      review.app_name && selectedApps.includes(review.app_name.toLowerCase())
+    )
+  }
+  
+  // Apply PR user filter (not supported by task-assignment API)
   if (prUserFilter.value) {
     const prUser = prUserFilter.value.toLowerCase()
     result = result.filter(review => 
@@ -427,18 +475,15 @@ const displayedReviews = computed(() => {
     )
   }
   
-  // Apply reviewer filter
-  if (reviewerFilter.value) {
-    const reviewer = reviewerFilter.value.toLowerCase()
+  // Apply reviewer filter for unassigned (not supported by backend)
+  if (reviewerFilter.value === '__unassigned__') {
     result = result.filter(review => 
-      review.reviewers?.some(r => 
-        r.reviewer?.toLowerCase().includes(reviewer) ||
-        r.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
-      )
+      !review.reviewers || review.reviewers.length === 0 ||
+      review.reviewers.every(r => !r.reviewer && !r.reviewer_info?.display_name)
     )
   }
   
-  // Apply scored filter (check if has scores in metadata)
+  // Apply scored filter (not supported by backend)
   if (scoredFilter.value === 'yes') {
     result = result.filter(review => 
       review.metadata?.has_scores || review.completed_reviewers > 0
@@ -449,7 +494,7 @@ const displayedReviews = computed(() => {
     )
   }
   
-  // Apply severity filter (check AI suggestions)
+  // Apply severity filter (not supported by backend)
   if (severityFilter.value) {
     const targetSeverity = severityFilter.value
     result = result.filter(review => {
@@ -536,6 +581,11 @@ const getReviewerTagType = (status: string) => {
   }
 }
 
+// Get assignment status description
+const getAssignmentStatusDescription = (status: string) => {
+  return t(`reviews.assignment_status_descriptions.${status}`, status)
+}
+
 // Get progress percentage
 const getProgressPercentage = (row: ReviewV2) => {
   if (row.total_reviewers === 0) return 0
@@ -598,6 +648,39 @@ const handleAssignReviewer = async (review: ReviewV2) => {
   await loadAvailableReviewers(review)
 }
 
+// Determine if a review is unassigned (no reviewers or all pending)
+const isUnassigned = (review: ReviewV2): boolean => {
+  // No reviewers at all
+  if (!review.reviewers || review.reviewers.length === 0) {
+    return true
+  }
+  
+  // All reviewers are in 'pending' status
+  const hasActiveReviewers = review.reviewers.some(
+    r => r.assignment_status !== 'pending'
+  )
+  return !hasActiveReviewers
+}
+
+// Get row class name for styling unassigned tasks
+const getRowClassName = ({ row }: { row: ReviewV2 }): string => {
+  return isUnassigned(row) ? 'unassigned-row' : ''
+}
+
+// Get cell style - applies inline styles to override stripe pattern
+const getCellStyle = ({ row }: { row: ReviewV2 }) => {
+  if (!isUnassigned(row)) return { verticalAlign: 'middle' }
+  
+  // Use amber colors per project specification for "needs attention" status
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+  
+  // Amber-100 for light theme, Amber-800 for dark theme (better contrast with light text)
+  return {
+    verticalAlign: 'middle',
+    backgroundColor: isDark ? '#78350f' : '#fef3c7',
+  }
+}
+
 // Submit assignment
 const submitAssignment = async () => {
   if (!assignForm.value.reviewer || !selectedReview.value) return
@@ -618,9 +701,107 @@ const submitAssignment = async () => {
   }
 }
 
+// Fetch available apps for filter dropdown
+const loadAvailableApps = async () => {
+  try {
+    const apps = await projectRegistryApi.listApps()
+    availableApps.value = apps
+  } catch (error) {
+    console.error('Failed to load available apps:', error)
+  }
+}
+
+// Load all users for PR user filter dropdown
+const loadPRUsers = async () => {
+  try {
+    prUsersLoading.value = true
+    const users = await usersApi.getAllBitbucketUsers(500)
+    availablePRUsers.value = users
+  } catch (error) {
+    console.error('Failed to load PR users:', error)
+  } finally {
+    prUsersLoading.value = false
+  }
+}
+
+// Search PR users remotely as user types
+const searchPRUsers = async (query: string) => {
+  if (!query) {
+    await loadPRUsers()
+    return
+  }
+  
+  try {
+    prUsersLoading.value = true
+    // Use backend username filtering for better performance
+    const users = await usersApi.getAllBitbucketUsers(500, query)
+    availablePRUsers.value = users
+  } catch (error) {
+    console.error('Failed to search PR users:', error)
+  } finally {
+    prUsersLoading.value = false
+  }
+}
+
+// Load all users for reviewer filter dropdown
+const loadReviewers = async () => {
+  try {
+    reviewersLoading.value = true
+    const users = await usersApi.getAllBitbucketUsers(500)
+    availableReviewers.value = users
+  } catch (error) {
+    console.error('Failed to load users:', error)
+  } finally {
+    reviewersLoading.value = false
+  }
+}
+
+// Search reviewers remotely as user types
+const searchReviewers = async (query: string) => {
+  if (!query) {
+    await loadReviewers()
+    return
+  }
+  
+  try {
+    reviewersLoading.value = true
+    // Use backend username filtering for better performance
+    const users = await usersApi.getAllBitbucketUsers(500, query)
+    availableReviewers.value = users
+  } catch (error) {
+    console.error('Failed to search users:', error)
+  } finally {
+    reviewersLoading.value = false
+  }
+}
+
+// Watch for filter changes and reload data
+watch(
+  [searchQuery, appFilter, projectFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter],
+  () => {
+    // Debounce the reload to avoid multiple rapid requests
+    clearTimeout(filterChangeTimeout)
+    filterChangeTimeout = setTimeout(() => {
+      loadReviews()
+    }, 300)
+  },
+  { deep: true }
+)
+
+let filterChangeTimeout: ReturnType<typeof setTimeout>
+
 onMounted(() => {
+  window.addEventListener('resize', handleResize)
   loadProjects()
   loadReviews()
+  loadAvailableApps()
+  loadPRUsers()
+  loadReviewers()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  clearTimeout(filterChangeTimeout)
 })
 </script>
 
@@ -635,8 +816,26 @@ onMounted(() => {
   align-items: center;
 }
 
-.filter-form {
-  margin-bottom: 20px;
+.header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-title-group h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-section {
+  margin-bottom: 16px;
 }
 
 .task-assignment-table :deep(th.el-table__cell) {
@@ -716,6 +915,20 @@ onMounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* PR Link Styles */
+.pr-id .pr-link {
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pr-id .pr-link:hover {
+  opacity: 0.7;
+  text-decoration: underline;
 }
 
 .pr-project {
@@ -801,5 +1014,15 @@ onMounted(() => {
 .empty-reviewers {
   color: var(--el-text-color-secondary);
   font-size: 13px;
+}
+
+/* Unassigned task row highlighting - backup CSS in case inline styles don't apply */
+/* This ensures coverage even if Element Plus re-renders cells */
+:deep(.task-assignment-table.el-table--striped .el-table__body tr.unassigned-row td.el-table__cell) {
+  background-color: #fef3c7 !important; /* Amber-100 for light theme */
+}
+
+[data-theme='dark'] :deep(.task-assignment-table.el-table--striped .el-table__body tr.unassigned-row td.el-table__cell) {
+  background-color: #78350f !important; /* Amber-800 for dark theme - better contrast with light text */
 }
 </style>

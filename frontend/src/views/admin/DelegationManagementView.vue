@@ -14,11 +14,39 @@
       <!-- Filters -->
       <el-form :inline="true" class="filter-form">
         <el-form-item label="Delegator">
-          <el-input v-model="filters.delegator_id" placeholder="User ID" clearable style="width: 150px" />
+          <el-autocomplete
+            v-model="filters.delegator_username"
+            :fetch-suggestions="filterDelegators"
+            placeholder="Search by username or name..."
+            clearable
+            style="width: 200px"
+            @select="handleSelectDelegator"
+          >
+            <template #default="{ item }">
+              <div class="user-option">
+                <span class="username">{{ item.value }}</span>
+                <span v-if="item.display_name" class="display-name">{{ item.display_name }}</span>
+              </div>
+            </template>
+          </el-autocomplete>
         </el-form-item>
         
         <el-form-item label="Delegatee">
-          <el-input v-model="filters.delegatee_id" placeholder="User ID" clearable style="width: 150px" />
+          <el-autocomplete
+            v-model="filters.delegatee_username"
+            :fetch-suggestions="filterDelegatees"
+            placeholder="Search by username or name..."
+            clearable
+            style="width: 200px"
+            @select="handleSelectDelegatee"
+          >
+            <template #default="{ item }">
+              <div class="user-option">
+                <span class="username">{{ item.value }}</span>
+                <span v-if="item.display_name" class="display-name">{{ item.display_name }}</span>
+              </div>
+            </template>
+          </el-autocomplete>
         </el-form-item>
         
         <el-form-item label="Status">
@@ -54,14 +82,20 @@
           </template>
         </el-table-column>
         <el-table-column prop="resource_type" label="Resource Type" width="120" />
-        <el-table-column label="Delegator" width="120">
+        <el-table-column label="Delegator" width="180">
           <template #default="{ row }">
-            User #{{ row.delegator_id }}
+            <div class="user-info-cell">
+              <div v-if="row.delegator_display_name" class="display-name">{{ row.delegator_display_name }}</div>
+              <div class="username">{{ row.delegator_username || `User ${row.delegator_id}` }}</div>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="Delegatee" width="120">
+        <el-table-column label="Delegatee" width="180">
           <template #default="{ row }">
-            User #{{ row.auth_user_id }}
+            <div class="user-info-cell">
+              <div v-if="row.delegatee_display_name" class="display-name">{{ row.delegatee_display_name }}</div>
+              <div class="username">{{ row.delegatee_username || `User ${row.auth_user_id}` }}</div>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="Status" width="120">
@@ -155,12 +189,19 @@ const showCreateDialog = ref(false)
 const delegationFormRef = ref<InstanceType<typeof DelegationForm>>()
 const pendingDelegationData = ref<any>(null)
 
-const filters = reactive<DelegationListQuery>({
-  delegator_id: undefined,
-  delegatee_id: undefined,
-  status: undefined,
+const filters = reactive({
+  delegator_id: undefined as number | undefined,
+  delegator_username: undefined as string | undefined,
+  delegatee_id: undefined as number | undefined,
+  delegatee_username: undefined as string | undefined,
+  status: undefined as string | undefined,
   include_expired: false,
 })
+
+// User search data
+const allUsers = ref<any[]>([])
+const filteredDelegators = ref<any[]>([])
+const filteredDelegatees = ref<any[]>([])
 
 // Statistics
 const activeCount = computed(() => delegations.value.filter(d => d.delegation_status === 'active').length)
@@ -205,12 +246,82 @@ const getRoleTagType = (roleName: string): 'success' | 'warning' | 'danger' | 'i
   return roleTypes[roleName.toLowerCase()] || 'info'
 }
 
+// Load all users for autocomplete
+const loadUsers = async () => {
+  try {
+    const response = await fetch('/api/v1/users')
+    if (response.ok) {
+      const data = await response.json()
+      // Ensure allUsers is always an array
+      allUsers.value = Array.isArray(data) ? data : []
+    } else {
+      console.error('Failed to fetch users:', response.status)
+      allUsers.value = []
+    }
+  } catch (error) {
+    console.error('Failed to load users:', error)
+    allUsers.value = []
+  }
+}
+
+// Filter users for delegator autocomplete
+const filterDelegators = (queryString: string, cb: any) => {
+  // Ensure allUsers.value is an array
+  const users = Array.isArray(allUsers.value) ? allUsers.value : []
+  
+  const results = queryString
+    ? users.filter(user => 
+        user.username.toLowerCase().includes(queryString.toLowerCase()) ||
+        (user.display_name && user.display_name.toLowerCase().includes(queryString.toLowerCase()))
+      )
+    : users
+  
+  cb(results.map(user => ({
+    value: user.username,
+    id: user.id,
+    display_name: user.display_name,
+    label: user.display_name ? `${user.display_name} (${user.username})` : user.username,
+  })))
+}
+
+// Filter users for delegatee autocomplete
+const filterDelegatees = (queryString: string, cb: any) => {
+  // Ensure allUsers.value is an array
+  const users = Array.isArray(allUsers.value) ? allUsers.value : []
+  
+  const results = queryString
+    ? users.filter(user => 
+        user.username.toLowerCase().includes(queryString.toLowerCase()) ||
+        (user.display_name && user.display_name.toLowerCase().includes(queryString.toLowerCase()))
+      )
+    : users
+  
+  cb(results.map(user => ({
+    value: user.username,
+    id: user.id,
+    display_name: user.display_name,
+    label: user.display_name ? `${user.display_name} (${user.username})` : user.username,
+  })))
+}
+
+// Handle delegator selection
+const handleSelectDelegator = (item: any) => {
+  filters.delegator_username = item.value
+}
+
+// Handle delegatee selection
+const handleSelectDelegatee = (item: any) => {
+  filters.delegatee_username = item.value
+}
+
 const loadDelegations = async () => {
   loading.value = true
   try {
     const params: DelegationListQuery = {
-      delegator_id: filters.delegator_id ? Number(filters.delegator_id) : undefined,
-      delegatee_id: filters.delegatee_id ? Number(filters.delegatee_id) : undefined,
+      delegator_id: filters.delegator_id,
+      delegator_username: filters.delegator_username,
+      delegatee_id: filters.delegatee_id,
+      delegatee_username: filters.delegatee_username,
       status: filters.status || undefined,
       include_expired: filters.include_expired,
     }
@@ -224,9 +335,13 @@ const loadDelegations = async () => {
 
 const resetFilters = () => {
   filters.delegator_id = undefined
+  filters.delegator_username = undefined
   filters.delegatee_id = undefined
+  filters.delegatee_username = undefined
   filters.status = undefined
   filters.include_expired = false
+  filteredDelegators.value = []
+  filteredDelegatees.value = []
   loadDelegations()
 }
 
@@ -283,6 +398,7 @@ const handleConfirmCreate = async () => {
 
 onMounted(() => {
   loadDelegations()
+  loadUsers()
 })
 </script>
 
@@ -320,5 +436,36 @@ onMounted(() => {
   color: var(--el-text-color-primary);
   font-size: 24px;
   font-weight: bold;
+}
+
+.user-info-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.user-info-cell .display-name {
+  font-weight: bold;
+}
+
+.user-info-cell .username {
+  color: var(--el-text-color-secondary);
+}
+
+.user-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-option .username {
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.user-option .display-name {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 </style>

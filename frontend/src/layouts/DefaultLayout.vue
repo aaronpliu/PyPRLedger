@@ -16,13 +16,13 @@
               style="border: none"
               aria-label="Main menu"
             >
-              <el-menu-item index="/">Dashboard</el-menu-item>
-              <el-menu-item index="/reviews">Reviews</el-menu-item>
-              <el-menu-item v-if="isAdmin" index="/task-assignment">Task Assignment</el-menu-item>
+              <el-menu-item index="/">{{ t('menu.dashboard') }}</el-menu-item>
+              <el-menu-item index="/reviews">{{ t('menu.reviews') }}</el-menu-item>
+              <el-menu-item v-if="isAdmin" index="/task-assignment">{{ t('menu.taskAssignment') }}</el-menu-item>
               <el-sub-menu index="/scores">
-                <template #title>Scores</template>
-                <el-menu-item index="/scores">Score List</el-menu-item>
-                <el-menu-item index="/scores/analytics">Analytics</el-menu-item>
+                <template #title>{{ t('menu.scores') }}</template>
+                <el-menu-item index="/scores">{{ t('menu.scoreList') }}</el-menu-item>
+                <el-menu-item index="/scores/analytics">{{ t('menu.analytics') }}</el-menu-item>
               </el-sub-menu>
             </el-menu>
           </nav>
@@ -67,6 +67,10 @@
             <template #dropdown>
               <el-dropdown-menu role="menu" aria-label="User options">
                 <el-dropdown-item command="profile" role="menuitem">{{ t('common.profile') }}</el-dropdown-item>
+                <el-dropdown-item v-if="isSystemAdmin" command="admin" role="menuitem">
+                  <el-icon><Lock /></el-icon>
+                  {{ t('menu.adminPanel') }}
+                </el-dropdown-item>
                 <el-dropdown-item command="logout" divided role="menuitem">{{ t('common.logout') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -77,29 +81,26 @@
 
     <!-- Main content -->
     <el-main class="layout-main" role="main">
-      <router-view />
-    </el-main>
-
-    <!-- Footer -->
-    <el-footer class="layout-footer" role="contentinfo">
-      <div class="footer-content">
-        <div class="footer-left">
+      <div class="page-wrapper">
+        <router-view />
+        
+        <!-- Page-level version info (shown at bottom of each page) -->
+        <div class="page-version-info">
           <span class="copyright">{{ COPYRIGHT }}</span>
-        </div>
-        <div class="footer-right">
+          <span class="version-separator">|</span>
           <span class="version-info">
             UI v{{ UI_VERSION }} | API v{{ apiVersion }}
           </span>
         </div>
       </div>
-    </el-footer>
+    </el-main>
   </el-container>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { User, ArrowDown } from '@element-plus/icons-vue'
+import { User, ArrowDown, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -150,12 +151,20 @@ const isAdmin = computed(() => {
   return userRoles.includes('review_admin') || userRoles.includes('system_admin')
 })
 
+// Check if user is system_admin (only for accessing /myadmin)
+const isSystemAdmin = computed(() => {
+  const userRoles = authStore.user?.roles || []
+  return userRoles.includes('system_admin')
+})
+
 const handleCommand = (command: string) => {
   if (command === 'logout') {
     authStore.logout()
     ElMessage.success(t('auth.logout_success'))
   } else if (command === 'profile') {
     router.push('/profile')
+  } else if (command === 'admin') {
+    router.push('/myadmin')
   }
 }
 
@@ -230,30 +239,37 @@ const handleLanguageChange = (lang: string) => {
 .layout-main {
   padding: 20px;
   background: var(--el-bg-color-page);
-}
-
-.layout-footer {
-  height: 40px;
-  padding: 0 20px;
-  background: var(--el-bg-color);
-  border-top: 1px solid var(--el-border-color);
-}
-
-.footer-content {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 100%;
+  flex-direction: column;
+  min-height: calc(100vh - 60px); /* Subtract header height */
+}
+
+.page-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.page-version-info {
+  margin-top: auto;
+  padding-top: 20px;
+  text-align: center;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+  opacity: 0.7;
 }
 
 .copyright {
   font-weight: 500;
 }
 
+.version-separator {
+  margin: 0 8px;
+  opacity: 0.5;
+}
+
 .version-info {
   font-family: monospace;
-  opacity: 0.8;
 }
 </style>

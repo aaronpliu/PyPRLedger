@@ -654,14 +654,18 @@ class RBACService:
         self,
         delegator_id: int | None = None,
         delegatee_id: int | None = None,
+        delegator_username: str | None = None,
+        delegatee_username: str | None = None,
         status: str | None = None,
         include_expired: bool = False,
     ) -> list[dict]:
         """Get delegation list with filters
 
         Args:
-            delegator_id: Filter by delegator
-            delegatee_id: Filter by delegatee
+            delegator_id: Filter by delegator user ID
+            delegatee_id: Filter by delegatee user ID
+            delegator_username: Filter by delegator username (partial match)
+            delegatee_username: Filter by delegatee username (partial match)
             status: Filter by status (active/expired/revoked/pending)
             include_expired: Include expired/revoked delegations
 
@@ -680,6 +684,27 @@ class RBACService:
             stmt = stmt.where(UserRoleAssignment.delegator_id == delegator_id)
         if delegatee_id:
             stmt = stmt.where(UserRoleAssignment.auth_user_id == delegatee_id)
+
+        # Handle username-based filtering
+        if delegator_username or delegatee_username:
+            # Join with AuthUser to filter by username
+            stmt = stmt.join(AuthUser, UserRoleAssignment.delegator_id == AuthUser.id, isouter=True)
+
+            if delegator_username:
+                stmt = stmt.where(AuthUser.username.ilike(f"%{delegator_username}%"))
+
+            if delegatee_username:
+                # Need another join for delegatee
+                from sqlalchemy.orm import aliased
+
+                delegatee_auth_user = aliased(AuthUser)
+                stmt = stmt.join(
+                    delegatee_auth_user,
+                    UserRoleAssignment.auth_user_id == delegatee_auth_user.id,
+                    isouter=True,
+                )
+                stmt = stmt.where(delegatee_auth_user.username.ilike(f"%{delegatee_username}%"))
+
         if status:
             stmt = stmt.where(UserRoleAssignment.delegation_status == status)
 
@@ -698,20 +723,36 @@ class RBACService:
             user_ids.add(assignment.delegator_id)
             user_ids.add(assignment.auth_user_id)  # delegatee
 
-        # Fetch usernames in batch
-        username_map = {}
+        # Fetch usernames and display_names in batch
+        # AuthUser doesn't have display_name, so we need to join with User table
+        user_info_map = {}
         if user_ids:
-            user_stmt = select(AuthUser).where(AuthUser.id.in_(user_ids))
+            # Join AuthUser with User to get display_name
+            from src.models.user import User as BitbucketUser
+
+            user_stmt = (
+                select(AuthUser, BitbucketUser)
+                .outerjoin(BitbucketUser, AuthUser.user_id == BitbucketUser.id)
+                .where(AuthUser.id.in_(user_ids))
+            )
             user_result = await self.db.execute(user_stmt)
-            users = user_result.scalars().all()
-            username_map = {user.id: user.username for user in users}
+            user_pairs = user_result.all()
+
+            for auth_user, bitbucket_user in user_pairs:
+                user_info_map[auth_user.id] = {
+                    "username": auth_user.username,
+                    "display_name": bitbucket_user.display_name if bitbucket_user else "",
+                }
 
         return [
             {
                 "id": assignment.id,
                 "auth_user_id": assignment.auth_user_id,  # delegatee
-                "delegatee_username": username_map.get(
-                    assignment.auth_user_id, f"User {assignment.auth_user_id}"
+                "delegatee_username": user_info_map.get(assignment.auth_user_id, {}).get(
+                    "username", f"User {assignment.auth_user_id}"
+                ),
+                "delegatee_display_name": user_info_map.get(assignment.auth_user_id, {}).get(
+                    "display_name", ""
                 ),
                 "role_id": assignment.role_id,
                 "role_name": role.name,
@@ -719,8 +760,11 @@ class RBACService:
                 "resource_id": assignment.resource_id,
                 "granted_by": assignment.granted_by,
                 "delegator_id": assignment.delegator_id,
-                "delegator_username": username_map.get(
-                    assignment.delegator_id, f"User {assignment.delegator_id}"
+                "delegator_username": user_info_map.get(assignment.delegator_id, {}).get(
+                    "username", f"User {assignment.delegator_id}"
+                ),
+                "delegator_display_name": user_info_map.get(assignment.delegator_id, {}).get(
+                    "display_name", ""
                 ),
                 "is_delegated": assignment.is_delegated,
                 "delegation_status": assignment.delegation_status,
@@ -767,6 +811,41 @@ class RBACService:
         if count > 0:
             await self.db.commit()
             logger.info(f"Marked {count} delegations as expired")
+
+        return count
+
+    async def activate_pending_delegations(self) -> int:
+        """Activate pending delegations whose start time has been reached
+
+        This should be called periodically (e.g., via background task) to mark
+        pending delegations as 'active' when their starts_at time is reached.
+
+        Returns:
+            Number of delegations activated
+        """
+        from datetime import UTC
+        from datetime import datetime as dt
+
+        now = dt.now(UTC)
+
+        stmt = select(UserRoleAssignment).where(
+            and_(
+                UserRoleAssignment.is_delegated == True,
+                UserRoleAssignment.delegation_status == "pending",
+                UserRoleAssignment.starts_at <= now,
+            )
+        )
+        result = await self.db.execute(stmt)
+        pending_assignments = result.scalars().all()
+
+        count = 0
+        for assignment in pending_assignments:
+            assignment.delegation_status = "active"
+            count += 1
+
+        if count > 0:
+            await self.db.commit()
+            logger.info(f"Activated {count} pending delegations")
 
         return count
 

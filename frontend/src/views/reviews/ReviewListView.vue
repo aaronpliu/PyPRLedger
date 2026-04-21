@@ -3,7 +3,10 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <h2>Code Reviews</h2>
+          <div class="header-title-group">
+            <h2>Code Reviews</h2>
+            <el-tag type="success" effect="dark" size="small" class="ai-badge">AI-Powered</el-tag>
+          </div>
           <div class="header-actions">
             <ExportMenu
               :data="reviews"
@@ -17,107 +20,25 @@
         </div>
       </template>
 
-      <!-- Info Banner -->
-      <div class="info-banner">
-        <div class="banner-icon">
-          <el-icon :size="24"><Cpu /></el-icon>
-        </div>
-        <div class="banner-content">
-          <div class="banner-title">AI-Powered PR Reviews</div>
-          <div class="banner-description">
-            Pull request reviews are automatically collected from Bitbucket webhooks and analyzed by AI. 
-            You can view reviews and add/update scores based on your permissions.
-          </div>
-        </div>
-        <div class="banner-badge">
-          <el-tag type="success" effect="dark" size="small">Automated</el-tag>
-        </div>
-      </div>
-
       <!-- Filters -->
-      <FilterBuilder
-        v-show="showAdvancedFilters"
-        :available-fields="filterFields"
-        @filters-change="handleFiltersChange"
-        @apply-preset="handleApplyPreset"
+      <FilterPopover
+        v-model:search-query="searchQuery"
+        v-model:app-filter="appFilter"
+        v-model:pr-user-filter="prUserFilter"
+        v-model:reviewer-filter="reviewerFilter"
+        v-model:scored-filter="scoredFilter"
+        v-model:severity-filter="severityFilter"
+        v-model:status-filter="statusFilter"
+        :app-options="availableApps"
+        :pr-user-options="availablePRUsers"
+        :reviewer-options="availableReviewers"
+        :pr-users-loading="prUsersLoading"
+        :reviewers-loading="reviewersLoading"
+        @apply="applyFilters"
+        @reset="handleResetFilters"
+        @search-pr-users="searchPRUsers"
+        @search-reviewers="searchReviewers"
       />
-      
-      <!-- Toggle Advanced Filters Button -->
-      <div style="margin-bottom: 16px;">
-        <el-button 
-          size="small" 
-          @click="showAdvancedFilters = !showAdvancedFilters"
-          :type="showAdvancedFilters ? 'primary' : ''"
-        >
-          <el-icon><Search /></el-icon>
-          {{ showAdvancedFilters ? 'Hide' : 'Show' }} Advanced Filters
-          <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-        </el-button>
-        <el-tag v-if="advancedFilters.length > 0" type="success" style="margin-left: 8px;">
-          {{ advancedFilters.length }} filter{{ advancedFilters.length > 1 ? 's' : '' }} active
-        </el-tag>
-      </div>
-
-      <el-form :inline="true" class="filter-form">
-        <el-form-item label="Search">
-          <el-input
-            v-model="searchQuery"
-            placeholder="Filter by PR ID, reviewer, or project"
-            clearable
-            style="width: 300px"
-            @input="handleSearch"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-        </el-form-item>
-        
-        <el-form-item label="PR User">
-          <el-input
-            v-model="prUserFilter"
-            placeholder="Filter by PR user"
-            clearable
-            style="width: 180px"
-            @input="applyFilters"
-          />
-        </el-form-item>
-        
-        <el-form-item label="Reviewer">
-          <el-input
-            v-model="reviewerFilter"
-            placeholder="Filter by reviewer"
-            clearable
-            style="width: 180px"
-            @input="applyFilters"
-          />
-        </el-form-item>
-        
-        <el-form-item label="Scored">
-          <el-select v-model="scoredFilter" placeholder="All" clearable style="width: 120px" @change="applyFilters">
-            <el-option label="Scored" value="yes" />
-            <el-option label="Not Scored" value="no" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="Severity">
-          <el-select v-model="severityFilter" placeholder="All" clearable style="width: 140px" @change="applyFilters">
-            <el-option label="Critical" value="critical" />
-            <el-option label="High" value="high" />
-            <el-option label="Medium" value="medium" />
-            <el-option label="Low" value="low" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="PR Status">
-          <el-select v-model="statusFilter" placeholder="All Status" clearable style="width: 150px" @change="loadReviews">
-            <el-option label="Open" value="open" />
-            <el-option label="Merged" value="merged" />
-            <el-option label="Closed" value="closed" />
-            <el-option label="Draft" value="draft" />
-          </el-select>
-        </el-form-item>
-      </el-form>
 
       <!-- Bulk Actions Toolbar -->
       <div v-if="selectedReviews.length > 0" class="bulk-actions-toolbar">
@@ -167,12 +88,34 @@
           </template>
         </el-table-column>
         
+        <!-- App Name -->
+        <el-table-column label="App Name" width="150">
+          <template #default="{ row }">
+            <el-tag v-if="row.app_name && row.app_name !== 'Unknown'" type="primary" size="small">
+              {{ row.app_name }}
+            </el-tag>
+            <span v-else class="text-secondary">Unknown</span>
+          </template>
+        </el-table-column>
+        
         <!-- PR Info Group -->
         <el-table-column label="PR Info" min-width="200">
           <template #default="{ row }">
             <div class="pr-info-cell">
               <div class="pr-id">
-                <el-tag size="small" type="info">{{ row.pull_request_id }}</el-tag>
+                <a 
+                  v-if="getPrUrl(row)" 
+                  :href="getPrUrl(row) || undefined" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  class="pr-link"
+                >
+                  <el-tag size="small" type="info" effect="plain">
+                    {{ row.pull_request_id }}
+                    <el-icon style="margin-left: 4px;"><Link /></el-icon>
+                  </el-tag>
+                </a>
+                <el-tag v-else size="small" type="info">{{ row.pull_request_id }}</el-tag>
                 <span v-if="row.pull_request_commit_id" class="commit-id">
                   🔖 {{ row.pull_request_commit_id.substring(0, 8) }}
                 </span>
@@ -210,7 +153,12 @@
         <el-table-column label="Reviewer" width="200">
           <template #default="{ row }">
             <div>
-              <div>{{ row.reviewer_info?.display_name || row.reviewer || 'Unassigned' }}</div>
+              <div v-if="row.reviewer || row.reviewer_info?.display_name">
+                {{ row.reviewer_info?.display_name || row.reviewer }}
+              </div>
+              <el-tag v-else type="warning" effect="dark" size="small">
+                ⚠️ Unassigned
+              </el-tag>
               <div class="text-secondary" style="font-size: 0.8rem;">
                 {{ row.source_filename ? '📄 File-level' : '📋 PR-level' }}
               </div>
@@ -344,22 +292,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu } from '@element-plus/icons-vue'
+import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu, Link } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
-import FilterBuilder from '@/components/common/FilterBuilder.vue'
+import FilterPopover from '@/components/common/FilterPopover.vue'
 import ExportMenu from '@/components/common/ExportMenu.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useReviewNavigationStore } from '@/stores/reviewNavigation'
+import { projectRegistryApi } from '@/api/projectRegistry'
+import type { AppInfo } from '@/api/projectRegistry'
+import { usersApi, type ReviewerUser } from '@/api/users'
+import { usePrUrl } from '@/composables/usePrUrl'
 
 const router = useRouter()
 const { hasPermission } = usePermission()
 const reviewNavigationStore = useReviewNavigationStore()
+const { getPrUrl } = usePrUrl()
+
+// Responsive page size calculation
+const calculatePageSize = () => {
+  const windowHeight = window.innerHeight
+  // Reserve space for header, filters, pagination, and margins (~400px)
+  const availableHeight = windowHeight - 400
+  const rowHeight = 52 // Average row height in pixels
+  return Math.max(10, Math.min(100, Math.floor(availableHeight / rowHeight)))
+}
+
+const pageSize = ref(calculatePageSize())
+
+// Update page size on window resize
+const handleResize = () => {
+  pageSize.value = calculatePageSize()
+}
 
 // Check if user is review admin
 const isReviewAdmin = computed(() => hasPermission('assign', 'reviews'))
@@ -367,15 +336,18 @@ const loading = ref(false)
 const reviews = ref<Review[]>([])
 const total = ref(0)
 const currentPage = ref(1)
-const pageSize = ref(20)
 const searchQuery = ref('')
 const statusFilter = ref('')
+const appFilter = ref<string[]>([])
+const availableApps = ref<AppInfo[]>([])
 const prUserFilter = ref('')
+const availablePRUsers = ref<ReviewerUser[]>([])
+const prUsersLoading = ref(false)
 const reviewerFilter = ref('')
+const availableReviewers = ref<ReviewerUser[]>([])
+const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
-const advancedFilters = ref<Filter[]>([])
-const showAdvancedFilters = ref(false)
 const tableRef = ref()
 
 // Bulk operation state
@@ -393,18 +365,6 @@ const totalCount = ref(0)
 // Task assignment state - REMOVED: Use Task Assignment page instead
 // const reviewers = ref<any[]>([])
 // const batchReviewerUsername = ref('')
-
-// Filter fields configuration
-const filterFields = [
-  { label: 'PR ID', value: 'pull_request_id' },
-  { label: 'PR User', value: 'pull_request_user' },
-  { label: 'Project Key', value: 'project_key' },
-  { label: 'Reviewer', value: 'reviewer' },
-  { label: 'PR Status', value: 'pull_request_status' },
-  { label: 'Created Date', value: 'created_date' },
-  { label: 'Updated Date', value: 'updated_date' },
-  { label: 'Summary', value: 'reviewer_comments' },
-]
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
@@ -426,15 +386,31 @@ const getStatusType = (status: string) => {
 const loadReviews = async () => {
   loading.value = true
   try {
-    const data = await reviewsApi.getReviews({
+    const params: any = {
       page: currentPage.value,
       page_size: pageSize.value,
-    })
+    }
+    
+    // Add filter parameters for server-side filtering (only supported fields)
+    if (appFilter.value && appFilter.value.length > 0) params.app_names = appFilter.value.join(',')
+    if (prUserFilter.value) params.pull_request_user = prUserFilter.value
+    if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+      params.reviewer = reviewerFilter.value
+    }
+    if (statusFilter.value) params.pull_request_status = statusFilter.value
+
+    console.log('Loading reviews with params:', params)
+    const data = await reviewsApi.getReviews(params)
+    console.log('Reviews loaded:', data.items.length, 'items')
     allReviews.value = data.items
     total.value = data.total
+    
+    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned reviewer)
     applyFilters()
-  } catch (error) {
-    ElMessage.error('Failed to load reviews')
+  } catch (error: any) {
+    console.error('Failed to load reviews:', error)
+    console.error('Error details:', error.response?.data || error.message)
+    ElMessage.error(`Failed to load reviews: ${error.response?.data?.detail || error.message}`)
   } finally {
     loading.value = false
   }
@@ -444,7 +420,14 @@ const loadReviews = async () => {
 const allReviews = ref<Review[]>([])
 const filteredReviews = ref<Review[]>([])
 
-const handleSearch = () => {
+const handleResetFilters = () => {
+  searchQuery.value = ''
+  appFilter.value = []
+  prUserFilter.value = ''
+  reviewerFilter.value = ''
+  scoredFilter.value = ''
+  severityFilter.value = ''
+  statusFilter.value = ''
   applyFilters()
 }
 
@@ -474,13 +457,29 @@ const applyFilters = () => {
     )
   }
   
+  // Apply app name filter (multi-select)
+  if (appFilter.value && appFilter.value.length > 0) {
+    const selectedApps = appFilter.value.map(app => app.toLowerCase())
+    result = result.filter(review => 
+      review.app_name && selectedApps.includes(review.app_name.toLowerCase())
+    )
+  }
+  
   // Apply reviewer filter
   if (reviewerFilter.value) {
-    const reviewer = reviewerFilter.value.toLowerCase()
-    result = result.filter(review => 
-      review.reviewer?.toLowerCase().includes(reviewer) ||
-      review.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
-    )
+    // Special handling for unassigned option
+    if (reviewerFilter.value === '__unassigned__') {
+      result = result.filter(review => 
+        !review.reviewer && !review.reviewer_info?.display_name
+      )
+    } else {
+      // Normal text search for assigned reviewers
+      const reviewer = reviewerFilter.value.toLowerCase()
+      result = result.filter(review => 
+        review.reviewer?.toLowerCase().includes(reviewer) ||
+        review.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
+      )
+    }
   }
   
   // Apply scored filter
@@ -514,42 +513,16 @@ const applyFilters = () => {
     result = result.filter(review => review.pull_request_status === statusFilter.value)
   }
   
-  // Apply advanced filters
-  if (advancedFilters.value.length > 0) {
-    result = result.filter(review => {
-      // All advanced filters must match (AND logic)
-      return advancedFilters.value.every(filter => {
-        const fieldValue = (review as any)[filter.field]
-        if (!fieldValue) return false
-        
-        const value = String(fieldValue).toLowerCase()
-        const filterValue = filter.value.toLowerCase()
-        
-        switch (filter.operator) {
-          case 'eq':
-            return value === filterValue
-          case 'neq':
-            return value !== filterValue
-          case 'contains':
-            return value.includes(filterValue)
-          case 'gt':
-            return parseFloat(value) > parseFloat(filter.value)
-          case 'lt':
-            return parseFloat(value) < parseFloat(filter.value)
-          case 'in':
-            // Support comma-separated values
-            const values = filter.value.split(',').map(v => v.trim().toLowerCase())
-            return values.includes(value)
-          default:
-            return true
-        }
-      })
-    })
-  }
-  
   filteredReviews.value = result
   reviews.value = result
-  total.value = result.length
+  
+  // Only update total if filters are active (client-side filtering scenario)
+  // Otherwise, keep the API's total count for proper pagination
+  const hasActiveFilters = searchQuery.value || appFilter.value?.length > 0 || prUserFilter.value || reviewerFilter.value || 
+                          scoredFilter.value || severityFilter.value || statusFilter.value
+  if (hasActiveFilters) {
+    total.value = result.length
+  }
 }
 
 const viewReview = (review: Review) => {
@@ -601,24 +574,6 @@ const confirmDelete = async (review: Review) => {
       ElMessage.error('Failed to delete review')
     }
   }
-}
-
-// Filter handlers
-interface Filter {
-  field: string
-  operator: string
-  value: string
-}
-
-const handleFiltersChange = (filters: Filter[]) => {
-  console.log('Advanced filters changed:', filters)
-  advancedFilters.value = filters
-  applyFilters()
-}
-
-const handleApplyPreset = (preset: any) => {
-  console.log('Applied preset:', preset)
-  ElMessage.success(`Applied preset: ${preset.name}`)
 }
 
 // Bulk operation handlers
@@ -755,9 +710,107 @@ const closeProgressDialog = () => {
   showProgressDialog.value = false
 }
 
+// Fetch available apps for filter dropdown
+const loadAvailableApps = async () => {
+  try {
+    const apps = await projectRegistryApi.listApps()
+    availableApps.value = apps
+  } catch (error) {
+    console.error('Failed to load available apps:', error)
+  }
+}
+
+// Load all users for PR User filter dropdown
+const loadPRUsers = async () => {
+  try {
+    prUsersLoading.value = true
+    const users = await usersApi.getAllBitbucketUsers(500)
+    availablePRUsers.value = users
+  } catch (error) {
+    console.error('Failed to load PR users:', error)
+  } finally {
+    prUsersLoading.value = false
+  }
+}
+
+// Search PR users remotely as user types
+const searchPRUsers = async (query: string) => {
+  if (!query) {
+    await loadPRUsers()
+    return
+  }
+  
+  try {
+    prUsersLoading.value = true
+    // Use backend username filtering for better performance
+    const users = await usersApi.getAllBitbucketUsers(500, query)
+    availablePRUsers.value = users
+  } catch (error) {
+    console.error('Failed to search PR users:', error)
+  } finally {
+    prUsersLoading.value = false
+  }
+}
+
+// Load all users for filter dropdown (not just reviewers)
+const loadReviewers = async () => {
+  try {
+    reviewersLoading.value = true
+    const users = await usersApi.getAllBitbucketUsers(500)
+    availableReviewers.value = users
+  } catch (error) {
+    console.error('Failed to load users:', error)
+  } finally {
+    reviewersLoading.value = false
+  }
+}
+
+// Search users remotely as user types
+const searchReviewers = async (query: string) => {
+  if (!query) {
+    await loadReviewers()
+    return
+  }
+  
+  try {
+    reviewersLoading.value = true
+    // Use backend username filtering for better performance
+    const users = await usersApi.getAllBitbucketUsers(500, query)
+    availableReviewers.value = users
+  } catch (error) {
+    console.error('Failed to search users:', error)
+  } finally {
+    reviewersLoading.value = false
+  }
+}
+
+// Watch for filter changes and reload data
+watch(
+  [searchQuery, appFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter],
+  () => {
+    // Debounce the reload to avoid multiple rapid requests
+    clearTimeout(filterChangeTimeout)
+    filterChangeTimeout = setTimeout(() => {
+      loadReviews()
+    }, 300)
+  },
+  { deep: true }
+)
+
+let filterChangeTimeout: ReturnType<typeof setTimeout>
+
 // Load reviews when component mounts
 onMounted(() => {
+  window.addEventListener('resize', handleResize)
   loadReviews()
+  loadAvailableApps()
+  loadPRUsers()
+  loadReviewers()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  clearTimeout(filterChangeTimeout)
 })
 </script>
 
@@ -772,9 +825,19 @@ onMounted(() => {
   align-items: center;
 }
 
+.header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .card-header h2 {
   margin: 0;
   font-size: 20px;
+}
+
+.ai-badge {
+  margin-top: 2px; /* Optional: slight adjustment for vertical alignment */
 }
 
 .header-actions {
@@ -882,7 +945,7 @@ onMounted(() => {
 
 .progress-detail {
   font-size: 14px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 /* PR Info Cell Styles */
@@ -897,6 +960,27 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* PR Link Styles */
+.pr-link {
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+}
+
+.pr-link:hover {
+  opacity: 0.8;
+}
+
+.pr-link :deep(.el-tag) {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pr-link:hover :deep(.el-tag) {
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
 }
 
 .commit-id {
@@ -941,69 +1025,6 @@ onMounted(() => {
 .score-count {
   font-size: 0.85rem;
   color: var(--el-text-color-secondary);
-}
-
-/* Info Banner Styles */
-.info-banner {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
-  background: var(--el-color-info-light-9);
-  border: 1px solid var(--el-color-info-light-7);
-  border-radius: 8px;
-  color: var(--el-text-color-primary);
-  transition: all 0.3s ease;
-}
-
-[data-theme="dark"] .info-banner {
-  background: rgba(64, 158, 255, 0.1);
-  border-color: rgba(64, 158, 255, 0.3);
-}
-
-.info-banner:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-[data-theme="dark"] .info-banner:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.banner-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  background: var(--el-color-info);
-  border-radius: 50%;
-  color: white;
-}
-
-.banner-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.banner-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  color: var(--el-text-color-primary);
-}
-
-.banner-description {
-  font-size: 0.9rem;
-  color: var(--el-text-color-secondary);
-  line-height: 1.5;
-}
-
-.banner-badge {
-  flex-shrink: 0;
 }
 
 /* Dark theme fixes - ensure consistency across all components */

@@ -2,7 +2,7 @@
   <div class="review-detail" v-loading="loading">
     <el-page-header @back="$router.back()" title="Back">
       <template #content>
-        <span class="page-title">Review Details</span>
+        <span class="header-content-title">Review Details</span>
       </template>
       <template #extra>
         <div class="detail-navigation-actions">
@@ -28,10 +28,9 @@
         <el-card class="info-card" shadow="hover">
           <template #header>
             <div class="card-header">
-              <div class="card-title-wrapper" @click="toggleInfoCollapse" style="cursor: pointer; flex: 1;">
+              <div class="card-title-wrapper" @click="toggleInfoCollapse">
                 <el-icon 
                   :class="['collapse-icon', { 'is-collapsed': !isInfoExpanded }]" 
-                  style="margin-right: 8px; transition: transform 0.3s;"
                 >
                   <ArrowDown />
                 </el-icon>
@@ -83,7 +82,19 @@
           <el-collapse-transition>
             <el-descriptions v-if="isInfoExpanded" :column="3" border size="default">
               <el-descriptions-item label="PR ID" label-align="right">
-                <el-tag type="info" size="small">{{ review.pull_request_id }}</el-tag>
+                <a 
+                  v-if="review && getPrUrl(review)" 
+                  :href="getPrUrl(review) || undefined" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  class="pr-link"
+                >
+                  <el-tag type="info" size="small">
+                    {{ review.pull_request_id }}
+                    <el-icon style="margin-left: 4px;"><Link /></el-icon>
+                  </el-tag>
+                </a>
+                <el-tag v-else type="info" size="small">{{ review?.pull_request_id }}</el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="Commit ID" v-if="review.pull_request_commit_id" label-align="right">
                 <el-tag type="success" size="small">{{ review.pull_request_commit_id.substring(0, 8) }}</el-tag>
@@ -143,8 +154,23 @@
           <!-- AI Review Column -->
           <el-col :xs="24" :sm="24" :md="review.ai_suggestions ? 10 : 0" :lg="review.ai_suggestions ? 10 : 0" :xl="review.ai_suggestions ? 9 : 0" v-if="review.ai_suggestions">
             <div class="analysis-column">
-              <div class="analysis-column-header">
-                🤖 AI Review Results
+              <div class="analysis-column-header ai-review-header">
+                <span class="ai-review-title">
+                  🤖 AI Review Result
+                  <el-tag v-if="review.ai_review_id" size="small" type="info" style="margin-left: 8px">
+                    {{ review.ai_review_id }}
+                  </el-tag>
+                </span>
+                <el-button
+                  v-if="review.ai_review_id"
+                  size="small"
+                  text
+                  @click="copyToClipboard(review.ai_review_id!)"
+                  class="copy-ai-id-btn"
+                >
+                  <el-icon><CopyDocument /></el-icon>
+                  Copy ID
+                </el-button>
               </div>
               <div class="analysis-column-body">
                 <AIReviewResults :suggestions="review.ai_suggestions" />
@@ -189,9 +215,37 @@
           </template>
 
           <el-table :data="scores" stripe>
-            <el-table-column prop="reviewer" label="Reviewer" width="150">
+            <el-table-column prop="reviewer" label="Reviewer" width="200">
               <template #default="{ row }">
-                {{ row.reviewer_info?.display_name || row.reviewer }}
+                <div class="reviewer-cell">
+                  <span>{{ row.reviewer_info?.display_name || row.reviewer }}</span>
+                  <el-tag 
+                    v-if="row.reviewer === review?.reviewer" 
+                    size="small" 
+                    type="primary" 
+                    effect="plain"
+                    class="primary-reviewer-badge"
+                  >
+                    Primary Reviewer
+                  </el-tag>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="AI Review ID" min-width="200" align="center">
+              <template #default>
+                <div v-if="review?.ai_review_id" class="ai-review-id-cell">
+                  <el-tag size="small" type="info">
+                    {{ review.ai_review_id }}
+                  </el-tag>
+                  <el-button
+                    size="small"
+                    text
+                    @click="copyToClipboard(review.ai_review_id!)"
+                  >
+                    <el-icon><CopyDocument /></el-icon>
+                  </el-button>
+                </div>
+                <span v-else class="empty-value">N/A</span>
               </template>
             </el-table-column>
             <el-table-column prop="score" label="Score" width="120">
@@ -214,11 +268,11 @@
             <el-table-column label="Actions" width="180">
               <template #default="{ row }">
                 <!-- Update button: 
-                     - review_admin+: can update any score
-                     - reviewer: can only update their own score (hide others')
+                     - reviewer: can only update their own score
+                     - review_admin: CANNOT update others' scores (only delete)
                 -->
                 <el-button 
-                  v-if="canDeleteAnyScore || (hasScorePermissionRole && canEditScore(row))"
+                  v-if="hasScorePermissionRole && canEditScore(row)"
                   size="small" 
                   type="primary" 
                   @click="editScore(row)"
@@ -250,10 +304,12 @@
     <el-dialog 
       v-model="showScoreDialog" 
       :title="editingScore ? 'Update Score' : 'Add Score'" 
-      width="900px"
+      width="1100px"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
       show-close
+      top="5vh"
+      class="score-dialog"
     >
       <!-- Quick Score Buttons -->
       <QuickScoreButtons @select="handleQuickScoreSelect" />
@@ -272,7 +328,7 @@
               <el-icon><User /></el-icon>
             </template>
           </el-input>
-          <div style="font-size: 0.8rem; color: var(--el-text-color-secondary); margin-top: 4px;">
+          <div class="form-item-hint">
             Score will be attributed to your account
           </div>
         </el-form-item>
@@ -300,10 +356,10 @@
             language="en-US"
             preview-theme="vuepress"
             code-theme="atom"
-            style="height: 400px; border-radius: 6px; overflow: hidden;"
+            class="score-md-editor"
             placeholder="Add your comments here... (supports Markdown)"
           />
-          <div class="editor-hint" style="margin-top: 8px;">
+          <div class="editor-hint">
             💡 Supports Markdown formatting. Use the toolbar above or type directly.
           </div>
         </el-form-item>
@@ -322,7 +378,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
@@ -339,11 +395,13 @@ import ScoreRangeGuide from '@/components/review/ScoreRangeGuide.vue'
 import AIReviewResults from '@/components/review/AIReviewResults.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useReviewNavigationStore, type ReviewNavigationItem } from '@/stores/reviewNavigation'
+import { usePrUrl } from '@/composables/usePrUrl'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const reviewNavigationStore = useReviewNavigationStore()
+const { getPrUrl } = usePrUrl()
 const loading = ref(false)
 const addingScore = ref(false)
 const review = ref<Review | null>(null)
@@ -376,15 +434,33 @@ const effectiveReviewerUsername = computed(() => {
   return authStore.currentUser?.git_username || null
 })
 
+// Can create/update score if:
+// 1. User has reviewer+ role AND
+// 2. User has a linked Git username AND
+// 3. Either:
+//    a. User is the assigned reviewer for this review, OR
+//    b. User already has a score for this review (can update their own)
 const canCreateScore = computed(() => {
-  return hasScorePermissionRole.value && !!effectiveReviewerUsername.value && isCurrentReviewAssignedToUser.value
+  if (!hasScorePermissionRole.value || !effectiveReviewerUsername.value) {
+    return false
+  }
+
+  // If user already has a score, they can always update it
+  if (currentUserHasScore.value) {
+    return true
+  }
+
+  // Otherwise, check if user is the assigned reviewer
+  return isCurrentReviewAssignedToUser.value
 })
 
+// Check if current user is assigned as the reviewer for this review
 const isCurrentReviewAssignedToUser = computed(() => {
   if (!review.value || !effectiveReviewerUsername.value) {
     return false
   }
 
+  // Check if user is the assigned reviewer
   return review.value.reviewer === effectiveReviewerUsername.value
 })
 
@@ -401,7 +477,11 @@ const scoreActionDisabledReason = computed(() => {
     return 'This review is visible because you raised the PR, but scoring is only allowed after review admin assigns it to you.'
   }
 
-  return 'You can only score reviews that are assigned to your linked Bitbucket user.'
+  if (!isCurrentReviewAssignedToUser.value && !currentUserHasScore.value) {
+    return 'You can only score reviews that are assigned to your linked Bitbucket user.'
+  }
+
+  return ''
 })
 
 // Check if current user has permission to delete scores
@@ -557,6 +637,14 @@ const lastAutoProgressAssignmentId = ref<number | null>(null)
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
+}
+
+const copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('Copied to clipboard')
+  }).catch(() => {
+    ElMessage.error('Failed to copy to clipboard')
+  })
 }
 
 const getStatusType = (status: string) => {
@@ -944,10 +1032,38 @@ watch(
   min-height: calc(100vh - 60px);
 }
 
-.page-title {
+.header-content-title {
   font-size: 18px;
   font-weight: 600;
   color: var(--el-text-color-primary);
+}
+
+.card-title-wrapper {
+  cursor: pointer;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.collapse-icon {
+  margin-right: 8px;
+  transition: transform 0.3s;
+}
+
+.form-item-hint {
+  font-size: 0.8rem;
+  color: var(--el-text-color-secondary);
+  margin-top: 4px;
+}
+
+.score-md-editor {
+  height: 400px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.editor-hint {
+  margin-top: 8px;
 }
 
 .detail-navigation-actions {
@@ -987,19 +1103,27 @@ watch(
   align-items: center;
 }
 
-.card-title-wrapper {
-  display: flex;
+/* PR Link Styles */
+.pr-link {
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+  display: inline-flex;
   align-items: center;
-  user-select: none;
 }
 
-.collapse-icon {
-  font-size: 16px;
-  color: var(--el-text-color-secondary);
+.pr-link:hover {
+  opacity: 0.8;
 }
 
-.collapse-icon.is-collapsed {
-  transform: rotate(-90deg);
+.pr-link :deep(.el-tag) {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pr-link:hover :deep(.el-tag) {
+  border-color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
 }
 
 .card-title {
@@ -1218,6 +1342,37 @@ watch(
   background-clip: text;
   margin-top: 12px;
   text-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+/* AI Review ID Styles */
+.ai-review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.ai-review-title {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.copy-ai-id-btn {
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.ai-review-id-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.empty-value {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 /* Element Plus enhancements */
@@ -1490,38 +1645,36 @@ watch(
   font-size: 0.75rem;
   color: var(--el-text-color-secondary);
   border-radius: 4px;
-}
-</style>
-
-<style>
-/* Global styles for dark mode descriptions - must be non-scoped */
-[data-theme='dark'] .el-descriptions__cell.is-bordered-content {
-  color: #cbd5e1 !important;
+  margin-top: 8px;
 }
 
-[data-theme='dark'] .el-descriptions__cell.is-bordered-content strong,
-[data-theme='dark'] .el-descriptions__cell.is-bordered-content span:not(.el-tag):not(.el-avatar),
-[data-theme='dark'] .el-descriptions__cell.is-bordered-content div:not([class*="el-"]) {
-  color: #cbd5e1 !important;
+/* Score Dialog Styles */
+.score-dialog :deep(.el-dialog__body) {
+  max-height: calc(90vh - 120px);
+  overflow-y: auto;
+  padding: 20px;
 }
 
-[data-theme='dark'] .summary-text {
-  color: #cbd5e1 !important;
+.score-md-editor {
+  height: 450px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--el-border-color);
 }
 
-/* Force all text nodes to be visible */
-[data-theme='dark'] td.el-descriptions__content {
-  color: #cbd5e1 !important;
+/* Ensure editor content area scrolls properly */
+.score-md-editor :deep(.md-editor-content) {
+  max-height: 380px;
+  overflow-y: auto;
 }
 
-/* Ultimate fallback - target everything */
-[data-theme='dark'] .el-descriptions table tbody tr td {
-  color: #cbd5e1 !important;
-  background-color: #0f172a !important;
+/* Dark theme scrollbar for editor */
+[data-theme='dark'] .score-md-editor :deep(.md-editor-content)::-webkit-scrollbar-thumb {
+  background: #475569;
 }
 
-[data-theme='dark'] .el-descriptions table tbody tr td * {
-  color: inherit !important;
+[data-theme='dark'] .score-md-editor :deep(.md-editor-content)::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
 /* MdEditor global dark mode overrides */
@@ -1530,10 +1683,17 @@ watch(
   --md-color: #cbd5e1 !important;
 }
 
-[data-theme='dark'] .md-editor textarea,
-[data-theme='dark'] .md-editor .md-editor-content,
-[data-theme='dark'] .md-editor .md-editor-preview {
-  background-color: #1e293b !important;
-  color: #cbd5e1 !important;
+/* Reviewer cell with badge */
+.reviewer-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.primary-reviewer-badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  white-space: nowrap;
 }
 </style>

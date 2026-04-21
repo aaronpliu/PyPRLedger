@@ -19,7 +19,8 @@
             placeholder="Search by username or email"
             clearable
             style="width: 300px"
-            @clear="loadUsers"
+            @clear="handleSearchClear"
+            @keyup.enter="loadUsers"
           >
             <template #append>
               <el-button @click="loadUsers">
@@ -42,6 +43,40 @@
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="username" label="Username" width="150" />
         <el-table-column prop="email" label="Email" min-width="200" />
+        <el-table-column label="Roles" min-width="180">
+          <template #default="{ row }">
+            <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+              <el-tag 
+                v-if="row.roles && row.roles.length > 0"
+                v-for="role in row.roles.slice(0, 2)" 
+                :key="role"
+                size="small"
+              >
+                {{ role }}
+              </el-tag>
+              <span v-else class="text-muted">No Role</span>
+              <el-tag 
+                v-if="row.roles && row.roles.length > 2"
+                size="small"
+                type="info"
+              >
+                +{{ row.roles.length - 2 }}
+              </el-tag>
+              
+              <!-- Delegated Role Badge -->
+              <el-tooltip 
+                v-if="hasDelegatedRole(row.id)"
+                content="Has delegated role(s)"
+                placement="top"
+              >
+                <el-tag size="small" type="warning" effect="plain">
+                  <el-icon><Share /></el-icon>
+                  Delegated
+                </el-tag>
+              </el-tooltip>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="is_active" label="Status" width="120">
           <template #default="{ row }">
             <el-tag :type="row.is_active ? 'success' : 'danger'">
@@ -91,7 +126,7 @@
 
     <!-- Create User Dialog -->
     <el-dialog v-model="showCreateDialog" title="Add New User" width="600px">
-      <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="120px">
+      <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="140px" class="user-form">
         <el-form-item label="Username" prop="username">
           <el-input v-model="createForm.username" placeholder="Enter username" />
         </el-form-item>
@@ -110,10 +145,12 @@
       </el-form>
       
       <template #footer>
-        <el-button @click="showCreateDialog = false">Cancel</el-button>
-        <el-button type="primary" :loading="creating" @click="handleCreate">
-          Create User
-        </el-button>
+        <span class="dialog-footer">
+          <el-button @click="showCreateDialog = false">Cancel</el-button>
+          <el-button type="primary" :loading="creating" @click="handleCreate">
+            Create User
+          </el-button>
+        </span>
       </template>
     </el-dialog>
 
@@ -161,9 +198,9 @@
           
           <el-form-item label="Scope">
             <el-radio-group v-model="roleForm.resource_type">
-              <el-radio label="global">Global</el-radio>
-              <el-radio label="project">Project</el-radio>
-              <el-radio label="repository">Repository</el-radio>
+              <el-radio value="global">Global</el-radio>
+              <el-radio value="project">Project</el-radio>
+              <el-radio value="repository">Repository</el-radio>
             </el-radio-group>
           </el-form-item>
           
@@ -190,12 +227,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Plus, Search, Share } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import { rbacApi } from '@/api/rbac'
+import { usersApi } from '@/api/users'
 import type { ResourceType, Role, RoleAssignment } from '@/types'
 
 const { t } = useI18n()
@@ -209,6 +247,9 @@ const searchQuery = ref('')
 const statusFilter = ref<boolean | null>(null)
 const showCreateDialog = ref(false)
 const createFormRef = ref<FormInstance>()
+
+// Delegation tracking
+const usersWithDelegations = ref<Set<number>>(new Set())
 
 // Role management state
 const showRoleDialog = ref(false)
@@ -271,14 +312,59 @@ const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
 }
 
+// Check if user has delegated roles
+const hasDelegatedRole = (userId: number): boolean => {
+  return usersWithDelegations.value.has(userId)
+}
+
+// Load delegation information for a user
+const loadUserDelegations = async (userId: number) => {
+  try {
+    const delegations = await rbacApi.getUserDelegations(userId, 'received', false)
+    // Filter only active delegations (not expired and not revoked)
+    const activeDelegations = delegations.filter(d => 
+      d.is_delegated && 
+      (!d.expires_at || new Date(d.expires_at) > new Date()) &&
+      !d.revoked_at
+    )
+    
+    if (activeDelegations.length > 0) {
+      usersWithDelegations.value.add(userId)
+    } else {
+      usersWithDelegations.value.delete(userId)
+    }
+  } catch (error) {
+    console.error(`Failed to load delegations for user ${userId}:`, error)
+  }
+}
+
+const handleSearchClear = () => {
+  searchQuery.value = ''
+  loadUsers()
+}
+
 const loadUsers = async () => {
   loading.value = true
   try {
-    // TODO: Implement actual API call
-    // For now, using mock data
-    users.value = []
-    total.value = 0
+    // Build filter parameters for server-side filtering
+    const activeFilter = statusFilter.value === null ? undefined : statusFilter.value
+    const usernameFilter = searchQuery.value || undefined
+    
+    // Fetch auth users from backend API with filters
+    const fetchedUsers = await usersApi.getAllUsers(500, activeFilter, usernameFilter)
+    
+    // Apply pagination on the filtered results
+    total.value = fetchedUsers.length
+    const start = (currentPage.value - 1) * pageSize.value
+    const end = start + pageSize.value
+    users.value = fetchedUsers.slice(start, end)
+    
+    // Load delegation information for displayed users
+    await Promise.all(
+      users.value.map(user => loadUserDelegations(user.id))
+    )
   } catch (error) {
+    console.error('Failed to load users:', error)
     ElMessage.error('Failed to load users')
   } finally {
     loading.value = false
@@ -444,5 +530,20 @@ onMounted(() => {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+
+.text-muted {
+  color: #909399;
+  font-size: 13px;
+}
+
+.user-form {
+  padding-right: 20px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 </style>

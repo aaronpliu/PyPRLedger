@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -118,6 +118,459 @@ async def upsert_review(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to upsert review"},
             )
+
+
+# ============================================================================
+# Dashboard Trend Analytics Endpoints
+# ============================================================================
+
+
+@router.get(
+    "/trends/reviewer-activity",
+    response_model=dict,
+    summary="Get reviewer activity trends",
+    description="Get review count trends for current user (assigned + self-raised PRs) over time",
+)
+async def get_reviewer_activity_trends(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    period: str = Query(
+        "weekly", pattern="^(daily|weekly|monthly)$", description="Time period aggregation"
+    ),
+    days: int = Query(90, ge=1, le=365, description="Number of days to look back"),
+) -> dict:
+    """Get review activity trends for current user
+
+    Returns time-series data showing:
+    - Reviews assigned to current user
+    - Self-raised PRs by current user
+    - Total review activity
+    """
+    try:
+        # Calculate date range
+        end_date = datetime.now(UTC)
+        start_date = (
+            end_date.replace(day=end_date.day - days)
+            if end_date.day > days
+            else end_date.replace(month=1, day=1)
+        )
+
+        # Determine date format based on period
+        if period == "daily":
+            date_format = "%Y-%m-%d"
+        elif period == "weekly":
+            date_format = "%Y-W%U"
+        else:  # monthly
+            date_format = "%Y-%m"
+
+        # Get assigned reviews (where current user is reviewer)
+        assigned_query = (
+            select(
+                func.date_format(PullRequestReviewAssignment.created_date, date_format).label(
+                    "date_period"
+                ),
+                func.count(func.distinct(PullRequestReviewAssignment.review_base_id)).label(
+                    "count"
+                ),
+            )
+            .where(
+                PullRequestReviewAssignment.reviewer == current_user.username,
+                PullRequestReviewAssignment.created_date >= start_date,
+                PullRequestReviewAssignment.created_date <= end_date,
+            )
+            .group_by("date_period")
+            .order_by("date_period")
+        )
+
+        assigned_result = await db.execute(assigned_query)
+        assigned_data = assigned_result.all()
+
+        # Get self-raised PRs (where current user is pull_request_user)
+        self_raised_query = (
+            select(
+                func.date_format(PullRequestReviewBase.created_date, date_format).label(
+                    "date_period"
+                ),
+                func.count(func.distinct(PullRequestReviewBase.id)).label("count"),
+            )
+            .where(
+                PullRequestReviewBase.pull_request_user == current_user.username,
+                PullRequestReviewBase.created_date >= start_date,
+                PullRequestReviewBase.created_date <= end_date,
+            )
+            .group_by("date_period")
+            .order_by("date_period")
+        )
+
+        self_raised_result = await db.execute(self_raised_query)
+        self_raised_data = self_raised_result.all()
+
+        # Convert to dict for easier merging
+        assigned_dict = {row.date_period: row.count for row in assigned_data}
+        self_raised_dict = {row.date_period: row.count for row in self_raised_data}
+
+        # Merge all dates and calculate totals
+        all_dates = sorted(set(list(assigned_dict.keys()) + list(self_raised_dict.keys())))
+
+        trends = []
+        for date_period in all_dates:
+            assigned_count = assigned_dict.get(date_period, 0)
+            self_raised_count = self_raised_dict.get(date_period, 0)
+            trends.append(
+                {
+                    "date": date_period,
+                    "assigned_reviews": assigned_count,
+                    "self_raised_prs": self_raised_count,
+                    "total": assigned_count + self_raised_count,
+                }
+            )
+
+        return {
+            "period": period,
+            "days": days,
+            "username": current_user.username,
+            "trends": trends,
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting reviewer activity trends: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get reviewer activity trends: {str(e)}",
+        )
+
+
+@router.get(
+    "/trends/score-trends",
+    response_model=dict,
+    summary="Get score trends by current reviewer",
+    description="Get average score trends given by current reviewer over time",
+)
+async def get_score_trends(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    period: str = Query(
+        "weekly", pattern="^(daily|weekly|monthly)$", description="Time period aggregation"
+    ),
+    days: int = Query(90, ge=1, le=365, description="Number of days to look back"),
+) -> dict:
+    """Get score trends for current user as reviewer
+
+    Returns time-series data showing:
+    - Average scores given by current user
+    - Score distribution over time
+    - Number of scores per period
+    """
+    try:
+        # Import PullRequestScore model
+        from src.models.pull_request import PullRequestScore
+
+        # Calculate date range
+        end_date = datetime.now(UTC)
+        start_date = (
+            end_date.replace(day=end_date.day - days)
+            if end_date.day > days
+            else end_date.replace(month=1, day=1)
+        )
+
+        # Determine date format based on period
+        if period == "daily":
+            date_format = "%Y-%m-%d"
+        elif period == "weekly":
+            date_format = "%Y-W%U"
+        else:  # monthly
+            date_format = "%Y-%m"
+
+        # Get score trends grouped by period
+        score_query = (
+            select(
+                func.date_format(PullRequestScore.created_date, date_format).label("date_period"),
+                func.avg(PullRequestScore.score).label("avg_score"),
+                func.count(PullRequestScore.id).label("score_count"),
+                func.min(PullRequestScore.score).label("min_score"),
+                func.max(PullRequestScore.score).label("max_score"),
+            )
+            .where(
+                PullRequestScore.reviewer == current_user.username,
+                PullRequestScore.created_date >= start_date,
+                PullRequestScore.created_date <= end_date,
+            )
+            .group_by("date_period")
+            .order_by("date_period")
+        )
+
+        score_result = await db.execute(score_query)
+        score_data = score_result.all()
+
+        # Format trends
+        trends = []
+        for row in score_data:
+            trends.append(
+                {
+                    "date": row.date_period,
+                    "average_score": round(float(row.avg_score), 2) if row.avg_score else 0,
+                    "score_count": row.score_count,
+                    "min_score": float(row.min_score) if row.min_score else 0,
+                    "max_score": float(row.max_score) if row.max_score else 0,
+                }
+            )
+
+        return {
+            "period": period,
+            "days": days,
+            "username": current_user.username,
+            "trends": trends,
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting score trends: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get score trends: {str(e)}",
+        )
+
+
+@router.get(
+    "/trends/project-repo-activity",
+    response_model=dict,
+    summary="Get project and repository activity trends",
+    description="Get unique projects and repositories reviewed by current user over time",
+)
+async def get_project_repo_activity_trends(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    period: str = Query(
+        "weekly", pattern="^(daily|weekly|monthly)$", description="Time period aggregation"
+    ),
+    days: int = Query(90, ge=1, le=365, description="Number of days to look back"),
+) -> dict:
+    """Get project and repository activity trends for current user
+
+    Returns time-series data showing:
+    - Unique projects reviewed
+    - Unique repositories reviewed
+    - Activity diversity metrics
+    """
+    try:
+        # Calculate date range
+        end_date = datetime.now(UTC)
+        start_date = (
+            end_date.replace(day=end_date.day - days)
+            if end_date.day > days
+            else end_date.replace(month=1, day=1)
+        )
+
+        # Determine date format based on period
+        if period == "daily":
+            date_format = "%Y-%m-%d"
+        elif period == "weekly":
+            date_format = "%Y-W%U"
+        else:  # monthly
+            date_format = "%Y-%m"
+
+        # Get unique projects per period
+        projects_query = (
+            select(
+                func.date_format(PullRequestReviewAssignment.created_date, date_format).label(
+                    "date_period"
+                ),
+                func.count(func.distinct(PullRequestReviewBase.project_key)).label("project_count"),
+            )
+            .join(
+                PullRequestReviewBase,
+                PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
+            )
+            .where(
+                PullRequestReviewAssignment.reviewer == current_user.username,
+                PullRequestReviewAssignment.created_date >= start_date,
+                PullRequestReviewAssignment.created_date <= end_date,
+            )
+            .group_by("date_period")
+            .order_by("date_period")
+        )
+
+        projects_result = await db.execute(projects_query)
+        projects_data = projects_result.all()
+
+        # Get unique repositories per period
+        repos_query = (
+            select(
+                func.date_format(PullRequestReviewAssignment.created_date, date_format).label(
+                    "date_period"
+                ),
+                func.count(func.distinct(PullRequestReviewBase.repository_slug)).label(
+                    "repo_count"
+                ),
+            )
+            .join(
+                PullRequestReviewBase,
+                PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
+            )
+            .where(
+                PullRequestReviewAssignment.reviewer == current_user.username,
+                PullRequestReviewAssignment.created_date >= start_date,
+                PullRequestReviewAssignment.created_date <= end_date,
+            )
+            .group_by("date_period")
+            .order_by("date_period")
+        )
+
+        repos_result = await db.execute(repos_query)
+        repos_data = repos_result.all()
+
+        # Convert to dicts for merging
+        projects_dict = {row.date_period: row.project_count for row in projects_data}
+        repos_dict = {row.date_period: row.repo_count for row in repos_data}
+
+        # Merge all dates
+        all_dates = sorted(set(list(projects_dict.keys()) + list(repos_dict.keys())))
+
+        trends = []
+        for date_period in all_dates:
+            trends.append(
+                {
+                    "date": date_period,
+                    "unique_projects": projects_dict.get(date_period, 0),
+                    "unique_repositories": repos_dict.get(date_period, 0),
+                }
+            )
+
+        return {
+            "period": period,
+            "days": days,
+            "username": current_user.username,
+            "trends": trends,
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting project/repo activity trends: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get project/repo activity trends: {str(e)}",
+        )
+
+
+@router.get(
+    "/trends/good-suggestions",
+    response_model=dict,
+    summary="Get good suggestions trends",
+    description="Get count of high-quality suggestions (score >= 8.0) over time",
+)
+async def get_good_suggestions_trends(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    period: str = Query(
+        "weekly", pattern="^(daily|weekly|monthly)$", description="Time period aggregation"
+    ),
+    days: int = Query(90, ge=1, le=365, description="Number of days to look back"),
+    threshold: float = Query(
+        8.0, ge=0, le=10, description="Minimum score to consider as 'good suggestion'"
+    ),
+) -> dict:
+    """Get good suggestions trends for current user
+
+    Returns time-series data showing:
+    - Count of high-quality suggestions (score >= threshold)
+    - Percentage of good suggestions vs total
+    - Trend analysis
+    """
+    try:
+        # Import PullRequestScore model
+        from src.models.pull_request import PullRequestScore
+
+        # Calculate date range
+        end_date = datetime.now(UTC)
+        start_date = (
+            end_date.replace(day=end_date.day - days)
+            if end_date.day > days
+            else end_date.replace(month=1, day=1)
+        )
+
+        # Determine date format based on period
+        if period == "daily":
+            date_format = "%Y-%m-%d"
+        elif period == "weekly":
+            date_format = "%Y-W%U"
+        else:  # monthly
+            date_format = "%Y-%m"
+
+        # Get good suggestions (score >= threshold)
+        good_query = (
+            select(
+                func.date_format(PullRequestScore.created_date, date_format).label("date_period"),
+                func.count(PullRequestScore.id).label("good_count"),
+            )
+            .where(
+                PullRequestScore.reviewer == current_user.username,
+                PullRequestScore.score >= threshold,
+                PullRequestScore.created_date >= start_date,
+                PullRequestScore.created_date <= end_date,
+            )
+            .group_by("date_period")
+            .order_by("date_period")
+        )
+
+        good_result = await db.execute(good_query)
+        good_data = good_result.all()
+
+        # Get total scores for percentage calculation
+        total_query = (
+            select(
+                func.date_format(PullRequestScore.created_date, date_format).label("date_period"),
+                func.count(PullRequestScore.id).label("total_count"),
+            )
+            .where(
+                PullRequestScore.reviewer == current_user.username,
+                PullRequestScore.created_date >= start_date,
+                PullRequestScore.created_date <= end_date,
+            )
+            .group_by("date_period")
+            .order_by("date_period")
+        )
+
+        total_result = await db.execute(total_query)
+        total_data = total_result.all()
+
+        # Convert to dicts
+        good_dict = {row.date_period: row.good_count for row in good_data}
+        total_dict = {row.date_period: row.total_count for row in total_data}
+
+        # Merge all dates
+        all_dates = sorted(set(list(good_dict.keys()) + list(total_dict.keys())))
+
+        trends = []
+        for date_period in all_dates:
+            good_count = good_dict.get(date_period, 0)
+            total_count = total_dict.get(date_period, 0)
+            percentage = (good_count / total_count * 100) if total_count > 0 else 0
+
+            trends.append(
+                {
+                    "date": date_period,
+                    "good_suggestions": good_count,
+                    "total_scores": total_count,
+                    "percentage": round(percentage, 2),
+                }
+            )
+
+        return {
+            "period": period,
+            "days": days,
+            "threshold": threshold,
+            "username": current_user.username,
+            "trends": trends,
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting good suggestions trends: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get good suggestions trends: {str(e)}",
+        )
 
 
 @router.get("", response_model=ReviewListResponse)
@@ -286,6 +739,68 @@ async def get_review_statistics(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get review statistics"},
         )
+
+
+@router.get("/ai-review/{ai_review_id}")
+async def get_review_by_ai_review_id(
+    ai_review_id: str,
+    source_filename: str | None = Query(
+        None,
+        alias="file",
+        description="Filter by source filename (required for file-level reviews)",
+    ),
+    db: AsyncSession = Depends(get_db_session),
+    current_user: AuthUser = Depends(get_current_user_with_token),
+) -> ReviewResponse:
+    """
+    Retrieve review by AI review identifier.
+
+    This endpoint enables:
+    1. Retrieving previous AI suggestions for feedback loops
+    2. Referencing specific AI reviews in git comments
+    3. Verifying if code changes addressed AI suggestions
+
+    Args:
+        ai_review_id: Unique AI review identifier (e.g., ai_rev_abc123def456)
+        source_filename: Optional file filter (recommended for file-level reviews)
+
+    Returns:
+        Complete review information including AI suggestions
+
+    Example:
+        GET /api/v1/reviews/ai-review/ai_rev_abc123def456
+        GET /api/v1/reviews/ai-review/ai_rev_abc123def456?file=src/cart.py
+    """
+    from src.utils.log import get_logger
+
+    logger = get_logger(__name__)
+    logger.info(f"Retrieving review by AI ID: {ai_review_id}, file: {source_filename}")
+
+    # Build query to find review base by AI review ID
+    query = select(PullRequestReviewBase).where(PullRequestReviewBase.ai_review_id == ai_review_id)
+
+    # Apply file filter if provided
+    if source_filename is not None:
+        query = query.where(PullRequestReviewBase.source_filename == source_filename)
+    else:
+        # For PR-level reviews, source_filename is NULL
+        query = query.where(PullRequestReviewBase.source_filename.is_(None))
+
+    result = await db.execute(query)
+    review_base = result.scalar_one_or_none()
+
+    if not review_base:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No review found with AI review ID: {ai_review_id}",
+        )
+
+    # Serialize the review base
+    review_dict = review_base.to_dict()
+
+    logger.info(f"Successfully retrieved review by AI ID {ai_review_id}")
+
+    return ReviewResponse(**review_dict)
 
 
 @router.get("/{project_key}/{repository_slug}/{pull_request_id}", response_model=ReviewListResponse)
@@ -972,14 +1487,14 @@ async def upsert_score(
         raise
     except Exception as e:
         error_traceback = traceback.format_exc()
-        logger.error(f"Failed to upsert score: {str(e)}\n{error_traceback}")
+        logger.error(f"Failed to upsert review: {str(e)}\n{error_traceback}")
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR",
             endpoint="PUT /api/v1/reviews/score",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to upsert score"},
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to upsert review"},
         )
 
 
@@ -1438,6 +1953,22 @@ async def assign_review_task(
         resource_type="reviews",
     )
 
+    # Get the Git username from the associated User record
+    git_username = await _get_git_username(current_user.id, db)
+
+    if not git_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "BAD_REQUEST",
+                "message": f"User '{current_user.username}' does not have an associated Git account. "
+                f"All users (including system admins) must have a Git account to assign review tasks. "
+                f"Please contact your administrator to create a Git user account linked to this system account.",
+                "hint": "To fix this, create a User record in the 'user' table with a username, "
+                f"then link it to AuthUser (id={current_user.id}) by setting auth_user.user_id",
+            },
+        )
+
     # Verify assignee exists
     stmt = select(User).where(User.username == assignment_data.assignee_username)
     result = await db.execute(stmt)
@@ -1493,7 +2024,7 @@ async def assign_review_task(
         assignment = PullRequestReviewAssignment(
             review_base_id=existing_review.id,
             reviewer=assignment_data.assignee_username,
-            assigned_by=current_user.username,
+            assigned_by=git_username,
             assigned_date=datetime.now(UTC),
             assignment_status="assigned",
             reviewer_comments=assignment_data.reviewer_comments,
@@ -1506,7 +2037,7 @@ async def assign_review_task(
         review = assignment.to_full_dict()
         logger.info(
             f"Updated existing review assignment: PR {assignment_data.pull_request_id} "
-            f"to {assignment_data.assignee_username} by {current_user.username}"
+            f"to {assignment_data.assignee_username} by {git_username}"
         )
     else:
         # Create new review with assigned reviewer
@@ -1544,7 +2075,7 @@ async def assign_review_task(
         result = await db.execute(stmt)
         assignment = result.scalars().first()
         if assignment:
-            assignment.assigned_by = current_user.username
+            assignment.assigned_by = git_username
             assignment.assigned_date = datetime.now(UTC)
             assignment.assignment_status = "assigned"
             await db.flush()
@@ -1552,7 +2083,7 @@ async def assign_review_task(
         review = assignment.to_full_dict() if assignment else review_obj.model_dump(mode="json")
         logger.info(
             f"Created new review with assignment: PR {assignment_data.pull_request_id} "
-            f"to {assignment_data.assignee_username} by {current_user.username}"
+            f"to {assignment_data.assignee_username} by {git_username}"
         )
 
     # Log audit trail

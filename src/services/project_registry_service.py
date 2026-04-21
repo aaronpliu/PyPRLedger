@@ -125,6 +125,24 @@ class ProjectRegistryService:
         result = await db.execute(query)
         return list(result.scalars().all())
 
+    async def list_all_projects(self, db: AsyncSession) -> list[ProjectRegistry]:
+        """
+        Get all registered projects across all applications
+
+        Args:
+            db: Database session
+
+        Returns:
+            List of all ProjectRegistry entries
+        """
+        query = select(ProjectRegistry).order_by(
+            ProjectRegistry.app_name,
+            ProjectRegistry.project_key,
+            ProjectRegistry.repository_slug,
+        )
+        result = await db.execute(query)
+        return list(result.scalars().all())
+
     async def register_project(
         self,
         app_name: str,

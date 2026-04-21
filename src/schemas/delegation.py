@@ -48,12 +48,16 @@ class DelegationResponse(BaseModel):
 
     id: int
     auth_user_id: int  # delegatee
+    delegatee_username: str | None = None
+    delegatee_display_name: str | None = None
     role_id: int
     role_name: str | None = None
     resource_type: str
     resource_id: str | None
     granted_by: int | None
     delegator_id: int | None
+    delegator_username: str | None = None
+    delegator_display_name: str | None = None
     is_delegated: bool
     delegation_status: str | None
     delegation_scope: dict | None
@@ -81,8 +85,14 @@ class DelegationRevoke(BaseModel):
 class DelegationListQuery(BaseModel):
     """Query parameters for listing delegations"""
 
-    delegator_id: int | None = Field(None, description="Filter by delegator")
-    delegatee_id: int | None = Field(None, description="Filter by delegatee")
+    delegator_id: int | None = Field(None, description="Filter by delegator user ID")
+    delegator_username: str | None = Field(
+        None, description="Filter by delegator username (partial match)"
+    )
+    delegatee_id: int | None = Field(None, description="Filter by delegatee user ID")
+    delegatee_username: str | None = Field(
+        None, description="Filter by delegatee username (partial match)"
+    )
     status: str | None = Field(
         None,
         description="Filter by status (active/expired/revoked/pending)",

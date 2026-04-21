@@ -5,7 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
+from src.core.permissions import get_current_user_with_token
+from src.models.auth_user import AuthUser
 from src.services.project_registry_service import ProjectRegistryService
+from src.services.rbac_service import RBACService
 
 
 logger = logging.getLogger(__name__)
@@ -16,6 +19,11 @@ router = APIRouter()
 def get_registry_service() -> ProjectRegistryService:
     """Get project registry service instance"""
     return ProjectRegistryService()
+
+
+def get_rbac_service(db: Annotated[AsyncSession, Depends(get_db_session)]) -> RBACService:
+    """Dependency to get RBAC service"""
+    return RBACService(db)
 
 
 # ==================== Public Endpoints ====================
@@ -77,6 +85,45 @@ async def list_projects_by_app(
         )
 
 
+@router.get("/apps/registry/all", response_model=list[dict])
+async def list_all_registered_projects(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    registry_service: Annotated[ProjectRegistryService, Depends(get_registry_service)],
+):
+    """
+    List all registered projects across all applications
+
+    This endpoint is more efficient than calling /apps/{app_name}/projects for each app,
+    as it fetches all project registry entries in a single database query.
+
+    Returns:
+        List of all project registry entries with app_name, project_key, repository_slug, etc.
+    """
+    try:
+        projects = await registry_service.list_all_projects(db)
+        return [
+            {
+                "id": p.id,
+                "app_name": p.app_name,
+                "project_key": p.project_key,
+                "repository_slug": p.repository_slug,
+                "description": p.description,
+                "created_date": p.created_date.isoformat(),
+                "updated_date": p.updated_date.isoformat(),
+            }
+            for p in projects
+        ]
+    except Exception as e:
+        logger.error(f"Failed to list all registered projects: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": "Failed to list registered projects",
+            },
+        )
+
+
 @router.get("/projects/{project_key}/{repository_slug}/app-name", response_model=dict)
 async def get_project_app_name(
     project_key: str,
@@ -111,6 +158,8 @@ async def get_project_app_name(
 
 @router.post("/admin/registry/register", response_model=dict)
 async def register_project_to_app(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
     app_name: Annotated[str, Query(min_length=1, max_length=64, description="Application name")],
     project_key: Annotated[str, Query(min_length=1, max_length=32, description="Project key")],
     repository_slug: Annotated[
@@ -125,6 +174,8 @@ async def register_project_to_app(
     """
     Register a project-repository pair to an application (Admin only)
 
+    Requires system_admin role with project_registry:manage permission.
+
     Args:
         app_name: Application name
         project_key: Project key
@@ -135,11 +186,23 @@ async def register_project_to_app(
         Dict with registration details
 
     Raises:
-        HTTPException: If already registered to different app
+        HTTPException: If already registered to different app or insufficient permissions
     """
-    # TODO: Add admin authentication check
-    # if not current_user.is_admin:
-    #     raise HTTPException(status_code=403, detail="Admin access required")
+    # Check if user has system_admin role with project_registry manage permission
+    has_permission = await rbac_service.check_permission(
+        auth_user_id=current_user.id,
+        action="manage",
+        resource_type="project_registry",
+    )
+
+    if not has_permission:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "FORBIDDEN",
+                "message": "Insufficient permissions. System administrator role required.",
+            },
+        )
 
     try:
         registry = await registry_service.register_project(
@@ -167,6 +230,8 @@ async def register_project_to_app(
 
 @router.put("/admin/registry/update", response_model=dict)
 async def update_project_app(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
     project_key: Annotated[str, Query(min_length=1, max_length=32, description="Project key")],
     repository_slug: Annotated[
         str, Query(min_length=1, max_length=128, description="Repository slug")
@@ -180,6 +245,8 @@ async def update_project_app(
     """
     Move a project-repository pair to a different application (Admin only)
 
+    Requires system_admin role with project_registry:manage permission.
+
     Args:
         project_key: Project key
         repository_slug: Repository slug
@@ -187,10 +254,25 @@ async def update_project_app(
 
     Returns:
         Dict with update details
+
+    Raises:
+        HTTPException: If insufficient permissions or project not found
     """
-    # TODO: Add admin authentication check
-    # if not current_user.is_admin:
-    #     raise HTTPException(status_code=403, detail="Admin access required")
+    # Check if user has system_admin role with project_registry manage permission
+    has_permission = await rbac_service.check_permission(
+        auth_user_id=current_user.id,
+        action="manage",
+        resource_type="project_registry",
+    )
+
+    if not has_permission:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "FORBIDDEN",
+                "message": "Insufficient permissions. System administrator role required.",
+            },
+        )
 
     try:
         registry = await registry_service.update_project_app(
@@ -213,6 +295,8 @@ async def update_project_app(
 
 @router.delete("/admin/registry/unregister", response_model=dict)
 async def unregister_project(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
     project_key: Annotated[str, Query(min_length=1, max_length=32, description="Project key")],
     repository_slug: Annotated[
         str, Query(min_length=1, max_length=128, description="Repository slug")
@@ -223,16 +307,33 @@ async def unregister_project(
     """
     Remove a project-repository pair from registry (Admin only)
 
+    Requires system_admin role with project_registry:manage permission.
+
     Args:
         project_key: Project key
         repository_slug: Repository slug
 
     Returns:
         Dict with unregistration details
+
+    Raises:
+        HTTPException: If insufficient permissions or project not found
     """
-    # TODO: Add admin authentication check
-    # if not current_user.is_admin:
-    #     raise HTTPException(status_code=403, detail="Admin access required")
+    # Check if user has system_admin role with project_registry manage permission
+    has_permission = await rbac_service.check_permission(
+        auth_user_id=current_user.id,
+        action="manage",
+        resource_type="project_registry",
+    )
+
+    if not has_permission:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "FORBIDDEN",
+                "message": "Insufficient permissions. System administrator role required.",
+            },
+        )
 
     try:
         success = await registry_service.unregister_project(project_key, repository_slug, db)

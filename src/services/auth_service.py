@@ -386,9 +386,10 @@ class AuthService:
     async def list_sessions(
         self,
         auth_user_id: int | None = None,
+        username: str | None = None,
         current_session_id: str | None = None,
     ) -> list[AuthSessionResponse]:
-        """List active refresh sessions, optionally filtered by auth user."""
+        """List active refresh sessions, optionally filtered by auth user or username."""
         session_keys = await self.redis_client.keys(f"{REFRESH_SESSION_KEY_PREFIX}:*")
         sessions: list[AuthSessionResponse] = []
 
@@ -399,7 +400,13 @@ class AuthService:
                 continue
 
             session_auth_user_id = int(session_data["auth_user_id"])
+            session_username = session_data.get("username", "")
+
+            # Apply filters
             if auth_user_id is not None and session_auth_user_id != auth_user_id:
+                continue
+
+            if username is not None and username.lower() not in session_username.lower():
                 continue
 
             expires_in_seconds = await self.redis_client.ttl(session_key)
@@ -410,7 +417,7 @@ class AuthService:
                 AuthSessionResponse(
                     session_id=session_id,
                     auth_user_id=session_auth_user_id,
-                    username=session_data["username"],
+                    username=session_username,
                     ip_address=session_data.get("ip_address"),
                     user_agent=session_data.get("user_agent"),
                     created_at=self._parse_datetime(session_data["created_at"]),

@@ -14,11 +14,11 @@
       </template>
 
       <el-form :inline="true" class="filter-form" @submit.prevent>
-        <el-form-item label="User ID">
+        <el-form-item label="Username">
           <el-input
-            v-model="userIdFilter"
+            v-model="usernameFilter"
             clearable
-            placeholder="Filter by auth user ID"
+            placeholder="Filter by username"
             style="width: 220px"
             @keyup.enter="loadSessions"
           />
@@ -117,7 +117,7 @@ import { getSessionDeviceDetails } from '@/utils/device'
 
 const loading = ref(false)
 const sessions = ref<AuthSession[]>([])
-const userIdFilter = ref('')
+const usernameFilter = ref('')
 const revokingSessionId = ref<string | null>(null)
 
 const formatDate = (dateStr: string) => {
@@ -162,25 +162,11 @@ const getExpiryTagType = (seconds: number) => {
   return 'success'
 }
 
-const parseUserIdFilter = () => {
-  const trimmedValue = userIdFilter.value.trim()
-  if (!trimmedValue) {
-    return undefined
-  }
-
-  const parsedValue = Number(trimmedValue)
-  if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
-    throw new Error('User ID must be a positive integer')
-  }
-
-  return parsedValue
-}
-
 const loadSessions = async () => {
   loading.value = true
   try {
-    const authUserId = parseUserIdFilter()
-    sessions.value = await authApi.getSessions(authUserId)
+    const username = usernameFilter.value.trim() || undefined
+    sessions.value = await authApi.getSessions(undefined, username)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load sessions'
     ElMessage.error(message)
@@ -191,7 +177,7 @@ const loadSessions = async () => {
 }
 
 const resetFilters = () => {
-  userIdFilter.value = ''
+  usernameFilter.value = ''
   loadSessions()
 }
 

@@ -47,7 +47,7 @@ const props = withDefaults(defineProps<Props>(), {
   selectedIds: () => [],
 })
 
-const handleExportCommand = (format: 'pdf' | 'excel' | 'csv' | 'json') => {
+const handleExportCommand = async (format: 'pdf' | 'excel' | 'csv' | 'json') => {
   if (props.data.length === 0) {
     ElMessage.warning('No data to export')
     return
@@ -55,7 +55,7 @@ const handleExportCommand = (format: 'pdf' | 'excel' | 'csv' | 'json') => {
 
   try {
     const selectedIds = props.selectedIds.length > 0 ? props.selectedIds : undefined
-    exportSelectedReviews(props.data, format, selectedIds)
+    await exportSelectedReviews(props.data, format, selectedIds)
     
     const formatNames: Record<string, string> = {
       pdf: 'PDF',

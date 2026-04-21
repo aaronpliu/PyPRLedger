@@ -639,6 +639,114 @@ export const reviewsApi = {
 
 ---
 
+## 📊 Assignment Status Workflow
+
+### Status Definitions
+
+The review assignment system uses four distinct statuses to track the lifecycle of a review task:
+
+| Status | Label | Description | Who Can Set | Typical Flow |
+|--------|-------|-------------|-------------|--------------|
+| `pending` | Pending | Review task has not been assigned to any reviewer yet | System (default) | Initial state when PR is detected |
+| `assigned` | Assigned | Task has been assigned to a reviewer by the review admin | Review Admin | After admin assigns a reviewer |
+| `in_progress` | In Progress | Reviewer has viewed the task but has not submitted a score yet | Assigned Reviewer | When reviewer starts working on it |
+| `completed` | Completed | Reviewer has completed scoring for this review | Assigned Reviewer | Final state after scoring |
+
+### Status Transitions
+
+```
+pending → assigned → in_progress → completed
+   ↑          ↓
+   └──────────┘ (admin can reassign)
+```
+
+**Transition Rules**:
+1. **pending → assigned**: Review admin assigns a reviewer to the task
+2. **assigned → in_progress**: Assigned reviewer acknowledges and starts reviewing
+3. **in_progress → completed**: Reviewer submits their score and completes the review
+4. **Any status → pending**: Review admin can unassign or reset the task
+5. **completed → assigned**: Review admin can reassign for re-review if needed
+
+### Permission Matrix
+
+| Action | Reviewer | Review Admin | System Admin |
+|--------|----------|--------------|--------------|
+| View own assignments | ✅ | ✅ | ✅ |
+| View all assignments | ❌ | ✅ | ✅ |
+| Assign reviewer | ❌ | ✅ | ✅ |
+| Update status to "in_progress" | ✅ (own tasks only) | ✅ | ✅ |
+| Update status to "completed" | ✅ (own tasks only) | ✅ | ✅ |
+| Reset to "pending" | ❌ | ✅ | ✅ |
+| Remove assignment | ❌ | ✅ | ✅ |
+
+### UI Implementation
+
+#### Task Assignment Details View
+
+In the "Task Assignment Details" page, each reviewer entry displays:
+
+1. **Status Tag**: Color-coded badge showing current status
+   - 🔵 Blue: Assigned
+   - 🟡 Yellow: In Progress
+   - 🟢 Green: Completed
+   - ⚪ Gray: Pending
+
+2. **Tooltip**: Hovering over the status tag shows a detailed description:
+   - **Pending**: "Review task has not been assigned to any reviewer yet"
+   - **Assigned**: "Task has been assigned to a reviewer by the review admin"
+   - **In Progress**: "Reviewer has viewed the task but has not submitted a score yet"
+   - **Completed**: "Reviewer has completed scoring for this review"
+
+3. **Status Dropdown**: Review admins can change status via dropdown menu
+4. **Comments Column**: Optional field for reviewers to add notes or explanations
+
+#### Task Assignment List View
+
+In the main "Task Assignment" list view:
+- Reviewer tags show status with tooltips
+- Progress bar indicates completion percentage (completed/total reviewers)
+- Visual indicators help admins quickly identify task states
+
+### i18n Support
+
+All status labels and descriptions are internationalized and support:
+- English (en)
+- Simplified Chinese (zh-CN)
+- Traditional Chinese (zh-TW)
+
+Translation keys follow the pattern:
+- Labels: `reviews.{status}` (e.g., `reviews.pending`, `reviews.assigned`)
+- Descriptions: `reviews.assignment_status_descriptions.{status}`
+
+### Database Schema
+
+Assignment status is stored in the `pull_request_review_assignment` table:
+
+```sql
+CREATE TABLE pull_request_review_assignment (
+    id INTEGER PRIMARY KEY AUTO_INCREMENT,
+    review_base_id INTEGER NOT NULL,
+    reviewer VARCHAR(64) NOT NULL,
+    assigned_by VARCHAR(64),
+    assigned_date DATETIME,
+    assignment_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    reviewer_comments TEXT,
+    created_date DATETIME NOT NULL,
+    updated_date DATETIME NOT NULL,
+    FOREIGN KEY (review_base_id) REFERENCES pull_request_review_base(id),
+    FOREIGN KEY (reviewer) REFERENCES user(username),
+    FOREIGN KEY (assigned_by) REFERENCES user(username)
+);
+```
+
+Valid status values are enforced at the application level:
+- `pending`
+- `assigned`
+- `in_progress`
+- `completed`
+
+---
+
 ## 📝 Next Steps
 
 After completing Phase 3.1:

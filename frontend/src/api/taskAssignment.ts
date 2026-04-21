@@ -25,6 +25,7 @@ export interface ReviewV2 {
   pull_request_commit_id?: string | null
   project_key: string
   repository_slug: string
+  app_name?: string
   pull_request_user?: string | null
   pull_request_user_info?: {
     username: string
@@ -37,8 +38,20 @@ export interface ReviewV2 {
   ai_suggestions?: any | null
   pull_request_status: string
   metadata?: Record<string, any> | null
+  ai_review_id?: string | null
   created_date: string
   updated_date: string
+  
+  // Embedded project information for PR URL generation
+  project?: {
+    id: number
+    project_id: number
+    project_name: string
+    project_key: string
+    project_url: string
+    created_date: string
+    updated_date: string
+  } | null
   
   // Multi-reviewer fields
   reviewers: ReviewerAssignment[]

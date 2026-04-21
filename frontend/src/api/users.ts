@@ -22,6 +22,19 @@ export interface ReviewerListResponse {
 
 export const usersApi = {
   /**
+   * Get all Bitbucket/Git users (for task assignment - includes all users, not just reviewers)
+   */
+  async getAllBitbucketUsers(limit: number = 500, username?: string): Promise<ReviewerUser[]> {
+    const params: any = { limit }
+    if (username) {
+      params.username = username
+    }
+    
+    const response: any = await request.get('/users', { params })
+    return response.items || []
+  },
+
+  /**
    * Get active reviewers
    */
   getReviewers(limit: number = 100): Promise<ReviewerListResponse> {
@@ -53,13 +66,16 @@ export const usersApi = {
    * Get all active auth users (for delegation)
    * Returns AuthUser records (system login users), not Bitbucket users
    */
-  async getAllUsers(limit: number = 500): Promise<User[]> {
-    const response: any = await request.get('/users/auth-users', { 
-      params: { 
-        active: true,  // Only active users
-        limit: limit 
-      } 
-    })
+  async getAllUsers(limit: number = 500, active?: boolean, username?: string): Promise<User[]> {
+    const params: any = { limit }
+    if (active !== undefined) {
+      params.active = active
+    }
+    if (username) {
+      params.username = username
+    }
+    
+    const response: any = await request.get('/users/auth-users', { params })
     // Handle response format
     return response.items || []
   },

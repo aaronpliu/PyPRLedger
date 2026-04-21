@@ -1,9 +1,11 @@
 <template>
-  <v-chart class="chart" :option="chartOption" autoresize />
+  <div v-if="isMounted" class="chart-container">
+    <v-chart class="chart" :option="chartOption" autoresize />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { PieChart } from 'echarts/charts'
@@ -33,10 +35,20 @@ const props = withDefaults(defineProps<Props>(), {
   height: '350px',
 })
 
+const isMounted = ref(false)
+
+onMounted(() => {
+  // Ensure DOM is ready before rendering chart
+  isMounted.value = true
+})
+
 const chartOption = computed(() => ({
   title: {
     text: props.title,
     left: 'center',
+    textStyle: {
+      color: 'var(--el-text-color-primary)',
+    },
   },
   tooltip: {
     trigger: 'item',
@@ -46,27 +58,39 @@ const chartOption = computed(() => ({
     orient: 'vertical',
     left: 'left',
     top: 'middle',
+    textStyle: {
+      color: 'var(--el-text-color-secondary)',
+    },
   },
   series: [
     {
       name: props.title,
       type: 'pie',
       radius: ['40%', '70%'],
-      avoidLabelOverlap: false,
+      center: ['60%', '50%'],
+      avoidLabelOverlap: true,
       itemStyle: {
         borderRadius: 10,
-        borderColor: '#fff',
+        borderColor: 'var(--el-bg-color)',
         borderWidth: 2,
       },
       label: {
         show: true,
         formatter: '{b}: {d}%',
+        color: 'var(--el-text-color-primary)',
+        fontSize: 12,
       },
       emphasis: {
         label: {
           show: true,
-          fontSize: 16,
+          fontSize: 14,
           fontWeight: 'bold',
+        },
+      },
+      labelLine: {
+        show: true,
+        lineStyle: {
+          color: 'var(--el-border-color)',
         },
       },
       data: props.data,
@@ -76,8 +100,13 @@ const chartOption = computed(() => ({
 </script>
 
 <style scoped>
-.chart {
+.chart-container {
   width: 100%;
   height: v-bind(height);
+}
+
+.chart {
+  width: 100%;
+  height: 100%;
 }
 </style>

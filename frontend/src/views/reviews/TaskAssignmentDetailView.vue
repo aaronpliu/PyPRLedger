@@ -15,7 +15,19 @@
       <div v-if="review" class="detail-content">
         <!-- PR Information -->
         <el-descriptions title="PR Information" :column="2" border>
-          <el-descriptions-item label="PR ID">{{ review.pull_request_id }}</el-descriptions-item>
+          <el-descriptions-item label="PR ID">
+            <a 
+              v-if="review && getPrUrl(review)" 
+              :href="getPrUrl(review) || undefined" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              class="pr-link"
+            >
+              {{ review.pull_request_id }}
+              <el-icon style="margin-left: 4px;"><Link /></el-icon>
+            </a>
+            <span v-else>{{ review?.pull_request_id }}</span>
+          </el-descriptions-item>
           <el-descriptions-item label="Commit ID">{{ review.pull_request_commit_id || 'N/A' }}</el-descriptions-item>
           <el-descriptions-item label="Project">{{ review.project_key }}</el-descriptions-item>
           <el-descriptions-item label="Repository">{{ review.repository_slug }}</el-descriptions-item>
@@ -44,10 +56,10 @@
           </el-button>
         </div>
 
-        <el-table :data="review.reviewers" stripe border>
-          <el-table-column prop="id" label="ID" width="80" />
+        <el-table :data="review.reviewers" stripe border header-align="center">
+          <el-table-column prop="id" label="ID" width="80" align="center" />
           
-          <el-table-column label="Reviewer" min-width="150">
+          <el-table-column label="Reviewer" min-width="150" align="center">
             <template #default="{ row }">
               <div class="reviewer-info">
                 <strong>{{ row.reviewer }}</strong>
@@ -58,19 +70,37 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="Assigned By" width="150">
+          <el-table-column label="AI Review ID" min-width="200" align="center">
+            <template #default>
+              <div v-if="review.ai_review_id" class="ai-review-id-cell">
+                <el-tag size="small" type="info">
+                  {{ review.ai_review_id }}
+                </el-tag>
+                <el-button
+                  size="small"
+                  text
+                  @click="copyToClipboard(review.ai_review_id!)"
+                >
+                  <el-icon><CopyDocument /></el-icon>
+                </el-button>
+              </div>
+              <span v-else class="empty-value">N/A</span>
+            </template>
+          </el-table-column>
+
+          <el-table-column label="Assigned By" width="150" align="center">
             <template #default="{ row }">
               {{ row.assigned_by || 'N/A' }}
             </template>
           </el-table-column>
 
-          <el-table-column label="Assigned Date" width="180">
+          <el-table-column label="Assigned Date" width="180" align="center">
             <template #default="{ row }">
               {{ row.assigned_date ? formatDate(row.assigned_date) : 'N/A' }}
             </template>
           </el-table-column>
 
-          <el-table-column label="Status" width="120">
+          <el-table-column label="Status" width="120" align="center">
             <template #default="{ row }">
               <el-dropdown @command="(cmd: string) => handleUpdateStatus(row.id, cmd)">
                 <el-tag :type="getAssignmentStatusType(row.assignment_status)" class="clickable">
@@ -79,23 +109,26 @@
                 </el-tag>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="pending">Pending</el-dropdown-item>
-                    <el-dropdown-item command="assigned">Assigned</el-dropdown-item>
-                    <el-dropdown-item command="in_progress">In Progress</el-dropdown-item>
-                    <el-dropdown-item command="completed">Completed</el-dropdown-item>
+                    <el-dropdown-item command="pending">{{ t('reviews.pending') }}</el-dropdown-item>
+                    <el-dropdown-item command="assigned">{{ t('reviews.assigned') }}</el-dropdown-item>
+                    <el-dropdown-item command="in_progress">{{ t('reviews.in_progress') }}</el-dropdown-item>
+                    <el-dropdown-item command="completed">{{ t('reviews.completed') }}</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
             </template>
           </el-table-column>
 
-          <el-table-column label="Comments" min-width="200">
+          <el-table-column label="Comments" min-width="200" align="left">
             <template #default="{ row }">
-              {{ row.reviewer_comments || '-' }}
+              <span v-if="row.reviewer_comments">{{ row.reviewer_comments }}</span>
+              <span v-else class="status-description">
+                {{ getAssignmentStatusDescription(row.assignment_status) }}
+              </span>
             </template>
           </el-table-column>
 
-          <el-table-column label="Actions" width="100" fixed="right">
+          <el-table-column label="Actions" width="100" fixed="right" align="center">
             <template #default="{ row }">
               <el-button
                 size="small"
@@ -112,7 +145,23 @@
         <!-- AI Suggestions -->
         <el-divider />
         <div v-if="review.ai_suggestions" class="ai-section">
-          <h3>AI Suggestions</h3>
+          <div class="ai-header">
+            <h3>
+              AI Review Result
+              <el-tag v-if="review.ai_review_id" size="small" type="info" style="margin-left: 8px">
+                {{ review.ai_review_id }}
+              </el-tag>
+            </h3>
+            <el-button
+              v-if="review.ai_review_id"
+              size="small"
+              text
+              @click="copyToClipboard(review.ai_review_id)"
+            >
+              <el-icon><CopyDocument /></el-icon>
+              Copy ID
+            </el-button>
+          </div>
           <el-alert
             v-if="review.ai_suggestions.overall_assessment"
             :title="review.ai_suggestions.overall_assessment"
@@ -140,8 +189,30 @@
         <!-- Code Diff -->
         <el-divider />
         <div v-if="review.git_code_diff" class="diff-section">
-          <h3>Code Diff</h3>
-          <pre class="code-diff">{{ review.git_code_diff }}</pre>
+          <div class="diff-header">
+            <h3>Code Diff</h3>
+            <div class="view-toggle-buttons">
+              <el-button
+                :type="outputFormat === 'line-by-line' ? 'primary' : 'default'"
+                size="small"
+                @click="outputFormat = 'line-by-line'"
+              >
+                Line by Line
+              </el-button>
+              <el-button
+                :type="outputFormat === 'side-by-side' ? 'primary' : 'default'"
+                size="small"
+                @click="outputFormat = 'side-by-side'"
+              >
+                Side by Side
+              </el-button>
+            </div>
+          </div>
+          <CodeDiffViewer
+            :diff="review.git_code_diff"
+            :output-format="outputFormat"
+            @update:output-format="outputFormat = $event"
+          />
         </div>
       </div>
     </el-card>
@@ -214,16 +285,22 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Back, ArrowDown } from '@element-plus/icons-vue'
+import { Back, ArrowDown, CopyDocument, Link } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
+import CodeDiffViewer from '@/components/review/CodeDiffViewer.vue'
+import { usePrUrl } from '@/composables/usePrUrl'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
+const { getPrUrl } = usePrUrl()
 
 // State
 const loading = ref(false)
 const review = ref<ReviewV2 | null>(null)
+const outputFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
 
 // Assign dialog
 const assignDialogVisible = ref(false)
@@ -324,6 +401,10 @@ const formatAssignmentStatusLabel = (status: string) => {
   }
 }
 
+const getAssignmentStatusDescription = (status: string) => {
+  return t(`reviews.assignment_status_descriptions.${status}`, status)
+}
+
 // Go back
 const goBack = () => {
   router.push('/task-assignment')
@@ -396,6 +477,14 @@ const handleRemoveReviewer = async (reviewer: string) => {
   }
 }
 
+const copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('Copied to clipboard')
+  }).catch(() => {
+    ElMessage.error('Failed to copy to clipboard')
+  })
+}
+
 onMounted(() => {
   loadReview()
 })
@@ -439,6 +528,21 @@ onMounted(() => {
   cursor: pointer;
 }
 
+/* PR Link Styles */
+.pr-link {
+  text-decoration: none;
+  color: var(--el-color-primary);
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pr-link:hover {
+  opacity: 0.7;
+  text-decoration: underline;
+}
+
 .current-reviewers {
   display: flex;
   flex-wrap: wrap;
@@ -452,8 +556,39 @@ onMounted(() => {
   font-size: 13px;
 }
 
+.status-description {
+  color: var(--el-text-color-secondary);
+  font-style: italic;
+  font-size: 12px;
+}
+
 .ai-section {
   margin-top: 20px;
+}
+
+.ai-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.ai-header h3 {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+
+.ai-review-id-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.empty-value {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .code-snippet {
@@ -468,12 +603,15 @@ onMounted(() => {
   margin-top: 20px;
 }
 
-.code-diff {
-  background: var(--el-fill-color-light);
-  padding: 16px;
-  border-radius: 4px;
-  overflow-x: auto;
-  font-size: 12px;
-  line-height: 1.5;
+.diff-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.view-toggle-buttons {
+  display: flex;
+  gap: 8px;
 }
 </style>

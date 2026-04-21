@@ -85,6 +85,7 @@ class AuditService:
     async def get_audit_logs(
         self,
         auth_user_id: int | None = None,
+        username: str | None = None,
         resource_type: str | None = None,
         resource_id: str | None = None,
         action: str | None = None,
@@ -99,6 +100,7 @@ class AuditService:
 
         Args:
             auth_user_id: Filter by user ID
+            username: Filter by username (partial match, joins with AuthUser)
             resource_type: Filter by resource type
             resource_id: Filter by specific resource ID
             action: Filter by action type
@@ -116,11 +118,25 @@ class AuditService:
         stmt = select(AuditLog)
         count_stmt = select(func.count(AuditLog.id))
 
+        # Join with AuthUser if username filter is provided
+        if username is not None:
+            from src.models.auth_user import AuthUser
+
+            stmt = stmt.join(AuthUser, AuditLog.auth_user_id == AuthUser.id, isouter=True)
+            count_stmt = count_stmt.select_from(AuditLog).join(
+                AuthUser, AuditLog.auth_user_id == AuthUser.id, isouter=True
+            )
+
         # Apply filters
         conditions = []
 
         if auth_user_id is not None:
             conditions.append(AuditLog.auth_user_id == auth_user_id)
+
+        if username is not None:
+            from src.models.auth_user import AuthUser
+
+            conditions.append(AuthUser.username.like(f"%{username}%"))
 
         if resource_type is not None:
             conditions.append(AuditLog.resource_type == resource_type)

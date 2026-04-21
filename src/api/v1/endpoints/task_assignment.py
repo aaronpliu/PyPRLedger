@@ -102,17 +102,39 @@ async def assign_reviewer(
     service: Annotated[MultiReviewerService, Depends(get_multi_reviewer_service)],
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> dict:
-    """Assign a reviewer to a review (requires review_admin or system_admin role)"""
+    """Assign a reviewer to a review (requires review_admin or system_admin role)
+
+    Note: All users (including system admins) must have an associated Git account
+    to assign review tasks. This ensures proper audit trail and data integrity.
+    """
     # TODO: Add permission check
 
     try:
+        # Get the Git username from the associated User record
+        git_username = await _get_git_username(current_user.id, db)
+
+        if not git_username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "BAD_REQUEST",
+                    "message": f"User '{current_user.username}' does not have an associated Git account. "
+                    f"All users (including system admins) must have a Git account to assign review tasks. "
+                    f"Please contact your administrator to create a Git user account linked to this system account.",
+                    "hint": "To fix this, create a User record in the 'user' table with a username, "
+                    f"then link it to AuthUser (id={current_user.id}) by setting auth_user.user_id",
+                },
+            )
+
         result = await service.assign_reviewer(
             db=db,
             review_base_id=review_id,
             assignment_data=request,
-            assigned_by=current_user.username,
+            assigned_by=git_username,
         )
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -22,13 +22,22 @@ export interface Review {
   assigned_date?: string | null
   pull_request_status: string
   metadata?: Record<string, any> | null
+  ai_review_id?: string | null
   
   created_date: string
   updated_date: string
   
   // Embedded entity information
   app_name?: string
-  project?: Record<string, any> | null
+  project?: {
+    id: number
+    project_id: number
+    project_name: string
+    project_key: string
+    project_url: string
+    created_date: string
+    updated_date: string
+  } | null
   repository?: Record<string, any> | null
   pull_request_user_info?: Record<string, any> | null
   reviewer_info?: Record<string, any> | null
@@ -164,5 +173,85 @@ export const reviewsApi = {
    */
   assignTask(data: ReviewAssignmentRequest): Promise<Review> {
     return request.post('/reviews/assign', data)
+  },
+
+  /**
+   * Get review statistics
+   */
+  getStats(params?: { project_key?: string }): Promise<any> {
+    return request.get('/reviews/statistics', { params })
+  },
+
+  /**
+   * Get reviewer activity trends (assigned + self-raised PRs)
+   */
+  getReviewerActivityTrends(params?: { period?: 'daily' | 'weekly' | 'monthly'; days?: number }): Promise<{
+    period: string
+    days: number
+    username: string
+    trends: Array<{
+      date: string
+      assigned_reviews: number
+      self_raised_prs: number
+      total: number
+    }>
+  }> {
+    return request.get('/reviews/trends/reviewer-activity', { params })
+  },
+
+  /**
+   * Get score trends by current reviewer
+   */
+  getScoreTrends(params?: { period?: 'daily' | 'weekly' | 'monthly'; days?: number }): Promise<{
+    period: string
+    days: number
+    username: string
+    trends: Array<{
+      date: string
+      average_score: number
+      score_count: number
+      min_score: number
+      max_score: number
+    }>
+  }> {
+    return request.get('/reviews/trends/score-trends', { params })
+  },
+
+  /**
+   * Get project and repository activity trends
+   */
+  getProjectRepoActivityTrends(params?: { period?: 'daily' | 'weekly' | 'monthly'; days?: number }): Promise<{
+    period: string
+    days: number
+    username: string
+    trends: Array<{
+      date: string
+      unique_projects: number
+      unique_repositories: number
+    }>
+  }> {
+    return request.get('/reviews/trends/project-repo-activity', { params })
+  },
+
+  /**
+   * Get good suggestions trends (high-quality scores)
+   */
+  getGoodSuggestionsTrends(params?: { 
+    period?: 'daily' | 'weekly' | 'monthly'
+    days?: number
+    threshold?: number
+  }): Promise<{
+    period: string
+    days: number
+    threshold: number
+    username: string
+    trends: Array<{
+      date: string
+      good_suggestions: number
+      total_scores: number
+      percentage: number
+    }>
+  }> {
+    return request.get('/reviews/trends/good-suggestions', { params })
   },
 }

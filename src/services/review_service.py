@@ -1,7 +1,7 @@
 import json
 import logging
 import traceback
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, desc, func, or_, select
@@ -32,6 +32,7 @@ from src.schemas.pull_request import (
 from src.services.entity_sync_service import EntitySyncService
 from src.services.project_registry_service import ProjectRegistryService
 from src.services.review_score_service import ReviewScoreService
+from src.utils.ai_review_utils import generate_ai_review_id
 from src.utils.metrics import MetricsCollector
 from src.utils.redis import get_redis_client
 
@@ -284,6 +285,14 @@ class ReviewService:
         base.ai_suggestions = review_data.ai_suggestions
         base.pull_request_status = review_data.pull_request_status
         base.review_metadata = review_data.metadata
+
+        # Generate AI review ID if not already set (per PR, stable across re-reviews)
+        if not base.ai_review_id:
+            base.ai_review_id = generate_ai_review_id(
+                project_key=review_data.project_key,
+                repository_slug=review_data.repository_slug,
+                pull_request_commit_id=review_data.pull_request_commit_id,
+            )
 
     @staticmethod
     def _populate_assignment(
@@ -979,21 +988,35 @@ class ReviewService:
             except Exception as e:
                 logger.warning(f"Failed to get review stats from cache: {str(e)}")
 
+        # Build base query for PullRequestReviewBase
         base_query = select(PullRequestReviewBase)
         if project_key:
             base_query = base_query.where(PullRequestReviewBase.project_key == project_key)
 
-        # Get total reviews
-        total_query = select(func.count()).select_from(base_query.subquery())
+        # Get total unique pull requests (distinct by pull_request_id and pull_request_commit_id)
+        total_query = select(
+            func.count(func.distinct(PullRequestReviewBase.pull_request_commit_id))
+        )
+        if project_key:
+            total_query = total_query.where(PullRequestReviewBase.project_key == project_key)
         total_result = await db.execute(total_query)
-        total_reviews = total_result.scalar()
+        total_reviews = total_result.scalar() or 0
 
-        # Get reviews by status
-        status_query = select(
+        # Get reviews by status - count unique PRs per status
+        status_subquery = select(
+            PullRequestReviewBase.pull_request_commit_id,
             PullRequestReviewBase.pull_request_status,
-            func.count(PullRequestReviewBase.id),
-        ).select_from(base_query.subquery())
-        status_query = status_query.group_by(PullRequestReviewBase.pull_request_status)
+        ).distinct()
+        if project_key:
+            status_subquery = status_subquery.where(
+                PullRequestReviewBase.project_key == project_key
+            )
+
+        status_query = select(
+            status_subquery.c.pull_request_status,
+            func.count(status_subquery.c.pull_request_commit_id),
+        ).group_by(status_subquery.c.pull_request_status)
+
         status_result = await db.execute(status_query)
         status_counts = {row[0]: row[1] for row in status_result}
 
@@ -1011,32 +1034,37 @@ class ReviewService:
         avg_score_result = await db.execute(avg_score_query)
         avg_score = avg_score_result.scalar() or 0.0
 
-        # Get reviews by date
+        # Get reviews by date - count unique PRs
         today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-        week_ago = today.replace(day=today.day - 7) if today.day > 7 else today.replace(day=1)
-        month_ago = (
-            today.replace(month=today.month - 1)
-            if today.month > 1
-            else today.replace(year=today.year - 1, month=12)
-        )
+        week_ago = today - timedelta(days=7)
+        month_ago = today - timedelta(days=30)
 
-        today_query = select(func.count()).select_from(
-            base_query.where(PullRequestReviewBase.created_date >= today).subquery()
-        )
+        # Reviews today (unique PRs)
+        today_query = select(
+            func.count(func.distinct(PullRequestReviewBase.pull_request_commit_id))
+        ).where(PullRequestReviewBase.created_date >= today)
+        if project_key:
+            today_query = today_query.where(PullRequestReviewBase.project_key == project_key)
         today_result = await db.execute(today_query)
-        reviews_today = today_result.scalar()
+        reviews_today = today_result.scalar() or 0
 
-        week_query = select(func.count()).select_from(
-            base_query.where(PullRequestReviewBase.created_date >= week_ago).subquery()
-        )
+        # Reviews this week (unique PRs)
+        week_query = select(
+            func.count(func.distinct(PullRequestReviewBase.pull_request_commit_id))
+        ).where(PullRequestReviewBase.created_date >= week_ago)
+        if project_key:
+            week_query = week_query.where(PullRequestReviewBase.project_key == project_key)
         week_result = await db.execute(week_query)
-        reviews_this_week = week_result.scalar()
+        reviews_this_week = week_result.scalar() or 0
 
-        month_query = select(func.count()).select_from(
-            base_query.where(PullRequestReviewBase.created_date >= month_ago).subquery()
-        )
+        # Reviews this month (unique PRs)
+        month_query = select(
+            func.count(func.distinct(PullRequestReviewBase.pull_request_commit_id))
+        ).where(PullRequestReviewBase.created_date >= month_ago)
+        if project_key:
+            month_query = month_query.where(PullRequestReviewBase.project_key == project_key)
         month_result = await db.execute(month_query)
-        reviews_this_month = month_result.scalar()
+        reviews_this_month = month_result.scalar() or 0
 
         # Create statistics object
         stats = ReviewStats(
@@ -1593,6 +1621,7 @@ class ReviewService:
             "reviewer_comments": review_dict.get("reviewer_comments"),
             "pull_request_status": review_dict["pull_request_status"],
             "metadata": review_dict.get("metadata"),
+            "ai_review_id": review_dict.get("ai_review_id"),
             "created_date": review_dict["created_date"],
             "updated_date": review_dict["updated_date"],
             "project": project,
