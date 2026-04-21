@@ -217,12 +217,13 @@ const handleCommand = (command: string) => {
 }
 
 .page-version-info {
-  margin-top: auto;
-  padding-top: 20px;
+  margin-top: auto; /* Push to bottom of flex container */
+  padding: 20px 0;
   text-align: center;
   font-size: 12px;
   color: var(--el-text-color-secondary);
   opacity: 0.7;
+  flex-shrink: 0; /* Prevent footer from shrinking */
 }
 
 .copyright {

@@ -180,7 +180,7 @@
         </el-row>
 
         <!-- Scores Section -->
-        <el-card class="scores-card" style="margin-top: 20px">
+        <el-card class="scores-card" style="margin-top: 20px; margin-bottom: 40px">
           <template #header>
             <div class="card-header">
               <span class="card-title">📊 Scores ({{ scores.length }})</span>
@@ -1029,7 +1029,6 @@ watch(
 .review-detail {
   padding: 20px;
   background: var(--el-bg-color-page);
-  min-height: calc(100vh - 60px);
 }
 
 .header-content-title {
@@ -1695,5 +1694,16 @@ watch(
   font-size: 0.7rem;
   padding: 2px 6px;
   white-space: nowrap;
+}
+
+/* Scores card spacing */
+.scores-card {
+  margin-bottom: 40px;
+}
+
+@media (max-width: 768px) {
+  .scores-card {
+    margin-bottom: 30px;
+  }
 }
 </style>
