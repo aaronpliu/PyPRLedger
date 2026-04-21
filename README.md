@@ -2,9 +2,6 @@
 
 A production-ready FastAPI-based PR Code Review Result Storage System with MySQL, Redis, and Prometheus integration.
 
-**Current API Version**: 1.6.0
-**Current UI Version**: 1.1.0
-See `pyproject.toml`, `frontend/package.json`, or run `python scripts/bump_version.py show`.
 
 ## Features
 
