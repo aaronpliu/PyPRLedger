@@ -296,7 +296,7 @@ class RBACService:
             auth_user_id: User to assign role to
             role_id: Role ID
             resource_type: Resource scope (global, project, repository)
-            resource_id: Resource identifier (optional for global)
+            resource_id: Resource identifier (optional for global, empty string treated as None)
             granted_by: User who granted the role
             expires_at: Optional expiration time
 
@@ -306,12 +306,15 @@ class RBACService:
         Raises:
             ForbiddenException: If assignment already exists
         """
+        # Normalize resource_id: treat empty string as None for consistent matching
+        normalized_resource_id = resource_id if resource_id else None
+
         # Check if assignment already exists
         stmt = select(UserRoleAssignment).where(
             UserRoleAssignment.auth_user_id == auth_user_id,
             UserRoleAssignment.role_id == role_id,
             UserRoleAssignment.resource_type == resource_type,
-            UserRoleAssignment.resource_id == resource_id,
+            UserRoleAssignment.resource_id == normalized_resource_id,
         )
         result = await self.db.execute(stmt)
         existing = result.scalar_one_or_none()
@@ -331,7 +334,7 @@ class RBACService:
             auth_user_id=auth_user_id,
             role_id=role_id,
             resource_type=resource_type,
-            resource_id=resource_id,
+            resource_id=normalized_resource_id,
             granted_by=granted_by,
             expires_at=expires_at,
         )
@@ -355,16 +358,19 @@ class RBACService:
             auth_user_id: User to revoke role from
             role_id: Role ID
             resource_type: Resource scope
-            resource_id: Resource identifier
+            resource_id: Resource identifier (None or empty string treated as NULL)
 
         Returns:
             True if role was revoked, False if not found
         """
+        # Normalize resource_id: treat empty string as None for consistent matching
+        normalized_resource_id = resource_id if resource_id else None
+
         stmt = select(UserRoleAssignment).where(
             UserRoleAssignment.auth_user_id == auth_user_id,
             UserRoleAssignment.role_id == role_id,
             UserRoleAssignment.resource_type == resource_type,
-            UserRoleAssignment.resource_id == resource_id,
+            UserRoleAssignment.resource_id == normalized_resource_id,
         )
         result = await self.db.execute(stmt)
         assignment = result.scalar_one_or_none()

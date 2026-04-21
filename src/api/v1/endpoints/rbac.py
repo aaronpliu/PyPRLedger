@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -272,16 +272,19 @@ async def revoke_role_from_user(
     resource_type: str,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
-    resource_id: str | None = None,
+    resource_id: str | None = Query(default=None),
 ) -> dict[str, str]:
     """Revoke role from user (requires system admin or user management permission)"""
     await rbac_service.require_permission(current_user.id, "manage", "users")
+
+    # Normalize resource_id: treat empty string as None
+    normalized_resource_id = resource_id if resource_id else None
 
     success = await rbac_service.revoke_role(
         auth_user_id=auth_user_id,
         role_id=role_id,
         resource_type=resource_type,
-        resource_id=resource_id,
+        resource_id=normalized_resource_id,
     )
 
     if not success:

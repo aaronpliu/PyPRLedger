@@ -445,8 +445,14 @@ const assignRole = async () => {
     
     ElMessage.success('Role assigned successfully')
     
-    // Reload current roles
+    // Close the dialog
+    showRoleDialog.value = false
+    
+    // Reload current roles (in case dialog is reopened)
     currentRoles.value = await rbacApi.getUserRoles(selectedUser.value.id)
+    
+    // Reload the main user list to reflect changes
+    await loadUsers()
     
     // Reset form
     roleForm.role_id = null
@@ -482,6 +488,9 @@ const revokeRole = async (assignment: RoleAssignment) => {
     
     // Reload current roles
     currentRoles.value = await rbacApi.getUserRoles(selectedUser.value.id)
+    
+    // Reload the main user list to reflect changes
+    await loadUsers()
   } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.response?.data?.detail || 'Failed to revoke role')
