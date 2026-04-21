@@ -232,6 +232,72 @@ class AuthService:
             user_agent=user_agent,
         )
 
+    async def _get_system_setting(self, setting_key: str, default_value: str = "true") -> str:
+        """Get system setting value with Redis cache and database fallback
+
+        This implements the same hybrid approach as RBACService to avoid circular dependencies.
+
+        Args:
+            setting_key: The setting identifier (e.g., 'registration_enabled')
+            default_value: Default value if setting doesn't exist
+
+        Returns:
+            The setting value as string
+        """
+        from src.models.system_setting import SystemSetting
+
+        cache_key = f"system:settings:{setting_key}"
+
+        try:
+            # Step 1: Try Redis cache first
+            cached_value = await self.redis_client.get(cache_key)
+            if cached_value is not None:
+                logger.debug(f"[AuthService] Cache hit for setting '{setting_key}': {cached_value}")
+                return cached_value
+
+            # Step 2: Cache miss - read from database
+            logger.debug(
+                f"[AuthService] Cache miss for setting '{setting_key}', reading from database"
+            )
+            stmt = select(SystemSetting).where(
+                SystemSetting.setting_key == setting_key,
+                SystemSetting.is_active == True,
+            )
+            result = await self.db.execute(stmt)
+            setting = result.scalar_one_or_none()
+
+            if setting:
+                # Found in database - cache it
+                value = setting.setting_value
+                await self.redis_client.setex(cache_key, 86400 * 365, value)  # Cache for 1 year
+                logger.info(f"[AuthService] Loaded setting '{setting_key}' from database: {value}")
+                return value
+
+            # Step 3: Setting doesn't exist - create with default value
+            logger.info(
+                f"[AuthService] Setting '{setting_key}' not found, creating with default: {default_value}"
+            )
+            new_setting = SystemSetting(
+                setting_key=setting_key,
+                setting_value=default_value,
+                description=f"Auto-created system setting: {setting_key}",
+                is_active=True,
+            )
+            self.db.add(new_setting)
+            await self.db.commit()
+            await self.db.refresh(new_setting)
+
+            # Cache the default value
+            await self.redis_client.setex(cache_key, 86400 * 365, default_value)
+            logger.info(
+                f"[AuthService] Created and cached default setting '{setting_key}': {default_value}"
+            )
+            return default_value
+
+        except Exception as e:
+            logger.error(f"[AuthService] Failed to get setting '{setting_key}': {e}")
+            raise
+
     async def register(
         self,
         register_data: RegisterRequest,
@@ -249,10 +315,13 @@ class AuthService:
         Raises:
             AppException: If username already exists or registration is disabled
         """
-        # Check if registration is enabled
+        # Check if registration is enabled using hybrid DB+Redis approach
         try:
-            reg_enabled_value = await self.redis_client.get("system:settings:registration_enabled")
-            if reg_enabled_value == "false":
+            reg_enabled_value = await self._get_system_setting("registration_enabled", "true")
+            if reg_enabled_value.lower() == "false":
+                logger.warning(
+                    f"Registration attempt while disabled - IP: {ip_address}, Username: {register_data.username}"
+                )
                 raise AppException(
                     code=ErrorCode.VALIDATION_ERROR,
                     message="User registration is currently disabled",
@@ -261,8 +330,14 @@ class AuthService:
         except AppException:
             raise
         except Exception as e:
-            logger.warning(f"Failed to check registration setting, defaulting to enabled: {e}")
-            # Continue with registration if Redis check fails
+            logger.error(
+                f"Failed to check registration setting: {e}. Defaulting to DISABLED for security."
+            )
+            raise AppException(
+                code=ErrorCode.SERVICE_UNAVAILABLE,
+                message="Registration service temporarily unavailable",
+                status_code=503,
+            ) from e
 
         # Check if username already exists
         stmt = select(AuthUser).where(AuthUser.username == register_data.username)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,6 +22,8 @@ from src.schemas.rbac import (
 )
 from src.services.rbac_service import RBACService
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/rbac")
 
@@ -305,16 +308,13 @@ async def get_registration_enabled(
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> dict:
     """Check if registration is enabled (public endpoint, no auth required)"""
-    from src.utils.redis import get_redis_client
-
-    redis_client = get_redis_client()
     try:
-        value = await redis_client.get("system:settings:registration_enabled")
-        # Default to True if not set
-        is_enabled = value != "false"
+        value = await rbac_service.get_setting("registration_enabled", default_value="true")
+        is_enabled = value.lower() == "true"
         return {"registration_enabled": is_enabled}
-    except Exception:
-        # If Redis fails, default to enabled
+    except Exception as e:
+        logger.error(f"Failed to get registration setting: {e}")
+        # Default to enabled on error for availability
         return {"registration_enabled": True}
 
 
@@ -333,23 +333,28 @@ async def update_registration_enabled(
     # Check if user has permission to manage settings
     await rbac_service.require_permission(current_user.id, "manage", "settings")
 
-    from src.utils.redis import get_redis_client
-
-    redis_client = get_redis_client()
     enabled = setting_data.get("registration_enabled", True)
+    value_str = str(enabled).lower()
 
     try:
-        await redis_client.setex(
-            "system:settings:registration_enabled",
-            86400 * 365,  # Cache for 1 year
-            str(enabled).lower(),
+        await rbac_service.update_setting(
+            setting_key="registration_enabled",
+            setting_value=value_str,
+            updated_by=current_user.id,
+            description="Controls whether new user registration is allowed",
         )
         return {
             "message": "Registration setting updated successfully",
             "registration_enabled": enabled,
         }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
     except Exception as e:
+        logger.error(f"Failed to update registration setting: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update registration setting: {str(e)}",
-        )
+        ) from e

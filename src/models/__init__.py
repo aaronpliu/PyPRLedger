@@ -16,6 +16,7 @@ from src.models.pull_request import (
 from src.models.rbac import UserRoleAssignment
 from src.models.repository import Repository
 from src.models.role import Role
+from src.models.system_setting import SystemSetting
 from src.models.user import User
 
 
@@ -31,4 +32,5 @@ __all__ = [
     "UserRoleAssignment",
     "AuditLog",
     "ProjectRegistry",
+    "SystemSetting",
 ]

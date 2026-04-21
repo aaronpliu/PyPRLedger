@@ -61,7 +61,7 @@ const { t } = useI18n()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
-const registrationEnabled = ref(true)
+const registrationEnabled = ref(false)
 
 // Check if registration is enabled
 onMounted(async () => {
@@ -70,8 +70,8 @@ onMounted(async () => {
     registrationEnabled.value = response.registration_enabled
   } catch (error) {
     console.error('Failed to check registration status:', error)
-    // Default to enabled if check fails
-    registrationEnabled.value = true
+    // Default to disabled on error for security
+    registrationEnabled.value = false
   }
 })
 
