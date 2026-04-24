@@ -149,11 +149,11 @@ window.addEventListener('notification-received', ((event: CustomEvent) => {
   padding: 8px;
   border-radius: 4px;
   transition: background-color 0.3s;
-  color: white;
+  color: var(--el-text-color-primary);
 }
 
 .notification-bell:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--el-fill-color-light);
 }
 
 .notification-dropdown {

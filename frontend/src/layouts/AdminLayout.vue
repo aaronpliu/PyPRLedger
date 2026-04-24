@@ -70,6 +70,7 @@
           <div class="header-item user-dropdown-wrapper">
             <el-dropdown @command="handleCommand">
               <span class="user-info">
+                <el-icon><User /></el-icon>
                 {{ authStore.user?.username }}
                 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
               </span>

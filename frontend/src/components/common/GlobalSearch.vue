@@ -344,14 +344,14 @@ const formatDate = (dateStr: string) => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: white;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color);
+  color: var(--el-text-color-primary);
 }
 
 .search-trigger:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--el-fill-color);
+  border-color: var(--el-border-color-hover);
 }
 
 .search-hint {
@@ -360,10 +360,11 @@ const formatDate = (dateStr: string) => {
 
 .shortcut {
   padding: 2px 6px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--el-fill-color);
   border-radius: 4px;
   font-size: 11px;
   font-family: monospace;
+  color: var(--el-text-color-regular);
 }
 
 .search-dialog :deep(.el-dialog__header) {
@@ -411,11 +412,11 @@ const formatDate = (dateStr: string) => {
   border-radius: 6px;
   cursor: pointer;
   transition: background-color 0.2s;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .recent-item:hover {
-  background-color: #f5f7fa;
+  background-color: var(--el-fill-color-light);
 }
 
 .suggestion-list {
@@ -426,25 +427,25 @@ const formatDate = (dateStr: string) => {
 
 .suggestion-item {
   padding: 8px 12px;
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
   border-radius: 6px;
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .suggestion-item kbd {
   padding: 2px 6px;
-  background: #e4e7ed;
+  background: var(--el-fill-color);
   border-radius: 4px;
   font-family: monospace;
   font-size: 12px;
   margin-right: 8px;
+  color: var(--el-text-color-primary);
 }
 
 .results-count {
   font-size: 12px;
-  color: #909399;
-  margin-bottom: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .result-item {
@@ -459,7 +460,7 @@ const formatDate = (dateStr: string) => {
 
 .result-item:hover,
 .result-item.active {
-  background-color: #ecf5ff;
+  background-color: var(--el-fill-color-light);
 }
 
 .result-icon {
@@ -467,7 +468,7 @@ const formatDate = (dateStr: string) => {
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -481,7 +482,7 @@ const formatDate = (dateStr: string) => {
 .result-title {
   font-size: 14px;
   font-weight: 500;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin-bottom: 4px;
 }
 
@@ -489,11 +490,12 @@ const formatDate = (dateStr: string) => {
   background: #fff566;
   padding: 0 2px;
   border-radius: 2px;
+  color: #000;
 }
 
 .result-description {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-bottom: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -508,30 +510,31 @@ const formatDate = (dateStr: string) => {
 
 .result-date {
   font-size: 11px;
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
 }
 
 .dialog-footer {
   display: flex;
   justify-content: center;
   padding-top: 8px;
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 .footer-hints {
   display: flex;
   gap: 16px;
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .footer-hints kbd {
   padding: 2px 6px;
-  background: #f5f7fa;
-  border: 1px solid #e4e7ed;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color);
   border-radius: 4px;
   font-family: monospace;
   font-size: 11px;
   margin-right: 4px;
+  color: var(--el-text-color-regular);
 }
 </style>
