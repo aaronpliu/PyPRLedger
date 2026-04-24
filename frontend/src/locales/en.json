@@ -51,6 +51,7 @@
     "login_title": "Login to PR Ledger",
     "login_subtitle": "Track and manage your code reviews",
     "register_title": "Create Account",
+    "registerPrompt": "Please register with your domain account",
     "register_subtitle": "Join the code review community",
     "username": "Username",
     "password": "Password",

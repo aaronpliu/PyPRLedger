@@ -51,6 +51,7 @@
     "login_title": "登录到 PR Ledger",
     "login_subtitle": "跟踪和管理您的代码审查",
     "register_title": "创建账户",
+    "registerPrompt": "请使用您的域账户进行注册",
     "register_subtitle": "加入代码审查社区",
     "username": "用户名",
     "password": "密码",

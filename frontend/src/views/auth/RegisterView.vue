@@ -26,6 +26,7 @@
       <el-card v-else-if="registrationEnabled" class="auth-card" shadow="always">
         <div class="card-header">
           <h2 class="card-title">{{ t('auth.register_title') }}</h2>
+          <p class="card-subtitle">{{ t('auth.registerPrompt') }}</p>
         </div>
         
         <el-form :model="form" :rules="rules" ref="formRef" label-width="0" class="auth-form">
@@ -271,7 +272,7 @@ const handleRegister = async () => {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 440px;
+  max-width: 520px;
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -324,7 +325,24 @@ const handleRegister = async () => {
   font-size: 1.5rem;
   font-weight: 600;
   color: var(--el-text-color-primary);
+  margin: 0 0 8px 0;
+}
+
+.card-subtitle {
+  font-size: 0.95rem;
+  color: var(--el-color-primary);
   margin: 0;
+  padding: 8px 16px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  display: inline-block;
+  font-weight: 500;
+  border: 1px solid var(--el-border-color-light);
+}
+
+[data-theme='dark'] .card-subtitle {
+  background: rgba(64, 158, 255, 0.1);
+  border-color: rgba(64, 158, 255, 0.3);
 }
 
 .rainbow-line {
@@ -360,12 +378,6 @@ const handleRegister = async () => {
   50% {
     opacity: 1;
   }
-}
-
-.card-subtitle {
-  font-size: 0.9rem;
-  color: var(--el-text-color-secondary);
-  margin: 0;
 }
 
 /* Form Styles */

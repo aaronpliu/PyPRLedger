@@ -51,6 +51,7 @@
     "login_title": "登入到 PR Ledger",
     "login_subtitle": "追蹤和管理您的程式碼審查",
     "register_title": "建立帳戶",
+    "registerPrompt": "請使用您的網域帳戶進行註冊",
     "register_subtitle": "加入程式碼審查社群",
     "username": "使用者名稱",
     "password": "密碼",

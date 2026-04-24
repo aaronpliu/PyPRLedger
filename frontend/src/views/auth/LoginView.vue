@@ -181,7 +181,7 @@ const handleLogin = async () => {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 440px;
+  max-width: 520px;
   padding: 24px;
   display: flex;
   flex-direction: column;
