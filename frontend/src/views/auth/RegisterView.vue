@@ -97,6 +97,17 @@
             </el-button>
           </el-form-item>
           
+          <!-- Inline Error Message -->
+          <el-alert
+            v-if="registerError"
+            :title="registerError"
+            type="error"
+            :closable="true"
+            @close="registerError = ''"
+            show-icon
+            class="inline-error"
+          />
+          
           <div class="auth-footer">
             <span>{{ t('auth.already_have_account') }}</span>
             <router-link to="/login" class="auth-link">{{ t('common.login') }}</router-link>
@@ -148,6 +159,7 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 const loadingCheck = ref(true)
 const registrationEnabled = ref(false)
+const registerError = ref('')
 
 // Check if registration is enabled
 onMounted(async () => {
@@ -212,6 +224,9 @@ const rules: FormRules = {
 const handleRegister = async () => {
   if (!formRef.value) return
   
+  // Clear previous errors
+  registerError.value = ''
+  
   await formRef.value.validate(async (valid) => {
     if (valid) {
       loading.value = true
@@ -221,7 +236,6 @@ const handleRegister = async () => {
           email: form.email,
           password: form.password,
         })
-        ElMessage.success(t('auth.register_success'))
         router.push('/')
       } catch (error: any) {
         console.error('Registration error:', error)
@@ -229,14 +243,13 @@ const handleRegister = async () => {
         // Extract specific error message from the response
         // Backend returns: { error: "CODE", message: "Human readable message", detail: null }
         const responseData = error?.response?.data
-        const errorMessage = responseData?.message || 
-                           responseData?.detail || 
-                           responseData?.error ||
-                           error?.message ||
-                           t('auth.register_failed')
+        registerError.value = responseData?.message || 
+                            responseData?.detail || 
+                            responseData?.error ||
+                            error?.message ||
+                            t('auth.register_failed')
         
-        console.log('Extracted error message:', errorMessage)
-        ElMessage.error(errorMessage)
+        console.log('Extracted error message:', registerError.value)
       } finally {
         loading.value = false
       }
@@ -451,6 +464,25 @@ const handleRegister = async () => {
 
 .submit-button:active {
   transform: translateY(0);
+}
+
+/* Inline Error Message */
+.inline-error {
+  margin-top: 16px;
+  margin-bottom: 0;
+  border-radius: 8px;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Footer */

@@ -61,6 +61,17 @@
             </el-button>
           </el-form-item>
           
+          <!-- Inline Error Message -->
+          <el-alert
+            v-if="loginError"
+            :title="loginError"
+            type="error"
+            :closable="true"
+            @close="loginError = ''"
+            show-icon
+            class="inline-error"
+          />
+          
           <div class="auth-footer" v-if="registrationEnabled">
             <span>{{ t('auth.dont_have_account') }}</span>
             <router-link to="/register" class="auth-link">{{ t('common.register') }}</router-link>
@@ -80,7 +91,6 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { rbacApi } from '@/api/rbac'
@@ -94,6 +104,7 @@ const { t } = useI18n()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const registrationEnabled = ref(false)
+const loginError = ref('')
 
 // Check if registration is enabled
 onMounted(async () => {
@@ -125,12 +136,14 @@ const rules: FormRules = {
 const handleLogin = async () => {
   if (!formRef.value) return
   
+  // Clear previous errors
+  loginError.value = ''
+  
   await formRef.value.validate(async (valid) => {
     if (valid) {
       loading.value = true
       try {
         await authStore.login(form)
-        ElMessage.success(t('auth.login_success'))
         router.push('/')
       } catch (error: any) {
         console.error('Login error:', error)
@@ -138,14 +151,13 @@ const handleLogin = async () => {
         // Extract specific error message from the response
         // Backend returns: { error: "CODE", message: "Human readable message", detail: null }
         const responseData = error?.response?.data
-        const errorMessage = responseData?.message || 
-                           responseData?.detail || 
-                           responseData?.error ||
-                           error?.message ||
-                           t('auth.login_failed')
+        loginError.value = responseData?.message || 
+                         responseData?.detail || 
+                         responseData?.error ||
+                         error?.message ||
+                         t('auth.login_failed')
         
-        console.log('Extracted error message:', errorMessage)
-        ElMessage.error(errorMessage)
+        console.log('Extracted error message:', loginError.value)
       } finally {
         loading.value = false
       }
@@ -345,6 +357,25 @@ const handleLogin = async () => {
   background: var(--el-color-primary-light-3);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+/* Inline Error Message */
+.inline-error {
+  margin-top: 16px;
+  margin-bottom: 0;
+  border-radius: 8px;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .submit-button:active {
