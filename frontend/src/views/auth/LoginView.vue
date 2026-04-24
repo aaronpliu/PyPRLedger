@@ -132,8 +132,20 @@ const handleLogin = async () => {
         await authStore.login(form)
         ElMessage.success(t('auth.login_success'))
         router.push('/')
-      } catch (error) {
-        ElMessage.error(t('auth.login_failed'))
+      } catch (error: any) {
+        console.error('Login error:', error)
+        
+        // Extract specific error message from the response
+        // Backend returns: { error: "CODE", message: "Human readable message", detail: null }
+        const responseData = error?.response?.data
+        const errorMessage = responseData?.message || 
+                           responseData?.detail || 
+                           responseData?.error ||
+                           error?.message ||
+                           t('auth.login_failed')
+        
+        console.log('Extracted error message:', errorMessage)
+        ElMessage.error(errorMessage)
       } finally {
         loading.value = false
       }

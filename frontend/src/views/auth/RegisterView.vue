@@ -223,8 +223,20 @@ const handleRegister = async () => {
         })
         ElMessage.success(t('auth.register_success'))
         router.push('/')
-      } catch (error) {
-        ElMessage.error(t('auth.register_failed'))
+      } catch (error: any) {
+        console.error('Registration error:', error)
+        
+        // Extract specific error message from the response
+        // Backend returns: { error: "CODE", message: "Human readable message", detail: null }
+        const responseData = error?.response?.data
+        const errorMessage = responseData?.message || 
+                           responseData?.detail || 
+                           responseData?.error ||
+                           error?.message ||
+                           t('auth.register_failed')
+        
+        console.log('Extracted error message:', errorMessage)
+        ElMessage.error(errorMessage)
       } finally {
         loading.value = false
       }

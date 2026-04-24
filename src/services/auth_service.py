@@ -346,7 +346,7 @@ class AuthService:
 
         if existing_user:
             raise AppException(
-                code=ErrorCode.USER_ALREADY_EXISTS,
+                code=ErrorCode.RESOURCE_ALREADY_EXISTS,
                 message=f"Username '{register_data.username}' already exists",
                 status_code=400,
             )
@@ -364,6 +364,8 @@ class AuthService:
             logger.info(
                 f"Marked existing git user '{git_user.username}' as reviewer during registration"
             )
+            # Flush the git user update to ensure it's persisted before creating auth_user
+            await self.db.flush()
 
         # Create new auth user
         hashed_password = hash_password(register_data.password)
