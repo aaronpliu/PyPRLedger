@@ -105,7 +105,7 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
 
 - **API**: http://localhost:8000
 - **Documentation**: http://localhost:8000/api/docs
-- **Metrics**: http://localhost:8000/metrics
+- **Metrics**: http://localhost:8000/api/metrics
 
 ---
 
@@ -322,7 +322,7 @@ jobs:
 
 ### 1. Prometheus Metrics
 
-Access metrics at: `http://your-server/metrics`
+Access metrics at: `http://your-server/api/metrics`
 
 Key metrics to monitor:
 - `http_requests_total` - Total HTTP requests
