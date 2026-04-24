@@ -996,15 +996,20 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 0.85rem;
+  flex-wrap: wrap;
+  line-height: 1.4;
 }
 
 .branch {
   color: var(--el-text-color-primary);
   font-weight: 500;
+  word-break: break-all;
+  overflow-wrap: break-word;
 }
 
 .arrow {
   color: var(--el-text-color-secondary);
+  flex-shrink: 0;
 }
 
 .text-secondary {
