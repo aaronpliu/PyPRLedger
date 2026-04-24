@@ -358,6 +358,13 @@ class AuthService:
             result = await self.db.execute(stmt)
             git_user = result.scalar_one_or_none()
 
+        # If git user exists, mark them as reviewer
+        if git_user and not git_user.is_reviewer:
+            git_user.is_reviewer = True
+            logger.info(
+                f"Marked existing git user '{git_user.username}' as reviewer during registration"
+            )
+
         # Create new auth user
         hashed_password = hash_password(register_data.password)
         new_auth_user = AuthUser(

@@ -139,6 +139,10 @@ class EntitySyncService:
             if is_reviewer and not user.is_reviewer:
                 user.is_reviewer = True
                 await self.db.flush()
+
+                # If user has linked auth_user, upgrade role to reviewer
+                await self._upgrade_linked_auth_user_role(user)
+
             return user
 
         # Fetch from Bitbucket API
@@ -238,6 +242,36 @@ class EntitySyncService:
         await self._log_association_audit(auth_user.id, git_user.id, git_user.username)
 
         # Upgrade role from viewer to reviewer
+        await self._upgrade_role_to_reviewer(auth_user.id)
+
+    async def _upgrade_linked_auth_user_role(self, git_user: User) -> None:
+        """Upgrade auth_user role to reviewer when git user is marked as reviewer
+
+        This handles the scenario where a PR review is inserted with a specified reviewer.
+        If the git user has a linked auth_user, upgrade their role to 'reviewer'.
+
+        Args:
+            git_user: The git user who is now a reviewer
+        """
+        from src.models.auth_user import AuthUser
+
+        # Find auth_user linked to this git user
+        stmt = select(AuthUser).where(AuthUser.user_id == git_user.id)
+        result = await self.db.execute(stmt)
+        auth_user = result.scalar_one_or_none()
+
+        if not auth_user:
+            logger.debug(
+                f"No auth_user linked to git user {git_user.username}, skipping role upgrade"
+            )
+            return
+
+        logger.info(
+            f"Git user {git_user.username} (ID: {git_user.id}) is now a reviewer. "
+            f"Upgrading linked auth_user {auth_user.id} to reviewer role."
+        )
+
+        # Upgrade the role
         await self._upgrade_role_to_reviewer(auth_user.id)
 
     async def _upgrade_role_to_reviewer(self, auth_user_id: int) -> None:
