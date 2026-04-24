@@ -518,13 +518,9 @@ const applyFilters = () => {
   filteredReviews.value = result
   reviews.value = result
   
-  // Only update total if filters are active (client-side filtering scenario)
-  // Otherwise, keep the API's total count for proper pagination
-  const hasActiveFilters = searchQuery.value || appFilter.value?.length > 0 || prUserFilter.value || reviewerFilter.value || 
-                          scoredFilter.value || severityFilter.value || statusFilter.value
-  if (hasActiveFilters) {
-    total.value = result.length
-  }
+  // Keep backend's total count for pagination.
+  // Client-side filters (search, scored, severity) reduce visible items but don't change total pages.
+  // Only server-side filters (app, pr_user, reviewer, status) affect the total count from backend.
 }
 
 const viewReview = (review: Review) => {
