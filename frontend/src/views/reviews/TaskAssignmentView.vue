@@ -39,7 +39,7 @@
         
       <!-- Reviews Table -->
       <el-table
-        :data="displayedReviews"
+        :data="reviews"
         v-loading="loading"
         stripe
         border
@@ -346,7 +346,8 @@ const handleResize = () => {
 
 // State
 const loading = ref(false)
-const allReviews = ref<ReviewV2[]>([]) // Store all reviews for client-side filtering
+const allReviews = ref<ReviewV2[]>([]) // Store reviews from API (current page)
+const reviews = ref<ReviewV2[]>([]) // Filtered reviews for display
 const total = ref(0) // Total count from API
 const currentPage = ref(1)
 
@@ -394,19 +395,27 @@ const loadReviews = async () => {
     }
     
     // Add filter parameters supported by task-assignment API
-    // Note: task-assignment API only supports project_key, reviewer, and status
     if (projectFilter.value) params.project_key = projectFilter.value
     if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
       params.reviewer = reviewerFilter.value
     }
     if (statusFilter.value) params.status = statusFilter.value
+    
+    // Add new filter parameters (now supported by backend)
+    if (appFilter.value && appFilter.value.length > 0) {
+      params.app_names = appFilter.value.join(',')
+    }
+    if (prUserFilter.value) {
+      params.pull_request_user = prUserFilter.value
+    }
 
     const response = await taskAssignmentApi.getReviews(params)
     allReviews.value = response.items
     total.value = response.total
     
-    // Client-side filtering for unsupported fields (search, app, prUser, scored, severity, unassigned)
-    // Handled automatically by displayedReviews computed property
+    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned)
+    applyFilters()
+
   } catch (error) {
     console.error('Failed to load reviews:', error)
     ElMessage.error('Failed to load reviews')
@@ -442,7 +451,8 @@ const handleResetFilters = () => {
   loadReviews()
 }
 
-const displayedReviews = computed(() => {
+// Apply client-side filters (same pattern as ReviewListView)
+const applyFilters = () => {
   let result = [...allReviews.value]
   
   // Apply search filter (text search not supported by backend)
@@ -456,23 +466,6 @@ const displayedReviews = computed(() => {
         review.reviewers?.some(r => r.reviewer?.toLowerCase().includes(query))
       )
     })
-  }
-  
-  // Apply app name filter (not supported by task-assignment API)
-  if (appFilter.value && appFilter.value.length > 0) {
-    const selectedApps = appFilter.value.map(app => app.toLowerCase())
-    result = result.filter(review => 
-      review.app_name && selectedApps.includes(review.app_name.toLowerCase())
-    )
-  }
-  
-  // Apply PR user filter (not supported by task-assignment API)
-  if (prUserFilter.value) {
-    const prUser = prUserFilter.value.toLowerCase()
-    result = result.filter(review => 
-      review.pull_request_user?.toLowerCase().includes(prUser) ||
-      review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
-    )
   }
   
   // Apply reviewer filter for unassigned (not supported by backend)
@@ -509,10 +502,12 @@ const displayedReviews = computed(() => {
 
   result.sort((left, right) => compareReviews(left, right))
 
-  return result
-})
-
-const displayedTotal = computed(() => displayedReviews.value.length)
+  reviews.value = result
+  
+  // Keep backend's total count for pagination.
+  // Client-side filters reduce visible items but don't change total pages.
+  // Only server-side filters (project_key, reviewer, status) affect the total count from backend.
+}
 
 const isDefaultPrioritySort = computed(
   () => sortState.value.prop === 'created_date' && sortState.value.order === 'descending'

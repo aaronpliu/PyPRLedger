@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.exceptions import ReviewNotFoundException
+from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import PullRequestReviewAssignment, PullRequestReviewBase
 from src.schemas.review import (
     AssignReviewerRequest,
@@ -40,9 +41,22 @@ class MultiReviewerService:
         reviewer: str | None = None,
         visible_to_username: str | None = None,
         status: str | None = None,
+        app_names: list[str] | None = None,
+        pull_request_user: str | None = None,
     ) -> tuple[list[ReviewWithAssignmentsResponse], int]:
         """
         Get list of reviews with their assignments
+
+        Args:
+            db: Database session
+            page: Page number (1-indexed)
+            page_size: Number of items per page
+            project_key: Filter by project key
+            reviewer: Filter by reviewer username
+            visible_to_username: Filter for visibility (PR author or reviewer)
+            status: Filter by PR status
+            app_names: List of app names to filter by (resolved via project_registry)
+            pull_request_user: Filter by PR author username
 
         Returns:
             Tuple of (reviews, total_count)
@@ -59,11 +73,37 @@ class MultiReviewerService:
             selectinload(PullRequestReviewBase.pull_request_user_rel),
         )
 
-        # Apply filters
+        # Handle app_name filtering via registry lookup
+        if app_names:
+            # Get all (project_key, repository_slug) pairs for requested apps
+            registry_query = select(
+                ProjectRegistry.project_key,
+                ProjectRegistry.repository_slug,
+            ).where(ProjectRegistry.app_name.in_(app_names))
+            registry_result = await db.execute(registry_query)
+            project_repo_pairs = registry_result.all()
+
+            if project_repo_pairs:
+                # Build OR condition for all matching pairs
+                app_conditions = [
+                    and_(
+                        PullRequestReviewBase.project_key == pk,
+                        PullRequestReviewBase.repository_slug == rs,
+                    )
+                    for pk, rs in project_repo_pairs
+                ]
+                stmt = stmt.where(or_(*app_conditions))
+            else:
+                # No projects registered to these apps, return empty result
+                return [], 0
+
+        # Apply other filters
         if project_key:
             stmt = stmt.where(PullRequestReviewBase.project_key == project_key)
         if status:
             stmt = stmt.where(PullRequestReviewBase.pull_request_status == status)
+        if pull_request_user:
+            stmt = stmt.where(PullRequestReviewBase.pull_request_user == pull_request_user)
         if reviewer:
             stmt = stmt.join(PullRequestReviewBase.assignments).where(
                 PullRequestReviewAssignment.reviewer == reviewer
