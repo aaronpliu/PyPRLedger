@@ -7,7 +7,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, case, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -121,8 +121,25 @@ class MultiReviewerService:
         total_result = await db.execute(count_stmt)
         total = total_result.scalar() or 0
 
-        # Apply pagination
-        stmt = stmt.order_by(desc(PullRequestReviewBase.created_date))
+        # Apply pagination with priority sorting for unassigned tasks
+        # Unassigned tasks (no reviewers or all pending) should appear first
+
+        # Create a CASE expression to prioritize unassigned tasks
+        # Priority 0 = unassigned (no active reviewers), Priority 1 = assigned
+        priority_case = case(
+            (
+                ~exists().where(
+                    and_(
+                        PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
+                        PullRequestReviewAssignment.assignment_status != "pending",
+                    )
+                ),
+                0,
+            ),
+            else_=1,
+        )
+
+        stmt = stmt.order_by(priority_case, desc(PullRequestReviewBase.created_date))
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
 
         result = await db.execute(stmt)
