@@ -11,6 +11,7 @@
             <ExportMenu
               :data="reviews"
               :selected-ids="selectedReviews.map(r => r.id)"
+              :fetch-all-data="fetchAllDataForExport"
             />
             <el-button @click="loadReviews">
               <el-icon><Refresh /></el-icon>
@@ -421,6 +422,94 @@ const loadReviews = async () => {
 // Store all reviews for client-side filtering
 const allReviews = ref<Review[]>([])
 const filteredReviews = ref<Review[]>([])
+
+// Fetch all data for export (bypassing pagination)
+const fetchAllDataForExport = async (): Promise<Review[]> => {
+  try {
+    const params: any = {
+      page: 1,
+      page_size: 10000, // Large page size to get all data
+    }
+    
+    // Add filter parameters for server-side filtering (only supported fields)
+    if (appFilter.value && appFilter.value.length > 0) params.app_names = appFilter.value.join(',')
+    if (prUserFilter.value) params.pull_request_user = prUserFilter.value
+    if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+      params.reviewer = reviewerFilter.value
+    }
+    if (statusFilter.value) params.pull_request_status = statusFilter.value
+
+    const data = await reviewsApi.getReviews(params)
+    let result = data.items
+    
+    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned reviewer)
+    if (searchQuery.value) {
+      const query = searchQuery.value.toLowerCase()
+      result = result.filter(review => {
+        return (
+          review.pull_request_id?.toLowerCase().includes(query) ||
+          review.reviewer?.toLowerCase().includes(query) ||
+          review.project_key?.toLowerCase().includes(query) ||
+          review.repository_slug?.toLowerCase().includes(query) ||
+          review.reviewer_comments?.toLowerCase().includes(query)
+        )
+      })
+    }
+    
+    // Apply PR user filter (client-side refinement if needed, though mostly server-side)
+    if (prUserFilter.value) {
+      const prUser = prUserFilter.value.toLowerCase()
+      result = result.filter(review => 
+        review.pull_request_user?.toLowerCase().includes(prUser) ||
+        review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
+      )
+    }
+    
+    // Apply reviewer filter (client-side refinement for unassigned or text search)
+    if (reviewerFilter.value) {
+      if (reviewerFilter.value === '__unassigned__') {
+        result = result.filter(review => 
+          !review.reviewer && !review.reviewer_info?.display_name
+        )
+      } else {
+        const reviewer = reviewerFilter.value.toLowerCase()
+        result = result.filter(review => 
+          review.reviewer?.toLowerCase().includes(reviewer) ||
+          review.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
+        )
+      }
+    }
+    
+    // Apply scored filter
+    if (scoredFilter.value === 'yes') {
+      result = result.filter(review => 
+        review.score_summary && review.score_summary.total_scores > 0
+      )
+    } else if (scoredFilter.value === 'no') {
+      result = result.filter(review => 
+        !review.score_summary || review.score_summary.total_scores === 0
+      )
+    }
+    
+    // Apply severity filter (check AI review issues)
+    if (severityFilter.value) {
+      const targetSeverity = severityFilter.value
+      result = result.filter(review => {
+        if (!review.ai_suggestions?.issues || review.ai_suggestions.issues.length === 0) {
+          return false
+        }
+        return review.ai_suggestions.issues.some(
+          issue => issue.severity === targetSeverity
+        )
+      })
+    }
+    
+    return result
+  } catch (error) {
+    console.error('Failed to fetch all data for export:', error)
+    throw error
+  }
+}
 
 const handleResetFilters = () => {
   searchQuery.value = ''
