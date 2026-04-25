@@ -369,7 +369,7 @@ const formatDate = (dateStr: string) => {
 
 .search-dialog :deep(.el-dialog__header) {
   padding: 16px 20px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--el-border-color-lighter);
   margin: 0;
 }
 
@@ -394,7 +394,7 @@ const formatDate = (dateStr: string) => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-bottom: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -487,10 +487,15 @@ const formatDate = (dateStr: string) => {
 }
 
 .result-title :deep(mark) {
-  background: #fff566;
+  background: #ffd700;
   padding: 0 2px;
   border-radius: 2px;
   color: #000;
+}
+
+[data-theme='dark'] .result-title :deep(mark) {
+  background: #b8860b;
+  color: #fff;
 }
 
 .result-description {
