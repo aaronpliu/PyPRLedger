@@ -260,7 +260,7 @@
             </el-table-column>
             <el-table-column prop="score" label="Score" width="120">
               <template #default="{ row }">
-                <span class="score-value">{{ row.score }}</span>
+                <span :class="['score-value', getScoreColorClass(row.score)]">{{ row.score }}</span>
                 <span v-if="row.max_score" class="score-max"> / {{ row.max_score }}</span>
               </template>
             </el-table-column>
@@ -354,7 +354,8 @@
               show-input
               style="width: 100%"
             />
-            <div class="score-value-display">{{ scoreForm.score.toFixed(1) }}</div>
+            <div :class="['score-value-display', getScoreColorClass(scoreForm.score)]">{{ scoreForm.score.toFixed(1) }}</div>
+
           </div>
         </el-form-item>
         
@@ -648,6 +649,15 @@ const lastAutoProgressAssignmentId = ref<number | null>(null)
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
+}
+
+// Get score color class based on score value
+const getScoreColorClass = (score: number): string => {
+  if (score >= 9) return 'score-excellent'
+  if (score >= 7) return 'score-good'
+  if (score >= 5) return 'score-acceptable'
+  if (score >= 3) return 'score-needs-improvement'
+  return 'score-poor'
 }
 
 const copyToClipboard = (text: string) => {
@@ -1482,7 +1492,26 @@ watch(
 .score-value {
   font-size: 1.2rem;
   font-weight: 700;
-  color: var(--el-color-success);
+}
+
+.score-excellent {
+  color: #10b981;
+}
+
+.score-good {
+  color: #3b82f6;
+}
+
+.score-acceptable {
+  color: #f59e0b;
+}
+
+.score-needs-improvement {
+  color: #f97316;
+}
+
+.score-poor {
+  color: #ef4444;
 }
 
 .score-max {
@@ -1498,12 +1527,43 @@ watch(
   text-align: center;
   font-size: 2rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  margin-top: 12px;
+  transition: color 0.3s ease;
+}
+
+.score-value-display.score-excellent {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  margin-top: 12px;
-  text-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+.score-value-display.score-good {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.score-value-display.score-acceptable {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.score-value-display.score-needs-improvement {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.score-value-display.score-poor {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* AI Review ID Styles */

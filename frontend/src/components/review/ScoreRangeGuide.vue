@@ -2,7 +2,7 @@
   <div class="score-range-guide">
     <h4>
       <el-icon><InfoFilled /></el-icon>
-      Scoring Guidelines
+      AI Review Evaluation Guidelines
     </h4>
     <div class="score-ranges">
       <div
@@ -11,7 +11,10 @@
         class="score-range-item"
         :class="range.className"
       >
-        <div class="range-badge">{{ range.min }}-{{ range.max }}</div>
+        <div class="range-header">
+          <span class="range-icon">{{ range.icon }}</span>
+          <div class="range-badge">{{ range.min }}-{{ range.max }}</div>
+        </div>
         <div class="range-label">{{ range.label }}</div>
         <div class="range-description">{{ range.description }}</div>
       </div>
@@ -27,36 +30,41 @@ const scoreRanges = [
     min: 9,
     max: 10,
     label: 'Excellent',
-    description: 'Outstanding code quality with minimal issues',
+    description: 'Outstanding insight with zero errors. The review is exceptionally accurate and insightful, identifying critical issues or optimizations without any hallucinations or noise.',
     className: 'excellent',
+    icon: '🟢',
   },
   {
     min: 7,
     max: 8.9,
     label: 'Good',
-    description: 'Good quality with minor improvements needed',
+    description: 'Helpful and accurate with minor nitpicks. The review is reliable and valuable, providing correct feedback that may only lack depth in complex areas or include trivial stylistic suggestions.',
     className: 'good',
+    icon: '🔵',
   },
   {
     min: 5,
     max: 6.9,
     label: 'Acceptable',
-    description: 'Meets basic requirements but needs some work',
+    description: 'Basic validity mixed with generic advice. The review correctly identifies obvious surface-level issues but lacks depth, offering generic suggestions that provide limited value.',
     className: 'acceptable',
+    icon: '🟠',
   },
   {
     min: 3,
     max: 4.9,
     label: 'Needs Improvement',
-    description: 'Significant issues that should be addressed',
+    description: 'Significant noise or missed critical context. The review contains noticeable inaccuracies, misunderstandings of logic, or irrelevant comments that require the developer to filter out significant noise.',
     className: 'needs-improvement',
+    icon: '🔴',
   },
   {
     min: 0,
     max: 2.9,
     label: 'Poor',
-    description: 'Major problems requiring substantial rework',
+    description: 'Fundamentally broken or misleading output. The review is completely incorrect, hallucinates issues, or provides dangerous advice that could harm the codebase.',
     className: 'poor',
+    icon: '⛔',
   },
 ]
 </script>
@@ -85,7 +93,7 @@ const scoreRanges = [
 
 .score-ranges {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
 }
 
@@ -106,23 +114,34 @@ const scoreRanges = [
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+.range-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.range-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
 .range-badge {
   font-size: 0.85rem;
   font-weight: 700;
-  margin-bottom: 4px;
   color: var(--el-text-color-primary);
 }
 
 .range-label {
   font-size: 0.9rem;
   font-weight: 600;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .range-description {
   font-size: 0.75rem;
   color: var(--el-text-color-secondary);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 /* Score range colors */
