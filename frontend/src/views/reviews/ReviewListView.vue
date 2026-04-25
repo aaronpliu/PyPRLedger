@@ -524,16 +524,24 @@ const applyFilters = () => {
 }
 
 const viewReview = (review: Review) => {
-  reviewNavigationStore.setItems(
-    reviews.value.map(item => ({
+  // Calculate if there are more pages
+  const totalPages = Math.ceil(total.value / pageSize.value)
+  const hasMorePages = currentPage.value < totalPages
+
+  reviewNavigationStore.setContext({
+    items: reviews.value.map(item => ({
       id: item.id,
       projectKey: item.project_key,
       repositorySlug: item.repository_slug,
       pullRequestId: item.pull_request_id,
       reviewer: item.reviewer || '',
       sourceFilename: item.source_filename || '',
-    }))
-  )
+    })),
+    currentPage: currentPage.value,
+    pageSize: pageSize.value,
+    totalItems: total.value,
+    hasMorePages: hasMorePages,
+  })
 
   router.push({
     name: 'ReviewDetail',

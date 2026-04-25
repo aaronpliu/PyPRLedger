@@ -12,48 +12,75 @@ export interface ReviewNavigationItem {
   sourceFilename: string
 }
 
-function loadStoredItems(): ReviewNavigationItem[] {
+export interface ReviewNavigationContext {
+  items: ReviewNavigationItem[]
+  currentPage: number
+  pageSize: number
+  totalItems: number
+  hasMorePages: boolean
+}
+
+function loadStoredContext(): ReviewNavigationContext | null {
   try {
     const stored = sessionStorage.getItem(STORAGE_KEY)
     if (!stored) {
-      return []
+      return null
     }
 
     const parsed = JSON.parse(stored)
-    return Array.isArray(parsed) ? parsed : []
+    if (!parsed || !Array.isArray(parsed.items)) {
+      return null
+    }
+
+    return {
+      items: parsed.items,
+      currentPage: parsed.currentPage || 1,
+      pageSize: parsed.pageSize || 20,
+      totalItems: parsed.totalItems || 0,
+      hasMorePages: parsed.hasMorePages || false,
+    }
   } catch {
-    return []
+    return null
   }
 }
 
 export const useReviewNavigationStore = defineStore('reviewNavigation', () => {
-  const items = ref<ReviewNavigationItem[]>(loadStoredItems())
+  const context = ref<ReviewNavigationContext | null>(loadStoredContext())
 
-  const total = computed(() => items.value.length)
+  const items = computed(() => context.value?.items || [])
+  const total = computed(() => context.value?.totalItems || 0)
+  const currentPage = computed(() => context.value?.currentPage || 1)
+  const pageSize = computed(() => context.value?.pageSize || 20)
+  const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
+  const hasMorePages = computed(() => context.value?.hasMorePages || false)
 
   const persist = () => {
-    if (items.value.length === 0) {
+    if (!context.value || context.value.items.length === 0) {
       sessionStorage.removeItem(STORAGE_KEY)
       return
     }
 
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items.value))
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(context.value))
   }
 
-  const setItems = (nextItems: ReviewNavigationItem[]) => {
-    items.value = nextItems
+  const setContext = (nextContext: ReviewNavigationContext) => {
+    context.value = nextContext
     persist()
   }
 
   const clear = () => {
-    items.value = []
+    context.value = null
     persist()
   }
 
   return {
     items,
     total,
-    setItems,
+    currentPage,
+    pageSize,
+    totalPages,
+    hasMorePages,
+    setContext,
     clear,
   }
 })
