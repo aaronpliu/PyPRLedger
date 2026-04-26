@@ -383,6 +383,34 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- Floating Navigation Buttons -->
+    <div 
+      v-if="reviewNavigationStore.items.length > 1"
+      class="floating-navigation"
+    >
+      <!-- Previous Button (Left Side) -->
+      <transition name="fade-slide">
+        <div 
+          v-if="canGoToPreviousPage && !navigatingPage"
+          class="floating-nav-btn floating-nav-prev"
+          @click="goToPreviousReview"
+        >
+          <el-icon :size="20"><ArrowLeft /></el-icon>
+        </div>
+      </transition>
+
+      <!-- Next Button (Right Side) -->
+      <transition name="fade-slide">
+        <div 
+          v-if="canGoToNextPage && !navigatingPage"
+          class="floating-nav-btn floating-nav-next"
+          @click="goToNextReview"
+        >
+          <el-icon :size="20"><ArrowRight /></el-icon>
+        </div>
+      </transition>
+    </div>
   </div>
 </template>
 
@@ -423,6 +451,7 @@ const scoreFormRef = ref<FormInstance>()
 const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
 const isInfoExpanded = ref(false)
 const navigatingPage = ref(false)
+const showFloatingNav = ref(false)
 
 // Detect current theme
 const isDarkTheme = computed(() => {
@@ -1927,6 +1956,112 @@ watch(
 @media (max-width: 768px) {
   .scores-card {
     margin-bottom: 30px;
+  }
+}
+
+/* Floating Navigation Styles */
+.floating-navigation {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.floating-nav-btn {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--el-color-primary);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  pointer-events: auto;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.floating-nav-btn:hover {
+  background: var(--el-color-primary-light-3);
+  transform: translateY(-50%) scale(1.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.floating-nav-prev {
+  left: 5px;
+}
+
+.floating-nav-next {
+  right: 5px;
+}
+
+/* Show buttons when hovering near the edges (within 50px from edge) */
+.review-detail:hover .floating-nav-prev,
+.floating-navigation:hover .floating-nav-prev {
+  opacity: 1;
+  visibility: visible;
+}
+
+.review-detail:hover .floating-nav-next,
+.floating-navigation:hover .floating-nav-next {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Transitions */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-50%) translateX(-10px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-50%) translateX(-10px);
+}
+
+.floating-nav-next.fade-slide-enter-from,
+.floating-nav-next.fade-slide-leave-to {
+  transform: translateY(-50%) translateX(10px);
+}
+
+/* Dark theme adjustments */
+[data-theme='dark'] .floating-nav-btn {
+  background: var(--el-color-primary-dark-2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='dark'] .floating-nav-btn:hover {
+  background: var(--el-color-primary-light-5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .floating-nav-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .floating-nav-prev {
+    left: 8px;
+  }
+
+  .floating-nav-next {
+    right: 8px;
   }
 }
 </style>
