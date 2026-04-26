@@ -11,8 +11,8 @@
               :default-active="activeMenu"
               router
               background-color="var(--el-color-primary)"
-              text-color="var(--el-menu-text-color, #fff)"
-              active-text-color="var(--el-menu-active-color, #ffd04b)"
+              text-color="#ffffff"
+              active-text-color="#ffd04b"
               style="border: none"
               aria-label="Main menu"
             >

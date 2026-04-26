@@ -55,9 +55,9 @@
       <!-- Summary Cards -->
       <el-row :gutter="20" class="summary-cards">
         <el-col :span="6">
-          <el-card shadow="hover" class="summary-card">
+          <el-card shadow="hover" class="summary-card theme-aware-card">
             <div class="summary-content">
-              <div class="summary-icon" style="background: #409eff">
+              <div class="summary-icon summary-icon-primary">
                 <el-icon size="32"><TrendCharts /></el-icon>
               </div>
               <div class="summary-info">
@@ -69,9 +69,9 @@
         </el-col>
         
         <el-col :span="6">
-          <el-card shadow="hover" class="summary-card">
+          <el-card shadow="hover" class="summary-card theme-aware-card">
             <div class="summary-content">
-              <div class="summary-icon" style="background: #67c23a">
+              <div class="summary-icon summary-icon-success">
                 <el-icon size="32"><Document /></el-icon>
               </div>
               <div class="summary-info">
@@ -83,9 +83,9 @@
         </el-col>
         
         <el-col :span="6">
-          <el-card shadow="hover" class="summary-card">
+          <el-card shadow="hover" class="summary-card theme-aware-card">
             <div class="summary-content">
-              <div class="summary-icon" style="background: #e6a23c">
+              <div class="summary-icon summary-icon-warning">
                 <el-icon size="32"><Calendar /></el-icon>
               </div>
               <div class="summary-info">
@@ -97,9 +97,9 @@
         </el-col>
         
         <el-col :span="6">
-          <el-card shadow="hover" class="summary-card">
+          <el-card shadow="hover" class="summary-card theme-aware-card">
             <div class="summary-content">
-              <div class="summary-icon" style="background: #f56c6c">
+              <div class="summary-icon summary-icon-danger">
                 <el-icon size="32"><Star /></el-icon>
               </div>
               <div class="summary-info">
@@ -282,6 +282,11 @@ onMounted(() => {
 
 .summary-card {
   height: 120px;
+  transition: all 0.3s ease;
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
 }
 
 .summary-content {
@@ -290,6 +295,7 @@ onMounted(() => {
   gap: 16px;
 }
 
+/* Theme-aware icon backgrounds using CSS variables */
 .summary-icon {
   width: 64px;
   height: 64px;
@@ -298,6 +304,29 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   color: white;
+  transition: all 0.3s ease;
+}
+
+.summary-icon-primary {
+  background: var(--el-color-primary, #409eff);
+}
+
+.summary-icon-success {
+  background: var(--el-color-success, #67c23a);
+}
+
+.summary-icon-warning {
+  background: var(--el-color-warning, #e6a23c);
+}
+
+.summary-icon-danger {
+  background: var(--el-color-danger, #f56c6c);
+}
+
+/* Dark mode adjustments for icons */
+[data-theme='dark'] .summary-icon {
+  opacity: 0.9;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .summary-info {
@@ -309,6 +338,7 @@ onMounted(() => {
   font-weight: bold;
   color: var(--el-text-color-primary);
   margin-bottom: 4px;
+  line-height: 1;
 }
 
 .summary-label {
@@ -325,14 +355,23 @@ onMounted(() => {
 }
 
 .summary-trend.up {
-  color: #67c23a;
+  color: var(--el-color-success, #67c23a);
 }
 
 .summary-trend.down {
-  color: #f56c6c;
+  color: var(--el-color-danger, #f56c6c);
 }
 
 .charts-grid {
   margin-bottom: 20px;
+}
+
+/* Ensure chart cards have proper theme support */
+:deep(.el-card__header) {
+  border-bottom-color: var(--el-border-color-lighter);
+}
+
+:deep(.el-card__body) {
+  background-color: transparent;
 }
 </style>

@@ -15,6 +15,12 @@ export interface Score {
   repository_slug: string
   created_date: string
   updated_date?: string
+  // Enriched fields from review context
+  project_name?: string
+  pull_request_user?: string
+  pull_request_user_info?: Record<string, any> | null
+  source_branch?: string
+  target_branch?: string
 }
 
 export interface ScoreCreate {
