@@ -48,7 +48,11 @@
             </el-empty>
           </div>
         </template>
-        <el-table-column prop="id" label="Seq#" width="70" />
+        <el-table-column label="Seq#" width="70">
+          <template #default="{ $index }">
+            <span class="seq-number">{{ (currentPage - 1) * pageSize + $index + 1 }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="project_key" label="Project" width="120">
           <template #default="{ row }">
             <span class="project-key">{{ row.project_name || row.project_key }}</span>
@@ -158,7 +162,7 @@
         </el-table-column>
         <el-table-column label="Actions" width="90" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="danger" @click="confirmDelete(row)">
+            <el-button size="small" type="danger" @click="confirmDelete(row)" :disabled="!canDeleteScore(row)">
               Delete
             </el-button>
           </template>
@@ -205,8 +209,10 @@ import type { Score, ScoreStats } from '@/api/scores'
 import type { ProjectSummary } from '@/api/projects'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const loading = ref(false)
 const projectsLoading = ref(false)
 const scores = ref<Score[]>([])
@@ -300,6 +306,12 @@ const getPRUrl = (score: Score): string | null => {
   // Construct URL: <project_url>/repos/<repository_slug>/commits/<commit_id>
   const baseUrl = score.project_url.replace(/\/$/, '') // Remove trailing slash
   return `${baseUrl}/repos/${score.repository_slug}/commits/${score.pull_request_commit_id}`
+}
+
+const canDeleteScore = (score: Score): boolean => {
+  const currentUsername = authStore.currentUser?.username
+  // Users can only delete their own scores
+  return currentUsername === score.reviewer
 }
 
 const viewReview = (pullRequestId: string) => {
@@ -447,13 +459,23 @@ const confirmDelete = async (score: Score) => {
       }
     )
     
-    // TODO: Need composite key for deletion
-    ElMessage.warning('Delete not implemented - requires composite key')
-    // await scoresApi.deleteScore(score.reviewer, ...)
-    // loadScores()
+    // Delete score using composite key
+    await scoresApi.deleteScore(
+      score.reviewer,
+      score.pull_request_id,
+      score.project_key,
+      score.repository_slug,
+      score.source_filename || null
+    )
+    
+    ElMessage.success('Score deleted successfully')
+    
+    // Reload scores to reflect changes
+    loadScores()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('Failed to delete score')
+      console.error('Failed to delete score:', error)
+      ElMessage.error('Failed to delete score: ' + (error instanceof Error ? error.message : String(error)))
     }
   }
 }
@@ -663,5 +685,14 @@ h2 {
   justify-content: center;
   margin-top: 20px;
   padding: 16px 0;
+}
+
+/* Sequence number styling */
+.seq-number {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  text-align: center;
+  display: inline-block;
+  width: 100%;
 }
 </style>

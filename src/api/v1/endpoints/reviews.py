@@ -672,6 +672,7 @@ async def list_reviews(
             git_username = await _get_git_username(current_user.id, db)
 
             if git_username:
+                filters.reviewer = git_username
                 filters.visible_to_username = git_username
                 logger.info(
                     f"Regular user {current_user.username} filtered by visible_to={git_username}"
@@ -708,38 +709,6 @@ async def list_reviews(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to list reviews"},
-        )
-
-
-@router.get("/statistics", response_model=ReviewStats)
-async def get_review_statistics(
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    review_service: Annotated[ReviewService, Depends(get_review_service)],
-    project_key: str | None = Query(
-        None, min_length=1, max_length=32, description="Filter statistics by project key"
-    ),
-) -> ReviewStats:
-    """
-    Get pull request review statistics
-
-    Args:
-        project_key: Optional project key to filter statistics
-        db: Database session
-        review_service: Review service instance
-
-    Returns:
-        ReviewStats: Review statistics
-    """
-    try:
-        stats = await review_service.get_review_statistics(project_key, db)
-        return stats
-    except Exception:
-        metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/reviews/statistics"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get review statistics"},
         )
 
 
@@ -1018,6 +987,72 @@ async def update_review_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to update review status"},
+        )
+
+
+@router.get("/statistics", response_model=ReviewStats)
+async def get_review_statistics(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    project_key: str | None = Query(
+        None, min_length=1, max_length=32, description="Filter statistics by project key"
+    ),
+) -> ReviewStats:
+    """
+    Get pull request review statistics for current user
+
+    Statistics are filtered to show only data relevant to the current logged-in user:
+    - Reviews where user is the reviewer (assigned reviews)
+    - Scores given by the user
+    - PRs raised by the user (self-raised)
+
+    Args:
+        current_user: Current authenticated user
+        project_key: Optional project key to filter statistics
+        db: Database session
+        review_service: Review service instance
+
+    Returns:
+        ReviewStats: User-specific review statistics
+    """
+    try:
+        # Get the git username for the current user
+        git_username = await _get_git_username(current_user.id, db)
+
+        logger.info(
+            f"Getting review statistics for user: {current_user.username}, git_username: {git_username}"
+        )
+
+        if not git_username:
+            # If no linked git user, return empty stats
+            logger.warning(f"User {current_user.username} has no linked Bitbucket account")
+            return ReviewStats(
+                total_reviews=0,
+                open_reviews=0,
+                merged_reviews=0,
+                closed_reviews=0,
+                average_score=0.0,
+                reviews_today=0,
+                reviews_this_week=0,
+                reviews_this_month=0,
+            )
+
+        stats = await review_service.get_review_statistics(
+            project_key=project_key, db=db, reviewer_username=git_username
+        )
+        logger.info(
+            f"Statistics for {git_username}: total={stats.total_reviews}, avg_score={stats.average_score}"
+        )
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get review statistics: {str(e)}", exc_info=True)
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/reviews/statistics"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get review statistics"},
         )
 
 
@@ -1480,6 +1515,19 @@ async def upsert_score(
             review_base_id=review_base.id,
             include_details=True,
         )
+
+        # Invalidate stats cache for the reviewer
+        try:
+            from src.utils.redis import get_redis_client
+
+            redis_client = get_redis_client()
+            # Invalidate both global and project-specific stats caches
+            await redis_client.delete(f"stats:reviews:all:{git_username}")
+            if score_data.project_key:
+                await redis_client.delete(f"stats:reviews:{score_data.project_key}:{git_username}")
+            logger.info(f"Invalidated stats cache for reviewer {git_username}")
+        except Exception as e:
+            logger.warning(f"Failed to invalidate stats cache: {e}")
 
         # Return the Pydantic model directly - FastAPI will serialize it according to response_model
         # Note: Using fixed 200 OK status code as per response_model declaration
@@ -2043,7 +2091,7 @@ async def assign_review_task(
         resource_type="reviews",
     )
 
-    # Get the Git username from the associated User record
+    # Get the git username for the current user
     git_username = await _get_git_username(current_user.id, db)
 
     if not git_username:

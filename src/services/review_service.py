@@ -967,6 +967,7 @@ class ReviewService:
         project_key: str | None = None,
         db: AsyncSession = None,
         use_cache: bool = True,
+        reviewer_username: str | None = None,
     ) -> ReviewStats:
         """
         Get pull request review statistics
@@ -975,24 +976,37 @@ class ReviewService:
             project_key: Optional project key to filter statistics
             db: Database session
             use_cache: Whether to use cache
+            reviewer_username: Optional username to filter statistics by reviewer
 
         Returns:
             ReviewStats: Review statistics
         """
         # Try cache first
-        cache_key = f"stats:reviews:{project_key or 'all'}"
+        cache_key = f"stats:reviews:{project_key or 'all'}:{reviewer_username or 'all'}"
         if use_cache:
             try:
                 cached = await self.redis_client.get(cache_key)
                 if cached:
+                    logger.info(f"Retrieved review stats from cache: {cache_key}")
                     return ReviewStats(**json.loads(cached))
             except Exception as e:
                 logger.warning(f"Failed to get review stats from cache: {str(e)}")
 
+        logger.info(
+            f"Calculating review statistics - project_key={project_key}, reviewer_username={reviewer_username}"
+        )
         # Build base query for PullRequestReviewBase
         base_query = select(PullRequestReviewBase)
         if project_key:
             base_query = base_query.where(PullRequestReviewBase.project_key == project_key)
+
+        # Filter by reviewer if specified (assigned reviews)
+        if reviewer_username:
+            # Join with PullRequestReviewAssignment to filter by reviewer
+            base_query = base_query.join(
+                PullRequestReviewAssignment,
+                PullRequestReviewBase.id == PullRequestReviewAssignment.review_base_id,
+            ).where(PullRequestReviewAssignment.reviewer == reviewer_username)
 
         # Get total unique pull requests (distinct by pull_request_id and pull_request_commit_id)
         total_query = select(
@@ -1000,6 +1014,14 @@ class ReviewService:
         )
         if project_key:
             total_query = total_query.where(PullRequestReviewBase.project_key == project_key)
+
+        # Apply reviewer filter
+        if reviewer_username:
+            total_query = total_query.join(
+                PullRequestReviewAssignment,
+                PullRequestReviewBase.id == PullRequestReviewAssignment.review_base_id,
+            ).where(PullRequestReviewAssignment.reviewer == reviewer_username)
+
         total_result = await db.execute(total_query)
         total_reviews = total_result.scalar() or 0
 
@@ -1012,6 +1034,13 @@ class ReviewService:
             status_subquery = status_subquery.where(
                 PullRequestReviewBase.project_key == project_key
             )
+
+        # Apply reviewer filter
+        if reviewer_username:
+            status_subquery = status_subquery.join(
+                PullRequestReviewAssignment,
+                PullRequestReviewBase.id == PullRequestReviewAssignment.review_base_id,
+            ).where(PullRequestReviewAssignment.reviewer == reviewer_username)
 
         status_query = select(
             status_subquery.c.pull_request_status,
@@ -1032,6 +1061,10 @@ class ReviewService:
         if project_key:
             avg_score_query = avg_score_query.where(PullRequestScore.project_key == project_key)
 
+        # Filter scores by reviewer if specified
+        if reviewer_username:
+            avg_score_query = avg_score_query.where(PullRequestScore.reviewer == reviewer_username)
+
         avg_score_result = await db.execute(avg_score_query)
         avg_score = avg_score_result.scalar() or 0.0
 
@@ -1046,6 +1079,14 @@ class ReviewService:
         ).where(PullRequestReviewBase.created_date >= today)
         if project_key:
             today_query = today_query.where(PullRequestReviewBase.project_key == project_key)
+
+        # Apply reviewer filter
+        if reviewer_username:
+            today_query = today_query.join(
+                PullRequestReviewAssignment,
+                PullRequestReviewBase.id == PullRequestReviewAssignment.review_base_id,
+            ).where(PullRequestReviewAssignment.reviewer == reviewer_username)
+
         today_result = await db.execute(today_query)
         reviews_today = today_result.scalar() or 0
 
@@ -1055,6 +1096,14 @@ class ReviewService:
         ).where(PullRequestReviewBase.created_date >= week_ago)
         if project_key:
             week_query = week_query.where(PullRequestReviewBase.project_key == project_key)
+
+        # Apply reviewer filter
+        if reviewer_username:
+            week_query = week_query.join(
+                PullRequestReviewAssignment,
+                PullRequestReviewBase.id == PullRequestReviewAssignment.review_base_id,
+            ).where(PullRequestReviewAssignment.reviewer == reviewer_username)
+
         week_result = await db.execute(week_query)
         reviews_this_week = week_result.scalar() or 0
 
@@ -1064,6 +1113,14 @@ class ReviewService:
         ).where(PullRequestReviewBase.created_date >= month_ago)
         if project_key:
             month_query = month_query.where(PullRequestReviewBase.project_key == project_key)
+
+        # Apply reviewer filter
+        if reviewer_username:
+            month_query = month_query.join(
+                PullRequestReviewAssignment,
+                PullRequestReviewBase.id == PullRequestReviewAssignment.review_base_id,
+            ).where(PullRequestReviewAssignment.reviewer == reviewer_username)
+
         month_result = await db.execute(month_query)
         reviews_this_month = month_result.scalar() or 0
 
