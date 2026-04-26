@@ -85,11 +85,16 @@
         <el-table-column prop="pull_request_id" label="PR ID" width="110">
           <template #default="{ row }">
             <el-link 
-              type="primary" 
-              @click="viewReview(row.pull_request_id)"
+              v-if="getPRUrl(row)"
+              :href="getPRUrl(row)!"
+              type="primary"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="pr-link"
             >
               {{ truncateId(row.pull_request_id) }}
             </el-link>
+            <el-tag v-else size="small">{{ truncateId(row.pull_request_id) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="branch_info" label="Branch" width="180">
@@ -160,6 +165,19 @@
         </el-table-column>
       </el-table>
 
+      <!-- Pagination -->
+      <div class="pagination-container" v-if="totalScores > 0">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="totalScores"
+          layout="total, sizes, prev, pager, next, jumper"
+          @current-change="handlePageChange"
+          @size-change="handlePageSizeChange"
+        />
+      </div>
+
       <!-- Statistics -->
       <el-divider />
       <el-row :gutter="20" class="stats-row">
@@ -170,7 +188,7 @@
           <el-statistic title="Total Reviews" :value="stats.total_reviews" class="theme-aware-statistic" />
         </el-col>
         <el-col :span="8">
-          <el-statistic title="Total Scores" :value="scores.length" class="theme-aware-statistic" />
+          <el-statistic title="Total Scores" :value="totalScores" class="theme-aware-statistic" />
         </el-col>
       </el-row>
     </el-card>
@@ -200,6 +218,11 @@ const stats = ref<ScoreStats>({
   total_reviews: 0,
   score_distribution: {},
 })
+
+// Pagination state
+const currentPage = ref(1)
+const pageSize = ref(20)
+const totalScores = ref(0)
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
@@ -268,6 +291,17 @@ const getScoreColor = (score: number) => {
   return '#f56c6c'  // Red - Poor
 }
 
+const getPRUrl = (score: Score): string | null => {
+  // Need project_url, repository_slug, and pull_request_commit_id to construct URL
+  if (!score.project_url || !score.repository_slug || !score.pull_request_commit_id) {
+    return null
+  }
+  
+  // Construct URL: <project_url>/repos/<repository_slug>/commits/<commit_id>
+  const baseUrl = score.project_url.replace(/\/$/, '') // Remove trailing slash
+  return `${baseUrl}/repos/${score.repository_slug}/commits/${score.pull_request_commit_id}`
+}
+
 const viewReview = (pullRequestId: string) => {
   // Navigate to review detail page
   router.push(`/reviews`)
@@ -300,91 +334,88 @@ const loadScores = async () => {
     console.log('Stats loaded:', statsData)
     stats.value = statsData
 
-    // Load reviews with optional project filter
-    const reviewsParams: any = {
-      page: 1,
-      page_size: 50,
+    // Load scores using new efficient paginated endpoint
+    const scoresParams: any = {
+      page: currentPage.value,
+      page_size: pageSize.value,
     }
+    
+    // Apply project filter if specified
     if (projectFilter.value) {
-      reviewsParams.project_key = projectFilter.value
+      scoresParams.project_key = projectFilter.value
     }
     
-    console.log('Loading reviews with params:', reviewsParams)
-    const reviewsResponse = await reviewsApi.getReviews(reviewsParams)
+    console.log('Loading scores with params:', scoresParams)
+    const scoresResponse = await scoresApi.listScores(scoresParams)
     
-    console.log('Reviews response:', reviewsResponse)
+    console.log('Scores response:', scoresResponse)
+    console.log(`Loaded ${scoresResponse.items?.length || 0} scores (total: ${scoresResponse.total})`)
     
-    // Safely check if reviewsResponse and items exist
-    if (!reviewsResponse || !reviewsResponse.items) {
-      console.warn('Reviews response is invalid or has no items:', reviewsResponse)
+    // Safely check if scoresResponse and items exist
+    if (!scoresResponse || !scoresResponse.items) {
+      console.warn('Scores response is invalid or has no items:', scoresResponse)
       scores.value = []
-      ElMessage.warning('No reviews found')
+      totalScores.value = 0
+      ElMessage.warning('No scores found')
       return
     }
     
-    console.log('Number of reviews:', reviewsResponse.items.length)
-
-    // Extract unique review targets and fetch their scores
-    const allScores: Score[] = []
-    const reviewTargets = new Set<string>()
-
-    if (reviewsResponse.items.length === 0) {
-      console.log('No reviews found')
-      scores.value = []
-      ElMessage.info('No reviews found')
-      return
-    }
-
-    for (const review of reviewsResponse.items) {
-      const targetKey = `${review.project_key}/${review.repository_slug}/${review.pull_request_id}`
-      if (!reviewTargets.has(targetKey)) {
-        reviewTargets.add(targetKey)
+    // Update pagination info
+    totalScores.value = scoresResponse.total
+    
+    // Enrich scores with review context (branch info, PR user, etc.)
+    const enrichedScores: Score[] = []
+    
+    for (const score of scoresResponse.items) {
+      try {
+        // Fetch review details to get branch info and PR user
+        const reviewsResponse = await reviewsApi.getReviews({
+          page: 1,
+          page_size: 1,
+          project_key: score.project_key,
+        })
         
-        try {
-          console.log(`Fetching scores for PR: ${review.pull_request_id}, Project: ${review.project_key}, Repo: ${review.repository_slug}`)
-          const reviewScores = await scoresApi.getScoresByReview(
-            review.pull_request_id,
-            review.project_key,
-            review.repository_slug
-          )
-          
-          console.log(`Got ${reviewScores.length} scores for PR ${review.pull_request_id}`)
-          
-          // Enrich each score with complete review context
-          const enrichedScores = reviewScores.map(score => ({
+        // Find matching review
+        const matchingReview = reviewsResponse.items?.find(
+          r => r.pull_request_id === score.pull_request_id
+        )
+        
+        if (matchingReview) {
+          // Enrich score with review context
+          enrichedScores.push({
             ...score,
-            // Composite key fields
-            pull_request_id: review.pull_request_id,
-            project_key: review.project_key,
-            repository_slug: review.repository_slug,
-            // Additional review context fields
-            project_name: review.project?.project_name || review.project_key,
-            pull_request_user: review.pull_request_user,
-            pull_request_user_info: review.pull_request_user_info,
-            source_branch: review.source_branch,
-            target_branch: review.target_branch,
-            updated_date: review.updated_date,
-          }))
-          
-          // Apply level filter if specified
-          let filteredScores = enrichedScores
-          if (levelFilter.value === 'pr') {
-            filteredScores = enrichedScores.filter(s => !s.source_filename)
-          } else if (levelFilter.value === 'file') {
-            filteredScores = enrichedScores.filter(s => s.source_filename)
-          }
-          
-          allScores.push(...filteredScores)
-        } catch (error) {
-          console.warn(`Failed to load scores for review ${review.pull_request_id}:`, error)
+            project_name: matchingReview.project?.project_name || score.project_key,
+            project_url: matchingReview.project?.project_url,
+            repository_slug: score.repository_slug || matchingReview.repository_slug,
+            pull_request_commit_id: score.pull_request_commit_id || matchingReview.pull_request_commit_id || undefined,
+            pull_request_user: matchingReview.pull_request_user,
+            pull_request_user_info: matchingReview.pull_request_user_info,
+            source_branch: matchingReview.source_branch,
+            target_branch: matchingReview.target_branch,
+            updated_date: matchingReview.updated_date,
+          })
+        } else {
+          // If review not found, use score data as-is
+          enrichedScores.push(score)
         }
+      } catch (error) {
+        console.warn(`Failed to enrich score ${score.id}:`, error)
+        // Still include the score even if enrichment fails
+        enrichedScores.push(score)
       }
     }
-
-    console.log(`Total scores loaded: ${allScores.length}`)
-    scores.value = allScores
     
-    if (allScores.length === 0) {
+    // Apply level filter if specified
+    let filteredScores = enrichedScores
+    if (levelFilter.value === 'pr') {
+      filteredScores = enrichedScores.filter(s => !s.source_filename)
+    } else if (levelFilter.value === 'file') {
+      filteredScores = enrichedScores.filter(s => s.source_filename)
+    }
+    
+    scores.value = filteredScores
+    
+    if (filteredScores.length === 0) {
       ElMessage.info('No scores found for the selected filters')
     }
   } catch (error) {
@@ -393,6 +424,17 @@ const loadScores = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const handlePageChange = (page: number) => {
+  currentPage.value = page
+  loadScores()
+}
+
+const handlePageSizeChange = (size: number) => {
+  pageSize.value = size
+  currentPage.value = 1  // Reset to first page
+  loadScores()
 }
 
 const confirmDelete = async (score: Score) => {
@@ -600,12 +642,26 @@ h2 {
   color: var(--el-text-color-primary);
 }
 
-:deep(.el-statistic__title) {
-  color: var(--el-text-color-secondary);
+/* PR link styling */
+.pr-link {
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.pr-link:hover {
+  text-decoration: underline;
 }
 
 /* Empty data state */
 .empty-data {
   padding: 40px 0;
+}
+
+/* Pagination container */
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  padding: 16px 0;
 }
 </style>

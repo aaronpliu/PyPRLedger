@@ -26,6 +26,7 @@ from src.schemas.pull_request import (
     ReviewListResponse,
     ReviewResponse,
     ReviewScoreCreate,
+    ReviewScoreListResponse,
     ReviewScoreResponse,
     ReviewScoreSummary,
     ReviewStats,
@@ -1610,6 +1611,94 @@ async def get_score_summary(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get score summary"},
+        )
+
+
+@router.get("/scores/list", response_model=ReviewScoreListResponse)
+async def list_scores(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
+    score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
+    reviewer: str | None = Query(None, description="Filter by reviewer username"),
+    project_key: str | None = Query(None, description="Filter by project key"),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
+) -> ReviewScoreListResponse:
+    """
+    List all scores with pagination and filtering
+
+    Access Control:
+    - review_admin: Can view ALL scores
+    - reviewer: Can only view their own scores (reviewer parameter forced to current user)
+
+    Args:
+        current_user: Current authenticated user
+        db: Database session
+        score_service: Review score service instance
+        reviewer: Filter by reviewer username (optional, restricted for non-admins)
+        project_key: Filter by project key (optional)
+        page: Page number (1-indexed)
+        page_size: Number of items per page (max 100)
+
+    Returns:
+        ReviewScoreListResponse: Paginated list of scores
+
+    Raises:
+        HTTPException: If an error occurs while fetching scores
+    """
+    try:
+        # Enforce access control
+        effective_reviewer = reviewer
+
+        # Check if user has review_admin role (by checking 'assign' permission)
+        rbac_service = RBACService(db)
+        is_review_admin = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="assign",
+            resource_type="reviews",
+        )
+
+        if not is_review_admin:
+            # Non-admin users can only see their own scores
+            effective_reviewer = current_user.username
+
+            # If they tried to filter by another reviewer, deny access
+            if reviewer and reviewer != current_user.username:
+                metrics.increment_error(
+                    error_type="FORBIDDEN",
+                    endpoint="GET /api/v1/reviews/scores/list",
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You can only view your own scores",
+                    },
+                )
+
+        # Fetch scores with pagination
+        result = await score_service.list_all_scores(
+            db=db,
+            reviewer=effective_reviewer,
+            project_key=project_key,
+            page=page,
+            page_size=page_size,
+        )
+
+        return ReviewScoreListResponse(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to list scores: {str(e)}\n{error_traceback}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint="GET /api/v1/reviews/scores/list",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to list scores"},
         )
 
 

@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    and_,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -395,6 +396,15 @@ class PullRequestScore(Base):
     )
     reviewer_rel: Mapped[User] = relationship(
         foreign_keys=[reviewer], back_populates="scores_given"
+    )
+    pull_request: Mapped[PullRequestReviewBase] = relationship(
+        primaryjoin=lambda: and_(
+            PullRequestScore.pull_request_id == PullRequestReviewBase.pull_request_id,
+            PullRequestScore.project_key == PullRequestReviewBase.project_key,
+            PullRequestScore.repository_slug == PullRequestReviewBase.repository_slug,
+        ),
+        foreign_keys=[pull_request_id, project_key, repository_slug],
+        viewonly=True,
     )
 
     # === Constraints & Indexes ===

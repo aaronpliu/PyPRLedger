@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.config import settings
-from src.models.pull_request import PullRequestReviewAssignment, PullRequestScore
+from src.models.pull_request import (
+    PullRequestReviewAssignment,
+    PullRequestReviewBase,
+    PullRequestScore,
+)
 from src.schemas.pull_request import (
     ReviewScoreCreate,
     ReviewScoreResponse,
@@ -510,6 +514,147 @@ class ReviewScoreService:
 
         return result
 
+    async def list_all_scores(
+        self,
+        db: AsyncSession,
+        reviewer: str | None = None,
+        project_key: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict[str, Any]:
+        """
+        List all scores with pagination and optional filtering
+
+        Args:
+            db: Database session
+            reviewer: Filter by reviewer username (optional)
+            project_key: Filter by project key (optional)
+            page: Page number (1-indexed)
+            page_size: Number of items per page (max 100)
+
+        Returns:
+            dict: {
+                "total": int,
+                "items": list[ReviewScoreResponse],
+                "page": int,
+                "page_size": int
+            }
+        """
+        from sqlalchemy import func
+
+        # Enforce page_size limits
+        page_size = min(max(page_size, 1), 100)
+
+        # Build base query for counting (without eager loading options)
+        base_query = select(PullRequestScore).where(PullRequestScore.active == True)
+
+        # Apply filters to base query
+        if reviewer:
+            base_query = base_query.where(PullRequestScore.reviewer == reviewer)
+
+        if project_key:
+            base_query = base_query.where(PullRequestScore.project_key == project_key)
+
+        # Get total count using the base query
+        count_query = select(func.count()).select_from(base_query.subquery())
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        # Build full query with eager loading for data retrieval
+        query = (
+            select(PullRequestScore)
+            .where(PullRequestScore.active == True)
+            .options(
+                selectinload(PullRequestScore.project),
+                selectinload(PullRequestScore.repository),
+                selectinload(PullRequestScore.reviewer_rel),
+                selectinload(PullRequestScore.pull_request),  # Load PR for branch info and user
+            )
+        )
+
+        # Apply filters to full query
+        if reviewer:
+            query = query.where(PullRequestScore.reviewer == reviewer)
+
+        if project_key:
+            query = query.where(PullRequestScore.project_key == project_key)
+
+        # Apply pagination
+        offset = (page - 1) * page_size
+        query = query.order_by(PullRequestScore.created_date.desc()).offset(offset).limit(page_size)
+
+        # Execute query
+        result = await db.execute(query)
+        scores = result.scalars().all()
+
+        logger.info(
+            f"Listed {len(scores)} scores (page={page}, page_size={page_size}, total={total})"
+            + (f", reviewer={reviewer}" if reviewer else "")
+            + (f", project={project_key}" if project_key else "")
+        )
+
+        # Collect unique PR IDs for batch loading PR user info
+        pr_keys = set()
+        for score in scores:
+            if score.pull_request_id and score.project_key and score.repository_slug:
+                pr_keys.add((score.pull_request_id, score.project_key, score.repository_slug))
+
+        # Batch load PRs with user relationships
+        pr_map = {}
+        if pr_keys:
+            from sqlalchemy import and_, or_
+
+            conditions = [
+                and_(
+                    PullRequestReviewBase.pull_request_id == pr_id,
+                    PullRequestReviewBase.project_key == proj_key,
+                    PullRequestReviewBase.repository_slug == repo_slug,
+                )
+                for pr_id, proj_key, repo_slug in pr_keys
+            ]
+
+            pr_query = (
+                select(PullRequestReviewBase)
+                .where(or_(*conditions))
+                .options(selectinload(PullRequestReviewBase.pull_request_user_rel))
+            )
+            pr_result = await db.execute(pr_query)
+            prs = pr_result.scalars().all()
+
+            for pr in prs:
+                key = (pr.pull_request_id, pr.project_key, pr.repository_slug)
+                pr_map[key] = pr
+
+        # Enrich scores with entity information
+        enriched_scores = []
+        for score in scores:
+            try:
+                # Get pre-loaded PR if available
+                pr_key = (score.pull_request_id, score.project_key, score.repository_slug)
+                pr_obj = pr_map.get(pr_key)
+
+                # Temporarily attach PR to score for enrichment
+                if pr_obj and not hasattr(score, "_temp_pr"):
+                    score._temp_pr = pr_obj
+
+                enriched = await self._enrich_score_response(score, db, include_details=True)
+                enriched_scores.append(enriched)
+
+                # Clean up temp attribute
+                if hasattr(score, "_temp_pr"):
+                    delattr(score, "_temp_pr")
+            except Exception as e:
+                logger.warning(f"Failed to enrich score {score.id}: {str(e)}")
+                # Still include basic score data even if enrichment fails
+                enriched_scores.append(ReviewScoreResponse(**score.to_dict()))
+
+        return {
+            "total": total,
+            "items": enriched_scores,
+            "page": page,
+            "page_size": page_size,
+        }
+
     # === Helper Methods ===
 
     async def _get_score_by_reviewer(
@@ -592,6 +737,17 @@ class ReviewScoreService:
         score_dict = {
             **score.to_dict(),
             "reviewer_info": None,
+            # PR context fields
+            "pull_request_id": score.pull_request_id,
+            "project_key": score.project_key,
+            "repository_slug": score.repository_slug,
+            "pull_request_commit_id": None,
+            "pull_request_user": None,
+            "pull_request_user_info": None,
+            "source_branch": None,
+            "target_branch": None,
+            "project_name": None,
+            "project_url": None,
         }
 
         if include_details:
@@ -607,6 +763,31 @@ class ReviewScoreService:
                     "email_address": reviewer.email_address,
                 }
 
+            # Enrich with PR context if pull_request relationship is loaded
+            pr = score.pull_request
+            # Also check for temporarily attached PR (from batch loading)
+            if not pr and hasattr(score, "_temp_pr"):
+                pr = score._temp_pr
+
+            if pr:
+                score_dict["pull_request_commit_id"] = pr.pull_request_commit_id
+                score_dict["pull_request_user"] = pr.pull_request_user
+                score_dict["source_branch"] = pr.source_branch
+                score_dict["target_branch"] = pr.target_branch
+
+                # Get PR author info
+                if pr.pull_request_user_rel:
+                    pr_user = pr.pull_request_user_rel
+                    score_dict["pull_request_user_info"] = {
+                        "username": pr_user.username,
+                        "display_name": pr_user.display_name,
+                        "email_address": pr_user.email_address,
+                    }
+
+            # Get project information
+            if score.project:
+                score_dict["project_name"] = score.project.project_name or score.project_key
+                score_dict["project_url"] = score.project.project_url
         return ReviewScoreResponse(**score_dict)
 
     def _get_scores_cache_key(
