@@ -12,13 +12,13 @@ PRLedger now tracks backend and frontend versions separately:
 ```toml
 [project]
 name = "prledger"
-version = "1.6.0"  # ← Backend/API version source of truth
+version = "1.7.1"  # ← Backend/API version source of truth
 ```
 
 ```json
 {
    "name": "frontend",
-   "version": "1.1.0"
+    "version": "1.2.1"
 }
 ```
 
@@ -56,7 +56,7 @@ python scripts/bump_version.py show
 # Bump major version (1.0.0 -> 2.0.0)
 python scripts/bump_version.py major
 
-# Bump minor version (1.5.0 -> 1.6.0)
+# Bump minor version (1.6.0 -> 1.7.0)
 python scripts/bump_version.py minor
 
 # Bump patch version (1.0.0 -> 1.0.1)
@@ -72,10 +72,10 @@ Edit `pyproject.toml` directly for the backend, and `frontend/package.json` dire
 
 ```bash
 # Backend/API
-version = "1.6.0"
+version = "1.7.1"
 
 # Frontend/UI
-"version": "1.1.0"
+"version": "1.2.1"
 ```
 
 ## Semantic Versioning
@@ -86,7 +86,7 @@ PRLedger follows [Semantic Versioning](https://semver.org/) (SemVer):
 - **MINOR** version for backwards-compatible features
 - **PATCH** version for backwards-compatible bug fixes
 
-Format: `MAJOR.MINOR.PATCH` (e.g., `1.6.0`)
+Format: `MAJOR.MINOR.PATCH` (e.g., `1.7.1`)
 
 ## Version Release Checklist
 
@@ -94,12 +94,12 @@ When releasing a new version:
 
 1. **Update backend/API version** using the bump script
    ```bash
-   python scripts/bump_version.py set 1.6.0
+   python scripts/bump_version.py set 1.7.1
    ```
 
 2. **Update frontend/UI version** in `frontend/package.json`
    ```bash
-   # Set package.json version to 1.1.0
+   # Set package.json version to 1.2.1
    ```
 
 3. **Update CHANGELOG.md** with the new version and changes
@@ -107,12 +107,12 @@ When releasing a new version:
 4. **Commit the changes**
    ```bash
    git add pyproject.toml frontend/package.json CHANGELOG.md
-   git commit -m "Release v1.6.0"
+   git commit -m "Release v1.7.1"
    ```
 
 5. **Create a git tag**
    ```bash
-   git tag -a v1.6.0 -m "Version 1.6.0"
+   git tag -a v1.7.1 -m "Version 1.7.1"
    ```
 
 6. **Build and publish** (if applicable)
@@ -124,7 +124,7 @@ When releasing a new version:
 
 7. **Update Docker image tags** (if using Docker)
    ```bash
-   docker build -t pypreledger:1.6.0 -t pypreledger:latest .
+   docker build -t pypreledger:1.7.1 -t pypreledger:latest .
    docker push pypreledger:latest
    ```
 
@@ -134,10 +134,10 @@ During development, you can use dev versions:
 
 ```bash
 # Set a dev version
-python scripts/bump_version.py set 1.2.0-dev
+python scripts/bump_version.py set 1.7.2-dev
 
 # Or with commit hash
-python scripts/bump_version.py set 1.2.0-dev+abc123
+python scripts/bump_version.py set 1.7.2-dev+abc123
 ```
 
 ## Checking Version at Runtime

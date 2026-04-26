@@ -13,7 +13,6 @@ class Settings(BaseSettings):
 
     # Basic project information
     PROJECT_NAME: str = "Pull Request Code Review Result Storage System"
-    PROJECT_VERSION: str = "1.6.0"
     API_V1_STR: str = "/api/v1"
 
     # Environment configuration

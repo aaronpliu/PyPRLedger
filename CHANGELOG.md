@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.1] - 2026-04-26
+
+### Changed
+- **Version Bump**: Backend updated to v1.7.1, Frontend updated to v1.2.1
+- **Configuration**: Removed unused `PROJECT_VERSION` field from `Settings` and `.env.example` to prevent future drift
+
+---
+
 ## [1.7.0] - 2026-04-22
 
 ### Added

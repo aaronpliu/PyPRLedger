@@ -6,10 +6,10 @@
 
 ```bash
 # Set backend/API version
-python3 scripts/bump_version.py set 1.6.0
+python3 scripts/bump_version.py set 1.7.1
 ```
 
-Then update `frontend/package.json` for the UI version, for example `1.1.0`.
+Then update `frontend/package.json` for the UI version, for example `1.2.1`.
 
 ---
 
@@ -21,7 +21,7 @@ Then update `frontend/package.json` for the UI version, for example `1.1.0`.
 | Bump major version | `python3 scripts/bump_version.py major` |
 | Bump minor version | `python3 scripts/bump_version.py minor` |
 | Bump patch version | `python3 scripts/bump_version.py patch` |
-| Set backend/API version | `python3 scripts/bump_version.py set 1.6.0` |
+| Set backend/API version | `python3 scripts/bump_version.py set 1.7.1` |
 
 ---
 
@@ -29,10 +29,10 @@ Then update `frontend/package.json` for the UI version, for example `1.1.0`.
 
 ```bash
 # 1. Update backend/API version
-python3 scripts/bump_version.py set 1.6.0
+python3 scripts/bump_version.py set 1.7.1
 
 # 2. Update frontend/UI version
-# Edit frontend/package.json and set "version": "1.1.0"
+# Edit frontend/package.json and set "version": "1.2.1"
 
 # 3. Verify the change
 cat pyproject.toml | grep version
@@ -42,10 +42,10 @@ cat pyproject.toml | grep version
 
 # 5. Commit
 git add pyproject.toml frontend/package.json CHANGELOG.md
-git commit -m "Release v1.6.0"
+git commit -m "Release v1.7.1"
 
 # 6. Tag
-git tag -a v1.6.0 -m "Version 1.6.0"
+git tag -a v1.7.1 -m "Version 1.7.1"
 ```
 
 ---
@@ -57,12 +57,12 @@ git tag -a v1.6.0 -m "Version 1.6.0"
 
 ```toml
 [project]
-version = "1.6.0"  # ← Backend/API version
+version = "1.7.1"  # ← Backend/API version
 ```
 
 ```json
 {
-	"version": "1.1.0"
+	"version": "1.2.1"
 }
 ```
 
