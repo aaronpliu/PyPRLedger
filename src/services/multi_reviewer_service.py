@@ -4,7 +4,6 @@ from __future__ import annotations
 """Service for managing multi-reviewer pull request reviews"""
 
 import logging
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import and_, case, desc, exists, func, or_, select
@@ -21,6 +20,7 @@ from src.schemas.review import (
 )
 from src.services.project_registry_service import ProjectRegistryService
 from src.utils.metrics import MetricsCollector
+from src.utils.timezone import get_current_time
 
 
 logger = logging.getLogger(__name__)
@@ -278,7 +278,7 @@ class MultiReviewerService:
             review_base_id=review_base_id,
             reviewer=assignment_data.reviewer,
             assigned_by=assigned_by,
-            assigned_date=datetime.now(UTC),
+            assigned_date=get_current_time(),
             assignment_status=assignment_data.assignment_status,
         )
         db.add(assignment)
@@ -330,7 +330,7 @@ class MultiReviewerService:
         assignment.assignment_status = status
         if comments is not None:
             assignment.reviewer_comments = comments
-        assignment.updated_date = datetime.now(UTC)
+        assignment.updated_date = get_current_time()
 
         await db.flush()
         await db.refresh(assignment)

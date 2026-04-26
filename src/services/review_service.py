@@ -1,7 +1,7 @@
 import json
 import logging
 import traceback
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, desc, func, or_, select
@@ -35,6 +35,7 @@ from src.services.review_score_service import ReviewScoreService
 from src.utils.ai_review_utils import generate_ai_review_id
 from src.utils.metrics import MetricsCollector
 from src.utils.redis import get_redis_client
+from src.utils.timezone import get_current_time, utc_to_local
 
 
 logger = logging.getLogger(__name__)
@@ -162,7 +163,7 @@ class ReviewService:
                 "reviewer_comments": assignment.reviewer_comments if assignment else None,
                 "assigned_by": assignment.assigned_by if assignment else None,
                 "assigned_date": (
-                    assignment.assigned_date.isoformat()
+                    utc_to_local(assignment.assigned_date).isoformat()
                     if assignment and isinstance(assignment.assigned_date, datetime)
                     else assignment.assigned_date
                     if assignment
@@ -459,12 +460,12 @@ class ReviewService:
         created = False
         if existing_base:
             self._populate_base(existing_base, review_data, pr_user.username)
-            existing_base.updated_date = datetime.now(UTC)
+            existing_base.updated_date = get_current_time()
 
             if reviewer:
                 if existing_assignment:
                     self._populate_assignment(existing_assignment, reviewer.username, review_data)
-                    existing_assignment.updated_date = datetime.now(UTC)
+                    existing_assignment.updated_date = get_current_time()
                 else:
                     existing_assignment = PullRequestReviewAssignment(
                         review_base_id=existing_base.id,
@@ -879,11 +880,11 @@ class ReviewService:
             "review_metadata": update_payload.get("metadata"),
         }
         base.update({key: value for key, value in base_updates.items() if value is not None})
-        base.updated_date = datetime.now(UTC)
+        base.updated_date = get_current_time()
 
         if assignment and "reviewer_comments" in update_payload:
             assignment.reviewer_comments = update_payload["reviewer_comments"]
-            assignment.updated_date = datetime.now(UTC)
+            assignment.updated_date = get_current_time()
 
         if (
             assignment
@@ -1035,7 +1036,7 @@ class ReviewService:
         avg_score = avg_score_result.scalar() or 0.0
 
         # Get reviews by date - count unique PRs
-        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        today = get_current_time().replace(hour=0, minute=0, second=0, microsecond=0)
         week_ago = today - timedelta(days=7)
         month_ago = today - timedelta(days=30)
 
@@ -1213,7 +1214,7 @@ class ReviewService:
             )
 
         base.pull_request_status = new_status
-        base.updated_date = datetime.now(UTC)
+        base.updated_date = get_current_time()
         await db.flush()
         await db.commit()
 

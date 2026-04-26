@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from src.core.database import Base
+from src.utils.timezone import get_current_time, utc_to_local
 
 
 if TYPE_CHECKING:
@@ -114,7 +115,7 @@ class UserRoleAssignment(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), nullable=False, default=get_current_time
     )
 
     # Relationships
@@ -154,14 +155,14 @@ class UserRoleAssignment(Base):
             "resource_type": self.resource_type,
             "resource_id": self.resource_id,
             "granted_by": self.granted_by,
-            "starts_at": self.starts_at.isoformat() if self.starts_at else None,
-            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "starts_at": utc_to_local(self.starts_at).isoformat() if self.starts_at else None,
+            "expires_at": utc_to_local(self.expires_at).isoformat() if self.expires_at else None,
             "is_delegated": self.is_delegated,
             "delegator_id": self.delegator_id,
             "delegation_status": self.delegation_status,
             "delegation_scope": self.delegation_scope,
             "delegation_reason": self.delegation_reason,
             "revoked_by": self.revoked_by,
-            "revoked_at": self.revoked_at.isoformat() if self.revoked_at else None,
-            "created_at": self.created_at.isoformat(),
+            "revoked_at": utc_to_local(self.revoked_at).isoformat() if self.revoked_at else None,
+            "created_at": utc_to_local(self.created_at).isoformat(),
         }

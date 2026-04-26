@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
@@ -19,6 +18,7 @@ from src.schemas.pull_request import (
 from src.services.entity_sync_service import EntitySyncService
 from src.utils.redis import get_redis_client
 from src.utils.score_utils import normalize_source_filename
+from src.utils.timezone import get_current_time
 
 
 if TYPE_CHECKING:
@@ -87,7 +87,7 @@ class ReviewScoreService:
             for field, value in update_data.items():
                 setattr(existing_score, field, value)
 
-            existing_score.updated_date = datetime.now(UTC)
+            existing_score.updated_date = get_current_time()
             await db.flush()
             score_obj = existing_score
 
@@ -176,7 +176,7 @@ class ReviewScoreService:
             return
 
         assignment.assignment_status = "completed"
-        assignment.updated_date = datetime.now(UTC)
+        assignment.updated_date = get_current_time()
 
         logger.info(
             "Marked assignment as completed after score submission: "
@@ -398,8 +398,8 @@ class ReviewScoreService:
         # Soft delete: mark as inactive and record deletion info
         score.active = False
         score.deleted_by = current_user
-        score.deleted_at = datetime.now(UTC)
-        score.updated_date = datetime.now(UTC)
+        score.deleted_at = get_current_time()
+        score.updated_date = get_current_time()
 
         await db.flush()
         await db.commit()

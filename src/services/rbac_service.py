@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, select
@@ -12,6 +13,7 @@ from src.core.exceptions import ForbiddenException
 from src.models.rbac import UserRoleAssignment
 from src.models.role import Role
 from src.models.system_setting import SystemSetting
+from src.utils.timezone import get_current_time, utc_to_local
 
 
 if TYPE_CHECKING:
@@ -75,9 +77,7 @@ class RBACService:
             )
 
         # Filter out expired/inactive assignments
-        from datetime import UTC, datetime
-
-        now = datetime.now(UTC)
+        now = get_current_time()
 
         def is_assignment_active(assignment) -> bool:
             """Check if assignment is active and not revoked/expired"""
@@ -220,7 +220,7 @@ class RBACService:
         Returns:
             List of role assignments with role details (excludes revoked/expired delegations)
         """
-        from datetime import UTC, datetime
+        from datetime import UTC
 
         stmt = (
             select(UserRoleAssignment, Role)
@@ -234,7 +234,7 @@ class RBACService:
         result = await self.db.execute(stmt)
         assignments = result.all()
 
-        now = datetime.now(UTC)
+        now = get_current_time()
 
         # Filter out inactive assignments
         def is_assignment_active(assignment) -> bool:
@@ -274,9 +274,11 @@ class RBACService:
                 "resource_id": assignment.resource_id,
                 "granted_by": assignment.granted_by,
                 "expires_at": (
-                    assignment.expires_at.isoformat() if assignment.expires_at else None
+                    utc_to_local(assignment.expires_at).isoformat()
+                    if assignment.expires_at
+                    else None
                 ),
-                "created_at": assignment.created_at.isoformat(),
+                "created_at": utc_to_local(assignment.created_at).isoformat(),
             }
             for assignment, role in active_assignments
         ]
@@ -777,11 +779,17 @@ class RBACService:
                 "delegation_status": assignment.delegation_status,
                 "delegation_scope": assignment.delegation_scope,
                 "delegation_reason": assignment.delegation_reason,
-                "starts_at": assignment.starts_at.isoformat() if assignment.starts_at else None,
-                "expires_at": assignment.expires_at.isoformat() if assignment.expires_at else None,
+                "starts_at": utc_to_local(assignment.starts_at).isoformat()
+                if assignment.starts_at
+                else None,
+                "expires_at": utc_to_local(assignment.expires_at).isoformat()
+                if assignment.expires_at
+                else None,
                 "revoked_by": assignment.revoked_by,
-                "revoked_at": assignment.revoked_at.isoformat() if assignment.revoked_at else None,
-                "created_at": assignment.created_at.isoformat(),
+                "revoked_at": utc_to_local(assignment.revoked_at).isoformat()
+                if assignment.revoked_at
+                else None,
+                "created_at": utc_to_local(assignment.created_at).isoformat(),
             }
             for assignment, role in delegations
         ]

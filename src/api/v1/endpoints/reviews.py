@@ -1,6 +1,6 @@
 import logging
 import traceback
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
@@ -36,6 +36,7 @@ from src.services.rbac_service import RBACService
 from src.services.review_score_service import ReviewScoreService
 from src.services.review_service import ReviewService
 from src.utils.metrics import OperationTimer, metrics
+from src.utils.timezone import get_current_time
 
 
 logger = logging.getLogger(__name__)
@@ -148,7 +149,7 @@ async def get_reviewer_activity_trends(
     """
     try:
         # Calculate date range
-        end_date = datetime.now(UTC)
+        end_date = get_current_time()
         start_date = (
             end_date.replace(day=end_date.day - days)
             if end_date.day > days
@@ -267,7 +268,7 @@ async def get_score_trends(
         from src.models.pull_request import PullRequestScore
 
         # Calculate date range
-        end_date = datetime.now(UTC)
+        end_date = get_current_time()
         start_date = (
             end_date.replace(day=end_date.day - days)
             if end_date.day > days
@@ -355,7 +356,7 @@ async def get_project_repo_activity_trends(
     """
     try:
         # Calculate date range
-        end_date = datetime.now(UTC)
+        end_date = get_current_time()
         start_date = (
             end_date.replace(day=end_date.day - days)
             if end_date.day > days
@@ -482,7 +483,7 @@ async def get_good_suggestions_trends(
         from src.models.pull_request import PullRequestScore
 
         # Calculate date range
-        end_date = datetime.now(UTC)
+        end_date = get_current_time()
         start_date = (
             end_date.replace(day=end_date.day - days)
             if end_date.day > days
@@ -2012,7 +2013,7 @@ async def assign_review_task(
 
     if existing_review:
         existing_review.pull_request_user = assignment_data.pull_request_user
-        existing_review.updated_date = datetime.now(UTC)
+        existing_review.updated_date = get_current_time()
 
         if assignment_data.pull_request_commit_id:
             existing_review.pull_request_commit_id = assignment_data.pull_request_commit_id
@@ -2025,7 +2026,7 @@ async def assign_review_task(
             review_base_id=existing_review.id,
             reviewer=assignment_data.assignee_username,
             assigned_by=git_username,
-            assigned_date=datetime.now(UTC),
+            assigned_date=get_current_time(),
             assignment_status="assigned",
             reviewer_comments=assignment_data.reviewer_comments,
         )
@@ -2076,7 +2077,7 @@ async def assign_review_task(
         assignment = result.scalars().first()
         if assignment:
             assignment.assigned_by = git_username
-            assignment.assigned_date = datetime.now(UTC)
+            assignment.assigned_date = get_current_time()
             assignment.assignment_status = "assigned"
             await db.flush()
 

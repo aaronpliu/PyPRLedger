@@ -1,5 +1,6 @@
 import logging
 import traceback
+from datetime import UTC
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -24,6 +25,7 @@ from src.schemas.user import (
 )
 from src.services.user_service import UserService
 from src.utils.metrics import metrics
+from src.utils.timezone import get_current_time
 
 
 logger = logging.getLogger(__name__)
@@ -296,9 +298,7 @@ async def list_auth_users(
 
         # Convert to response format with role summaries
         users_data = []
-        from datetime import UTC, datetime
-
-        now = datetime.now(UTC)
+        now = get_current_time()
 
         for auth_user in auth_users:
             user_dict = auth_user.to_dict()

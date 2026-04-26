@@ -19,6 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+from src.utils.timezone import get_current_time, utc_to_local
 
 
 if TYPE_CHECKING:
@@ -83,14 +84,14 @@ class PullRequestReviewBase(Base):
     )
 
     created_date: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), nullable=False, default=get_current_time
     )
 
     updated_date: Mapped[datetime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=get_current_time,
+        onupdate=get_current_time,
     )
 
     __table_args__ = (
@@ -127,14 +128,14 @@ class PullRequestReviewBase(Base):
             "metadata": self.review_metadata,
             "ai_review_id": self.ai_review_id,
             "created_date": (
-                self.created_date.isoformat()
+                utc_to_local(self.created_date).isoformat()
                 if isinstance(self.created_date, datetime)
                 else self.created_date
             )
             if self.created_date
             else None,
             "updated_date": (
-                self.updated_date.isoformat()
+                utc_to_local(self.updated_date).isoformat()
                 if isinstance(self.updated_date, datetime)
                 else self.updated_date
             )
@@ -281,7 +282,7 @@ class PullRequestReviewAssignment(Base):
             "reviewer": self.reviewer,
             "assigned_by": self.assigned_by,
             "assigned_date": (
-                self.assigned_date.isoformat()
+                utc_to_local(self.assigned_date).isoformat()
                 if isinstance(self.assigned_date, datetime)
                 else self.assigned_date
             )
@@ -290,14 +291,14 @@ class PullRequestReviewAssignment(Base):
             "assignment_status": self.assignment_status,
             "reviewer_comments": self.reviewer_comments,
             "created_date": (
-                self.created_date.isoformat()
+                utc_to_local(self.created_date).isoformat()
                 if isinstance(self.created_date, datetime)
                 else self.created_date
             )
             if self.created_date
             else None,
             "updated_date": (
-                self.updated_date.isoformat()
+                utc_to_local(self.updated_date).isoformat()
                 if isinstance(self.updated_date, datetime)
                 else self.updated_date
             )
@@ -377,13 +378,14 @@ class PullRequestScore(Base):
 
     # Timestamps
     created_date: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), nullable=False, default=get_current_time
     )
+
     updated_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=get_current_time,
+        onupdate=get_current_time,
     )
 
     # Relationships
@@ -444,19 +446,19 @@ class PullRequestScore(Base):
             "active": self.active,
             "deleted_by": self.deleted_by,
             "deleted_at": (
-                self.deleted_at.isoformat()
+                utc_to_local(self.deleted_at).isoformat()
                 if isinstance(self.deleted_at, datetime) and self.deleted_at
                 else None
             ),
             "created_date": (
-                self.created_date.isoformat()
+                utc_to_local(self.created_date).isoformat()
                 if isinstance(self.created_date, datetime)
                 else self.created_date
             )
             if self.created_date
             else None,
             "updated_date": (
-                self.updated_date.isoformat()
+                utc_to_local(self.updated_date).isoformat()
                 if isinstance(self.updated_date, datetime)
                 else self.updated_date
             )

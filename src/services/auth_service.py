@@ -36,6 +36,7 @@ from src.schemas.auth import (
 from src.utils.jwt import create_access_token, decode_access_token
 from src.utils.password import hash_password, verify_password
 from src.utils.redis import get_redis_client
+from src.utils.timezone import get_current_time
 
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,7 @@ class AuthService:
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> None:
-        now = datetime.now(UTC).isoformat()
+        now = get_current_time().isoformat()
         session_data = {
             "auth_user_id": auth_user.id,
             "username": auth_user.username,
@@ -222,7 +223,7 @@ class AuthService:
                 await self._upgrade_linked_user_role(auth_user.id)
 
         # Update last login time
-        auth_user.last_login_at = datetime.now(UTC)
+        auth_user.last_login_at = get_current_time()
         await self.db.commit()
 
         return await self._create_token_response(

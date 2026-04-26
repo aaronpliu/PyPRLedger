@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Integer, String, Text
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from src.core.database import Base
+from src.utils.timezone import get_current_time, utc_to_local
 
 
 if TYPE_CHECKING:
@@ -36,13 +37,13 @@ class Role(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), nullable=False, default=get_current_time
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=get_current_time,
+        onupdate=get_current_time,
     )
 
     # Relationships
@@ -60,5 +61,5 @@ class Role(Base):
             "name": self.name,
             "description": self.description,
             "permissions": self.permissions,
-            "created_at": self.created_at.isoformat(),
+            "created_at": utc_to_local(self.created_at).isoformat(),
         }

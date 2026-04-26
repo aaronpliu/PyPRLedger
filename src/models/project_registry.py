@@ -1,10 +1,11 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+from src.utils.timezone import get_current_time
 
 
 if TYPE_CHECKING:
@@ -48,11 +49,11 @@ class ProjectRegistry(Base):
 
     # Timestamps
     created_date: Mapped[datetime] = mapped_column(
-        default=lambda: datetime.now(UTC), nullable=False
+        DateTime(timezone=True), default=get_current_time, nullable=False
     )
 
     updated_date: Mapped[datetime] = mapped_column(
-        default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False
+        DateTime(timezone=True), default=get_current_time, onupdate=get_current_time, nullable=False
     )
 
     # Relationships

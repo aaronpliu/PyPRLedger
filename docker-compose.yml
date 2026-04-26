@@ -48,6 +48,7 @@ services:
     ports:
       - "3306:3306"
     environment:
+      - TZ=Asia/Shanghai
       - MYSQL_ROOT_PASSWORD=rootpassword
       - MYSQL_DATABASE=code_review
       - MYSQL_USER=code_review
@@ -57,7 +58,11 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-time-zone='+08:00'
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
