@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.exceptions import ForbiddenException
 from src.models.rbac import UserRoleAssignment
 from src.models.role import Role
+from src.models.system_setting import SystemSetting
 
 
 if TYPE_CHECKING:
@@ -295,7 +296,7 @@ class RBACService:
             auth_user_id: User to assign role to
             role_id: Role ID
             resource_type: Resource scope (global, project, repository)
-            resource_id: Resource identifier (optional for global)
+            resource_id: Resource identifier (optional for global, empty string treated as None)
             granted_by: User who granted the role
             expires_at: Optional expiration time
 
@@ -305,12 +306,15 @@ class RBACService:
         Raises:
             ForbiddenException: If assignment already exists
         """
+        # Normalize resource_id: treat empty string as None for consistent matching
+        normalized_resource_id = resource_id if resource_id else None
+
         # Check if assignment already exists
         stmt = select(UserRoleAssignment).where(
             UserRoleAssignment.auth_user_id == auth_user_id,
             UserRoleAssignment.role_id == role_id,
             UserRoleAssignment.resource_type == resource_type,
-            UserRoleAssignment.resource_id == resource_id,
+            UserRoleAssignment.resource_id == normalized_resource_id,
         )
         result = await self.db.execute(stmt)
         existing = result.scalar_one_or_none()
@@ -330,7 +334,7 @@ class RBACService:
             auth_user_id=auth_user_id,
             role_id=role_id,
             resource_type=resource_type,
-            resource_id=resource_id,
+            resource_id=normalized_resource_id,
             granted_by=granted_by,
             expires_at=expires_at,
         )
@@ -354,16 +358,19 @@ class RBACService:
             auth_user_id: User to revoke role from
             role_id: Role ID
             resource_type: Resource scope
-            resource_id: Resource identifier
+            resource_id: Resource identifier (None or empty string treated as NULL)
 
         Returns:
             True if role was revoked, False if not found
         """
+        # Normalize resource_id: treat empty string as None for consistent matching
+        normalized_resource_id = resource_id if resource_id else None
+
         stmt = select(UserRoleAssignment).where(
             UserRoleAssignment.auth_user_id == auth_user_id,
             UserRoleAssignment.role_id == role_id,
             UserRoleAssignment.resource_type == resource_type,
-            UserRoleAssignment.resource_id == resource_id,
+            UserRoleAssignment.resource_id == normalized_resource_id,
         )
         result = await self.db.execute(stmt)
         assignment = result.scalar_one_or_none()
@@ -956,3 +963,135 @@ class RBACService:
             if not set(actions).issubset(set(superset[resource])):
                 return False
         return True
+
+    # ========================================================================
+    # System Settings Management
+    # ========================================================================
+
+    async def get_setting(self, setting_key: str, default_value: str = "true") -> str:
+        """Get system setting value with Redis cache and database fallback
+
+        This method implements a hybrid storage approach:
+        1. Try to read from Redis cache (fast)
+        2. If cache miss, read from MySQL database (persistent)
+        3. If database record doesn't exist, create it with default value
+        4. Cache the result in Redis for future reads
+
+        Args:
+            setting_key: The setting identifier (e.g., 'registration_enabled')
+            default_value: Default value if setting doesn't exist
+
+        Returns:
+            The setting value as string
+        """
+        from src.utils.redis import get_redis_client
+
+        redis_client = get_redis_client()
+        cache_key = f"system:settings:{setting_key}"
+
+        try:
+            # Step 1: Try Redis cache first
+            cached_value = await redis_client.get(cache_key)
+            if cached_value is not None:
+                logger.debug(f"Cache hit for setting '{setting_key}': {cached_value}")
+                return cached_value
+
+            # Step 2: Cache miss - read from database
+            logger.debug(f"Cache miss for setting '{setting_key}', reading from database")
+            stmt = select(SystemSetting).where(
+                SystemSetting.setting_key == setting_key,
+                SystemSetting.is_active == True,
+            )
+            result = await self.db.execute(stmt)
+            setting = result.scalar_one_or_none()
+
+            if setting:
+                # Found in database - cache it
+                value = setting.setting_value
+                await redis_client.setex(cache_key, 86400 * 365, value)  # Cache for 1 year
+                logger.info(f"Loaded setting '{setting_key}' from database: {value}")
+                return value
+
+            # Step 3: Setting doesn't exist - create with default value
+            logger.info(
+                f"Setting '{setting_key}' not found, creating with default: {default_value}"
+            )
+            new_setting = SystemSetting(
+                setting_key=setting_key,
+                setting_value=default_value,
+                description=f"Auto-created system setting: {setting_key}",
+                is_active=True,
+            )
+            self.db.add(new_setting)
+            await self.db.commit()
+            await self.db.refresh(new_setting)
+
+            # Cache the default value
+            await redis_client.setex(cache_key, 86400 * 365, default_value)
+            logger.info(f"Created and cached default setting '{setting_key}': {default_value}")
+            return default_value
+
+        except Exception as e:
+            logger.error(f"Failed to get setting '{setting_key}': {e}")
+            # Fallback to default value on error
+            return default_value
+
+    async def update_setting(
+        self,
+        setting_key: str,
+        setting_value: str,
+        updated_by: int | None = None,
+        description: str | None = None,
+    ) -> SystemSetting:
+        """Update system setting in both database and Redis cache
+
+        This ensures consistency between persistent storage and cache.
+        Updates are atomic: database is updated first, then cache.
+
+        Args:
+            setting_key: The setting identifier
+            setting_value: New value for the setting
+            updated_by: ID of the user making the change (for audit trail)
+            description: Optional description update
+
+        Returns:
+            The updated SystemSetting object
+
+        Raises:
+            ValueError: If setting_key doesn't exist
+        """
+        from src.utils.redis import get_redis_client
+
+        redis_client = get_redis_client()
+        cache_key = f"system:settings:{setting_key}"
+
+        # Step 1: Update database
+        stmt = select(SystemSetting).where(SystemSetting.setting_key == setting_key)
+        result = await self.db.execute(stmt)
+        setting = result.scalar_one_or_none()
+
+        if not setting:
+            raise ValueError(f"Setting '{setting_key}' does not exist")
+
+        old_value = setting.setting_value
+        setting.setting_value = setting_value
+        if updated_by is not None:
+            setting.updated_by = updated_by
+        if description is not None:
+            setting.description = description
+
+        await self.db.commit()
+        await self.db.refresh(setting)
+
+        # Step 2: Update Redis cache
+        try:
+            await redis_client.setex(cache_key, 86400 * 365, setting_value)
+            logger.info(
+                f"Updated setting '{setting_key}': '{old_value}' -> '{setting_value}' "
+                f"(by user {updated_by})"
+            )
+        except Exception as e:
+            logger.error(f"Failed to update Redis cache for setting '{setting_key}': {e}")
+            # Database is already updated, so we continue but log the error
+
+        return setting

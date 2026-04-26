@@ -139,6 +139,10 @@ class EntitySyncService:
             if is_reviewer and not user.is_reviewer:
                 user.is_reviewer = True
                 await self.db.flush()
+
+                # If user has linked auth_user, upgrade role to reviewer
+                await self._upgrade_linked_auth_user_role(user)
+
             return user
 
         # Fetch from Bitbucket API
@@ -164,6 +168,9 @@ class EntitySyncService:
 
         # Auto-associate with auth_user if exists
         await self._auto_associate_auth_user(user)
+
+        # Invalidate user list cache since a new user was created
+        await self._invalidate_user_list_cache()
 
         return user
 
@@ -221,6 +228,12 @@ class EntitySyncService:
 
         # Create the association
         auth_user.user_id = git_user.id
+
+        # Auto-set is_reviewer=1 when auth user binds to git user
+        if not git_user.is_reviewer:
+            git_user.is_reviewer = True
+            logger.info(f"Auto-set is_reviewer=True for git user {git_user.username}")
+
         await self.db.flush()
 
         logger.info(f"Auto-associated auth_user {auth_user.id} with Bitbucket user {git_user.id}")
@@ -229,6 +242,36 @@ class EntitySyncService:
         await self._log_association_audit(auth_user.id, git_user.id, git_user.username)
 
         # Upgrade role from viewer to reviewer
+        await self._upgrade_role_to_reviewer(auth_user.id)
+
+    async def _upgrade_linked_auth_user_role(self, git_user: User) -> None:
+        """Upgrade auth_user role to reviewer when git user is marked as reviewer
+
+        This handles the scenario where a PR review is inserted with a specified reviewer.
+        If the git user has a linked auth_user, upgrade their role to 'reviewer'.
+
+        Args:
+            git_user: The git user who is now a reviewer
+        """
+        from src.models.auth_user import AuthUser
+
+        # Find auth_user linked to this git user
+        stmt = select(AuthUser).where(AuthUser.user_id == git_user.id)
+        result = await self.db.execute(stmt)
+        auth_user = result.scalar_one_or_none()
+
+        if not auth_user:
+            logger.debug(
+                f"No auth_user linked to git user {git_user.username}, skipping role upgrade"
+            )
+            return
+
+        logger.info(
+            f"Git user {git_user.username} (ID: {git_user.id}) is now a reviewer. "
+            f"Upgrading linked auth_user {auth_user.id} to reviewer role."
+        )
+
+        # Upgrade the role
         await self._upgrade_role_to_reviewer(auth_user.id)
 
     async def _upgrade_role_to_reviewer(self, auth_user_id: int) -> None:
@@ -384,3 +427,16 @@ class EntitySyncService:
             )
         except Exception as e:
             logger.warning(f"Failed to log role upgrade audit: {e}")
+
+    async def _invalidate_user_list_cache(self) -> None:
+        """Invalidate user list cache when users are created or updated"""
+        try:
+            from src.core.redis_client import get_redis_client
+
+            redis_client = get_redis_client()
+            keys = await redis_client.keys("users:list:*")
+            if keys:
+                await redis_client.delete(*keys)
+                logger.debug(f"Invalidated {len(keys)} user list cache entries")
+        except Exception as e:
+            logger.warning(f"Failed to invalidate user list cache: {str(e)}")

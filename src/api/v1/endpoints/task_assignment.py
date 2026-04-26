@@ -39,15 +39,34 @@ async def list_reviews(
     project_key: str | None = Query(None, description="Filter by project key"),
     reviewer: str | None = Query(None, description="Filter by reviewer"),
     status: str | None = Query(None, description="Filter by PR status"),
+    app_names: str | None = Query(
+        None,
+        description="Filter by application names (comma-separated for multiple apps, e.g., 'member,tv,football')",
+    ),
+    pull_request_user: str | None = Query(
+        None, min_length=1, max_length=64, description="Filter by pull request user username"
+    ),
 ) -> ReviewListResponse:
     """
     Get list of reviews with their assignments (requires review_admin role)
 
     This endpoint is for review admins to manage and assign review tasks.
+
+    Supports filtering by:
+    - project_key: Filter by Bitbucket project key
+    - reviewer: Filter by assigned reviewer username
+    - status: Filter by PR status (open, merged, closed, draft)
+    - app_names: Filter by registered app names (comma-separated)
+    - pull_request_user: Filter by PR author username
     """
     # TODO: Add permission check - must be review_admin or system_admin
 
     try:
+        # Parse app_names from comma-separated string
+        app_names_list = None
+        if app_names:
+            app_names_list = [name.strip() for name in app_names.split(",") if name.strip()]
+
         reviews, total = await service.get_reviews(
             db=db,
             page=page,
@@ -55,6 +74,8 @@ async def list_reviews(
             project_key=project_key,
             reviewer=reviewer,
             status=status,
+            app_names=app_names_list,
+            pull_request_user=pull_request_user,
         )
 
         return ReviewListResponse(

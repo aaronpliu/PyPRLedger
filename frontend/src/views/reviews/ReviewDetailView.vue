@@ -6,16 +6,26 @@
       </template>
       <template #extra>
         <div class="detail-navigation-actions">
+          <!-- Display format: "Page X - Y/Z" matching Code Reviews style -->
           <span v-if="currentReviewIndex >= 0" class="detail-navigation-position">
-            {{ currentReviewIndex + 1 }} / {{ reviewNavigationStore.total }}
+            Page {{ reviewNavigationStore.currentPage }} · {{ currentReviewIndex + 1 }}/{{ reviewNavigationStore.items.length }}
           </span>
-          <el-button class="detail-navigation-button" :disabled="!previousReview" @click="goToPreviousReview">
+          <el-button 
+            class="detail-navigation-button" 
+            :disabled="!canGoToPreviousPage || navigatingPage"
+            @click="goToPreviousReview"
+          >
             <el-icon><ArrowLeft /></el-icon>
             Previous
           </el-button>
-          <el-button class="detail-navigation-button" type="primary" :disabled="!nextReview" @click="goToNextReview">
+          
+          <el-button 
+            class="detail-navigation-button" 
+            :disabled="!canGoToNextPage || navigatingPage"
+            @click="goToNextReview"
+          >
             Next
-            <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+            <el-icon><ArrowRight /></el-icon>
           </el-button>
         </div>
       </template>
@@ -180,7 +190,7 @@
         </el-row>
 
         <!-- Scores Section -->
-        <el-card class="scores-card" style="margin-top: 20px">
+        <el-card class="scores-card" style="margin-top: 20px; margin-bottom: 40px">
           <template #header>
             <div class="card-header">
               <span class="card-title">📊 Scores ({{ scores.length }})</span>
@@ -250,7 +260,7 @@
             </el-table-column>
             <el-table-column prop="score" label="Score" width="120">
               <template #default="{ row }">
-                <span class="score-value">{{ row.score }}</span>
+                <span :class="['score-value', getScoreColorClass(row.score)]">{{ row.score }}</span>
                 <span v-if="row.max_score" class="score-max"> / {{ row.max_score }}</span>
               </template>
             </el-table-column>
@@ -344,7 +354,8 @@
               show-input
               style="width: 100%"
             />
-            <div class="score-value-display">{{ scoreForm.score.toFixed(1) }}</div>
+            <div :class="['score-value-display', getScoreColorClass(scoreForm.score)]">{{ scoreForm.score.toFixed(1) }}</div>
+
           </div>
         </el-form-item>
         
@@ -411,6 +422,7 @@ const editingScore = ref<Score | null>(null)
 const scoreFormRef = ref<FormInstance>()
 const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
 const isInfoExpanded = ref(false)
+const navigatingPage = ref(false)
 
 // Detect current theme
 const isDarkTheme = computed(() => {
@@ -639,6 +651,15 @@ const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
 }
 
+// Get score color class based on score value
+const getScoreColorClass = (score: number): string => {
+  if (score >= 9) return 'score-excellent'
+  if (score >= 7) return 'score-good'
+  if (score >= 5) return 'score-acceptable'
+  if (score >= 3) return 'score-needs-improvement'
+  return 'score-poor'
+}
+
 const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text).then(() => {
     ElMessage.success('Copied to clipboard')
@@ -717,6 +738,23 @@ const previousReview = computed<ReviewNavigationItem | null>(() => {
   }
 
   return reviewNavigationStore.items[currentReviewIndex.value - 1] || null
+})
+
+// Pagination state
+const isOnLastPage = computed(() => {
+  return currentReviewIndex.value === reviewNavigationStore.items.length - 1 && !reviewNavigationStore.hasMorePages
+})
+
+const isOnFirstPage = computed(() => {
+  return currentReviewIndex.value === 0 && reviewNavigationStore.currentPage === 1
+})
+
+const canGoToNextPage = computed(() => {
+  return reviewNavigationStore.hasMorePages || (currentReviewIndex.value < reviewNavigationStore.items.length - 1)
+})
+
+const canGoToPreviousPage = computed(() => {
+  return reviewNavigationStore.currentPage > 1 || currentReviewIndex.value > 0
 })
 
 const normalizeRouteQueryValue = (value: unknown): string | null => {
@@ -824,40 +862,168 @@ const markReviewInProgressOnOpen = async (reviewData: Review) => {
   }
 }
 
-const goToNextReview = () => {
-  if (!nextReview.value) {
+const goToNextReview = async () => {
+  // If there's a next review on current page, navigate to it
+  if (nextReview.value) {
+    router.replace({
+      name: 'ReviewDetail',
+      params: { id: nextReview.value.id },
+      query: {
+        projectKey: nextReview.value.projectKey,
+        repositorySlug: nextReview.value.repositorySlug,
+        pullRequestId: nextReview.value.pullRequestId,
+        reviewer: nextReview.value.reviewer,
+        sourceFilename: nextReview.value.sourceFilename,
+      },
+    })
     return
   }
 
-  router.replace({
-    name: 'ReviewDetail',
-    params: { id: nextReview.value.id },
-    query: {
-      projectKey: nextReview.value.projectKey,
-      repositorySlug: nextReview.value.repositorySlug,
-      pullRequestId: nextReview.value.pullRequestId,
-      reviewer: nextReview.value.reviewer,
-      sourceFilename: nextReview.value.sourceFilename,
-    },
-  })
+  // If we're at the end of current page and there are more pages, load next page
+  if (reviewNavigationStore.hasMorePages && currentReviewIndex.value === reviewNavigationStore.items.length - 1) {
+    await loadNextPage()
+  }
 }
 
-const goToPreviousReview = () => {
-  if (!previousReview.value) {
+const goToPreviousReview = async () => {
+  // If there's a previous review on current page, navigate to it
+  if (previousReview.value) {
+    router.replace({
+      name: 'ReviewDetail',
+      params: { id: previousReview.value.id },
+      query: {
+        projectKey: previousReview.value.projectKey,
+        repositorySlug: previousReview.value.repositorySlug,
+        pullRequestId: previousReview.value.pullRequestId,
+        reviewer: previousReview.value.reviewer,
+        sourceFilename: previousReview.value.sourceFilename,
+      },
+    })
     return
   }
 
-  router.replace({
-    name: 'ReviewDetail',
-    params: { id: previousReview.value.id },
-    query: {
-      projectKey: previousReview.value.projectKey,
-      repositorySlug: previousReview.value.repositorySlug,
-      pullRequestId: previousReview.value.pullRequestId,
-      reviewer: previousReview.value.reviewer,
-      sourceFilename: previousReview.value.sourceFilename,
-    },
-  })
+  // If we're at the beginning of current page and not on first page, load previous page
+  if (reviewNavigationStore.currentPage > 1 && currentReviewIndex.value === 0) {
+    await loadPreviousPage()
+  }
+}
+
+// Load next page of reviews
+const loadNextPage = async () => {
+  if (!review.value || navigatingPage.value) return
+
+  navigatingPage.value = true
+  try {
+    const nextPage = reviewNavigationStore.currentPage + 1
+    
+    // Fetch next page from API
+    const response = await reviewsApi.getReviews({
+      page: nextPage,
+      page_size: reviewNavigationStore.pageSize,
+    })
+
+    if (response.items.length === 0) {
+      ElMessage.warning('No more reviews available')
+      return
+    }
+
+    // Update navigation context with new page
+    const totalPages = Math.ceil(response.total / reviewNavigationStore.pageSize)
+    reviewNavigationStore.setContext({
+      items: response.items.map(item => ({
+        id: item.id,
+        projectKey: item.project_key,
+        repositorySlug: item.repository_slug,
+        pullRequestId: item.pull_request_id,
+        reviewer: item.reviewer || '',
+        sourceFilename: item.source_filename || '',
+      })),
+      currentPage: nextPage,
+      pageSize: reviewNavigationStore.pageSize,
+      totalItems: response.total,
+      hasMorePages: nextPage < totalPages,
+    })
+
+    // Navigate to first review on the new page
+    const firstReview = response.items[0]
+    if (firstReview) {
+      router.replace({
+        name: 'ReviewDetail',
+        params: { id: firstReview.id },
+        query: {
+          projectKey: firstReview.project_key,
+          repositorySlug: firstReview.repository_slug,
+          pullRequestId: firstReview.pull_request_id,
+          reviewer: firstReview.reviewer || '',
+          sourceFilename: firstReview.source_filename || '',
+        },
+      })
+    }
+  } catch (error) {
+    console.error('Failed to load next page:', error)
+    ElMessage.error('Failed to load next page')
+  } finally {
+    navigatingPage.value = false
+  }
+}
+
+// Load previous page of reviews
+const loadPreviousPage = async () => {
+  if (!review.value || navigatingPage.value) return
+
+  navigatingPage.value = true
+  try {
+    const prevPage = reviewNavigationStore.currentPage - 1
+    
+    // Fetch previous page from API
+    const response = await reviewsApi.getReviews({
+      page: prevPage,
+      page_size: reviewNavigationStore.pageSize,
+    })
+
+    if (response.items.length === 0) {
+      ElMessage.warning('No more reviews available')
+      return
+    }
+
+    // Update navigation context with new page
+    const totalPages = Math.ceil(response.total / reviewNavigationStore.pageSize)
+    reviewNavigationStore.setContext({
+      items: response.items.map(item => ({
+        id: item.id,
+        projectKey: item.project_key,
+        repositorySlug: item.repository_slug,
+        pullRequestId: item.pull_request_id,
+        reviewer: item.reviewer || '',
+        sourceFilename: item.source_filename || '',
+      })),
+      currentPage: prevPage,
+      pageSize: reviewNavigationStore.pageSize,
+      totalItems: response.total,
+      hasMorePages: prevPage < totalPages,
+    })
+
+    // Navigate to last review on the new page
+    const lastReview = response.items[response.items.length - 1]
+    if (lastReview) {
+      router.replace({
+        name: 'ReviewDetail',
+        params: { id: lastReview.id },
+        query: {
+          projectKey: lastReview.project_key,
+          repositorySlug: lastReview.repository_slug,
+          pullRequestId: lastReview.pull_request_id,
+          reviewer: lastReview.reviewer || '',
+          sourceFilename: lastReview.source_filename || '',
+        },
+      })
+    }
+  } catch (error) {
+    console.error('Failed to load previous page:', error)
+    ElMessage.error('Failed to load previous page')
+  } finally {
+    navigatingPage.value = false
+  }
 }
 
 const handleAddScore = async () => {
@@ -1029,7 +1195,6 @@ watch(
 .review-detail {
   padding: 20px;
   background: var(--el-bg-color-page);
-  min-height: calc(100vh - 60px);
 }
 
 .header-content-title {
@@ -1083,14 +1248,21 @@ watch(
   justify-content: center;
   color: var(--el-text-color-secondary);
   font-size: 13px;
-  width: 104px;
+  min-width: 104px;
   height: 32px;
+  padding: 0 16px;
   text-align: center;
   box-sizing: border-box;
   border-radius: 999px;
   background: var(--el-fill-color-light);
   border: 1px solid var(--el-border-color-lighter);
   font-weight: 500;
+  white-space: nowrap;
+}
+
+.page-indicator {
+  display: inline-flex;
+  align-items: center;
 }
 
 .content-row {
@@ -1320,7 +1492,26 @@ watch(
 .score-value {
   font-size: 1.2rem;
   font-weight: 700;
-  color: var(--el-color-success);
+}
+
+.score-excellent {
+  color: #10b981;
+}
+
+.score-good {
+  color: #3b82f6;
+}
+
+.score-acceptable {
+  color: #f59e0b;
+}
+
+.score-needs-improvement {
+  color: #f97316;
+}
+
+.score-poor {
+  color: #ef4444;
 }
 
 .score-max {
@@ -1336,12 +1527,43 @@ watch(
   text-align: center;
   font-size: 2rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  margin-top: 12px;
+  transition: color 0.3s ease;
+}
+
+.score-value-display.score-excellent {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  margin-top: 12px;
-  text-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+.score-value-display.score-good {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.score-value-display.score-acceptable {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.score-value-display.score-needs-improvement {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.score-value-display.score-poor {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* AI Review ID Styles */
@@ -1695,5 +1917,16 @@ watch(
   font-size: 0.7rem;
   padding: 2px 6px;
   white-space: nowrap;
+}
+
+/* Scores card spacing */
+.scores-card {
+  margin-bottom: 40px;
+}
+
+@media (max-width: 768px) {
+  .scores-card {
+    margin-bottom: 30px;
+  }
 }
 </style>

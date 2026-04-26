@@ -17,6 +17,8 @@
     "search": "搜索",
     "filter": "筛选",
     "loading": "加载中...",
+    "logging_in": "登录中...",
+    "creating_account": "创建账户中...",
     "success": "成功",
     "error": "错误",
     "confirm": "确认",
@@ -25,7 +27,9 @@
     "noData": "暂无数据",
     "viewAll": "查看全部",
     "backToHome": "返回首页",
-    "refresh": "刷新"
+    "refresh": "刷新",
+    "enabled": "启用",
+    "disabled": "禁用"
   },
   "menu": {
     "dashboard": "仪表板",
@@ -40,17 +44,29 @@
     "delegations": "委托",
     "auditLogs": "审计日志",
     "sessions": "会话",
-    "projectRegistry": "项目注册表"
+    "projectRegistry": "项目注册表",
+    "systemSettings": "系统设置"
   },
   "auth": {
     "login_title": "登录到 PR Ledger",
+    "login_subtitle": "跟踪和管理您的代码审查",
     "register_title": "创建账户",
+    "registerPrompt": "请使用您的域账户进行注册",
+    "register_subtitle": "加入代码审查社区",
     "username": "用户名",
     "password": "密码",
     "email": "邮箱",
     "confirm_password": "确认密码",
     "current_password": "当前密码",
     "new_password": "新密码",
+    "username_required": "请输入用户名",
+    "password_required": "请输入密码",
+    "confirm_password_required": "请确认您的密码",
+    "passwords_not_match": "两次输入的密码不一致",
+    "username_length": "长度应在3到20个字符之间",
+    "email_required": "请输入邮箱",
+    "email_invalid": "请输入正确的邮箱地址",
+    "password_min_length": "密码至少需要6个字符",
     "login_success": "登录成功",
     "logout_success": "登出成功",
     "login_failed": "登录失败，请检查您的凭据。",
@@ -69,7 +85,11 @@
     "received": "收到的委托",
     "sent": "发出的委托",
     "delegation_revoked": "委托撤销成功",
-    "revoke_failed": "撤销委托失败"
+    "revoke_failed": "撤销委托失败",
+    "registration_disabled": "注册已禁用",
+    "registration_disabled_message": "系统管理员已禁用用户注册功能。",
+    "contact_admin": "请联系您的管理员为您创建账户。",
+    "back_to_login": "返回登录"
   },
   "dashboard": {
     "welcome": "欢迎使用 PR Ledger",

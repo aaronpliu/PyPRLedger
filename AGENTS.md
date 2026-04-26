@@ -1,246 +1,246 @@
 # Agent Guidelines for PyPRLedger
 
-This document provides guidelines for AI agents operating in this repository.
+This document provides essential guidelines for AI agents contributing to PyPRLedger. For full documentation, see README.md.
 
-## Project Overview
+## Tech Stack
 
-PyPRLedger is a FastAPI-based Pull Request Code Review Result Storage System with MySQL, Redis, and Prometheus integration. It uses Python 3.12+ with async/await patterns throughout.
+- Python 3.12+, FastAPI, async/await throughout
+- MySQL + SQLAlchemy 2.0 (async), Alembic migrations
+- Redis caching, Prometheus metrics, Grafana dashboards
+- Pydantic v2, SQLModel, JWT auth, RBAC with delegation
 
-## Build/Lint/Test Commands
-
-### Running the Application
-
-```bash
-# Development server with auto-reload
-uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
-
-# Or using the module syntax
-python -m uvicorn src.main:app --reload
-```
-
-### Running Tests
+## Quick Commands
 
 ```bash
-# Run all tests
-pytest
+# Dev server
+uv run uvicorn src.main:app --reload
 
-# Run a single test file
-pytest tests/test_users.py
-
-# Run a single test by name
-pytest tests/test_users.py::test_create_user
-
-# Run with verbose output
+# Tests
 pytest -v
+pytest --cov=src
 
-# Run with coverage (if pytest-cov is installed)
-pytest --cov=src --cov-report=html
-```
-
-### Linting and Formatting
-
-```bash
-# Format code with ruff
-ruff format
-
-# Lint with ruff (auto-fix where possible)
-ruff check --fix
-
-# Run both before committing
+# Lint/format
 ruff format && ruff check --fix
 
-# Run pre-commit hooks manually
-pre-commit run --all-files
+# Migrations
+alembic revision --autogenerate -m "desc"
+alembic upgrade head
+
+# Docker
+docker-compose up -d
+docker-compose logs -f api
 ```
 
-## Code Style Guidelines
+## Critical Rules
 
-### General Principles
-
-- **Type hints are required** - Use Python 3.12+ type hints everywhere
-- **Prefer async/await** - All database and I/O operations should be async
-- **Avoid comments** - Let code be self-explanatory; don't add comments unless absolutely necessary
-- **Use `from __future__ import annotations`** for forward references
-
-### Imports
-
-Standard import order (per Ruff/PEP 8):
-
+### 1. Import Order (Ruff/PEP 8)
 ```python
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncGenerator
-from typing import Any
+from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter
+from sqlalchemy import select
 
 from src.core.config import settings
-from src.core.exceptions import NotFoundException
 from src.models.user import User
-from src.schemas.user import UserResponse
 from src.services.user_service import UserService
-from src.utils.metrics import metrics
+
+if TYPE_CHECKING:
+    from src.models.pull_request import PullRequestReview
 ```
 
-- Use `from __future__ import annotations` at the top of every file
-- Use `TYPE_CHECKING` block for imports only needed for type hints:
-  ```python
-  from typing import TYPE_CHECKING
-  if TYPE_CHECKING:
-      from src.models.pull_request import PullRequestReview
-  ```
-- Group: stdlib → third-party → local (src)
+### 2. Async Database Pattern
+```python
+async def get_user(db: AsyncSession, user_id: int):
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
+```
+- **Never** forget `await` on DB operations
+- Use `Depends(get_db_session)` in endpoints for auto commit/rollback
+- Call `await db.flush()` before `await db.refresh()`
 
-### Naming Conventions
+### 3. SQLAlchemy 2.0 Models
+```python
+class User(Base):
+    __tablename__ = "user"
 
-- **Classes**: `PascalCase` (e.g., `UserService`, `PullRequestReviewBase`, `PullRequestReviewAssignment`)
-- **Functions/methods**: `snake_case` (e.g., `get_user_by_id`, `_get_cache_key`)
-- **Variables**: `snake_case` (e.g., `user_id`, `cache_key`)
-- **Constants**: `UPPER_SNAKE_CASE` (e.g., `CACHE_TTL_USERS`)
-- **Private methods**: Prefix with `_` (e.g., `_get_user_from_cache`)
-- **Database models**: Use `PascalCase` class names, `snake_case` column names
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_date: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC)
+    )
+```
+- Always use `Mapped[type]` + `mapped_column()`
+- Use `lambda: datetime.now(UTC)` for timestamps
+- Define `foreign_keys` in relationships
+- Add indexes via `__table_args__`
 
-### Pydantic Schemas
+### 4. Pydantic Schemas
+```python
+class UserBase(BaseModel):
+    username: str = Field(..., min_length=3, max_length=64)
+    model_config = {"from_attributes": True}
 
-- Use `BaseModel` from Pydantic v2
-- Define base schemas with common fields, then extend:
-  ```python
-  class UserBase(BaseModel):
-      username: str = Field(..., min_length=3, max_length=64)
-      
-  class UserCreate(UserBase):
-      password: str | None = Field(None, min_length=8)
-  ```
-- Always set `from_attributes = True` for ORM compatibility:
-  ```python
-  class Config:
-      from_attributes = True
-  ```
-- Use `field_validator` for custom validation:
-  ```python
-  @field_validator("username")
-  def username_alphanumeric(cls, v):
-      if not all(c.isalnum() or c == "_" for c in v):
-          raise ValueError("Username must be alphanumeric")
-      return v.lower()
-  ```
+class UserCreate(UserBase):
+    password: str = Field(..., min_length=8)
 
-### SQLAlchemy Models
+class UserResponse(UserBase):
+    id: int
+```
+- Inherit from base schemas
+- Set `from_attributes = True` for ORM compatibility
+- Use `Field(..., description="...")` for docs
+- Use `model_dump(exclude_unset=True)` for PATCH
 
-- Use SQLAlchemy 2.0 style with `Mapped` and `mapped_column`:
-  ```python
-  class User(Base):
-      __tablename__ = "user"
-      
-      id: Mapped[int] = mapped_column(Integer, primary_key=True)
-      username: Mapped[str] = mapped_column(String(64), unique=True)
-  ```
-- Add indexes using `__table_args__`:
-  ```python
-  __table_args__ = (
-      Index("idx_username", "username"),
-  )
-  ```
+### 5. API Endpoint Pattern
+```python
+router = APIRouter(prefix="/users", tags=["users"])
 
-### Error Handling
+@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    user_in: UserCreate,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[UserService, Depends(get_user_service)],
+):
+    user = await service.create_user(db, user_in)
+    metrics.increment("user.created")
+    return user
+```
+- Use `Annotated` + `Depends` for DI
+- Increment metrics for all operations
+- Return proper HTTP status codes
 
-- Use custom exception classes inheriting from `AppException`
-- Define error codes in `ErrorCode` class in `src/core/exceptions.py`
-- Specific exceptions should extend base exceptions:
-  ```python
-  class UserNotFoundException(NotFoundException):
-      def __init__(self, user_id: int):
-          super().__init__(
-              message=f"User with ID {user_id} not found",
-              detail={"user_id": user_id},
-          )
-  ```
-- Catch specific exceptions in API endpoints, let generic ones bubble up
+### 6. Exception Handling
+```python
+# Define in src/core/exceptions.py
+class UserNotFoundException(NotFoundException):
+    def __init__(self, user_id: int | None = None, username: str | None = None):
+        if user_id:
+            super().__init__(message=f"User with ID {user_id} not found", detail={"user_id": user_id})
 
-### API Endpoints
+# Raise in code
+raise UserNotFoundException(user_id=user_id)
+```
+- Extend from `AppException` hierarchy
+- Include structured `detail` for debugging
+- Use i18n message keys when needed
 
-- Use `APIRouter` for grouping routes
-- Use `Annotated` with `Depends` for dependency injection:
-  ```python
-  @router.get("/{user_id}")
-  async def get_user(
-      user_id: int,
-      db: Annotated[AsyncSession, Depends(get_db_session)],
-      user_service: Annotated[UserService, Depends(get_user_service)],
-  ) -> UserResponse:
-  ```
-- Use status codes: `status.HTTP_201_CREATED` for creation, `status.HTTP_204_NO_CONTENT` for deletion
-- Return proper response models; use `response_model` parameter
-- Include metrics tracking for errors and operations
+### 7. Service Layer
+```python
+class UserService:
+    def __init__(self, metrics: MetricsCollector | None = None):
+        self.redis_client = get_redis_client()
+        self.metrics = metrics or MetricsCollector()
 
-### Configuration
+    async def get_user_by_id(self, db: AsyncSession, user_id: int) -> UserResponse:
+        cache_key = f"user:{user_id}"
+        cached = await cache.get_json(cache_key)
+        if cached:
+            self.metrics.increment("cache.hit", labels={"resource": "user"})
+            return UserResponse(**cached)
+        # DB query...
+        await cache.set_json(cache_key, response.model_dump(), expire=settings.CACHE_TTL_USERS)
+        return response
+```
+- Return schemas, not ORM models
+- Cache reads, invalidate on writes
+- Increment metrics
 
-- Use Pydantic `BaseSettings` for configuration
-- Store in `src/core/config.py`
-- Use `Field` with defaults for environment variables:
-  ```python
-  DATABASE_HOST: str = Field(default="localhost")
-  DATABASE_PORT: int = Field(default=3306)
-  ```
-- Use `@lru_cache` for singleton pattern:
-  ```python
-  @lru_cache
-  def get_settings() -> Settings:
-      return Settings()
-  ```
+### 8. Caching (RedisCache)
+```python
+# Key patterns: entity:ID, list:resource:param:page:N:size:M, stats:resource:metric
+await cache.set_json(f"user:{user_id}", data, expire=settings.CACHE_TTL_USERS)
+data = await cache.get_json(f"user:{user_id}")
+await cache.delete(f"user:{user_id}")  # Invalidate on write
+```
+- Always wrap in try/except, log warnings
+- Use TTL from settings
+- Delete on mutations
 
-### Logging
+### 9. Logging
+```python
+logger = get_logger(__name__)
+logger.info("Review created", extra={
+    "review_id": review.id,
+    "user_id": user.id,
+    "project_key": project_key,
+})
+```
+- Use structured logging with `extra`
+- Appropriate levels: DEBUG/INFO/WARNING/ERROR/CRITICAL
+- Include correlation IDs in production
 
-- Use module-level loggers:
-  ```python
-  logger = logging.getLogger(__name__)
-  ```
-- Use appropriate levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
-- Include structured data in `extra` parameter:
-  ```python
-  logger.error("Failed operation", extra={"user_id": user_id})
-  ```
+### 10. Configuration
+```python
+from src.core.config import settings
 
-### Redis/Caching
+# Access: settings.DATABASE_HOST, settings.CACHE_TTL_USERS, etc.
+```
+- All config via `Settings` class in `src/core/config.py`
+- Use `@lru_cache` singleton pattern
+- Environment variables from `.env`
 
-- Use cache keys with prefixes: `user:123`, `users:list:active:1:20`
-- Set appropriate TTL using settings: `settings.CACHE_TTL_USERS`
-- Wrap cache operations in try/except with warning-level logging on failure
+## Testing
 
-### Testing
+```python
+# Use async fixtures from tests/conftest.py
+@pytest.mark.asyncio
+async def test_create_user(async_client: AsyncClient, db_session: AsyncSession):
+    response = await async_client.post("/api/v1/users/", json={...})
+    assert response.status_code == 201
+```
+- `asyncio_mode = auto` in pytest.ini
+- SQLite in-memory DB: `sqlite+aiosqlite:///:memory:`
+- Fixtures: `async_client`, `db_session`, `test_engine`
 
-- Use `pytest` with `pytest.ini` configuration: `asyncio_mode = auto`
-- Use `AsyncClient` from `httpx` with `ASGITransport` for testing
-- Use in-memory SQLite for tests: `sqlite+aiosqlite:///:memory:`
-- Follow test structure in `tests/conftest.py`
+## Pre-PR Checklist
 
-### File Organization
+- [ ] `ruff format` and `ruff check --fix` pass
+- [ ] All type hints present, no `Any` abuse
+- [ ] All DB ops are async with proper `await`
+- [ ] Cache invalidation on writes
+- [ ] Metrics incremented for operations
+- [ ] Structured logging with `extra`
+- [ ] Proper exception types used
+- [ ] Response models match schemas
+- [ ] Tests added/updated: `pytest -v`
+- [ ] Pre-commit passes: `pre-commit run --all-files`
+- [ ] Migration generated if schema changed: `alembic revision --autogenerate`
+
+## Project Structure
 
 ```
 src/
-├── __init__.py          # Version info
-├── main.py              # FastAPI app setup
-├── core/
-│   ├── config.py        # Settings
-│   ├── database.py      # DB connection
-│   ├── exceptions.py    # Custom exceptions
-│   └── middleware.py   # Custom middleware
-├── models/              # SQLAlchemy models
-├── schemas/             # Pydantic schemas
-├── services/            # Business logic
-├── api/
-│   └── v1/
-│       ├── api.py      # Router aggregation
-│       └── endpoints/  # Route handlers
-└── utils/               # Utilities (redis, metrics, logging)
+├── api/v1/endpoints/  # Route handlers (use Depends for db/service)
+├── core/              # Config, DB, exceptions, middleware
+├── models/            # SQLAlchemy ORM (Mapped, mapped_column)
+├── schemas/           # Pydantic v2 (from_attributes=True)
+├── services/          # Business logic (caching, metrics)
+├── utils/             # redis, metrics, log, jwt, i18n
+└── main.py            # App factory, lifespan, middleware, handlers
+tests/                 # pytest with async fixtures
+alembic/versions/      # DB migrations
 ```
 
-## Database
+## Common Pitfalls
 
-- MySQL for persistent storage
-- Use `sqlmodel` for ORM
-- Async operations with `sqlalchemy.ext.asyncio`
-- Define foreign keys explicitly in relationships
+- **No comments** - Let code be self-explanatory
+- **No blocking calls** - Everything async (DB, Redis, I/O)
+- **Don't manually manage sessions** in endpoints (use `Depends`)
+- **Don't forget cache invalidation** on create/update/delete
+- **Don't use `model_dump()` without `exclude_unset=True`** for PATCH
+- **Don't return ORM models** - convert to Pydantic schemas
+
+## Key Files
+
+- `src/main.py:73` - Lifespan context (startup/shutdown)
+- `src/core/database.py:132` - `get_db_session()` dependency
+- `src/core/exceptions.py:58` - `AppException` base class
+- `src/utils/redis.py:87` - `RedisCache` class
+- `src/utils/metrics.py` - Metrics collector
+
+## Environment
+
+See `.env.example` for all variables. Key: `DATABASE_*`, `REDIS_*`, `SECRET_KEY`, `CACHE_TTL_*`.

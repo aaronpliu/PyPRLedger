@@ -296,13 +296,39 @@ async def list_auth_users(
 
         # Convert to response format with role summaries
         users_data = []
+        from datetime import UTC, datetime
+
+        now = datetime.now(UTC)
+
         for auth_user in auth_users:
             user_dict = auth_user.to_dict()
 
-            # Extract role names for display
+            # Extract only ACTIVE role names (exclude expired/revoked delegations)
             role_names = []
             for assignment in auth_user.role_assignments:
-                if assignment.role:
+                if not assignment.role:
+                    continue
+
+                # Check if assignment is active
+                is_active = True
+
+                # For delegated roles, check delegation_status
+                if assignment.is_delegated:
+                    if assignment.delegation_status != "active":
+                        is_active = False
+
+                # Check expiration time
+                if is_active and assignment.expires_at:
+                    expires_at = assignment.expires_at
+                    # If expires_at is naive (no timezone), assume it's UTC
+                    if expires_at.tzinfo is None:
+                        expires_at = expires_at.replace(tzinfo=UTC)
+
+                    if expires_at <= now:
+                        is_active = False
+
+                # Only include active assignments
+                if is_active:
                     role_names.append(assignment.role.name)
 
             user_dict["roles"] = role_names

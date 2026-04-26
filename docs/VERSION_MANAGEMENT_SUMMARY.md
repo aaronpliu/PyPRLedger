@@ -20,8 +20,8 @@ frontend/package.json → version = "1.0.0"
 
 ### After (✅ Explicit Backend and Frontend Sources)
 ```
-pyproject.toml        → version = "1.6.0" (BACKEND/API SOURCE OF TRUTH)
-frontend/package.json → version = "1.1.0" (FRONTEND/UI SOURCE OF TRUTH)
+pyproject.toml        → version = "1.7.1" (BACKEND/API SOURCE OF TRUTH)
+frontend/package.json → version = "1.2.1" (FRONTEND/UI SOURCE OF TRUTH)
 src/__init__.py       → reads from pyproject.toml via tomllib
 src/main.py           → imports __version__ from src.__init__
 frontend/src/config/versions.ts → reads UI version from package.json
@@ -69,7 +69,7 @@ python3 scripts/bump_version.py show
 # Major release (1.5.0 → 2.0.0)
 python3 scripts/bump_version.py major
 
-# Minor release (1.5.0 → 1.6.0)
+# Minor release (1.6.0 → 1.7.0)
 python3 scripts/bump_version.py minor
 
 # Patch release (1.0.0 → 1.0.1)

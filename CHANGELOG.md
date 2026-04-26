@@ -9,6 +9,100 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.1] - 2026-04-26
+
+### Changed
+- **Version Bump**: Backend updated to v1.7.1, Frontend updated to v1.2.1
+- **Configuration**: Removed unused `PROJECT_VERSION` field from `Settings` and `.env.example` to prevent future drift
+
+---
+
+## [1.7.0] - 2026-04-22
+
+### Added
+- **System Settings Management** - Centralized system configuration
+  - New `system_setting` table for storing system-wide settings
+  - Admin UI for managing system settings
+  - Backend CRUD endpoints for system settings
+
+- **Enhanced Admin Dashboard** - Comprehensive admin overview
+  - New admin dashboard view with key metrics
+  - Project registry management in admin page
+  - Enhanced delegation query and management
+
+- **Session Management** - User login session tracking
+  - Manage user login sessions by user and admin
+  - Enhanced session info display
+  - Enhanced logged token and refresh mechanism
+
+- **PR ID Hyperlinks** - Quick navigation to pull requests
+  - Hyperlink for PR ID in task assignment page
+  - Enhanced PR URL handling with `usePrUrl` composable
+
+- **Code Diff Enhancements** - Improved diff visualization
+  - Show code diff with diff2html in task assignment details page
+  - Enhanced code diff styles referencing theme color
+  - Optimized UI display for user-agent
+
+- **Score Analytics Dashboard** - Enhanced analytics visualization
+  - Improved score distribution charts
+  - Better performance metrics display
+
+- **i18n Enhancements** - Expanded internationalization support
+  - Updated translations for en, zh-CN, zh-TW
+  - Enhanced search for audit logs and sessions
+
+- **Multi-Git Provider Support** - Broader Git provider compatibility
+  - Replaced specific prefix of git provider to support more providers
+
+### Changed
+- **Task Assignment Workflow** - Improved task assignment experience
+  - Enhanced sequence for task assignment
+  - Highlight unassigned tasks with obvious tags
+  - Allow PR user to view self-raised PR
+  - Show more recent reviews
+  - Add "next" button in reviews detail page for quick navigation
+  - Enable switching reviews in details page
+
+- **Filter Enhancements** - Better filtering capabilities
+  - Optimize user filter
+  - Add app_name as filter
+  - Enhance filter styles and fix app name display
+
+- **UI/UX Improvements** - Visual refinements across the application
+  - Update styles of login and registry page
+  - Optimize dashboard display
+  - Optimize banner in code reviews page
+  - Optimize records display as per resolution
+  - Update menu style in admin layout
+
+- **Permission Updates** - Refined access control
+  - Enhance admin page access
+  - Update permission for TAM page
+  - Fix permission and score for reviewer
+  - Update permission to view task assignment
+
+### Fixed
+- **Deprecated API Parameters** - Updated deprecated `Query()` parameter usage
+- **Docker Configuration** - Fixed Dockerfile and nginx.conf issues
+- **User Role Management** - Resolved user role management issues
+- **Admin Route** - Fixed admin route issue after rename
+- **Pagination** - Resolved pagination issues
+- **Build Issues** - Fixed frontend build problems
+- **Dependency Vulnerabilities** - Replaced xlsx with exceljs to avoid vulnerabilities
+- **Delegation Status** - Handle delegation status transition with lifespan
+- **Comments Component** - Fixed comments component display issue
+- **PR User/Reviewer Filter** - Updated filter logic
+- **Copyright/Version Display** - Fixed copyright and version info show in pages
+
+### Technical Details
+- **Backend Version**: 1.7.0 (FastAPI service)
+- **Frontend Version**: 1.2.0 (Vue 3 application)
+- **Database Migrations**: Added system settings table (migration 015), project registry permissions (migration 013), AI review ID column (migration 014)
+- **Dependencies**: Replaced xlsx with exceljs for security
+
+---
+
 ## [1.6.0] - 2026-04-13
 
 ### Added
@@ -529,6 +623,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
+| 1.7.0 | 2026-04-22 | System settings, admin dashboard, session management, PR hyperlinks, diff enhancements, i18n updates |
 | 1.6.0 | 2026-04-13 | Multi-reviewer review table split, assignment workflow, role delegation, release metadata alignment |
 | 1.5.0 | 2026-04-08 | Vue.js frontend application, advanced review management, analytics dashboard |
 | 1.4.0 | 2026-04-06 | Diff2HTML integration, score deletion, Material Design UI overhaul, cache enhancements |

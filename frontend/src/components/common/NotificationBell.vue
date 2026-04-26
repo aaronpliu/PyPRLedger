@@ -149,11 +149,11 @@ window.addEventListener('notification-received', ((event: CustomEvent) => {
   padding: 8px;
   border-radius: 4px;
   transition: background-color 0.3s;
-  color: white;
+  color: var(--el-text-color-primary);
 }
 
 .notification-bell:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--el-fill-color-light);
 }
 
 .notification-dropdown {
@@ -171,6 +171,7 @@ window.addEventListener('notification-received', ((event: CustomEvent) => {
 .notification-header .title {
   font-weight: bold;
   font-size: 14px;
+  color: var(--el-text-color-primary);
 }
 
 .notification-header .actions {
@@ -189,19 +190,27 @@ window.addEventListener('notification-received', ((event: CustomEvent) => {
   padding: 12px 16px;
   cursor: pointer;
   transition: background-color 0.2s;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
 .notification-item:hover {
-  background-color: #f5f7fa;
+  background-color: var(--el-fill-color-light);
 }
 
 .notification-item.unread {
-  background-color: #ecf5ff;
+  background-color: var(--el-color-primary-light-9);
 }
 
 .notification-item.unread:hover {
-  background-color: #d9ecff;
+  background-color: var(--el-color-primary-light-8);
+}
+
+[data-theme='dark'] .notification-item.unread {
+  background-color: rgba(64, 158, 255, 0.1);
+}
+
+[data-theme='dark'] .notification-item.unread:hover {
+  background-color: rgba(64, 158, 255, 0.15);
 }
 
 .notification-icon {
@@ -212,7 +221,7 @@ window.addEventListener('notification-received', ((event: CustomEvent) => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background-color: #f5f7fa;
+  background-color: var(--el-fill-color-light);
 }
 
 .notification-content {
@@ -223,13 +232,13 @@ window.addEventListener('notification-received', ((event: CustomEvent) => {
 .notification-title {
   font-size: 14px;
   font-weight: 500;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin-bottom: 4px;
 }
 
 .notification-message {
   font-size: 12px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -238,7 +247,7 @@ window.addEventListener('notification-received', ((event: CustomEvent) => {
 
 .notification-time {
   font-size: 11px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .notification-actions {

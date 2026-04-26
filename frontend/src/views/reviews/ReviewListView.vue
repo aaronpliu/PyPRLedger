@@ -11,6 +11,7 @@
             <ExportMenu
               :data="reviews"
               :selected-ids="selectedReviews.map(r => r.id)"
+              :fetch-all-data="fetchAllDataForExport"
             />
             <el-button @click="loadReviews">
               <el-icon><Refresh /></el-icon>
@@ -34,10 +35,10 @@
         :reviewer-options="availableReviewers"
         :pr-users-loading="prUsersLoading"
         :reviewers-loading="reviewersLoading"
-        @apply="applyFilters"
-        @reset="handleResetFilters"
         @search-pr-users="searchPRUsers"
         @search-reviewers="searchReviewers"
+        @apply="applyFilters"
+        @reset="handleResetFilters"
       />
 
       <!-- Bulk Actions Toolbar -->
@@ -342,9 +343,11 @@ const appFilter = ref<string[]>([])
 const availableApps = ref<AppInfo[]>([])
 const prUserFilter = ref('')
 const availablePRUsers = ref<ReviewerUser[]>([])
+const allPRUsers = ref<ReviewerUser[]>([]) // Cache for client-side filtering
 const prUsersLoading = ref(false)
 const reviewerFilter = ref('')
 const availableReviewers = ref<ReviewerUser[]>([])
+const allReviewers = ref<ReviewerUser[]>([]) // Cache for client-side filtering
 const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
@@ -419,6 +422,94 @@ const loadReviews = async () => {
 // Store all reviews for client-side filtering
 const allReviews = ref<Review[]>([])
 const filteredReviews = ref<Review[]>([])
+
+// Fetch all data for export (bypassing pagination)
+const fetchAllDataForExport = async (): Promise<Review[]> => {
+  try {
+    const params: any = {
+      page: 1,
+      page_size: 10000, // Large page size to get all data
+    }
+    
+    // Add filter parameters for server-side filtering (only supported fields)
+    if (appFilter.value && appFilter.value.length > 0) params.app_names = appFilter.value.join(',')
+    if (prUserFilter.value) params.pull_request_user = prUserFilter.value
+    if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+      params.reviewer = reviewerFilter.value
+    }
+    if (statusFilter.value) params.pull_request_status = statusFilter.value
+
+    const data = await reviewsApi.getReviews(params)
+    let result = data.items
+    
+    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned reviewer)
+    if (searchQuery.value) {
+      const query = searchQuery.value.toLowerCase()
+      result = result.filter(review => {
+        return (
+          review.pull_request_id?.toLowerCase().includes(query) ||
+          review.reviewer?.toLowerCase().includes(query) ||
+          review.project_key?.toLowerCase().includes(query) ||
+          review.repository_slug?.toLowerCase().includes(query) ||
+          review.reviewer_comments?.toLowerCase().includes(query)
+        )
+      })
+    }
+    
+    // Apply PR user filter (client-side refinement if needed, though mostly server-side)
+    if (prUserFilter.value) {
+      const prUser = prUserFilter.value.toLowerCase()
+      result = result.filter(review => 
+        review.pull_request_user?.toLowerCase().includes(prUser) ||
+        review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
+      )
+    }
+    
+    // Apply reviewer filter (client-side refinement for unassigned or text search)
+    if (reviewerFilter.value) {
+      if (reviewerFilter.value === '__unassigned__') {
+        result = result.filter(review => 
+          !review.reviewer && !review.reviewer_info?.display_name
+        )
+      } else {
+        const reviewer = reviewerFilter.value.toLowerCase()
+        result = result.filter(review => 
+          review.reviewer?.toLowerCase().includes(reviewer) ||
+          review.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
+        )
+      }
+    }
+    
+    // Apply scored filter
+    if (scoredFilter.value === 'yes') {
+      result = result.filter(review => 
+        review.score_summary && review.score_summary.total_scores > 0
+      )
+    } else if (scoredFilter.value === 'no') {
+      result = result.filter(review => 
+        !review.score_summary || review.score_summary.total_scores === 0
+      )
+    }
+    
+    // Apply severity filter (check AI review issues)
+    if (severityFilter.value) {
+      const targetSeverity = severityFilter.value
+      result = result.filter(review => {
+        if (!review.ai_suggestions?.issues || review.ai_suggestions.issues.length === 0) {
+          return false
+        }
+        return review.ai_suggestions.issues.some(
+          issue => issue.severity === targetSeverity
+        )
+      })
+    }
+    
+    return result
+  } catch (error) {
+    console.error('Failed to fetch all data for export:', error)
+    throw error
+  }
+}
 
 const handleResetFilters = () => {
   searchQuery.value = ''
@@ -516,26 +607,30 @@ const applyFilters = () => {
   filteredReviews.value = result
   reviews.value = result
   
-  // Only update total if filters are active (client-side filtering scenario)
-  // Otherwise, keep the API's total count for proper pagination
-  const hasActiveFilters = searchQuery.value || appFilter.value?.length > 0 || prUserFilter.value || reviewerFilter.value || 
-                          scoredFilter.value || severityFilter.value || statusFilter.value
-  if (hasActiveFilters) {
-    total.value = result.length
-  }
+  // Keep backend's total count for pagination.
+  // Client-side filters (search, scored, severity) reduce visible items but don't change total pages.
+  // Only server-side filters (app, pr_user, reviewer, status) affect the total count from backend.
 }
 
 const viewReview = (review: Review) => {
-  reviewNavigationStore.setItems(
-    reviews.value.map(item => ({
+  // Calculate if there are more pages
+  const totalPages = Math.ceil(total.value / pageSize.value)
+  const hasMorePages = currentPage.value < totalPages
+
+  reviewNavigationStore.setContext({
+    items: reviews.value.map(item => ({
       id: item.id,
       projectKey: item.project_key,
       repositorySlug: item.repository_slug,
       pullRequestId: item.pull_request_id,
       reviewer: item.reviewer || '',
       sourceFilename: item.source_filename || '',
-    }))
-  )
+    })),
+    currentPage: currentPage.value,
+    pageSize: pageSize.value,
+    totalItems: total.value,
+    hasMorePages: hasMorePages,
+  })
 
   router.push({
     name: 'ReviewDetail',
@@ -720,12 +815,15 @@ const loadAvailableApps = async () => {
   }
 }
 
-// Load all users for PR User filter dropdown
+// Load all PR users for filter dropdown (active users only)
 const loadPRUsers = async () => {
   try {
     prUsersLoading.value = true
+    // Fetch all active users once - cache for client-side filtering
     const users = await usersApi.getAllBitbucketUsers(500)
-    availablePRUsers.value = users
+    const activeUsers = users.filter(u => u.active !== false)
+    allPRUsers.value = activeUsers
+    availablePRUsers.value = activeUsers
   } catch (error) {
     console.error('Failed to load PR users:', error)
   } finally {
@@ -733,55 +831,52 @@ const loadPRUsers = async () => {
   }
 }
 
-// Search PR users remotely as user types
-const searchPRUsers = async (query: string) => {
-  if (!query) {
-    await loadPRUsers()
+// Search PR users - PURE client-side filtering, NO API call
+const searchPRUsers = (query: string) => {
+  if (!query || query.trim() === '') {
+    // If no query, show all cached users
+    availablePRUsers.value = allPRUsers.value
     return
   }
   
-  try {
-    prUsersLoading.value = true
-    // Use backend username filtering for better performance
-    const users = await usersApi.getAllBitbucketUsers(500, query)
-    availablePRUsers.value = users
-  } catch (error) {
-    console.error('Failed to search PR users:', error)
-  } finally {
-    prUsersLoading.value = false
-  }
+  // Client-side filtering from cached data - NO API call
+  const queryLower = query.toLowerCase()
+  availablePRUsers.value = allPRUsers.value.filter(user => 
+    user.username.toLowerCase().includes(queryLower) ||
+    (user.display_name && user.display_name.toLowerCase().includes(queryLower))
+  )
 }
 
-// Load all users for filter dropdown (not just reviewers)
+// Load all reviewers for filter dropdown using dedicated endpoint
 const loadReviewers = async () => {
   try {
     reviewersLoading.value = true
-    const users = await usersApi.getAllBitbucketUsers(500)
-    availableReviewers.value = users
+    // Use dedicated /users/reviewers endpoint - returns active reviewers only
+    const response = await usersApi.getReviewers(500)
+    const reviewers = response.items || []
+    allReviewers.value = reviewers
+    availableReviewers.value = reviewers
   } catch (error) {
-    console.error('Failed to load users:', error)
+    console.error('Failed to load reviewers:', error)
   } finally {
     reviewersLoading.value = false
   }
 }
 
-// Search users remotely as user types
-const searchReviewers = async (query: string) => {
-  if (!query) {
-    await loadReviewers()
+// Search reviewers - PURE client-side filtering, NO API call
+const searchReviewers = (query: string) => {
+  if (!query || query.trim() === '') {
+    // If no query, show all cached reviewers
+    availableReviewers.value = allReviewers.value
     return
   }
   
-  try {
-    reviewersLoading.value = true
-    // Use backend username filtering for better performance
-    const users = await usersApi.getAllBitbucketUsers(500, query)
-    availableReviewers.value = users
-  } catch (error) {
-    console.error('Failed to search users:', error)
-  } finally {
-    reviewersLoading.value = false
-  }
+  // Client-side filtering from cached data - NO API call
+  const queryLower = query.toLowerCase()
+  availableReviewers.value = allReviewers.value.filter(user => 
+    user.username.toLowerCase().includes(queryLower) ||
+    (user.display_name && user.display_name.toLowerCase().includes(queryLower))
+  )
 }
 
 // Watch for filter changes and reload data
@@ -994,15 +1089,20 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 0.85rem;
+  flex-wrap: wrap;
+  line-height: 1.4;
 }
 
 .branch {
   color: var(--el-text-color-primary);
   font-weight: 500;
+  word-break: break-all;
+  overflow-wrap: break-word;
 }
 
 .arrow {
   color: var(--el-text-color-secondary);
+  flex-shrink: 0;
 }
 
 .text-secondary {

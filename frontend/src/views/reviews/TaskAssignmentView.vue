@@ -35,13 +35,11 @@
         show-project-filter
         @apply="loadReviews"
         @reset="handleResetFilters"
-        @search-pr-users="searchPRUsers"
-        @search-reviewers="searchReviewers"
       />
         
       <!-- Reviews Table -->
       <el-table
-        :data="displayedReviews"
+        :data="reviews"
         v-loading="loading"
         stripe
         border
@@ -348,7 +346,8 @@ const handleResize = () => {
 
 // State
 const loading = ref(false)
-const allReviews = ref<ReviewV2[]>([]) // Store all reviews for client-side filtering
+const allReviews = ref<ReviewV2[]>([]) // Store reviews from API (current page)
+const reviews = ref<ReviewV2[]>([]) // Filtered reviews for display
 const total = ref(0) // Total count from API
 const currentPage = ref(1)
 
@@ -359,9 +358,11 @@ const appFilter = ref<string[]>([])
 const availableApps = ref<AppInfo[]>([])
 const prUserFilter = ref('')
 const availablePRUsers = ref<ReviewerUser[]>([])
+const allPRUsers = ref<ReviewerUser[]>([]) // Cache for client-side filtering
 const prUsersLoading = ref(false)
 const reviewerFilter = ref('')
 const availableReviewers = ref<ReviewerUser[]>([])
+const allReviewers = ref<ReviewerUser[]>([]) // Cache for client-side filtering
 const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
@@ -394,19 +395,27 @@ const loadReviews = async () => {
     }
     
     // Add filter parameters supported by task-assignment API
-    // Note: task-assignment API only supports project_key, reviewer, and status
     if (projectFilter.value) params.project_key = projectFilter.value
     if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
       params.reviewer = reviewerFilter.value
     }
     if (statusFilter.value) params.status = statusFilter.value
+    
+    // Add new filter parameters (now supported by backend)
+    if (appFilter.value && appFilter.value.length > 0) {
+      params.app_names = appFilter.value.join(',')
+    }
+    if (prUserFilter.value) {
+      params.pull_request_user = prUserFilter.value
+    }
 
     const response = await taskAssignmentApi.getReviews(params)
     allReviews.value = response.items
     total.value = response.total
     
-    // Client-side filtering for unsupported fields (search, app, prUser, scored, severity, unassigned)
-    // Handled automatically by displayedReviews computed property
+    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned)
+    applyFilters()
+
   } catch (error) {
     console.error('Failed to load reviews:', error)
     ElMessage.error('Failed to load reviews')
@@ -442,7 +451,8 @@ const handleResetFilters = () => {
   loadReviews()
 }
 
-const displayedReviews = computed(() => {
+// Apply client-side filters (same pattern as ReviewListView)
+const applyFilters = () => {
   let result = [...allReviews.value]
   
   // Apply search filter (text search not supported by backend)
@@ -456,23 +466,6 @@ const displayedReviews = computed(() => {
         review.reviewers?.some(r => r.reviewer?.toLowerCase().includes(query))
       )
     })
-  }
-  
-  // Apply app name filter (not supported by task-assignment API)
-  if (appFilter.value && appFilter.value.length > 0) {
-    const selectedApps = appFilter.value.map(app => app.toLowerCase())
-    result = result.filter(review => 
-      review.app_name && selectedApps.includes(review.app_name.toLowerCase())
-    )
-  }
-  
-  // Apply PR user filter (not supported by task-assignment API)
-  if (prUserFilter.value) {
-    const prUser = prUserFilter.value.toLowerCase()
-    result = result.filter(review => 
-      review.pull_request_user?.toLowerCase().includes(prUser) ||
-      review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
-    )
   }
   
   // Apply reviewer filter for unassigned (not supported by backend)
@@ -509,10 +502,12 @@ const displayedReviews = computed(() => {
 
   result.sort((left, right) => compareReviews(left, right))
 
-  return result
-})
-
-const displayedTotal = computed(() => displayedReviews.value.length)
+  reviews.value = result
+  
+  // Keep backend's total count for pagination.
+  // Client-side filters reduce visible items but don't change total pages.
+  // Only server-side filters (project_key, reviewer, status) affect the total count from backend.
+}
 
 const isDefaultPrioritySort = computed(
   () => sortState.value.prop === 'created_date' && sortState.value.order === 'descending'
@@ -623,7 +618,7 @@ const formatReviewerOption = (user: ReviewerUser) => {
 const loadAvailableReviewers = async (review: ReviewV2) => {
   loadingReviewers.value = true
   try {
-    const response = await usersApi.getReviewers()
+    const response = await usersApi.getReviewers(500)
     const assignedReviewers = new Set(review.reviewers.map(item => item.reviewer))
     availableReviewers.value = response.items.filter(user => !assignedReviewers.has(user.username))
   } catch (error) {
@@ -711,12 +706,15 @@ const loadAvailableApps = async () => {
   }
 }
 
-// Load all users for PR user filter dropdown
+// Load all users for PR user filter dropdown (active users only)
 const loadPRUsers = async () => {
   try {
     prUsersLoading.value = true
+    // Fetch all active users once - cache for client-side filtering
     const users = await usersApi.getAllBitbucketUsers(500)
-    availablePRUsers.value = users
+    const activeUsers = users.filter(u => u.active !== false)
+    allPRUsers.value = activeUsers
+    availablePRUsers.value = activeUsers
   } catch (error) {
     console.error('Failed to load PR users:', error)
   } finally {
@@ -724,55 +722,52 @@ const loadPRUsers = async () => {
   }
 }
 
-// Search PR users remotely as user types
-const searchPRUsers = async (query: string) => {
-  if (!query) {
-    await loadPRUsers()
+// Search PR users - PURE client-side filtering, NO API call
+const searchPRUsers = (query: string) => {
+  if (!query || query.trim() === '') {
+    // If no query, show all cached users
+    availablePRUsers.value = allPRUsers.value
     return
   }
   
-  try {
-    prUsersLoading.value = true
-    // Use backend username filtering for better performance
-    const users = await usersApi.getAllBitbucketUsers(500, query)
-    availablePRUsers.value = users
-  } catch (error) {
-    console.error('Failed to search PR users:', error)
-  } finally {
-    prUsersLoading.value = false
-  }
+  // Client-side filtering from cached data - NO API call
+  const queryLower = query.toLowerCase()
+  availablePRUsers.value = allPRUsers.value.filter(user => 
+    user.username.toLowerCase().includes(queryLower) ||
+    (user.display_name && user.display_name.toLowerCase().includes(queryLower))
+  )
 }
 
-// Load all users for reviewer filter dropdown
+// Load all reviewers for filter dropdown using dedicated endpoint
 const loadReviewers = async () => {
   try {
     reviewersLoading.value = true
-    const users = await usersApi.getAllBitbucketUsers(500)
-    availableReviewers.value = users
+    // Use dedicated /users/reviewers endpoint - returns active reviewers only
+    const response = await usersApi.getReviewers(500)
+    const reviewers = response.items || []
+    allReviewers.value = reviewers
+    availableReviewers.value = reviewers
   } catch (error) {
-    console.error('Failed to load users:', error)
+    console.error('Failed to load reviewers:', error)
   } finally {
     reviewersLoading.value = false
   }
 }
 
-// Search reviewers remotely as user types
-const searchReviewers = async (query: string) => {
-  if (!query) {
-    await loadReviewers()
+// Search reviewers - PURE client-side filtering, NO API call
+const searchReviewers = (query: string) => {
+  if (!query || query.trim() === '') {
+    // If no query, show all cached reviewers
+    availableReviewers.value = allReviewers.value
     return
   }
   
-  try {
-    reviewersLoading.value = true
-    // Use backend username filtering for better performance
-    const users = await usersApi.getAllBitbucketUsers(500, query)
-    availableReviewers.value = users
-  } catch (error) {
-    console.error('Failed to search users:', error)
-  } finally {
-    reviewersLoading.value = false
-  }
+  // Client-side filtering from cached data - NO API call
+  const queryLower = query.toLowerCase()
+  availableReviewers.value = allReviewers.value.filter(user => 
+    user.username.toLowerCase().includes(queryLower) ||
+    (user.display_name && user.display_name.toLowerCase().includes(queryLower))
+  )
 }
 
 // Watch for filter changes and reload data

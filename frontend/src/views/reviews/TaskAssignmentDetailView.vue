@@ -346,7 +346,7 @@ const loadAvailableReviewers = async () => {
 
   loadingReviewers.value = true
   try {
-    const response = await usersApi.getReviewers()
+    const response = await usersApi.getReviewers(500)
     const assignedReviewers = new Set(review.value.reviewers.map(item => item.reviewer))
     availableReviewers.value = response.items.filter(user => !assignedReviewers.has(user.username))
   } catch (error) {

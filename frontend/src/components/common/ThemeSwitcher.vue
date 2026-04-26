@@ -1,8 +1,6 @@
 <template>
   <el-dropdown @command="handleThemeChange" trigger="click">
-    <el-button :icon="currentThemeIcon" circle size="small">
-      <el-icon><component :is="currentThemeIcon" /></el-icon>
-    </el-button>
+    <el-button :icon="currentThemeIcon" circle size="small" />
     <template #dropdown>
       <el-dropdown-menu>
         <el-dropdown-item command="light">

@@ -116,7 +116,7 @@ request.interceptors.response.use(
   async (error: AxiosError) => {
     const { response } = error
     const originalRequest = error.config as RetryableRequestConfig | undefined
-    const responseData = response?.data as { detail?: string } | undefined
+    const responseData = response?.data as { detail?: string; message?: string; error?: string } | undefined
 
     if (response) {
       switch (response.status) {
@@ -133,24 +133,50 @@ request.interceptors.response.use(
           } else if (!isAuthExcluded(originalRequest?.url)) {
             await redirectToLogin()
           }
+          // Don't show additional error message for 401 on auth endpoints
           break
 
         case 403:
-          ElMessage.error('You do not have permission to perform this action.')
+          // Only show error if not handled by the calling component
+          if (!originalRequest?.url?.includes('/auth/')) {
+            ElMessage.error('You do not have permission to perform this action.')
+          }
           break
 
         case 404:
-          ElMessage.error('Resource not found.')
+          // Only show error if not handled by the calling component
+          if (!originalRequest?.url?.includes('/auth/')) {
+            ElMessage.error('Resource not found.')
+          }
+          break
+
+        case 400:
+        case 409:
+        case 422:
+          // For validation errors on auth endpoints, let the view handle it
+          // Don't show duplicate messages
+          if (!originalRequest?.url?.includes('/auth/')) {
+            const errorMessage = responseData?.detail || responseData?.message || 'Validation error.'
+            ElMessage.error(errorMessage)
+          }
           break
 
         case 500:
-          ElMessage.error('Server error. Please try again later.')
+          // Only show generic server error for non-auth endpoints
+          if (!originalRequest?.url?.includes('/auth/')) {
+            ElMessage.error('Server error. Please try again later.')
+          }
           break
 
         default:
-          ElMessage.error(responseData?.detail || 'An error occurred.')
+          // For other errors, only show if not an auth endpoint
+          if (!originalRequest?.url?.includes('/auth/')) {
+            const errorMessage = responseData?.detail || responseData?.message || 'An error occurred.'
+            ElMessage.error(errorMessage)
+          }
       }
     } else {
+      // Network errors - always show
       ElMessage.error('Network error. Please check your connection.')
     }
 

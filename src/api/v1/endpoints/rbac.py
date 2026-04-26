@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +22,8 @@ from src.schemas.rbac import (
 )
 from src.services.rbac_service import RBACService
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/rbac")
 
@@ -269,16 +272,19 @@ async def revoke_role_from_user(
     resource_type: str,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
-    resource_id: str | None = None,
+    resource_id: str | None = Query(default=None),
 ) -> dict[str, str]:
     """Revoke role from user (requires system admin or user management permission)"""
     await rbac_service.require_permission(current_user.id, "manage", "users")
+
+    # Normalize resource_id: treat empty string as None
+    normalized_resource_id = resource_id if resource_id else None
 
     success = await rbac_service.revoke_role(
         auth_user_id=auth_user_id,
         role_id=role_id,
         resource_type=resource_type,
-        resource_id=resource_id,
+        resource_id=normalized_resource_id,
     )
 
     if not success:
@@ -288,3 +294,70 @@ async def revoke_role_from_user(
         )
 
     return {"message": "Role revoked successfully"}
+
+
+# ============================================================================
+# System Settings Endpoints
+# ============================================================================
+
+
+@router.get(
+    "/settings/registration-enabled",
+    response_model=dict,
+    summary="Check if user registration is enabled",
+    description="Returns whether new user registration is currently allowed (public endpoint)",
+)
+async def get_registration_enabled(
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict:
+    """Check if registration is enabled (public endpoint, no auth required)"""
+    try:
+        value = await rbac_service.get_setting("registration_enabled", default_value="true")
+        is_enabled = value.lower() == "true"
+        return {"registration_enabled": is_enabled}
+    except Exception as e:
+        logger.error(f"Failed to get registration setting: {e}")
+        # Default to enabled on error for availability
+        return {"registration_enabled": True}
+
+
+@router.put(
+    "/settings/registration-enabled",
+    response_model=dict,
+    summary="Update registration enabled setting",
+    description="Enable or disable new user registration (requires system admin)",
+)
+async def update_registration_enabled(
+    setting_data: dict,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict:
+    """Update registration enabled setting (requires manage settings permission)"""
+    # Check if user has permission to manage settings
+    await rbac_service.require_permission(current_user.id, "manage", "settings")
+
+    enabled = setting_data.get("registration_enabled", True)
+    value_str = str(enabled).lower()
+
+    try:
+        await rbac_service.update_setting(
+            setting_key="registration_enabled",
+            setting_value=value_str,
+            updated_by=current_user.id,
+            description="Controls whether new user registration is allowed",
+        )
+        return {
+            "message": "Registration setting updated successfully",
+            "registration_enabled": enabled,
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        logger.error(f"Failed to update registration setting: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update registration setting: {str(e)}",
+        ) from e

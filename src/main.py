@@ -114,6 +114,8 @@ app = FastAPIOffline(
     version=__version__,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    static_url="/api/static-offline-docs",  # Offline docs, outer nginx proxy with same-origin
+    swagger_ui_oauth2_redirect_url="/api/docs/oauth2-redirect",  # Offline docs
     openapi_url="/api/openapi.json",
     lifespan=lifespan,
 )
@@ -132,7 +134,7 @@ app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware, max_requests=settings.RATE_LIMIT_MAX_REQUESTS)
 
 # Integrate Prometheus metrics
-Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+Instrumentator().instrument(app).expose(app, endpoint=settings.PROMETHEUS_METRICS_PATH)
 
 # Register API routes
 app.include_router(api_router, prefix=settings.API_V1_STR)
@@ -295,7 +297,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     )
 
 
-@app.get("/health")
+@app.get("/api/health")
 async def health_check() -> dict:
     """Health check endpoint"""
     return {"status": "healthy", "version": __version__}

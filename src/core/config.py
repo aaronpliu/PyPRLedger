@@ -13,7 +13,6 @@ class Settings(BaseSettings):
 
     # Basic project information
     PROJECT_NAME: str = "Pull Request Code Review Result Storage System"
-    PROJECT_VERSION: str = "1.6.0"
     API_V1_STR: str = "/api/v1"
 
     # Environment configuration
@@ -91,7 +90,7 @@ class Settings(BaseSettings):
 
     # Prometheus monitoring configuration
     PROMETHEUS_ENABLED: bool = Field(default=True)
-    PROMETHEUS_METRICS_PATH: str = Field(default="/metrics")
+    PROMETHEUS_METRICS_PATH: str = Field(default="/api/metrics")
 
     # Pagination defaults
     DEFAULT_PAGE_SIZE: int = Field(default=20)

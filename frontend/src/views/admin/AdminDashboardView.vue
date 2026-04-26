@@ -72,25 +72,29 @@
             </div>
           </template>
           <div class="action-buttons">
-            <el-button type="primary" @click="$router.push('/admin/users')">
+            <el-button type="primary" @click="$router.push({ name: 'UserManagement' })">
               <el-icon><User /></el-icon>
               {{ t('admin.dashboard.manageUsers') }}
             </el-button>
-            <el-button type="success" @click="$router.push('/admin/roles')">
+            <el-button type="success" @click="$router.push({ name: 'RoleManagement' })">
               <el-icon><Lock /></el-icon>
               {{ t('admin.dashboard.manageRoles') }}
             </el-button>
-            <el-button type="warning" @click="$router.push('/admin/delegations')">
+            <el-button type="warning" @click="$router.push({ name: 'DelegationManagement' })">
               <el-icon><Share /></el-icon>
               {{ t('admin.dashboard.manageDelegations') }}
             </el-button>
-            <el-button type="info" @click="$router.push('/admin/audit')">
+            <el-button type="info" @click="$router.push({ name: 'AuditLogs' })">
               <el-icon><Document /></el-icon>
               {{ t('admin.dashboard.viewAuditLogs') }}
             </el-button>
-            <el-button @click="$router.push('/admin/sessions')">
+            <el-button @click="$router.push({ name: 'SessionManagement' })">
               <el-icon><Monitor /></el-icon>
               {{ t('admin.dashboard.manageSessions') }}
+            </el-button>
+            <el-button type="danger" @click="$router.push({ name: 'SystemSettings' })">
+              <el-icon><Setting /></el-icon>
+              {{ t('admin.dashboard.systemSettings') }}
             </el-button>
           </div>
         </el-card>
@@ -104,7 +108,7 @@
           <template #header>
             <div class="card-header">
               <span>{{ t('admin.dashboard.recentAuditLogs') }}</span>
-              <el-button text type="primary" @click="$router.push('/admin/audit')">
+              <el-button text type="primary" @click="$router.push({ name: 'AuditLogs' })">
                 {{ t('common.viewAll') }}
               </el-button>
             </div>
@@ -133,7 +137,7 @@
           <template #header>
             <div class="card-header">
               <span>{{ t('admin.dashboard.activeSessions') }}</span>
-              <el-button text type="primary" @click="$router.push('/admin/sessions')">
+              <el-button text type="primary" @click="$router.push({ name: 'SessionManagement' })">
                 {{ t('common.viewAll') }}
               </el-button>
             </div>
@@ -160,7 +164,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { User, Lock, Share, Monitor, Document } from '@element-plus/icons-vue'
+import { User, Lock, Share, Monitor, Document, Setting } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { usersApi } from '@/api/users'
 import { rbacApi } from '@/api/rbac'

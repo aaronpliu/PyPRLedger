@@ -88,6 +88,8 @@ export const taskAssignmentApi = {
     project_key?: string
     reviewer?: string
     status?: string
+    app_names?: string  // Comma-separated app names
+    pull_request_user?: string
   }): Promise<ReviewListResponse> {
     return request.get('/task-assignment/', { params })
   },
