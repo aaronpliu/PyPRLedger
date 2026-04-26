@@ -38,10 +38,17 @@
         </div>
         
         <div class="issue-badges">
-          <el-tag :type="getCategoryColor(issue.category)" size="small">
-            {{ issue.category }}
+          <el-tag :type="getCategoryColor(issue.category)" size="small" effect="plain">
+            {{ issue.category.toUpperCase() }}
           </el-tag>
-          <el-tag :type="getSeverityColor(issue.severity)" size="small">
+          <el-tag 
+            :style="{ 
+              backgroundColor: getSeverityBackgroundColor(issue.severity),
+              borderColor: getSeverityBorderColor(issue.severity),
+              color: getSeverityTextColor(issue.severity)
+            }" 
+            size="small"
+          >
             {{ issue.severity.toUpperCase() }}
           </el-tag>
         </div>
@@ -96,10 +103,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { AIReviewSuggestions, AIReviewIssue } from '@/api/reviews'
+import { useTheme } from '@/composables/useTheme'
 
 const props = defineProps<{
   suggestions: AIReviewSuggestions
 }>()
+
+const { currentTheme } = useTheme()
+
+const isDarkTheme = computed(() => {
+  if (currentTheme.value === 'auto') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  }
+  return currentTheme.value === 'dark'
+})
 
 const issues = computed(() => props.suggestions.issues || [])
 
@@ -120,8 +137,70 @@ const getCategoryColor = (category: string) => {
     performance: 'warning',
     style: 'info',
     maintainability: 'info',
+    architecture: '',
   }
   return colors[category.toLowerCase()] || 'info'
+}
+
+// Severity color helpers to match border colors
+const getSeverityBackgroundColor = (severity: string): string => {
+  if (isDarkTheme.value) {
+    const colors: Record<string, string> = {
+      critical: '#7f1d1d',
+      high: '#7c2d12',
+      medium: '#713f12',
+      low: '#1e3a8a',
+    }
+    return colors[severity] || '#1e293b'
+  }
+  
+  const colors: Record<string, string> = {
+    critical: '#fee2e2',
+    high: '#ffedd5',
+    medium: '#fef9c3',
+    low: '#dbeafe',
+  }
+  return colors[severity] || '#f1f5f9'
+}
+
+const getSeverityBorderColor = (severity: string): string => {
+  if (isDarkTheme.value) {
+    const colors: Record<string, string> = {
+      critical: '#fca5a5',
+      high: '#fdba74',
+      medium: '#fde047',
+      low: '#60a5fa',
+    }
+    return colors[severity] || '#475569'
+  }
+  
+  const colors: Record<string, string> = {
+    critical: '#ef4444',
+    high: '#f97316',
+    medium: '#eab308',
+    low: '#3b82f6',
+  }
+  return colors[severity] || '#cbd5e1'
+}
+
+const getSeverityTextColor = (severity: string): string => {
+  if (isDarkTheme.value) {
+    const colors: Record<string, string> = {
+      critical: '#fecaca',
+      high: '#fed7aa',
+      medium: '#fef08a',
+      low: '#bfdbfe',
+    }
+    return colors[severity] || '#e2e8f0'
+  }
+  
+  const colors: Record<string, string> = {
+    critical: '#991b1b',
+    high: '#9a3412',
+    medium: '#854d0e',
+    low: '#1e40af',
+  }
+  return colors[severity] || '#475569'
 }
 </script>
 
@@ -226,6 +305,22 @@ const getCategoryColor = (category: string) => {
 
 .ai-issue-item.severity-low {
   border-left: 4px solid #3b82f6;
+}
+
+[data-theme='dark'] .ai-issue-item.severity-critical {
+  border-left-color: #fca5a5;
+}
+
+[data-theme='dark'] .ai-issue-item.severity-high {
+  border-left-color: #fdba74;
+}
+
+[data-theme='dark'] .ai-issue-item.severity-medium {
+  border-left-color: #fde047;
+}
+
+[data-theme='dark'] .ai-issue-item.severity-low {
+  border-left-color: #60a5fa;
 }
 
 .ai-issue-header {

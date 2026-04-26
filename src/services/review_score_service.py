@@ -242,6 +242,9 @@ class ReviewScoreService:
                 selectinload(PullRequestScore.project),
                 selectinload(PullRequestScore.repository),
                 selectinload(PullRequestScore.reviewer_rel),
+                selectinload(PullRequestScore.pull_request).selectinload(
+                    PullRequestReviewBase.pull_request_user_rel
+                ),
             )
         )
 
@@ -568,7 +571,9 @@ class ReviewScoreService:
                 selectinload(PullRequestScore.project),
                 selectinload(PullRequestScore.repository),
                 selectinload(PullRequestScore.reviewer_rel),
-                selectinload(PullRequestScore.pull_request),  # Load PR for branch info and user
+                selectinload(PullRequestScore.pull_request).selectinload(
+                    PullRequestReviewBase.pull_request_user_rel
+                ),  # Load PR and its user relationship
             )
         )
 
@@ -674,9 +679,17 @@ class ReviewScoreService:
             f"project={project_key}, repo={repository_slug}, file={source_filename}"
         )
 
+        # Build query with eager loading
         query = (
             select(PullRequestScore)
-            .options(selectinload(PullRequestScore.reviewer_rel))
+            .options(
+                selectinload(PullRequestScore.project),
+                selectinload(PullRequestScore.repository),
+                selectinload(PullRequestScore.reviewer_rel),
+                selectinload(PullRequestScore.pull_request).selectinload(
+                    PullRequestReviewBase.pull_request_user_rel
+                ),
+            )
             .where(
                 PullRequestScore.pull_request_id == pull_request_id,
                 PullRequestScore.project_key == project_key,
