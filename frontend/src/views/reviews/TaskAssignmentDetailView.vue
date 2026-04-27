@@ -70,24 +70,6 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="AI Review ID" min-width="200" align="center">
-            <template #default>
-              <div v-if="review.ai_review_id" class="ai-review-id-cell">
-                <el-tag size="small" type="info">
-                  {{ review.ai_review_id }}
-                </el-tag>
-                <el-button
-                  size="small"
-                  text
-                  @click="copyToClipboard(review.ai_review_id!)"
-                >
-                  <el-icon><CopyDocument /></el-icon>
-                </el-button>
-              </div>
-              <span v-else class="empty-value">N/A</span>
-            </template>
-          </el-table-column>
-
           <el-table-column label="Assigned By" width="150" align="center">
             <template #default="{ row }">
               {{ row.assigned_by || 'N/A' }}
@@ -401,7 +383,10 @@ const formatAssignmentStatusLabel = (status: string) => {
   }
 }
 
-const getAssignmentStatusDescription = (status: string) => {
+const getAssignmentStatusDescription = (status: string | undefined | null) => {
+  if (!status) {
+    return t('reviews.assignment_status_descriptions.pending', 'Pending')
+  }
   return t(`reviews.assignment_status_descriptions.${status}`, status)
 }
 

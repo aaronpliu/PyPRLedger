@@ -577,7 +577,10 @@ const getReviewerTagType = (status: string) => {
 }
 
 // Get assignment status description
-const getAssignmentStatusDescription = (status: string) => {
+const getAssignmentStatusDescription = (status: string | undefined | null) => {
+  if (!status) {
+    return t('reviews.assignment_status_descriptions.pending', 'Pending')
+  }
   return t(`reviews.assignment_status_descriptions.${status}`, status)
 }
 
