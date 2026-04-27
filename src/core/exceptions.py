@@ -5,58 +5,58 @@ from pydantic import BaseModel
 
 
 class ErrorCode:
-    """错误码常量"""
+    """Error code constants"""
 
-    # 通用错误 (1000-1999)
+    # General errors (1000-1999)
     INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR"
     NOT_IMPLEMENTED = "NOT_IMPLEMENTED"
     SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
 
-    # 请求相关错误 (2000-2999)
+    # Request-related errors (2000-2999)
     BAD_REQUEST = "BAD_REQUEST"
     VALIDATION_ERROR = "VALIDATION_ERROR"
     METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED"
     UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE"
 
-    # 认证和授权错误 (3000-3999)
+    # Authentication and authorization errors (3000-3999)
     UNAUTHORIZED = "UNAUTHORIZED"
     FORBIDDEN = "FORBIDDEN"
     INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
     TOKEN_EXPIRED = "TOKEN_EXPIRED"
     TOKEN_INVALID = "TOKEN_INVALID"
 
-    # 资源相关错误 (4000-4999)
+    # Resource-related errors (4000-4999)
     NOT_FOUND = "NOT_FOUND"
     RESOURCE_ALREADY_EXISTS = "RESOURCE_ALREADY_EXISTS"
     RESOURCE_CONFLICT = "RESOURCE_CONFLICT"
     RESOURCE_LOCKED = "RESOURCE_LOCKED"
 
-    # 业务逻辑错误 (5000-5999)
+    # Business logic errors (5000-5999)
     INVALID_OPERATION = "INVALID_OPERATION"
     INVALID_STATUS = "INVALID_STATUS"
     INVALID_TRANSITION = "INVALID_TRANSITION"
     OPERATION_NOT_ALLOWED = "OPERATION_NOT_ALLOWED"
 
-    # 数据库错误 (6000-6999)
+    # Database errors (6000-6999)
     DATABASE_ERROR = "DATABASE_ERROR"
     DATABASE_CONNECTION_ERROR = "DATABASE_CONNECTION_ERROR"
     DATABASE_TIMEOUT = "DATABASE_TIMEOUT"
 
-    # 缓存错误 (7000-7999)
+    # Cache errors (7000-7999)
     CACHE_ERROR = "CACHE_ERROR"
     CACHE_CONNECTION_ERROR = "CACHE_CONNECTION_ERROR"
     CACHE_MISS = "CACHE_MISS"
 
-    # 外部服务错误 (8000-8999)
+    # External service errors (8000-8999)
     EXTERNAL_SERVICE_ERROR = "EXTERNAL_SERVICE_ERROR"
     GIT_SERVICE_ERROR = "GIT_SERVICE_ERROR"
 
-    # 限流错误 (9000-9999)
+    # Rate limiting errors (9000-9999)
     RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
 
 
 class AppException(HTTPException):
-    """应用程序基础异常类
+    """Base application exception class
 
     Supports i18n by accepting a message_key instead of hardcoded message.
     The actual message will be translated based on the request's Accept-Language header.
@@ -387,7 +387,7 @@ class GitServiceException(AppException):
 
 
 class ErrorResponse(BaseModel):
-    """标准错误响应模型"""
+    """Standard error response model"""
 
     error: str
     message: str

@@ -13,7 +13,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from src import __version__
 from src.api import api_router
 from src.core.config import settings
-from src.core.database import close_db, get_session_maker, init_db
+from src.core.database import close_db, get_db_context, init_db
 from src.core.exceptions import AppException, ErrorCode
 from src.core.middleware import LoggingMiddleware, RateLimitMiddleware
 from src.services.rbac_service import RBACService
@@ -45,11 +45,10 @@ async def delegation_status_cleanup_task():
     Runs every 5 minutes by default.
     """
     cleanup_interval = 300  # 5 minutes
-    session_maker = get_session_maker()
 
     while True:
         try:
-            async with session_maker() as db:
+            async with get_db_context() as db:
                 rbac_service = RBACService(db)
 
                 # Update expired delegations (active -> expired)
