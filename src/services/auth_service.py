@@ -233,6 +233,40 @@ class AuthService:
             user_agent=user_agent,
         )
 
+    async def admin_reset_password(
+        self,
+        auth_user_id: int,
+        new_password: str,
+        force_change: bool = True,
+    ) -> bool:
+        """Admin reset password for a user
+
+        Args:
+            auth_user_id: The user ID to reset password for
+            new_password: New initial password
+            force_change: Force user to change password on next login
+
+        Returns:
+            True if password reset successfully
+
+        Raises:
+            NotFoundException: If user not found
+        """
+        # Get auth user
+        auth_user = await self._get_auth_user_by_id(auth_user_id)
+        if not auth_user:
+            raise NotFoundException(resource="AuthUser", identifier=str(auth_user_id))
+
+        # Hash and set new password
+        auth_user.password_hash = hash_password(new_password)
+        auth_user.must_change_password = force_change
+        await self.db.commit()
+
+        logger.info(
+            f"Admin reset password for user {auth_user.username} (force_change={force_change})"
+        )
+        return True
+
     async def _get_system_setting(self, setting_key: str, default_value: str = "true") -> str:
         """Get system setting value with Redis cache and database fallback
 
@@ -612,6 +646,7 @@ class AuthService:
             git_username=git_username,
             last_login_at=auth_user.last_login_at,
             created_at=auth_user.created_at,
+            must_change_password=auth_user.must_change_password,
             roles=roles,
         )
 
@@ -625,23 +660,28 @@ class AuthService:
 
         Args:
             auth_user: Authenticated user
-            old_password: Current password
+            old_password: Current password (ignored if must_change_password is True)
             new_password: New password
 
         Returns:
             True if password changed successfully
 
         Raises:
-            InvalidCredentialsException: If old password is incorrect
+            InvalidCredentialsException: If old password is incorrect (unless must_change_password is True)
         """
-        # Verify old password
-        if not verify_password(old_password, auth_user.password_hash):
-            raise InvalidCredentialsException()
+        # Skip old password verification if user must change password (admin reset scenario)
+        if not auth_user.must_change_password:
+            # Verify old password for normal password change
+            if not verify_password(old_password, auth_user.password_hash):
+                raise InvalidCredentialsException()
 
         # Hash and update new password
         auth_user.password_hash = hash_password(new_password)
+        # Clear the must_change_password flag after successful password change
+        auth_user.must_change_password = False
         await self.db.commit()
 
+        logger.info(f"User {auth_user.username} changed password successfully")
         return True
 
     async def _auto_link_git_user(self, auth_user: AuthUser) -> bool:

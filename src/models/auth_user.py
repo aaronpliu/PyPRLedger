@@ -46,6 +46,9 @@ class AuthUser(Base):
     # Status fields
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, comment="Force password change on next login"
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
