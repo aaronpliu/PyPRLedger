@@ -1,313 +1,343 @@
 ---
 name: release-manager
-description: Executes the project release workflow, including version bumping, changelog generation, dependency synchronization, and git tagging. Does NOT push to remote - requires manual confirmation.
-version: 1.1.0
+description: Streamlined release workflow with user confirmation for all git operations. Uses helper scripts in scripts/release/ for automation.
+version: 2.0.0
 ---
 
 ### 🎯 Objective
-Assist the user in completing the project release process. You must strictly follow the steps below to ensure version consistency, accurate documentation updates, and correct Git tagging.
+Guide users through release preparation with explicit confirmation at each git operation. No automatic commits or pushes.
 
-**⚠️ CRITICAL CONSTRAINT**: This skill will NEVER execute `git push` commands. All changes remain local until the user manually pushes them.
+**Principles:**
+1. ❌ No auto `git commit` / `git push`
+2. ✅ User confirms versions, docs, commit, tag
+3. 🔄 Scripts automate non-git tasks
+4. 📤 Manual push only
+
+---
+
+### 📊 Workflow
+
+```
+1. Verify Versions   → Run: scripts/release/get_versions.py
+2. Choose Versions   → User input + auto-calc frontend
+3. Set Versions      → Run: bump_version.py + set_frontend_version.py
+4. Analyze Changes   → Run: scripts/release/analyze_changes.py
+5. Update Docs       → Run: scripts/release/update_changelog.py
+6. Sync Dependencies → Run: scripts/release/sync_dependencies.sh
+7. Prepare Commit    → Show details, ask: "Execute git add + git commit?"
+8. Create Tag        → Show details, ask: "Create git tag?"
+9. Manual Push       → Provide instructions
+```
+
+---
 
 ### 🛠️ Execution Steps
 
-#### Step 1: Verify Current Version
-**Action**: Execute command to check current version
+#### Step 1: Verify Current Versions
+
+**Action**: Run version check script
 ```bash
-python scripts/bump_version.py show
+python scripts/release/get_versions.py
 ```
 
-**Expected Output**: Current version number (e.g., `1.2.3`)
+**Expected**:
+```
+Backend: X.Y.Z
+Frontend: A.B.C
+```
 
-**Validation**:
-- ✅ Command executes successfully
-- ✅ Version format follows SemVer (major.minor.patch)
-- ❌ If error occurs: Stop and report error message to user
-
-**Next**: Record output as `current_version` and proceed to Step 2.
+**Record**: `backend_version`, `frontend_version`
 
 ---
 
-#### Step 2: Determine New Version
-**Action**: Ask user for version upgrade type or specific version number
+#### Step 2: Determine New Versions
 
-**Prompt User**:
+**Prompt**:
 ```
-Current version: {current_version}
+Current:
+  Backend:  {backend_version}
+  Frontend: {frontend_version}
 
-Please specify the new version:
-  Option 1: Semantic version bump (patch/minor/major)
-  Option 2: Specific version number (e.g., 1.2.4)
+Frontend minor = Backend minor + 1
 
-Which would you prefer?
+Options:
+1. Auto-calc frontend (recommended)
+2. Specify both versions
+3. Backend only
+
+Choice (1-3) or exact backend version:
 ```
 
-**Once user confirms `new_version`**:
+**On choice**:
 
-**Action**: Execute command to set new version
-```bash
-python scripts/bump_version.py set <new_version>
+- **Option 1/backend version** → Calculate: `frontend_new = backend_major.(backend_minor+1).backend_patch`
+- **Option 2** → Ask: "Enter frontend version:"
+- **Option 3** → `frontend_new = frontend_version` (unchanged)
+
+**Display plan**:
 ```
+Version Plan:
+  Backend:  {backend_version} → {backend_new_version}
+  Frontend: {frontend_version} → {frontend_new_version}
+```
+
+**Ask**: "Confirm? (yes/no)"
+
+**On confirm**:
+- Run: `python scripts/bump_version.py set {backend_new_version}`
+- Run: `python scripts/release/set_frontend_version.py {frontend_new_version}` (if changed)
 
 **Validation**:
-- ✅ Command executes successfully
-- ✅ Version is updated in all relevant files
-- ❌ If error occurs: Stop and report error message to user
-
-**Next**: Proceed to Step 3.
+- ✅ `pyproject.toml` updated
+- ✅ `frontend/package.json` updated (if changed)
 
 ---
 
-#### Step 3: Analyze Changes Since Last Release
-**Action 3.1**: Retrieve commit history
+#### Step 3: Analyze Changes
+
+**Action**: Run analysis script
 ```bash
-git log --oneline --decorate v{previous_version}..HEAD
+python scripts/release/analyze_changes.py v{old_backend}..HEAD
 ```
 
-**Note**: If tag not found, use:
-```bash
-git log --oneline --decorate -20
-```
+**Output**: Categorized summary (Features, Bug Fixes, Improvements, Docs)
 
-**Action 3.2**: Retrieve list of changed files
-```bash
-git diff --name-only v{previous_version}..HEAD
-```
+**Display**: Full summary to user
 
-**Action 3.3**: Categorize changes
-Analyze commits and files to categorize into:
-- **Features**: New functionality
-- **Bug Fixes**: Issue resolutions
-- **Improvements**: Enhancements to existing features
-- **Documentation**: Doc updates
-- **Dependencies**: Library updates
-- **Breaking Changes**: API or behavior changes
-
-**Output Format**:
-```markdown
-## Summary of Changes
-
-### Features
-- Feature 1 description
-- Feature 2 description
-
-### Bug Fixes
-- Fix 1 description
-
-### Improvements
-- Improvement 1 description
-
-### Documentation
-- Doc update 1
-
-### Breaking Changes (if any)
-- Breaking change description
-```
-
-**Next**: Show summary to user for review, then proceed to Step 4.
+**Ask**: "Ready to update docs? (yes/no)"
 
 ---
 
 #### Step 4: Update Documentation
 
-**Action 4.1**: Update CHANGELOG.md
-
-**File**: `CHANGELOG.md`
-
-**Changes**:
-1. Add new section at the top with format:
-```markdown
-## [v{new_version}] - {YYYY-MM-DD}
-
-### Features
-- ...
-
-### Bug Fixes
-- ...
+**Action**: Run documentation update script
+```bash
+python scripts/release/update_changelog.py {backend_new_version} {frontend_new_version}
 ```
 
-2. Keep existing entries below the new section
+**What it does**:
+- Prepends new section to `CHANGELOG.md`
+- Includes both backend and frontend versions
+- Uses today's date
 
-**Action 4.2**: Update README.md (if needed)
+**Optional**: Manually edit `CHANGELOG.md` to fill in actual change details
 
-**Check for**:
-- Version-specific download links
-- Installation instructions with version numbers
-- API version references
+**Display**: Show updated CHANGELOG.md head
 
-**Update if found**:
-- Replace old version with `{new_version}`
-
-**Action 4.3**: Update docs/ directory (if applicable)
-
-**Files to check**:
-- `docs/*.md` - version related references
-- Any other version-specific documentation
-
-**Validation**:
-- ✅ All version references updated consistently
-- ✅ CHANGELOG.md formatted correctly
-- ✅ No broken links or references
-
-**Next**: Show user a preview of documentation changes for approval before proceeding.
+**Ask**: "Docs ready. Proceed to dependency sync? (yes/no)"
 
 ---
 
-#### Step 5: Synchronize Dependencies
+#### Step 5: Synchronize Dependencies (Automatic)
 
-**Action**: Execute dependency synchronization
+**Action**: Run sync script
 ```bash
-uv sync --all-extras
+bash scripts/release/sync_dependencies.sh
 ```
 
-**Expected Behavior**:
-- Updates `uv.lock` file
-- Ensures all dependencies are consistent
-- May update package versions if constraints changed
+**Does**:
+1. `uv sync --all-extras` (backend)
+2. `cd frontend && npm install` (frontend)
 
 **Validation**:
-- ✅ Command completes without errors
-- ✅ `uv.lock` file is modified
-- ✅ No dependency conflicts reported
-
-**Frontend Synchronization**:
-```bash
-cd frontend && npm install
-```
-
-**Validation**:
+- ✅ No errors
+- ✅ `uv.lock` updated
 - ✅ `package-lock.json` updated
-- ✅ No dependency conflicts reported
-
-**If errors occur**:
-- Report error details to user
-- Do NOT proceed to next step
-- Wait for user guidance
-
-**Next**: Proceed to Step 6.
 
 ---
 
-#### Step 6: Stage and Commit Changes
+#### Step 6: Prepare Commit (User Action)
 
-**Action 6.1**: Review all changes
+**⚠️ NO auto-commit. User must execute git commands.**
+
+**Action 6.1**: Show prepared commit details
+
+Run preview script:
 ```bash
-git status
+python scripts/release/prepare_commit.py {backend_new_version} {frontend_new_version}
 ```
 
-**Expected Files to be Modified**:
-- Version configuration files (from Step 2)
-- `CHANGELOG.md` (from Step 4.1)
-- `README.md` (if updated in Step 4.2)
-- Documentation files (if updated in Step 4.3)
-- `uv.lock` (from Step 5)
-- `web/lib/` (if library files were added/updated)
+**Displays**:
+- Git status
+- Files changed
+- Commit message
 
-**Action 6.2**: Stage all changes
-```bash
-git add .
+**Action 6.2**: Ask user
+
+```
+All changes ready.
+
+Execute commit now? (yes/no)
+  yes → Run: git add . && git commit -m "Release v{backend_new_version}..."
+  no  → Stop, wait for user
 ```
 
-**Action 6.3**: Create commit
-```bash
-git commit -m "Release v{new_version}
+**On yes**:
+- Execute `git add .`
+- Execute `git commit -m "..."`
+- Or run: `python scripts/release/prepare_commit.py {backend_new_version} {frontend_new_version} --execute`
 
-- Bump version to {new_version}
-- Update CHANGELOG.md
-- Synchronize dependencies
-"
-```
-
-**Validation**:
-- ✅ All expected files are staged
-- ✅ Commit message is clear and descriptive
-- ✅ No unintended files included
-
-**Next**: Proceed to Step 7.
+**Show result**: `git log -1 --oneline`
 
 ---
 
-#### Step 7: Create Git Tag
+#### Step 7: Create Git Tag (User Confirmation)
 
-**Action**: Create annotated tag
-```bash
-git tag -a v{new_version} -m "Release version {new_version}"
+**Action 7.1**: Show tag details
+
+```
+Tag: v{backend_new_version}
+Message: Release version {backend_new_version}
+Commit: <current HEAD>
 ```
 
-**Validation**:
-- ✅ Tag created successfully
-- ✅ Tag is annotated (not lightweight)
-- ✅ Tag message includes version number
+**Action 7.2**: Ask
 
-**Verify Tag**:
-```bash
-git tag -l | tail -5
-git show v{new_version}
+```
+Create annotated tag? (yes/no)
+
+Command: git tag -a v{backend_new_version} -m "Release version {backend_new_version}"
+
+Or run: python scripts/release/create_tag.py {backend_new_version} --execute
 ```
 
-**Next**: Proceed to Final Step.
+**On yes**:
+- Run: `python scripts/release/create_tag.py {backend_new_version} --execute`
+- Or manually: `git tag -a v{backend_new_version} -m "Release version {backend_new_version}"`
+
+**On no**: Stop, wait for user
+
+---
+
+### 🏁 Final: Manual Push
+
+**Provide instructions**:
+```bash
+# Push commit
+git push origin <branch>
+
+# Push tag
+git push origin v{backend_new_version}
+```
 
 ---
 
 ### ⚠️ Safety Constraints
 
-#### Prohibited Actions
-- ❌ **NEVER** execute `git push` commands
-- ❌ **NEVER** execute `git push --tags`
-- ❌ **NEVER** force push (`git push --force`)
-- ❌ **NEVER** delete remote tags or branches
-- ❌ **NEVER** modify remote repository state
+**NEVER auto-execute**:
+- ❌ `git commit` (without confirmation)
+- ❌ `git push` / `git push --tags`
+- ❌ `git push --force`
+- ❌ Branch deletion
+- ❌ Remote modifications
 
-#### Required Validations
-- ✅ Always verify command success before proceeding
-- ✅ Always show change summaries to user
-- ✅ Always wait for user confirmation on critical steps
-- ✅ Always report errors immediately and stop
-
-#### Error Handling
-- If any command fails: **STOP** and report error
-- Do NOT attempt automatic recovery
-- Wait for user guidance before continuing
-- Provide clear error messages and context
+**ALWAYS ask before**:
+- ✅ `git add .`
+- ✅ `git commit`
+- ✅ `git tag`
+- ✅ Any destructive operation
 
 ---
 
-### 📋 Checklist for User
+### 📋 User Checklist
 
-Before pushing, verify:
-- [ ] Version number is correct in all files
-- [ ] CHANGELOG.md accurately reflects changes
-- [ ] All tests pass locally
-- [ ] `uv.lock` is up to date
-- [ ] Git tag is created and annotated
-- [ ] No unintended files are committed
-- [ ] Ready to push to remote repository
+**Before starting**:
+- [ ] Working directory clean (or stashed)
+- [ ] Tests passing: `pytest -v`
+- [ ] No broken builds
+
+**After versions set**:
+- [ ] Backend version in `pyproject.toml` ✓
+- [ ] Frontend version in `frontend/package.json` ✓
+
+**Before commit**:
+- [ ] `CHANGELOG.md` content accurate
+- [ ] All intended files modified
+- [ ] No unintended changes
+
+**After release**:
+- [ ] Commit created
+- [ ] Tag created
+- [ ] Pushed to remote
+
+---
+
+### 🔧 Helper Scripts Reference
+
+All scripts in `scripts/release/`:
+
+| Script | Purpose |
+|--------|---------|
+| `get_versions.py` | Show current backend & frontend versions |
+| `calculate_frontend_version.py` | Compute frontend version from backend |
+| `set_frontend_version.py` | Update `frontend/package.json` version |
+| `analyze_changes.py` | Generate changelog summary from git log |
+| `update_changelog.py` | Prepend new release section to CHANGELOG.md |
+| `sync_dependencies.sh` | Run `uv sync` + `npm install` |
+| `prepare_commit.py` | Preview commit details |
+| `create_tag.py` | Create annotated git tag |
+
+---
+
+### 🎯 Version Convention
+
+```
+Backend:  X.Y.Z    (e.g., 1.8.0)
+Frontend: X.(Y+1).Z (e.g., 1.9.0)
+```
+
+Frontend releases more frequently; minor version always one ahead.
 
 ---
 
 ### 🔍 Troubleshooting
 
-#### Issue: `bump_version.py` returns error
-**Solution**: 
-- Check Python environment
-- Verify script exists and is executable
-- Report exact error message to user
+**User declines step** → Respect decision, wait for instruction
 
-#### Issue: `uv sync` fails
-**Solution**:
-- Check network connectivity
-- Verify `pyproject.toml` syntax
-- Review dependency conflicts
-- Do NOT proceed until resolved
+**Script error** → Show error, suggest manual alternative
 
-#### Issue: Git tag already exists
-**Solution**:
-- Inform user of conflict
-- Suggest using different version number
-- Do NOT delete existing tag
+**Git conflicts** → Warn user, suggest `git status`/`git diff` review
 
-#### Issue: Uncommitted changes detected
-**Solution**:
-- Warn user about dirty working directory
-- Suggest committing or stashing changes first
-- Do NOT proceed with release
+**Frontend bump fails** → Edit `frontend/package.json` manually, then `npm install`
+
+---
+
+### 📚 Example Session
+
+```bash
+# 1. Check versions
+$ python scripts/release/get_versions.py
+Backend: 1.7.1
+Frontend: 1.2.1
+
+# 2. Choose: backend 1.8.0 → frontend auto-calc = 1.9.0
+# Confirm: yes
+
+# 3. Analyze changes
+$ python scripts/release/analyze_changes.py v1.7.1..HEAD
+## Summary of Changes...
+# Confirm: yes
+
+# 4. Update docs
+$ python scripts/release/update_changelog.py 1.8.0 1.9.0
+✓ Updated CHANGELOG.md
+# Edit CHANGELOG.md to fill details
+# Confirm: yes
+
+# 5. Sync deps
+$ bash scripts/release/sync_dependencies.sh
+✓ Dependencies synchronized
+
+# 6. Prepare & commit
+$ python scripts/release/prepare_commit.py 1.8.0 1.9.0
+# Review output
+# Execute: git add . && git commit -m "Release v1.8.0..."
+
+# 7. Tag
+$ python scripts/release/create_tag.py 1.8.0
+✓ Tag v1.8.0 created
+
+# 8. Push (manual)
+$ git push origin feature/xyz
+$ git push origin v1.8.0
+```
