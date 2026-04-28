@@ -672,7 +672,7 @@ async def list_reviews(
             git_username = await _get_git_username(current_user.id, db)
 
             if git_username:
-                filters.reviewer = git_username
+                # Use visible_to_username to show both assigned reviews AND self-raised PRs
                 filters.visible_to_username = git_username
                 logger.info(
                     f"Regular user {current_user.username} filtered by visible_to={git_username}"
