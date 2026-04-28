@@ -1,5 +1,5 @@
 ---
-name: release-version
+name: release-manager
 description: Executes the project release workflow, including version bumping, changelog generation, dependency synchronization, and git tagging. Does NOT push to remote - requires manual confirmation.
 version: 1.1.0
 ---
