@@ -57,6 +57,7 @@ dependencies = [
     "uvicorn[standard]>=0.42.0",
     "fastapi-offline>=1.7.6",
     "passlib[bcrypt]>=1.7.4",
+    "tzdata>=2026.2",
 ]
 
 [project.optional-dependencies]
