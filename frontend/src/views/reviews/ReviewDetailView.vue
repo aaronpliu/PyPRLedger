@@ -321,9 +321,6 @@
       top="5vh"
       class="score-dialog"
     >
-      <!-- Quick Score Buttons -->
-      <QuickScoreButtons @select="handleQuickScoreSelect" />
-      
       <!-- Score Range Guide -->
       <ScoreRangeGuide />
       
@@ -345,17 +342,41 @@
         
         <el-form-item label="Score" prop="score">
           <div class="score-input-container">
-            <el-slider 
-              v-model="scoreForm.score" 
-              :min="0" 
-              :max="10" 
-              :step="0.5"
-              :marks="{ 0: '0', 2: '2', 4: '4', 6: '6', 8: '8', 10: '10' }"
-              show-input
-              style="width: 100%"
-            />
-            <div :class="['score-value-display', getScoreColorClass(scoreForm.score)]">{{ scoreForm.score.toFixed(1) }}</div>
-
+            <!-- Visual Score Bar -->
+            <div class="score-visual-bar">
+              <div class="score-track"></div>
+              <div 
+                class="score-indicator" 
+                :style="{ left: `${(scoreForm.score / 10) * 100}%` }"
+                :class="getScoreColorClass(scoreForm.score)"
+              >
+                {{ scoreForm.score.toFixed(1) }}
+              </div>
+              <div class="score-labels">
+                <span>0</span>
+                <span>5</span>
+                <span>10</span>
+              </div>
+            </div>
+            
+            <!-- Quick Buttons -->
+            <QuickScoreButtons @select="handleQuickScoreSelect" />
+            
+            <!-- Manual Input -->
+            <div class="score-input-wrapper">
+              <el-input-number 
+                v-model="scoreForm.score" 
+                :min="0" 
+                :max="10" 
+                :step="0.5"
+                :precision="1"
+                controls-position="right"
+                style="width: 100%"
+              />
+            </div>
+          </div>
+          <div class="form-item-hint">
+            Click quick buttons or adjust manually (0-10, step 0.5)
           </div>
         </el-form-item>
         
@@ -1552,47 +1573,74 @@ watch(
   width: 100%;
 }
 
-.score-value-display {
-  text-align: center;
-  font-size: 2rem;
-  font-weight: 800;
-  margin-top: 12px;
-  transition: color 0.3s ease;
+/* Visual Score Bar Styles */
+.score-visual-bar {
+  position: relative;
+  height: 40px;
+  margin-bottom: 16px;
+  user-select: none;
 }
 
-.score-value-display.score-excellent {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.score-track {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  right: 10px;
+  height: 8px;
+  background: linear-gradient(to right, 
+    #ef4444 0%, 
+    #ef4444 25%,
+    #f97316 30%, 
+    #f59e0b 45%,
+    #3b82f6 65%, 
+    #10b981 85%,
+    #10b981 100%
+  );
+  border-radius: 4px;
+  transform: translateY(-50%);
+  opacity: 0.6;
 }
 
-.score-value-display.score-good {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.score-indicator {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid currentColor;
+  font-weight: bold;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: left 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+  z-index: 1;
 }
 
-.score-value-display.score-acceptable {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+[data-theme='dark'] .score-indicator {
+  background: #1e293b;
+  color: white;
 }
 
-.score-value-display.score-needs-improvement {
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
+.score-indicator.score-excellent { color: #10b981; border-color: #10b981; }
+.score-indicator.score-good { color: #3b82f6; border-color: #3b82f6; }
+.score-indicator.score-acceptable { color: #f59e0b; border-color: #f59e0b; }
+.score-indicator.score-needs-improvement { color: #f97316; border-color: #f97316; }
+.score-indicator.score-poor { color: #ef4444; border-color: #ef4444; }
 
-.score-value-display.score-poor {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.score-labels {
+  position: absolute;
+  top: 24px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--el-text-color-secondary);
+  padding: 0 2px;
 }
 
 /* AI Review ID Styles */
@@ -1697,6 +1745,110 @@ watch(
   max-height: calc(90vh - 120px);
   overflow-y: auto;
   padding: 20px;
+}
+
+/* Visual Score Bar */
+.score-visual-bar {
+  position: relative;
+  height: 60px;
+  margin-bottom: 16px;
+  padding: 0 10px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  overflow: visible;
+}
+
+.score-track {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  right: 10px;
+  height: 8px;
+  background: linear-gradient(to right, 
+    #ef4444 0%, 
+    #ef4444 25%,
+    #f97316 30%, 
+    #f59e0b 45%,
+    #3b82f6 65%, 
+    #10b981 85%,
+    #10b981 100%
+  );
+  border-radius: 4px;
+  transform: translateY(-50%);
+  opacity: 0.6;
+}
+
+.score-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 48px;
+  height: 32px;
+  line-height: 32px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: left 0.3s ease;
+  z-index: 10;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+/* Color classes for indicator - matches existing getScoreColorClass and ScoreRangeGuide */
+.score-indicator.score-excellent {
+  background: #10b981;
+  color: white;
+}
+
+.score-indicator.score-good {
+  background: #3b82f6;
+  color: white;
+}
+
+.score-indicator.score-acceptable {
+  background: #f59e0b;
+  color: white;
+}
+
+.score-indicator.score-needs-improvement {
+  background: #f97316;
+  color: white;
+}
+
+.score-indicator.score-poor {
+  background: #ef4444;
+  color: white;
+}
+
+.score-labels {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--el-text-color-secondary);
+  padding: 0 5px;
+}
+
+/* Score input wrapper */
+.score-input-wrapper {
+  width: 100%;
+  margin-top: 12px;
+}
+
+/* Style the input number for better UX */
+.score-dialog :deep(.el-input-number) {
+  width: 100%;
+}
+
+.score-dialog :deep(.el-input-number .el-input__inner) {
+  text-align: left;
+  font-size: 1.1rem;
+  font-weight: 600;
 }
 
 .score-md-editor {
