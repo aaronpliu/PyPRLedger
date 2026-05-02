@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Warning, Check, TrendCharts } from '@element-plus/icons-vue'
+import { Refresh, Warning, Check, TrendCharts, QuestionFilled } from '@element-plus/icons-vue'
 import { reviewsApi, type ReviewValidationSummary, type ReviewRawRecord } from '@/api/reviews'
 
 const loading = ref(false)
@@ -112,7 +112,29 @@ onMounted(() => {
     <el-card>
       <template #header>
         <div class="card-header">
-          <h2>PR Review Validation</h2>
+          <div class="title-with-help">
+            <h2>PR Review Validation</h2>
+            <el-tooltip placement="bottom" effect="light">
+              <template #content>
+                <div class="validation-help-content">
+                  <p>
+                    This dashboard monitors the integrity of PR review processing by comparing
+                    <strong>total attempted reviews</strong> against <strong>successfully processed reviews</strong>.
+                  </p>
+                  <p>
+                    When a PR review is submitted, the system first stores the raw request data before attempting
+                    to process it. If processing fails (e.g., missing project/repository/user information), the
+                    failed attempt is recorded here for troubleshooting and retry.
+                  </p>
+                  <p>
+                    <strong>Key Features:</strong> Track success rates, identify failed reviews with error details,
+                    and retry failed submissions without requiring users to resubmit from Bitbucket.
+                  </p>
+                </div>
+              </template>
+              <el-icon class="help-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </div>
           <el-button type="primary" :icon="Refresh" @click="loadValidationData" :loading="loading">
             Refresh
           </el-button>
@@ -316,10 +338,40 @@ onMounted(() => {
   align-items: center;
 }
 
+.title-with-help {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .card-header h2 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+}
+
+.help-icon {
+  font-size: 18px;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.help-icon:hover {
+  color: var(--el-color-primary);
+}
+
+.validation-help-content {
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+.validation-help-content p {
+  margin: 0 0 8px 0;
+}
+
+.validation-help-content p:last-child {
+  margin-bottom: 0;
 }
 
 .filter-form {
@@ -357,13 +409,13 @@ onMounted(() => {
 .metric-value {
   font-size: 28px;
   font-weight: bold;
-  color: #303133;
+  color: var(--el-text-color-primary);
   line-height: 1.2;
 }
 
 .metric-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-top: 4px;
 }
 
@@ -392,12 +444,12 @@ onMounted(() => {
 
 .pr-id {
   font-weight: 600;
-  color: #409eff;
+  color: var(--el-color-primary);
 }
 
 .pr-meta {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .error-cell {
@@ -411,7 +463,7 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #f56c6c;
+  color: var(--el-color-danger);
   font-size: 13px;
 }
 
@@ -423,7 +475,7 @@ onMounted(() => {
 
 .relative-time {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 /* Responsive adjustments */
@@ -436,5 +488,18 @@ onMounted(() => {
   .metric-value {
     font-size: 24px;
   }
+}
+
+/* Dark theme adjustments */
+[data-theme='dark'] .metric-card {
+  background-color: var(--el-bg-color-overlay);
+}
+
+[data-theme='dark'] .metric-value {
+  color: var(--el-text-color-primary);
+}
+
+[data-theme='dark'] .section-header h3 {
+  color: var(--el-text-color-primary);
 }
 </style>

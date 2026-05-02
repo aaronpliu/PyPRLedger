@@ -15,6 +15,16 @@ export interface AppInfo {
   project_count: number
 }
 
+export interface ProjectInfo {
+  project_key: string
+  project_name: string
+}
+
+export interface RepositoryInfo {
+  repository_slug: string
+  repository_name: string
+}
+
 export const projectRegistryApi = {
   // Public endpoints
   async listApps(): Promise<AppInfo[]> {

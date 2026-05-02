@@ -350,10 +350,17 @@ onMounted(() => {
 }
 
 pre {
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
   padding: 12px;
   border-radius: 4px;
   max-height: 200px;
   overflow-y: auto;
+  color: var(--el-text-color-primary);
+}
+
+/* Dark theme adjustments */
+[data-theme='dark'] pre {
+  background: var(--el-fill-color-dark);
+  color: var(--el-text-color-primary);
 }
 </style>

@@ -40,7 +40,7 @@
           <el-icon><Folder /></el-icon>
           <span>{{ t('menu.projectRegistry') }}</span>
         </el-menu-item>
-         <el-menu-item index="/myadmin/review-validation">
+        <el-menu-item index="/myadmin/review-validation">
           <el-icon><TrendCharts /></el-icon>
           <span>Review Validation</span>
         </el-menu-item>
