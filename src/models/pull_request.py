@@ -83,6 +83,9 @@ class PullRequestReviewBase(Base):
     assignments: Mapped[list[PullRequestReviewAssignment]] = relationship(
         back_populates="review_base", cascade="all, delete-orphan"
     )
+    raw_records: Mapped[list[PullRequestReviewRaw]] = relationship(
+        back_populates="review_base", foreign_keys="PullRequestReviewRaw.review_base_id"
+    )
 
     created_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=get_current_time
@@ -498,3 +501,87 @@ class PullRequestScore(Base):
         for key, value in data.items():
             if key in updatable_fields and hasattr(self, key):
                 setattr(self, key, value)
+
+
+class PullRequestReviewRaw(Base):
+    """Raw PR review data stored before processing - for validation and audit trail"""
+
+    __tablename__ = "pull_request_review_raw"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, index=True)
+
+    # Raw request data (stored as JSON for flexibility)
+    request_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+    # Processing status
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="pending",
+        server_default="pending",
+        comment="pending, success, failed",
+    )
+
+    # Error information (if failed)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_details: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+    # Link to successful review (if status = success)
+    review_base_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("pull_request_review_base.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Links to successful review in pull_request_review_base",
+    )
+
+    # Metadata
+    source_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Timestamps
+    created_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=get_current_time
+    )
+
+    processed_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="When processing completed"
+    )
+
+    # Relationships
+    review_base: Mapped[PullRequestReviewBase | None] = relationship(
+        foreign_keys=[review_base_id], back_populates="raw_records"
+    )
+
+    __table_args__ = (
+        Index("idx_raw_status", "status"),
+        Index("idx_raw_created", "created_date"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<PullRequestReviewRaw(id={self.id}, status='{self.status}')>"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert raw review record to dictionary"""
+        return {
+            "id": self.id,
+            "request_payload": self.request_payload,
+            "status": self.status,
+            "error_message": self.error_message,
+            "error_details": self.error_details,
+            "review_base_id": self.review_base_id,
+            "source_ip": self.source_ip,
+            "user_agent": self.user_agent,
+            "created_date": (
+                utc_to_local(self.created_date).isoformat()
+                if isinstance(self.created_date, datetime)
+                else self.created_date
+            )
+            if self.created_date
+            else None,
+            "processed_date": (
+                utc_to_local(self.processed_date).isoformat()
+                if isinstance(self.processed_date, datetime) and self.processed_date
+                else None
+            ),
+        }

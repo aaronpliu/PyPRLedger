@@ -5,6 +5,30 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-05-02
+
+**Backend Version**: 1.9.0
+**Frontend Version**: 1.4.0
+
+### Features
+- **PR Review Validation** - Added validation for pull request reviews
+- **Release Manager Skill** - Automated release workflow integration
+  - New `release-manager` skill for consistent version management
+  - Automated changelog generation and dependency synchronization
+  - Git tag creation with proper annotations
+
+### Bug Fixes
+- **Audit Logs** - Enhanced audit logging functionality
+- **Admin Theme & Filtering** - Fixed theme issues and improved admin page filtering
+- **PR Review Validation** - Enhanced validation of PR review insertions
+- **Code Diff Display** - Improved code diff display styling
+- **Theme & Code Diff** - Enhanced theme and code diff styling (multiple improvements)
+- **Web Directory Cleanup** - Removed obsolete `web/` directory
+- **Console Element Issues** - Fixed console issues with Element Plus component sliding
+
+---
+
+
 ## [Unreleased]
 
 ### Added

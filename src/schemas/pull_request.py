@@ -648,3 +648,30 @@ class ReviewAssignmentRequest(BaseModel):
             }
         }
     }
+
+
+class ReviewRawResponse(BaseModel):
+    """Response schema for raw review record"""
+
+    id: int
+    request_payload: dict[str, Any]
+    status: str
+    error_message: str | None
+    error_details: dict[str, Any] | None
+    review_base_id: int | None
+    source_ip: str | None
+    user_agent: str | None
+    created_date: datetime
+    processed_date: datetime | None
+    model_config = {"from_attributes": True}
+
+
+class ReviewValidationSummary(BaseModel):
+    """Validation summary comparing raw vs successful reviews"""
+
+    total_attempted: int
+    total_successful: int
+    total_failed: int
+    success_rate: float
+    failed_reviews: list[ReviewRawResponse]
+    date_range: dict[str, str | None]  # {from, to}

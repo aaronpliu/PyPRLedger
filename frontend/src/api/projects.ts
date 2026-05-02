@@ -17,6 +17,17 @@ export interface ProjectListResponse {
   page_size: number
 }
 
+export interface RepositorySummary {
+  id: number
+  repository_id: number
+  repository_name: string
+  repository_slug: string
+  repository_url: string
+  project_id: number
+  created_date: string
+  updated_date: string
+}
+
 export const projectsApi = {
   listProjects(params?: {
     page?: number
@@ -24,5 +35,17 @@ export const projectsApi = {
     is_active?: boolean
   }): Promise<ProjectListResponse> {
     return request.get('/projects', { params })
+  },
+
+  // Get all projects (for dropdown)
+  async getAllProjects(): Promise<ProjectSummary[]> {
+    const response = await request.get('/projects/all')
+    return response.data || response
+  },
+
+  // Get repositories for a specific project
+  async getProjectRepositories(projectKey: string): Promise<RepositorySummary[]> {
+    const response = await request.get(`/projects/key/${projectKey}/repositories`)
+    return response.data || response
   },
 }

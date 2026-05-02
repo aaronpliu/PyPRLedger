@@ -204,11 +204,64 @@ const renderDiff = () => {
   position: relative !important;
 }
 
-/* That's it! Let diff2html handle everything else including:
- * - Backgrounds (via colorScheme config)
- * - Spacing and padding
- * - Font families
- * - Syntax highlighting colors
- * - Theme switching
- */
+/* Fix 2: Remove solid background colors that don't adapt to themes */
+:deep(.d2h-wrapper),
+:deep(.d2h-file-wrapper),
+:deep(.d2h-file-header),
+:deep(.d2h-diff-table),
+:deep(.d2h-code-line-ctn),
+:deep(.d2h-code-line),
+:deep(.d2h-code-side-line),
+:deep(.d2h-ins),
+:deep(.d2h-del),
+:deep(.d2h-emptyplaceholder),
+:deep(.d2h-code-linenumber),
+:deep(.d2h-code-side-linenumber),
+:deep(.d2h-gutter) {
+  background-color: transparent !important;
+}
+
+/* Fix 3: Ensure added/removed lines have subtle backgrounds that work in both themes */
+:deep(.d2h-ins) {
+  background-color: rgba(34, 197, 94, 0.1) !important;
+}
+
+:deep(.d2h-del) {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+/* Fix 4: Ensure the diff container itself has no background */
+:deep(.d2h-file-diff) {
+  background: transparent !important;
+}
+
+/* Fix 5: Ensure file header has solid background when sticky/scrolled */
+:deep(.d2h-file-header) {
+  background-color: var(--el-bg-color) !important;
+}
+
+[data-theme='dark'] :deep(.d2h-file-header) {
+  background-color: #1e293b !important;
+}
+
+/* Ensure sticky header doesn't become transparent */
+:deep(.d2h-sticky-header) {
+  background-color: var(--el-bg-color) !important;
+  backdrop-filter: none !important;
+}
+
+[data-theme='dark'] :deep(.d2h-sticky-header) {
+  background-color: #1e293b !important;
+}
+
+/* Fix 6: Minimal spacing adjustments - only override what's necessary */
+:deep(.d2h-code-line) {
+  padding: 0 1em !important;
+  width: calc(100% - 2em) !important;
+}
+
+:deep(.d2h-code-side-line) {
+  padding: 0 0.5em !important;
+  width: calc(100% - 1em) !important;
+}
 </style>

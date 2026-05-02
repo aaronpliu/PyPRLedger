@@ -122,6 +122,31 @@ export interface ReviewAssignmentRequest {
   reviewer_comments?: string
 }
 
+export interface ReviewRawRecord {
+  id: number
+  request_payload: Record<string, any>
+  status: 'pending' | 'success' | 'failed'
+  error_message?: string | null
+  error_details?: Record<string, any> | null
+  review_base_id?: number | null
+  source_ip?: string | null
+  user_agent?: string | null
+  created_date: string
+  processed_date?: string | null
+}
+
+export interface ReviewValidationSummary {
+  total_attempted: number
+  total_successful: number
+  total_failed: number
+  success_rate: number
+  failed_reviews: ReviewRawRecord[]
+  date_range: {
+    from: string | null
+    to: string | null
+  }
+}
+
 // Reviews API
 // NOTE: Reviews are created by Bitbucket webhook, not from UI
 export const reviewsApi = {
@@ -257,5 +282,28 @@ export const reviewsApi = {
     }>
   }> {
     return request.get('/reviews/trends/good-suggestions', { params })
+  },
+
+  /**
+   * Get validation summary comparing raw vs successful reviews
+   */
+  getValidationSummary(params?: {
+    date_from?: string
+    date_to?: string
+    project_key?: string
+  }): Promise<ReviewValidationSummary> {
+    return request.get('/reviews/validation/summary', { params })
+  },
+
+  /**
+   * Retry a failed review using stored raw data
+   */
+  retryFailedReview(rawRecordId: number): Promise<{
+    success: boolean
+    message: string
+    review_id: number
+    pull_request_id: string
+  }> {
+    return request.post(`/reviews/validation/retry/${rawRecordId}`)
   },
 }

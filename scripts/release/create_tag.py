@@ -15,9 +15,8 @@ def create_tag(version, auto_confirm=False):
     print(f"  Message: {tag_message}")
 
     # Get current commit
-    commit_hash, _ = subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
-    )
+    result = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True)
+    commit_hash = result.stdout
     print(f"  Commit:  {commit_hash.strip()}")
 
     if auto_confirm:

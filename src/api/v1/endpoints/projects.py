@@ -493,6 +493,75 @@ async def get_project_by_key(
         )
 
 
+@router.get("/key/{project_key}/repositories")
+async def get_project_repositories(
+    project_key: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[dict]:
+    """
+    Get all repositories for a specific project by project key
+
+    Args:
+        project_key: The project key
+        db: Database session
+
+    Returns:
+        List of repository dictionaries with id, repository_id, repository_name, repository_slug, etc.
+    """
+    from sqlalchemy import select
+
+    from src.models.project import Project
+    from src.models.repository import Repository
+
+    try:
+        # First get the project
+        project_query = select(Project).where(Project.project_key == project_key.upper())
+        project_result = await db.execute(project_query)
+        project = project_result.scalar_one_or_none()
+
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": f"Project with key {project_key} not found",
+                },
+            )
+
+        # Get all repositories for this project
+        repo_query = select(Repository).where(Repository.project_id == project.project_id)
+        repo_result = await db.execute(repo_query)
+        repositories = repo_result.scalars().all()
+
+        return [
+            {
+                "id": repo.id,
+                "repository_id": repo.repository_id,
+                "repository_name": repo.repository_name,
+                "repository_slug": repo.repository_slug,
+                "repository_url": repo.repository_url,
+                "created_date": repo.created_date.isoformat() if repo.created_date else None,
+                "updated_date": repo.updated_date.isoformat() if repo.updated_date else None,
+            }
+            for repo in repositories
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get repositories for project {project_key}: {str(e)}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint=f"GET /api/v1/projects/key/{project_key}/repositories",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": "Failed to get project repositories",
+            },
+        )
+
+
 @router.get("/name/{project_name}", response_model=ProjectResponse)
 async def get_project_by_name(
     project_name: str,

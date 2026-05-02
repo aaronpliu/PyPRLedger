@@ -64,11 +64,37 @@
         </el-form-item>
         
         <el-form-item label="Project Key" prop="projectKey">
-          <el-input v-model="registerForm.projectKey" placeholder="e.g., ECOM" />
+          <el-select 
+            v-model="registerForm.projectKey" 
+            placeholder="Select project key" 
+            filterable
+            style="width: 100%"
+          >
+            <el-option 
+              v-for="project in availableProjects" 
+              :key="project.project_key" 
+              :label="`${project.project_key} - ${project.project_name}`" 
+              :value="project.project_key" 
+            />
+          </el-select>
         </el-form-item>
         
         <el-form-item label="Repository Slug" prop="repositorySlug">
-          <el-input v-model="registerForm.repositorySlug" placeholder="e.g., frontend-store" />
+          <el-select 
+            v-model="registerForm.repositorySlug" 
+            placeholder="Select repository slug" 
+            filterable
+            :disabled="!registerForm.projectKey"
+            :loading="loadingRepositories"
+            style="width: 100%"
+          >
+            <el-option 
+              v-for="repo in availableRepositories" 
+              :key="repo.repository_slug" 
+              :label="`${repo.repository_slug} - ${repo.repository_name}`" 
+              :value="repo.repository_slug" 
+            />
+          </el-select>
         </el-form-item>
         
         <el-form-item label="Description" prop="description">
@@ -127,10 +153,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { projectRegistryApi } from '@/api/projectRegistry'
+import { projectsApi } from '@/api/projects'
 import type { ProjectRegistry, AppInfo } from '@/api/projectRegistry'
+import type { ProjectSummary, RepositorySummary } from '@/api/projects'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
@@ -145,6 +173,11 @@ const apps = ref<AppInfo[]>([])
 const projects = ref<ProjectRegistry[]>([])
 const selectedApp = ref<string | null>(null)
 const selectedProject = ref<ProjectRegistry | null>(null)
+
+// Dropdown data
+const availableProjects = ref<ProjectSummary[]>([])
+const availableRepositories = ref<RepositorySummary[]>([])
+const loadingRepositories = ref(false)
 
 // Dialogs
 const showRegisterDialog = ref(false)
@@ -164,6 +197,20 @@ const registerForm = reactive({
 const updateForm = reactive({
   newAppName: '',
 })
+
+// Watch for project key changes to load repositories
+watch(
+  () => registerForm.projectKey,
+  async (newProjectKey) => {
+    if (newProjectKey) {
+      await loadRepositoriesForProject(newProjectKey)
+      // Clear repository slug when project changes
+      registerForm.repositorySlug = ''
+    } else {
+      availableRepositories.value = []
+    }
+  }
+)
 
 // Validation rules
 const registerRules: FormRules = {
@@ -200,6 +247,33 @@ const loadApps = async () => {
   } catch (error) {
     console.error('Failed to load apps:', error)
     ElMessage.error('Failed to load applications')
+  }
+}
+
+const loadAvailableProjects = async () => {
+  try {
+    availableProjects.value = await projectsApi.getAllProjects()
+  } catch (error) {
+    console.error('Failed to load projects:', error)
+    ElMessage.error('Failed to load projects for dropdown')
+  }
+}
+
+const loadRepositoriesForProject = async (projectKey: string) => {
+  if (!projectKey) {
+    availableRepositories.value = []
+    return
+  }
+  
+  loadingRepositories.value = true
+  try {
+    availableRepositories.value = await projectsApi.getProjectRepositories(projectKey)
+  } catch (error) {
+    console.error('Failed to load repositories:', error)
+    ElMessage.error('Failed to load repositories')
+    availableRepositories.value = []
+  } finally {
+    loadingRepositories.value = false
   }
 }
 
@@ -315,6 +389,8 @@ onMounted(async () => {
   // Load apps first, then load projects (which depends on apps list)
   await loadApps()
   await loadProjects()
+  // Load available projects for dropdown
+  await loadAvailableProjects()
 })
 </script>
 

@@ -436,7 +436,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
@@ -456,6 +456,7 @@ import AIReviewResults from '@/components/review/AIReviewResults.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useReviewNavigationStore, type ReviewNavigationItem } from '@/stores/reviewNavigation'
 import { usePrUrl } from '@/composables/usePrUrl'
+import { useTheme } from '@/composables/useTheme'
 
 const route = useRoute()
 const router = useRouter()
@@ -474,9 +475,27 @@ const isInfoExpanded = ref(false)
 const navigatingPage = ref(false)
 const showFloatingNav = ref(false)
 
-// Detect current theme
+// Track theme changes reactively
+const themeTrigger = ref(0)
+
+// Detect current theme - will recompute when themeTrigger changes
 const isDarkTheme = computed(() => {
+  // Access themeTrigger to make this computed reactive to theme changes
+  void themeTrigger.value
   return document.documentElement.getAttribute('data-theme') === 'dark'
+})
+
+// Watch for theme changes and update the theme trigger
+onMounted(() => {
+  const observer = new MutationObserver(() => {
+    // Trigger re-computation of isDarkTheme
+    themeTrigger.value++
+  })
+  
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme']
+  })
 })
 
 // Check if current user already has a score
