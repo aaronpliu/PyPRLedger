@@ -474,9 +474,27 @@ const isInfoExpanded = ref(false)
 const navigatingPage = ref(false)
 const showFloatingNav = ref(false)
 
-// Detect current theme
+// Track theme changes reactively
+const themeTrigger = ref(0)
+
+// Detect current theme - will recompute when themeTrigger changes
 const isDarkTheme = computed(() => {
+  // Access themeTrigger to make this computed reactive to theme changes
+  void themeTrigger.value
   return document.documentElement.getAttribute('data-theme') === 'dark'
+})
+
+// Watch for theme changes and update the theme trigger
+onMounted(() => {
+  const observer = new MutationObserver(() => {
+    // Trigger re-computation of isDarkTheme
+    themeTrigger.value++
+  })
+  
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme']
+  })
 })
 
 // Check if current user already has a score
