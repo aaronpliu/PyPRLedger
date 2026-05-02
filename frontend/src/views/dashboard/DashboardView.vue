@@ -205,6 +205,18 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 const router = useRouter()
 
+// Helper function to get chart axis colors based on theme
+const getAxisColors = () => {
+  // Check current theme from DOM
+  const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark'
+  return {
+    axisLabelColor: isDarkMode ? '#cbd5e1' : '#64748b',
+    axisLineColor: isDarkMode ? '#475569' : '#e2e8f0',
+    splitLineColor: isDarkMode ? '#334155' : '#f1f5f9',
+    nameColor: isDarkMode ? '#94a3b8' : '#64748b',
+  }
+}
+
 // Time period controls
 const selectedPeriod = ref<'daily' | 'weekly' | 'monthly'>('weekly')
 const selectedDays = ref(90)
@@ -301,6 +313,8 @@ const renderActivityChart = () => {
   const selfRaisedData = trendData.value.activity.map(d => d.self_raised_prs)
   const totalData = trendData.value.activity.map(d => d.total)
 
+  const colors = getAxisColors()
+
   const option: EChartsOption = {
     tooltip: {
       trigger: 'axis',
@@ -308,6 +322,9 @@ const renderActivityChart = () => {
     },
     legend: {
       data: [t('dashboard.assigned_reviews'), t('dashboard.self_raised_prs'), t('dashboard.total')],
+      textStyle: {
+        color: colors.axisLabelColor,
+      },
     },
     grid: {
       left: '3%',
@@ -321,11 +338,33 @@ const renderActivityChart = () => {
       axisLabel: { 
         rotate: 45,
         interval: 0,
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
       },
     },
     yAxis: {
       type: 'value',
       name: t('dashboard.count'),
+      nameTextStyle: {
+        color: colors.nameColor,
+      },
+      axisLabel: {
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
+      },
+      splitLine: {
+        lineStyle: {
+          color: colors.splitLineColor,
+        },
+      },
     },
     series: [
       {
@@ -382,12 +421,17 @@ const renderScoreChart = () => {
   const minScores = trendData.value.scores.map(d => d.min_score)
   const maxScores = trendData.value.scores.map(d => d.max_score)
 
+  const colors = getAxisColors()
+
   const option: EChartsOption = {
     tooltip: {
       trigger: 'axis',
     },
     legend: {
       data: [t('dashboard.avg_score'), t('dashboard.min_score'), t('dashboard.max_score')],
+      textStyle: {
+        color: colors.axisLabelColor,
+      },
     },
     grid: {
       left: '3%',
@@ -401,6 +445,12 @@ const renderScoreChart = () => {
       axisLabel: { 
         rotate: 45,
         interval: 0,
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
       },
     },
     yAxis: {
@@ -408,6 +458,22 @@ const renderScoreChart = () => {
       name: t('dashboard.score'),
       min: 0,
       max: 10,
+      nameTextStyle: {
+        color: colors.nameColor,
+      },
+      axisLabel: {
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
+      },
+      splitLine: {
+        lineStyle: {
+          color: colors.splitLineColor,
+        },
+      },
     },
     series: [
       {
@@ -469,6 +535,8 @@ const renderProjectChart = () => {
   const projects = trendData.value.projects.map(d => d.unique_projects)
   const repos = trendData.value.projects.map(d => d.unique_repositories)
 
+  const colors = getAxisColors()
+
   const option: EChartsOption = {
     tooltip: {
       trigger: 'axis',
@@ -476,6 +544,9 @@ const renderProjectChart = () => {
     },
     legend: {
       data: [t('dashboard.unique_projects'), t('dashboard.unique_repos')],
+      textStyle: {
+        color: colors.axisLabelColor,
+      },
     },
     grid: {
       left: '3%',
@@ -489,11 +560,33 @@ const renderProjectChart = () => {
       axisLabel: { 
         rotate: 45,
         interval: 0,
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
       },
     },
     yAxis: {
       type: 'value',
       name: t('dashboard.count'),
+      nameTextStyle: {
+        color: colors.nameColor,
+      },
+      axisLabel: {
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
+      },
+      splitLine: {
+        lineStyle: {
+          color: colors.splitLineColor,
+        },
+      },
     },
     series: [
       {
@@ -541,6 +634,8 @@ const renderSuggestionsChart = () => {
   const goodSuggestions = trendData.value.suggestions.map(d => d.good_suggestions)
   const percentages = trendData.value.suggestions.map(d => d.percentage)
 
+  const colors = getAxisColors()
+
   const option: EChartsOption = {
     tooltip: {
       trigger: 'axis',
@@ -548,6 +643,9 @@ const renderSuggestionsChart = () => {
     },
     legend: {
       data: [t('dashboard.good_suggestions'), t('dashboard.percentage')],
+      textStyle: {
+        color: colors.axisLabelColor,
+      },
     },
     grid: {
       left: '3%',
@@ -558,19 +656,57 @@ const renderSuggestionsChart = () => {
     xAxis: {
       type: 'category',
       data: dates,
-      axisLabel: { rotate: 45 },
+      axisLabel: { 
+        rotate: 45,
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
+      },
     },
     yAxis: [
       {
         type: 'value',
         name: t('dashboard.count'),
         position: 'left',
+        nameTextStyle: {
+          color: colors.nameColor,
+        },
+        axisLabel: {
+          color: colors.axisLabelColor,
+        },
+        axisLine: {
+          lineStyle: {
+            color: colors.axisLineColor,
+          },
+        },
+        splitLine: {
+          lineStyle: {
+            color: colors.splitLineColor,
+          },
+        },
       },
       {
         type: 'value',
         name: t('dashboard.percentage'),
         position: 'right',
-        axisLabel: { formatter: '{value}%' },
+        nameTextStyle: {
+          color: colors.nameColor,
+        },
+        axisLabel: { 
+          formatter: '{value}%',
+          color: colors.axisLabelColor,
+        },
+        axisLine: {
+          lineStyle: {
+            color: colors.axisLineColor,
+          },
+        },
+        splitLine: {
+          show: false,
+        },
       },
     ],
     series: [
@@ -675,6 +811,23 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
   loadTrendData()
   loadRecentReviews()
+  
+  // Watch for theme changes via MutationObserver
+  const observer = new MutationObserver(() => {
+    // Re-render all charts with new theme colors when theme changes
+    if (trendData.value.activity.length > 0) renderActivityChart()
+    if (trendData.value.scores.length > 0) renderScoreChart()
+    if (trendData.value.projects.length > 0) renderProjectChart()
+    if (trendData.value.suggestions.length > 0) renderSuggestionsChart()
+  })
+  
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme']
+  })
+  
+  // Store observer reference for cleanup
+  ;(window as any).__themeObserver = observer
 })
 
 onUnmounted(() => {
@@ -683,6 +836,12 @@ onUnmounted(() => {
   scoreChart?.dispose()
   projectChart?.dispose()
   suggestionsChart?.dispose()
+  
+  // Cleanup theme observer
+  if ((window as any).__themeObserver) {
+    (window as any).__themeObserver.disconnect()
+    delete (window as any).__themeObserver
+  }
 })
 </script>
 

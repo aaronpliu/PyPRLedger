@@ -1,6 +1,14 @@
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 
 const currentTheme = ref<'light' | 'dark' | 'auto'>('auto')
+
+// Computed property to determine if dark mode is active
+const isDark = computed(() => {
+  if (currentTheme.value === 'auto') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  }
+  return currentTheme.value === 'dark'
+})
 
 // Initialize theme on module load
 const initTheme = () => {
@@ -56,6 +64,7 @@ const updateElementPlusTheme = (isDark: boolean) => {
 export const useTheme = () => {
   return {
     currentTheme,
+    isDark,
     setTheme: (theme: 'light' | 'dark' | 'auto') => {
       currentTheme.value = theme
     },
