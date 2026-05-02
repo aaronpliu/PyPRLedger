@@ -436,7 +436,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
@@ -456,6 +456,7 @@ import AIReviewResults from '@/components/review/AIReviewResults.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useReviewNavigationStore, type ReviewNavigationItem } from '@/stores/reviewNavigation'
 import { usePrUrl } from '@/composables/usePrUrl'
+import { useTheme } from '@/composables/useTheme'
 
 const route = useRoute()
 const router = useRouter()
