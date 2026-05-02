@@ -99,13 +99,7 @@ class BitbucketService:
 
             api_response = await self._make_request(url)
             if not api_response:
-                # Fallback to minimal info if API fails
-                return {
-                    "project_id": hash(project_key) % 100000,
-                    "project_name": f"Project {project_key}",
-                    "project_key": project_key,
-                    "project_url": f"{self.base_url}/projects/{project_key}",
-                }
+                return None
 
             # Map Bitbucket Server API response to our format
             links = api_response.get("links", {})
@@ -177,14 +171,7 @@ class BitbucketService:
 
             api_response = await self._make_request(url)
             if not api_response:
-                # Fallback to minimal info
-                return {
-                    "repository_id": hash(repo_slug) % 100000,
-                    "repository_name": repo_slug,
-                    "repository_slug": repo_slug,
-                    "repository_url": f"{self.base_url}/projects/{workspace}/repos/{repo_slug}",
-                    "project_id": None,
-                }
+                return None
 
             # Map Server API response
             links = api_response.get("links", {})
@@ -235,13 +222,7 @@ class BitbucketService:
                 api_response = await self._make_request(url)
 
             if not api_response:
-                # Return minimal info if API fails
-                return {
-                    "user_id": hash(username) % 100000,
-                    "username": username,
-                    "display_name": username.replace("_", " ").title(),
-                    "email_address": f"{username}@example.com",
-                }
+                return None
 
             # Map Cloud API response
             return {
@@ -257,13 +238,7 @@ class BitbucketService:
 
             api_response = await self._make_request(url)
             if not api_response:
-                # Return minimal info if API fails
-                return {
-                    "user_id": hash(username) % 100000,
-                    "username": username,
-                    "display_name": username.replace("_", " ").title(),
-                    "email_address": f"{username}@example.com",
-                }
+                return None
 
             # Map Server API response
             return {
