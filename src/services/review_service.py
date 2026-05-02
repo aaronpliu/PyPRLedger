@@ -20,6 +20,7 @@ from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import (
     PullRequestReviewAssignment,
     PullRequestReviewBase,
+    PullRequestReviewRaw,
     PullRequestScore,
 )
 from src.schemas.pull_request import (
@@ -426,89 +427,186 @@ class ReviewService:
         Returns:
             tuple[ReviewResponse, bool]: The created/updated review response and True (created) or False (updated)
         """
-        # Initialize entity sync service
-        entity_sync_service = EntitySyncService(db)
-
-        # Sync all related entities using business keys only
-        project: Project = await entity_sync_service.sync_project(review_data.project_key)
-
-        repository = await entity_sync_service.sync_repository(
-            repository_slug=review_data.repository_slug, project=project
+        # Step 1: Save raw request data immediately (always succeeds)
+        raw_record = PullRequestReviewRaw(
+            request_payload=review_data.model_dump(),
+            status="pending",
         )
+        db.add(raw_record)
+        await db.flush()  # Get raw_record.id
 
-        pr_user = await entity_sync_service.sync_user(
-            username=review_data.pull_request_user, is_reviewer=False
-        )
+        try:
+            # Step 2: Process review (existing logic)
+            # Initialize entity sync service
+            entity_sync_service = EntitySyncService(db)
 
-        # Sync reviewer if provided, otherwise set to None
-        reviewer = None
-        if review_data.reviewer:
-            reviewer = await entity_sync_service.sync_user(
-                username=review_data.reviewer, is_reviewer=True
+            # Sync all related entities using business keys only
+            project: Project = await entity_sync_service.sync_project(review_data.project_key)
+
+            repository = await entity_sync_service.sync_repository(
+                repository_slug=review_data.repository_slug, project=project
             )
 
-        existing_base = await self._get_existing_base(
-            review_data,
-            db,
-            project.project_key,
-            repository.repository_slug,
-        )
-        existing_assignment = None
-        if reviewer and existing_base:
-            existing_assignment = self._get_existing_assignment(existing_base, reviewer.username)
-
-        created = False
-        if existing_base:
-            self._populate_base(existing_base, review_data, pr_user.username)
-            existing_base.updated_date = get_current_time()
-
-            if reviewer:
-                if existing_assignment:
-                    self._populate_assignment(existing_assignment, reviewer.username, review_data)
-                    existing_assignment.updated_date = get_current_time()
-                else:
-                    existing_assignment = PullRequestReviewAssignment(
-                        review_base_id=existing_base.id,
-                        reviewer=reviewer.username,
-                        assignment_status="assigned",
-                    )
-                    self._populate_assignment(existing_assignment, reviewer.username, review_data)
-                    db.add(existing_assignment)
-                    created = True
-            await db.flush()
-            await db.commit()
-
-            review_dict = self._serialize_review(existing_base, existing_assignment)
-            if include_details:
-                review_dict["project_name"] = project.project_name
-                review_dict["pull_request_user_info"] = {
-                    "username": pr_user.username,
-                    "display_name": pr_user.display_name,
-                }
-                if reviewer:
-                    review_dict["reviewer_info"] = {
-                        "username": reviewer.username,
-                        "display_name": reviewer.display_name,
-                    }
-            await self._set_review_in_cache(
-                project_key=str(project.project_key),
-                repository_slug=str(repository.repository_slug),
-                pull_request_id=str(existing_base.pull_request_id),
-                review_data=review_dict,
+            pr_user = await entity_sync_service.sync_user(
+                username=review_data.pull_request_user, is_reviewer=False
             )
 
-            # Update metrics (only if reviewer is set)
-            if reviewer:
-                self.metrics.increment_review(
-                    project=str(project.project_key), reviewer=str(reviewer.username)
+            # Sync reviewer if provided, otherwise set to None
+            reviewer = None
+            if review_data.reviewer:
+                reviewer = await entity_sync_service.sync_user(
+                    username=review_data.reviewer, is_reviewer=True
                 )
 
-            logger.info(f"Updated review: {existing_base.pull_request_id}")
-            return ReviewResponse(**review_dict), created
-        else:
-            new_review_response = await self.create_review(review_data, db, include_details)
-            logger.info(f"Created new review: {new_review_response.pull_request_id}")
-            return new_review_response, True
+            existing_base = await self._get_existing_base(
+                review_data,
+                db,
+                project.project_key,
+                repository.repository_slug,
+            )
+            existing_assignment = None
+            if reviewer and existing_base:
+                existing_assignment = self._get_existing_assignment(
+                    existing_base, reviewer.username
+                )
+
+            created = False
+            if existing_base:
+                self._populate_base(existing_base, review_data, pr_user.username)
+                existing_base.updated_date = get_current_time()
+
+                if reviewer:
+                    if existing_assignment:
+                        self._populate_assignment(
+                            existing_assignment, reviewer.username, review_data
+                        )
+                        existing_assignment.updated_date = get_current_time()
+                    else:
+                        existing_assignment = PullRequestReviewAssignment(
+                            review_base_id=existing_base.id,
+                            reviewer=reviewer.username,
+                            assignment_status="assigned",
+                        )
+                        self._populate_assignment(
+                            existing_assignment, reviewer.username, review_data
+                        )
+                        db.add(existing_assignment)
+                        created = True
+                await db.flush()
+                await db.commit()
+
+                review_dict = self._serialize_review(existing_base, existing_assignment)
+                if include_details:
+                    review_dict["project_name"] = project.project_name
+                    review_dict["pull_request_user_info"] = {
+                        "username": pr_user.username,
+                        "display_name": pr_user.display_name,
+                    }
+                    if reviewer:
+                        review_dict["reviewer_info"] = {
+                            "username": reviewer.username,
+                            "display_name": reviewer.display_name,
+                        }
+                await self._set_review_in_cache(
+                    project_key=str(project.project_key),
+                    repository_slug=str(repository.repository_slug),
+                    pull_request_id=str(existing_base.pull_request_id),
+                    review_data=review_dict,
+                )
+
+                # Update metrics (only if reviewer is set)
+                if reviewer:
+                    self.metrics.increment_review(
+                        project=str(project.project_key), reviewer=str(reviewer.username)
+                    )
+
+                logger.info(f"Updated review: {existing_base.pull_request_id}")
+
+                # Step 3: Mark raw record as success and delete it to keep validation table clean
+                # The successful review is now in pull_request_review_base
+                await db.delete(raw_record)
+
+                # Also clean up any other failed raw records for the same PR commit/file
+                # This handles the case where user retries multiple times or re-posts the same PR
+                # Use JSON_EXTRACT for MySQL compatibility
+                from sqlalchemy import func
+
+                cleanup_query = select(PullRequestReviewRaw).where(
+                    and_(
+                        PullRequestReviewRaw.status == "failed",
+                        func.json_extract(PullRequestReviewRaw.request_payload, "$.pull_request_id")
+                        == str(existing_base.pull_request_id),
+                        func.json_extract(PullRequestReviewRaw.request_payload, "$.project_key")
+                        == str(project.project_key),
+                        func.json_extract(PullRequestReviewRaw.request_payload, "$.repository_slug")
+                        == str(repository.repository_slug),
+                    )
+                )
+                old_failed_records = (await db.execute(cleanup_query)).scalars().all()
+                for old_record in old_failed_records:
+                    await db.delete(old_record)
+                    logger.info(
+                        f"Cleaned up old failed raw record {old_record.id} for PR {existing_base.pull_request_id}"
+                    )
+
+                await db.commit()
+
+                return ReviewResponse(**review_dict), created
+            else:
+                new_review_response = await self.create_review(review_data, db, include_details)
+                logger.info(f"Created new review: {new_review_response.pull_request_id}")
+
+                # Step 3: Delete raw record and clean up old failed records for this PR
+                # The successful review is now in pull_request_review_base
+                await db.delete(raw_record)
+
+                # Clean up any other failed raw records for the same PR commit/file
+                # This handles re-commits and multiple retry attempts
+                existing_base_after_create = await self._get_existing_base(
+                    review_data,
+                    db,
+                    review_data.project_key,
+                    review_data.repository_slug,
+                )
+                if existing_base_after_create:
+                    cleanup_query = select(PullRequestReviewRaw).where(
+                        and_(
+                            PullRequestReviewRaw.status == "failed",
+                            func.json_extract(
+                                PullRequestReviewRaw.request_payload, "$.pull_request_id"
+                            )
+                            == str(existing_base_after_create.pull_request_id),
+                            func.json_extract(PullRequestReviewRaw.request_payload, "$.project_key")
+                            == str(review_data.project_key),
+                            func.json_extract(
+                                PullRequestReviewRaw.request_payload, "$.repository_slug"
+                            )
+                            == str(review_data.repository_slug),
+                        )
+                    )
+                    old_failed_records = (await db.execute(cleanup_query)).scalars().all()
+                    for old_record in old_failed_records:
+                        await db.delete(old_record)
+                        logger.info(
+                            f"Cleaned up old failed raw record {old_record.id} for PR {existing_base_after_create.pull_request_id}"
+                        )
+
+                await db.commit()
+
+                return new_review_response, True
+
+        except Exception as e:
+            # Step 4: Mark raw record as failed
+            raw_record.status = "failed"
+            raw_record.error_message = str(e)
+            raw_record.error_details = {
+                "error_type": type(e).__name__,
+                "traceback": traceback.format_exc(),
+            }
+            raw_record.processed_date = get_current_time()
+            await db.commit()
+
+            raise  # Re-raise to API endpoint
 
     async def get_review(
         self,
@@ -951,6 +1049,25 @@ class ReviewService:
             if not base:
                 return False
             await db.delete(base)
+
+        # Also delete any associated raw records (both pending and failed)
+        # This ensures consistency - when a PR review is deleted, all related raw data is also removed
+        cleanup_raw_query = select(PullRequestReviewRaw).where(
+            and_(
+                func.json_extract(PullRequestReviewRaw.request_payload, "$.pull_request_id")
+                == str(review["pull_request_id"]),
+                func.json_extract(PullRequestReviewRaw.request_payload, "$.project_key")
+                == str(review["project_key"]),
+                func.json_extract(PullRequestReviewRaw.request_payload, "$.repository_slug")
+                == str(review["repository_slug"]),
+            )
+        )
+        raw_records_to_delete = (await db.execute(cleanup_raw_query)).scalars().all()
+        for raw_record in raw_records_to_delete:
+            await db.delete(raw_record)
+            logger.info(
+                f"Deleted associated raw record {raw_record.id} for PR {review['pull_request_id']}"
+            )
 
         await db.commit()
 

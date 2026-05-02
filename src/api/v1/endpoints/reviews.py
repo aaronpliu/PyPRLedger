@@ -31,11 +31,13 @@ from src.schemas.pull_request import (
     ReviewScoreSummary,
     ReviewStats,
     ReviewUpdate,
+    ReviewValidationSummary,
 )
 from src.services.audit_service import AuditService
 from src.services.rbac_service import RBACService
 from src.services.review_score_service import ReviewScoreService
 from src.services.review_service import ReviewService
+from src.services.review_validation_service import ReviewValidationService
 from src.utils.metrics import OperationTimer, metrics
 from src.utils.timezone import get_current_time
 
@@ -2280,3 +2282,97 @@ async def _get_git_username(auth_user_id: int, db: AsyncSession) -> str | None:
     git_user = result.scalar_one_or_none()
 
     return git_user.username if git_user else None
+
+
+# Validation Endpoints
+
+
+@router.get(
+    "/validation/summary",
+    response_model=ReviewValidationSummary,
+    summary="Get review validation summary",
+    description="Compare total attempted vs successful PR reviews",
+)
+async def get_validation_summary(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    date_from: datetime | None = Query(None, description="Start date (ISO format)"),
+    date_to: datetime | None = Query(None, description="End date (ISO format)"),
+    project_key: str | None = Query(None, description="Filter by project key"),
+):
+    """
+    Get validation summary comparing raw vs successful reviews.
+
+    This endpoint provides insights into:
+    - Total review attempts (from raw records)
+    - Successfully processed reviews
+    - Failed reviews with error details
+    - Success rate percentage
+
+    Requires admin or reviewer role permissions.
+    """
+    # Check permission
+    rbac_service = RBACService(db)
+    has_permission = await rbac_service.check_permission(
+        auth_user_id=current_user.id,
+        action="read",
+        resource_type="reviews",
+    )
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    validation_service = ReviewValidationService(db)
+    return await validation_service.get_validation_summary(
+        date_from=date_from, date_to=date_to, project_key=project_key
+    )
+
+
+@router.post(
+    "/validation/retry/{raw_record_id}",
+    response_model=dict,
+    summary="Retry failed review",
+    description="Retry a failed PR review using stored raw data",
+)
+async def retry_failed_review(
+    raw_record_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+):
+    """
+    Retry a failed PR review using the stored raw payload.
+
+    This allows administrators to reprocess failed reviews without
+    requiring the original request to be resent.
+
+    Args:
+        raw_record_id: ID of the failed raw record to retry
+
+    Returns:
+        dict: Success status and review information
+
+    Raises:
+        HTTPException: 403 if insufficient permissions, 404 if record not found
+    """
+    # Check permission
+    rbac_service = RBACService(db)
+    has_permission = await rbac_service.check_permission(
+        auth_user_id=current_user.id,
+        action="create",
+        resource_type="reviews",
+    )
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    validation_service = ReviewValidationService(db)
+
+    try:
+        result = await validation_service.retry_failed_review(raw_record_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to retry review {raw_record_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to retry review"},
+        )

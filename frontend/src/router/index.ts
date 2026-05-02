@@ -121,6 +121,12 @@ const routes: RouteRecordRaw[] = [
         name: 'SystemSettings',
         component: () => import('@/views/admin/SystemSettingsView.vue'),
       },
+      {
+        path: 'review-validation',
+        name: 'ReviewValidation',
+        component: () => import('@/views/admin/ReviewValidationView.vue'),
+        meta: { requiresReviewAdmin: true },
+      },
     ],
   },
 
