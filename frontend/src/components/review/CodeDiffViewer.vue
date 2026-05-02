@@ -235,9 +235,33 @@ const renderDiff = () => {
   background: transparent !important;
 }
 
-/* That's it! Let diff2html handle everything else including:
- * - Spacing and padding
- * - Font families
- * - Syntax highlighting colors
- */
+/* Fix 5: Ensure file header has solid background when sticky/scrolled */
+:deep(.d2h-file-header) {
+  background-color: var(--el-bg-color) !important;
+}
+
+[data-theme='dark'] :deep(.d2h-file-header) {
+  background-color: #1e293b !important;
+}
+
+/* Ensure sticky header doesn't become transparent */
+:deep(.d2h-sticky-header) {
+  background-color: var(--el-bg-color) !important;
+  backdrop-filter: none !important;
+}
+
+[data-theme='dark'] :deep(.d2h-sticky-header) {
+  background-color: #1e293b !important;
+}
+
+/* Fix 6: Minimal spacing adjustments - only override what's necessary */
+:deep(.d2h-code-line) {
+  padding: 0 1em !important;
+  width: calc(100% - 2em) !important;
+}
+
+:deep(.d2h-code-side-line) {
+  padding: 0 0.5em !important;
+  width: calc(100% - 1em) !important;
+}
 </style>
