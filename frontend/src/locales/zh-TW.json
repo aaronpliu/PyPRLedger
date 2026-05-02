@@ -29,7 +29,9 @@
     "backToHome": "返回首頁",
     "refresh": "重新整理",
     "enabled": "啟用",
-    "disabled": "停用"
+    "disabled": "停用",
+    "fullscreen": "全螢幕",
+    "exitFullscreen": "退出全螢幕"
   },
   "menu": {
     "dashboard": "儀表板",

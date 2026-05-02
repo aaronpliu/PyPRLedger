@@ -29,7 +29,9 @@
     "backToHome": "Back to Home",
     "refresh": "Refresh",
     "enabled": "Enabled",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit Fullscreen"
   },
   "menu": {
     "dashboard": "Dashboard",
