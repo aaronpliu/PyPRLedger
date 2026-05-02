@@ -82,9 +82,8 @@
 
       <!-- Audit Logs Table -->
       <el-table :data="logs" v-loading="loading" stripe style="width: 100%; margin-top: 20px">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="auth_user_id" label="User ID" width="100" />
-        <el-table-column prop="action" label="Action" width="120">
+        <el-table-column prop="id" label="Log ID" width="90" />
+        <el-table-column prop="action" label="Action" min-width="140">
           <template #default="{ row }">
             <el-tag :type="getActionType(row.action)">{{ row.action }}</el-tag>
           </template>
@@ -142,8 +141,7 @@
     <!-- Details Dialog -->
     <el-dialog v-model="showDetailsDialog" title="Audit Log Details" width="700px">
       <el-descriptions :column="1" border v-if="selectedLog">
-        <el-descriptions-item label="ID">{{ selectedLog.id }}</el-descriptions-item>
-        <el-descriptions-item label="User ID">{{ selectedLog.auth_user_id }}</el-descriptions-item>
+        <el-descriptions-item label="Log ID">{{ selectedLog.id }}</el-descriptions-item>
         <el-descriptions-item label="Action">{{ selectedLog.action }}</el-descriptions-item>
         <el-descriptions-item label="Resource Type">{{ selectedLog.resource_type }}</el-descriptions-item>
         <el-descriptions-item label="Resource ID">{{ selectedLog.resource_id }}</el-descriptions-item>
