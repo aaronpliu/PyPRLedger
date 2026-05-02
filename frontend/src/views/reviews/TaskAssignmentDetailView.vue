@@ -5,17 +5,17 @@
         <div class="card-header">
           <el-button @click="goBack">
             <el-icon><Back /></el-icon>
-            Back
+            {{ t('task_assignment.detail.back') }}
           </el-button>
-          <span>Task Assignment Details</span>
-          <el-tag type="info">Review Admin</el-tag>
+          <span>{{ t('task_assignment.detail.title') }}</span>
+          <el-tag type="info">{{ t('task_assignment.detail.review_admin') }}</el-tag>
         </div>
       </template>
 
       <div v-if="review" class="detail-content">
         <!-- PR Information -->
-        <el-descriptions title="PR Information" :column="2" border>
-          <el-descriptions-item label="PR ID">
+        <el-descriptions :title="t('task_assignment.detail.pr_information')" :column="2" border>
+          <el-descriptions-item :label="t('task_assignment.detail.pr_id')">
             <a 
               v-if="review && getPrUrl(review)" 
               :href="getPrUrl(review) || undefined" 
@@ -28,21 +28,21 @@
             </a>
             <span v-else>{{ review?.pull_request_id }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="Commit ID">{{ review.pull_request_commit_id || 'N/A' }}</el-descriptions-item>
-          <el-descriptions-item label="Project">{{ review.project_key }}</el-descriptions-item>
-          <el-descriptions-item label="Repository">{{ review.repository_slug }}</el-descriptions-item>
-          <el-descriptions-item label="Source Branch">
+          <el-descriptions-item :label="t('task_assignment.detail.commit_id')">{{ review.pull_request_commit_id || t('reviews.detail.na') }}</el-descriptions-item>
+          <el-descriptions-item :label="t('task_assignment.detail.project')">{{ review.project_key }}</el-descriptions-item>
+          <el-descriptions-item :label="t('task_assignment.detail.repository')">{{ review.repository_slug }}</el-descriptions-item>
+          <el-descriptions-item :label="t('task_assignment.detail.source_branch')">
             <el-tag>{{ review.source_branch }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="Target Branch">
+          <el-descriptions-item :label="t('task_assignment.detail.target_branch')">
             <el-tag type="success">{{ review.target_branch }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="PR Status">
+          <el-descriptions-item :label="t('task_assignment.detail.pr_status')">
             <el-tag :type="getStatusType(review.pull_request_status)">
               {{ review.pull_request_status }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="Created">
+          <el-descriptions-item :label="t('task_assignment.detail.created')">
             {{ formatDate(review.created_date) }}
           </el-descriptions-item>
         </el-descriptions>
@@ -50,16 +50,16 @@
         <!-- Reviewers Management -->
         <el-divider />
         <div class="section-header">
-          <h3>Reviewers ({{ review.total_reviewers }})</h3>
+          <h3>{{ t('task_assignment.detail.reviewers') }} ({{ review.total_reviewers }})</h3>
           <el-button type="primary" size="small" @click="handleAssignReviewer">
-            + Assign Reviewer
+            {{ t('task_assignment.detail.assign_reviewer') }}
           </el-button>
         </div>
 
         <el-table :data="review.reviewers" stripe border header-align="center">
-          <el-table-column prop="id" label="ID" width="80" align="center" />
+          <el-table-column prop="id" :label="t('task_assignment.detail.id')" width="80" align="center" />
           
-          <el-table-column label="Reviewer" min-width="150" align="center">
+          <el-table-column :label="t('task_assignment.detail.reviewer')" min-width="150" align="center">
             <template #default="{ row }">
               <div class="reviewer-info">
                 <strong>{{ row.reviewer }}</strong>
@@ -70,19 +70,19 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="Assigned By" width="150" align="center">
+          <el-table-column :label="t('task_assignment.detail.assigned_by')" width="150" align="center">
             <template #default="{ row }">
-              {{ row.assigned_by || 'N/A' }}
+              {{ row.assigned_by || t('reviews.detail.na') }}
             </template>
           </el-table-column>
 
-          <el-table-column label="Assigned Date" width="180" align="center">
+          <el-table-column :label="t('task_assignment.detail.assigned_date')" width="180" align="center">
             <template #default="{ row }">
-              {{ row.assigned_date ? formatDate(row.assigned_date) : 'N/A' }}
+              {{ row.assigned_date ? formatDate(row.assigned_date) : t('reviews.detail.na') }}
             </template>
           </el-table-column>
 
-          <el-table-column label="Status" width="120" align="center">
+          <el-table-column :label="t('task_assignment.detail.status')" width="120" align="center">
             <template #default="{ row }">
               <el-dropdown @command="(cmd: string) => handleUpdateStatus(row.id, cmd)">
                 <el-tag :type="getAssignmentStatusType(row.assignment_status)" class="clickable">
@@ -101,7 +101,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="Comments" min-width="200" align="left">
+          <el-table-column :label="t('task_assignment.detail.comments')" min-width="200" align="left">
             <template #default="{ row }">
               <span v-if="row.reviewer_comments">{{ row.reviewer_comments }}</span>
               <span v-else class="status-description">
@@ -110,7 +110,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column label="Actions" width="100" fixed="right" align="center">
+          <el-table-column :label="t('task_assignment.detail.actions')" width="100" fixed="right" align="center">
             <template #default="{ row }">
               <el-button
                 size="small"
@@ -118,7 +118,7 @@
                 link
                 @click="handleRemoveReviewer(row.reviewer)"
               >
-                Remove
+                {{ t('task_assignment.detail.remove') }}
               </el-button>
             </template>
           </el-table-column>
@@ -129,7 +129,7 @@
         <div v-if="review.ai_suggestions" class="ai-section">
           <div class="ai-header">
             <h3>
-              AI Review Result
+              {{ t('task_assignment.detail.ai_review_result') }}
               <el-tag v-if="review.ai_review_id" size="small" type="info" style="margin-left: 8px">
                 {{ review.ai_review_id }}
               </el-tag>
@@ -141,7 +141,7 @@
               @click="copyToClipboard(review.ai_review_id)"
             >
               <el-icon><CopyDocument /></el-icon>
-              Copy ID
+              {{ t('task_assignment.detail.copy_id') }}
             </el-button>
           </div>
           <el-alert
@@ -153,15 +153,15 @@
           />
           
           <div v-if="review.ai_suggestions.issues && review.ai_suggestions.issues.length > 0">
-            <h4>Issues Found ({{ review.ai_suggestions.issues.length }})</h4>
+            <h4>{{ t('task_assignment.detail.issues_found') }} ({{ review.ai_suggestions.issues.length }})</h4>
             <el-collapse>
               <el-collapse-item
                 v-for="(issue, index) in review.ai_suggestions.issues"
                 :key="index"
                 :title="`${issue.category} - ${issue.severity} (${issue.file}:${issue.line})`"
               >
-                <p><strong>Description:</strong> {{ issue.description }}</p>
-                <p v-if="issue.suggestion"><strong>Suggestion:</strong> {{ issue.suggestion }}</p>
+                <p><strong>{{ t('task_assignment.detail.description') }}:</strong> {{ issue.description }}</p>
+                <p v-if="issue.suggestion"><strong>{{ t('task_assignment.detail.suggestion') }}:</strong> {{ issue.suggestion }}</p>
                 <pre v-if="issue.code_snippet" class="code-snippet">{{ issue.code_snippet }}</pre>
               </el-collapse-item>
             </el-collapse>
@@ -172,21 +172,21 @@
         <el-divider />
         <div v-if="review.git_code_diff" class="diff-section">
           <div class="diff-header">
-            <h3>Code Diff</h3>
+            <h3>{{ t('task_assignment.detail.code_diff') }}</h3>
             <div class="view-toggle-buttons">
               <el-button
                 :type="outputFormat === 'line-by-line' ? 'primary' : 'default'"
                 size="small"
                 @click="outputFormat = 'line-by-line'"
               >
-                Line by Line
+                {{ t('task_assignment.detail.line_by_line') }}
               </el-button>
               <el-button
                 :type="outputFormat === 'side-by-side' ? 'primary' : 'default'"
                 size="small"
                 @click="outputFormat = 'side-by-side'"
               >
-                Side by Side
+                {{ t('task_assignment.detail.side_by_side') }}
               </el-button>
             </div>
           </div>
@@ -200,26 +200,26 @@
     </el-card>
 
     <!-- Assign Reviewer Dialog -->
-    <el-dialog v-model="assignDialogVisible" title="Assign Reviewer" width="640px">
+    <el-dialog v-model="assignDialogVisible" :title="t('task_assignment.detail.assign_reviewer_dialog.title')" width="640px">
       <el-form :model="assignForm" label-width="120px">
-        <el-form-item label="PR ID">
+        <el-form-item :label="t('task_assignment.detail.assign_reviewer_dialog.pr_id')">
           <el-input :value="review?.pull_request_id" disabled />
         </el-form-item>
-        <el-form-item label="Project / Repo">
+        <el-form-item :label="t('task_assignment.detail.assign_reviewer_dialog.project_repo')">
           <el-input :value="review ? `${review.project_key} / ${review.repository_slug}` : ''" disabled />
         </el-form-item>
-        <el-form-item label="PR User">
+        <el-form-item :label="t('task_assignment.detail.assign_reviewer_dialog.pr_user')">
           <el-input :value="getPullRequestAuthor()" disabled />
         </el-form-item>
-        <el-form-item label="Branches">
+        <el-form-item :label="t('task_assignment.detail.assign_reviewer_dialog.branches')">
           <el-input :value="review ? `${review.source_branch} -> ${review.target_branch}` : ''" disabled />
         </el-form-item>
-        <el-form-item label="PR Status">
+        <el-form-item :label="t('task_assignment.detail.assign_reviewer_dialog.pr_status')">
           <el-tag v-if="review" :type="getStatusType(review.pull_request_status)">
             {{ review.pull_request_status }}
           </el-tag>
         </el-form-item>
-        <el-form-item label="Reviewers">
+        <el-form-item :label="t('task_assignment.detail.assign_reviewer_dialog.reviewers_label')">
           <div class="current-reviewers">
             <el-tag
               v-for="assignedReviewer in review?.reviewers || []"
@@ -229,13 +229,13 @@
             >
               {{ assignedReviewer.reviewer_info?.display_name || assignedReviewer.reviewer }}
             </el-tag>
-            <span v-if="!review?.reviewers?.length" class="empty-reviewers">No reviewers assigned</span>
+            <span v-if="!review?.reviewers?.length" class="empty-reviewers">{{ t('task_assignment.detail.assign_reviewer_dialog.no_reviewers_assigned') }}</span>
           </div>
         </el-form-item>
-        <el-form-item label="Reviewer" required>
+        <el-form-item :label="t('task_assignment.detail.assign_reviewer_dialog.reviewer_select')" required>
           <el-select
             v-model="assignForm.reviewer"
-            placeholder="Select reviewer"
+            :placeholder="t('task_assignment.detail.assign_reviewer_dialog.select_reviewer_placeholder')"
             style="width: 100%"
             filterable
             :loading="loadingReviewers"
@@ -250,13 +250,13 @@
           </el-select>
         </el-form-item>
         <el-form-item v-if="!loadingReviewers && availableReviewers.length === 0" label="">
-          <span class="empty-reviewers">No available reviewers to assign</span>
+          <span class="empty-reviewers">{{ t('task_assignment.detail.assign_reviewer_dialog.no_available_reviewers') }}</span>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="assignDialogVisible = false">Cancel</el-button>
+        <el-button @click="assignDialogVisible = false">{{ t('task_assignment.detail.assign_reviewer_dialog.cancel') }}</el-button>
         <el-button type="primary" @click="submitAssignment" :loading="assigning">
-          Assign
+          {{ t('task_assignment.detail.assign_reviewer_dialog.assign') }}
         </el-button>
       </template>
     </el-dialog>

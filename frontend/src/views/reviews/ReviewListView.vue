@@ -4,8 +4,8 @@
       <template #header>
         <div class="card-header">
           <div class="header-title-group">
-            <h2>Code Reviews</h2>
-            <el-tag type="success" effect="dark" size="small" class="ai-badge">AI-Powered</el-tag>
+            <h2>{{ t('reviews.code_reviews') }}</h2>
+            <el-tag type="success" effect="dark" size="small" class="ai-badge">{{ t('reviews.ai_powered') }}</el-tag>
           </div>
           <div class="header-actions">
             <ExportMenu
@@ -15,7 +15,7 @@
             />
             <el-button @click="loadReviews">
               <el-icon><Refresh /></el-icon>
-              Refresh
+              {{ t('reviews.refresh') }}
             </el-button>
           </div>
         </div>
@@ -45,31 +45,31 @@
       <div v-if="selectedReviews.length > 0" class="bulk-actions-toolbar">
         <div class="selection-info">
           <el-icon><CircleCheck /></el-icon>
-          <span>{{ selectedReviews.length }} item{{ selectedReviews.length > 1 ? 's' : '' }} selected</span>
+          <span>{{ t('reviews.bulk_actions.selected_count', { count: selectedReviews.length, plural: selectedReviews.length > 1 ? 's' : '' }) }}</span>
         </div>
         <div class="bulk-actions">
           <el-button size="small" type="danger" @click="showBulkDeleteDialog">
             <el-icon><Delete /></el-icon>
-            Delete Selected
+            {{ t('reviews.bulk_actions.delete_selected') }}
           </el-button>
           <el-dropdown @command="handleBulkStatusChange">
             <el-button size="small" type="warning">
               <el-icon><Edit /></el-icon>
-              Change PR Status
+              {{ t('reviews.bulk_actions.change_pr_status') }}
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="open">Set to Open</el-dropdown-item>
-                <el-dropdown-item command="merged">Set to Merged</el-dropdown-item>
-                <el-dropdown-item command="closed">Set to Closed</el-dropdown-item>
-                <el-dropdown-item command="draft">Set to Draft</el-dropdown-item>
+                <el-dropdown-item command="open">{{ t('reviews.bulk_actions.set_to_open') }}</el-dropdown-item>
+                <el-dropdown-item command="merged">{{ t('reviews.bulk_actions.set_to_merged') }}</el-dropdown-item>
+                <el-dropdown-item command="closed">{{ t('reviews.bulk_actions.set_to_closed') }}</el-dropdown-item>
+                <el-dropdown-item command="draft">{{ t('reviews.bulk_actions.set_to_draft') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
           <el-button size="small" @click="clearSelection">
             <el-icon><Close /></el-icon>
-            Clear Selection
+            {{ t('reviews.bulk_actions.clear_selection') }}
           </el-button>
         </div>
       </div>
@@ -83,24 +83,24 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55" fixed="left" />
-        <el-table-column label="Seq#" width="80">
+        <el-table-column :label="t('reviews.seq_number')" width="80">
           <template #default="{ $index }">
             {{ (currentPage - 1) * pageSize + $index + 1 }}
           </template>
         </el-table-column>
         
         <!-- App Name -->
-        <el-table-column label="App Name" width="150">
+        <el-table-column :label="t('reviews.app_name')" width="150">
           <template #default="{ row }">
             <el-tag v-if="row.app_name && row.app_name !== 'Unknown'" type="primary" size="small">
               {{ row.app_name }}
             </el-tag>
-            <span v-else class="text-secondary">Unknown</span>
+            <span v-else class="text-secondary">{{ t('reviews.unknown') }}</span>
           </template>
         </el-table-column>
         
         <!-- PR Info Group -->
-        <el-table-column label="PR Info" min-width="200">
+        <el-table-column :label="t('reviews.pr_info')" min-width="200">
           <template #default="{ row }">
             <div class="pr-info-cell">
               <div class="pr-id">
@@ -131,7 +131,7 @@
         </el-table-column>
         
         <!-- Project/Repo -->
-        <el-table-column label="Project/Repo" width="180">
+        <el-table-column :label="t('scores.project_repo')" width="180">
           <template #default="{ row }">
             <div>
               <div><strong>{{ row.project_key }}</strong></div>
@@ -141,7 +141,7 @@
         </el-table-column>
         
         <!-- PR User -->
-        <el-table-column label="PR User" width="150">
+        <el-table-column :label="t('reviews.pr_user')" width="150">
           <template #default="{ row }">
             <div>
               <div>{{ row.pull_request_user_info?.display_name || row.pull_request_user }}</div>
@@ -151,7 +151,7 @@
         </el-table-column>
         
         <!-- Reviewer -->
-        <el-table-column label="Reviewer" width="200">
+        <el-table-column :label="t('reviews.reviewer')" width="200">
           <template #default="{ row }">
             <div>
               <div v-if="row.reviewer || row.reviewer_info?.display_name">
@@ -168,7 +168,7 @@
         </el-table-column>
         
         <!-- Status -->
-        <el-table-column prop="pull_request_status" label="PR Status" width="120">
+        <el-table-column prop="pull_request_status" :label="t('reviews.pr_status')" width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.pull_request_status)">
               {{ row.pull_request_status }}
@@ -177,38 +177,38 @@
         </el-table-column>
         
         <!-- Scores Summary -->
-        <el-table-column label="Scores" width="120">
+        <el-table-column :label="t('reviews.scores')" width="120">
           <template #default="{ row }">
             <div v-if="row.score_summary && row.score_summary.total_scores > 0">
               <div class="score-summary">
                 <span class="avg-score">{{ row.score_summary.max_score?.toFixed(1) || row.score_summary.average_score?.toFixed(1) }}</span>
                 <span class="score-count">({{ row.score_summary.total_scores }})</span>
-                <el-tag v-if="row.score_summary.max_score" size="small" type="warning" style="margin-left: 4px; font-size: 0.7rem;">max</el-tag>
+                <el-tag v-if="row.score_summary.max_score" size="small" type="warning" style="margin-left: 4px; font-size: 0.7rem;">{{ t('reviews.max_score_label') }}</el-tag>
               </div>
             </div>
-            <span v-else class="text-secondary">No scores</span>
+            <span v-else class="text-secondary">{{ t('reviews.no_scores') }}</span>
           </template>
         </el-table-column>
         
         <!-- Created Date -->
-        <el-table-column prop="created_date" label="Created" width="160">
+        <el-table-column prop="created_date" :label="t('reviews.created')" width="160">
           <template #default="{ row }">
             {{ formatDate(row.created_date || '') }}
           </template>
         </el-table-column>
         
         <!-- Updated Date -->
-        <el-table-column prop="updated_date" label="Updated" width="160">
+        <el-table-column prop="updated_date" :label="t('common.update')" width="160">
           <template #default="{ row }">
             {{ formatDate(row.updated_date || '') }}
           </template>
         </el-table-column>
         
         <!-- Actions -->
-        <el-table-column label="Actions" width="120" fixed="right">
+        <el-table-column :label="t('reviews.actions')" width="120" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" @click.stop="viewReview(row)">
-              View
+              {{ t('reviews.view') }}
             </el-button>
           </template>
         </el-table-column>
@@ -231,7 +231,7 @@
     <!-- Bulk Delete Confirmation Dialog -->
     <el-dialog
       v-model="showBulkDeleteDialogVisible"
-      title="Confirm Bulk Delete"
+      :title="t('common.confirm')"
       width="500px"
     >
       <el-alert
@@ -240,8 +240,7 @@
         style="margin-bottom: 16px"
       >
         <template #title>
-          Are you sure you want to delete {{ selectedReviews.length }} review{{ selectedReviews.length > 1 ? 's' : '' }}?
-          This action cannot be undone.
+          {{ t('reviews.bulk_delete_confirm', { count: selectedReviews.length }) }}
         </template>
       </el-alert>
       
@@ -301,6 +300,7 @@ import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
+import { useI18n } from 'vue-i18n'
 import FilterPopover from '@/components/common/FilterPopover.vue'
 import ExportMenu from '@/components/common/ExportMenu.vue'
 import { usePermission } from '@/composables/usePermission'
@@ -310,6 +310,7 @@ import type { AppInfo } from '@/api/projectRegistry'
 import { usersApi, type ReviewerUser } from '@/api/users'
 import { usePrUrl } from '@/composables/usePrUrl'
 
+const { t } = useI18n()
 const router = useRouter()
 const { hasPermission } = usePermission()
 const reviewNavigationStore = useReviewNavigationStore()

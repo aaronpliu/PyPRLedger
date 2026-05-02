@@ -4,13 +4,13 @@
       <template #header>
         <div class="card-header">
           <div class="header-title-group">
-            <h2>Task Assignment Management</h2>
-            <el-tag type="info">Review Admin Only</el-tag>
+            <h2>{{ t('task_assignment.management_title') }}</h2>
+            <el-tag type="info">{{ t('task_assignment.review_admin_only') }}</el-tag>
           </div>
           <div class="header-actions">
             <el-button @click="loadReviews">
               <el-icon><Refresh /></el-icon>
-              Refresh
+              {{ t('task_assignment.refresh') }}
             </el-button>
           </div>
         </div>
@@ -49,23 +49,23 @@
         :cell-style="getCellStyle"
         :row-class-name="getRowClassName"
       >
-        <el-table-column label="Seq#" width="80">
+        <el-table-column :label="t('task_assignment.seq_number')" width="80">
           <template #default="{ $index }">
             {{ (currentPage - 1) * pageSize + $index + 1 }}
           </template>
         </el-table-column>
         
         <!-- App Name -->
-        <el-table-column label="App Name" width="150">
+        <el-table-column :label="t('task_assignment.app_name')" width="150">
           <template #default="{ row }">
             <el-tag v-if="row.app_name && row.app_name !== 'Unknown'" type="primary" size="small">
               {{ row.app_name }}
             </el-tag>
-            <span v-else class="text-secondary">Unknown</span>
+            <span v-else class="text-secondary">{{ t('task_assignment.unknown') }}</span>
           </template>
         </el-table-column>
         
-        <el-table-column label="PR Info" min-width="220">
+        <el-table-column :label="t('task_assignment.pr_info')" min-width="220">
           <template #default="{ row }">
             <div class="pr-info" :title="`${row.pull_request_id} | ${row.project_key}/${row.repository_slug}`">
               <div class="pr-id">
@@ -86,7 +86,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Branches" min-width="220">
+        <el-table-column :label="t('task_assignment.branches')" min-width="220">
           <template #default="{ row }">
             <div class="branches" :title="`${row.source_branch} -> ${row.target_branch}`">
               <el-tag size="small">{{ row.source_branch }}</el-tag>
@@ -96,7 +96,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="PR User" min-width="180">
+        <el-table-column :label="t('task_assignment.pr_user')" min-width="180">
           <template #default="{ row }">
             <div class="pr-user" :title="row.pull_request_user_info?.display_name || row.pull_request_user || '-'">
               <div class="pr-user-name">{{ row.pull_request_user_info?.display_name || row.pull_request_user || '-' }}</div>
@@ -107,7 +107,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Reviewers" min-width="260">
+        <el-table-column :label="t('task_assignment.reviewers')" min-width="260">
           <template #default="{ row }">
             <div class="reviewers-list">
               <el-tooltip
@@ -132,13 +132,13 @@
                 link
                 @click="handleAssignReviewer(row)"
               >
-                + Assign
+                {{ t('task_assignment.assign_reviewer') }}
               </el-button>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column label="Progress" min-width="120">
+        <el-table-column :label="t('task_assignment.progress')" min-width="120">
           <template #default="{ row }">
             <div class="progress-info">
               <el-progress
@@ -153,7 +153,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="PR Status" min-width="120">
+        <el-table-column :label="t('task_assignment.status')" min-width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.pull_request_status)">
               {{ row.pull_request_status }}
@@ -169,7 +169,7 @@
               :class="{ active: sortState.prop === 'created_date' }"
               @click="toggleSort('created_date')"
             >
-              <span class="sort-header-label">Created</span>
+              <span class="sort-header-label">{{ t('task_assignment.created') }}</span>
               <div class="sort-header-icons">
                 <el-icon
                   class="sort-header-icon"
@@ -221,13 +221,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Actions" min-width="150" fixed="right">
+        <el-table-column :label="t('task_assignment.actions')" min-width="150" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" link @click="viewDetail(row.id)">
-              View
+              {{ t('task_assignment.view_details') }}
             </el-button>
             <el-button size="small" type="success" link @click="handleAssignReviewer(row)">
-              Assign
+              {{ t('task_assignment.assign_reviewer') }}
             </el-button>
           </template>
         </el-table-column>
