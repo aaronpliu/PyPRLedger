@@ -321,9 +321,6 @@
       top="5vh"
       class="score-dialog"
     >
-      <!-- Quick Score Buttons -->
-      <QuickScoreButtons @select="handleQuickScoreSelect" />
-      
       <!-- Score Range Guide -->
       <ScoreRangeGuide />
       
@@ -345,17 +342,41 @@
         
         <el-form-item label="Score" prop="score">
           <div class="score-input-container">
-            <el-slider 
-              v-model="scoreForm.score" 
-              :min="0" 
-              :max="10" 
-              :step="0.5"
-              :marks="{ 0: '0', 2: '2', 4: '4', 6: '6', 8: '8', 10: '10' }"
-              show-input
-              style="width: 100%"
-            />
-            <div :class="['score-value-display', getScoreColorClass(scoreForm.score)]">{{ scoreForm.score.toFixed(1) }}</div>
-
+            <!-- Visual Score Bar -->
+            <div class="score-visual-bar">
+              <div class="score-track"></div>
+              <div 
+                class="score-indicator" 
+                :style="{ left: `${(scoreForm.score / 10) * 100}%` }"
+                :class="getScoreColorClass(scoreForm.score)"
+              >
+                {{ scoreForm.score.toFixed(1) }}
+              </div>
+              <div class="score-labels">
+                <span>0</span>
+                <span>5</span>
+                <span>10</span>
+              </div>
+            </div>
+            
+            <!-- Quick Buttons -->
+            <QuickScoreButtons @select="handleQuickScoreSelect" />
+            
+            <!-- Manual Input -->
+            <div class="score-input-wrapper">
+              <el-input-number 
+                v-model="scoreForm.score" 
+                :min="0" 
+                :max="10" 
+                :step="0.5"
+                :precision="1"
+                controls-position="right"
+                style="width: 100%"
+              />
+            </div>
+          </div>
+          <div class="form-item-hint">
+            Click quick buttons or adjust manually (0-10, step 0.5)
           </div>
         </el-form-item>
         
@@ -383,6 +404,34 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- Floating Navigation Buttons -->
+    <div 
+      v-if="reviewNavigationStore.items.length > 1"
+      class="floating-navigation"
+    >
+      <!-- Previous Button (Left Side) -->
+      <transition name="fade-slide">
+        <div 
+          v-if="canGoToPreviousPage && !navigatingPage"
+          class="floating-nav-btn floating-nav-prev"
+          @click="goToPreviousReview"
+        >
+          <el-icon :size="20"><ArrowLeft /></el-icon>
+        </div>
+      </transition>
+
+      <!-- Next Button (Right Side) -->
+      <transition name="fade-slide">
+        <div 
+          v-if="canGoToNextPage && !navigatingPage"
+          class="floating-nav-btn floating-nav-next"
+          @click="goToNextReview"
+        >
+          <el-icon :size="20"><ArrowRight /></el-icon>
+        </div>
+      </transition>
+    </div>
   </div>
 </template>
 
@@ -423,6 +472,7 @@ const scoreFormRef = ref<FormInstance>()
 const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
 const isInfoExpanded = ref(false)
 const navigatingPage = ref(false)
+const showFloatingNav = ref(false)
 
 // Detect current theme
 const isDarkTheme = computed(() => {
@@ -1523,47 +1573,74 @@ watch(
   width: 100%;
 }
 
-.score-value-display {
-  text-align: center;
-  font-size: 2rem;
-  font-weight: 800;
-  margin-top: 12px;
-  transition: color 0.3s ease;
+/* Visual Score Bar Styles */
+.score-visual-bar {
+  position: relative;
+  height: 40px;
+  margin-bottom: 16px;
+  user-select: none;
 }
 
-.score-value-display.score-excellent {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.score-track {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  right: 10px;
+  height: 8px;
+  background: linear-gradient(to right, 
+    #ef4444 0%, 
+    #ef4444 25%,
+    #f97316 30%, 
+    #f59e0b 45%,
+    #3b82f6 65%, 
+    #10b981 85%,
+    #10b981 100%
+  );
+  border-radius: 4px;
+  transform: translateY(-50%);
+  opacity: 0.6;
 }
 
-.score-value-display.score-good {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.score-indicator {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid currentColor;
+  font-weight: bold;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: left 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+  z-index: 1;
 }
 
-.score-value-display.score-acceptable {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+[data-theme='dark'] .score-indicator {
+  background: #1e293b;
+  color: white;
 }
 
-.score-value-display.score-needs-improvement {
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
+.score-indicator.score-excellent { color: #10b981; border-color: #10b981; }
+.score-indicator.score-good { color: #3b82f6; border-color: #3b82f6; }
+.score-indicator.score-acceptable { color: #f59e0b; border-color: #f59e0b; }
+.score-indicator.score-needs-improvement { color: #f97316; border-color: #f97316; }
+.score-indicator.score-poor { color: #ef4444; border-color: #ef4444; }
 
-.score-value-display.score-poor {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.score-labels {
+  position: absolute;
+  top: 24px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--el-text-color-secondary);
+  padding: 0 2px;
 }
 
 /* AI Review ID Styles */
@@ -1654,213 +1731,6 @@ watch(
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* MdEditor custom styles */
-:deep(.md-editor) {
-  border-radius: 6px;
-  overflow: hidden;
-  border: 1px solid var(--el-border-color);
-  transition: all 0.3s ease;
-}
-
-/* Light theme customization */
-:deep(.md-editor) {
-  --md-bk-color: #ffffff;
-  --md-color: var(--el-text-color-primary);
-  --md-bk-color-outstand: #f8fafc;
-  --md-border-color: var(--el-border-color);
-  --md-scrollbar-bg-color: #f1f5f9;
-  --md-scrollbar-thumb-color: #cbd5e1;
-}
-
-/* Dark theme customization */
-[data-theme='dark'] :deep(.md-editor) {
-  --md-bk-color: #1e293b !important;
-  --md-color: #cbd5e1 !important;
-  --md-bk-color-outstand: #0f172a !important;
-  --md-border-color: #334155 !important;
-  --md-scrollbar-bg-color: #0f172a !important;
-  --md-scrollbar-thumb-color: #475569 !important;
-}
-
-/* Toolbar styling */
-:deep(.md-editor-toolbar) {
-  background: var(--el-fill-color-light);
-  border-bottom: 1px solid var(--el-border-color);
-  transition: all 0.3s ease;
-}
-
-[data-theme='dark'] :deep(.md-editor-toolbar) {
-  background: #1e293b;
-  border-bottom-color: #334155;
-}
-
-/* Toolbar button hover */
-:deep(.md-editor-toolbar-item:hover) {
-  background: var(--el-fill-color);
-  color: var(--el-text-color-primary);
-}
-
-[data-theme='dark'] :deep(.md-editor-toolbar-item:hover) {
-  background: #334155;
-  color: #cbd5e1;
-}
-
-/* Active toolbar button */
-:deep(.md-editor-toolbar-item.active) {
-  color: #3b82f6;
-}
-
-[data-theme='dark'] :deep(.md-editor-toolbar-item.active) {
-  color: #60a5fa;
-}
-
-/* Editor content area - textarea */
-:deep(.md-editor-content) {
-  background: white;
-  transition: background 0.3s ease;
-}
-
-[data-theme='dark'] :deep(.md-editor-content) {
-  background: #1e293b;
-}
-
-/* Textarea itself */
-:deep(.md-editor-textarea) {
-  background: white;
-  color: var(--el-text-color-primary);
-}
-
-[data-theme='dark'] :deep(.md-editor-textarea) {
-  background: #1e293b !important;
-  color: #cbd5e1 !important;
-}
-
-/* Preview area */
-:deep(.md-editor-preview) {
-  background: white;
-  color: var(--el-text-color-primary);
-  transition: all 0.3s ease;
-}
-
-[data-theme='dark'] :deep(.md-editor-preview) {
-  background: #1e293b !important;
-  color: #cbd5e1 !important;
-}
-
-/* Code block styling */
-:deep(.md-editor-preview pre) {
-  background: #f1f5f9;
-  border: 1px solid var(--el-border-color);
-  transition: all 0.3s ease;
-}
-
-[data-theme='dark'] :deep(.md-editor-preview pre) {
-  background: #0f172a;
-  border-color: #334155;
-}
-
-/* Inline code */
-:deep(.md-editor-preview code) {
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-primary);
-  transition: all 0.3s ease;
-}
-
-[data-theme='dark'] :deep(.md-editor-preview code) {
-  background: #334155;
-  color: #cbd5e1;
-}
-
-/* Links */
-:deep(.md-editor-preview a) {
-  color: #3b82f6;
-  transition: color 0.2s ease;
-}
-
-:deep(.md-editor-preview a:hover) {
-  color: #2563eb;
-}
-
-[data-theme='dark'] :deep(.md-editor-preview a) {
-  color: #60a5fa;
-}
-
-[data-theme='dark'] :deep(.md-editor-preview a:hover) {
-  color: #93c5fd;
-}
-
-/* Blockquote */
-:deep(.md-editor-preview blockquote) {
-  border-left-color: #3b82f6;
-  background: var(--el-fill-color-lighter);
-  color: var(--el-text-color-regular);
-  transition: all 0.3s ease;
-}
-
-[data-theme='dark'] :deep(.md-editor-preview blockquote) {
-  background: #0f172a;
-  border-left-color: #60a5fa;
-  color: #94a3b8;
-}
-
-/* Table styling */
-:deep(.md-editor-preview table) {
-  border-color: var(--el-border-color);
-}
-
-:deep(.md-editor-preview table th),
-:deep(.md-editor-preview table td) {
-  border-color: var(--el-border-color);
-  transition: all 0.3s ease;
-}
-
-[data-theme='dark'] :deep(.md-editor-preview table th),
-[data-theme='dark'] :deep(.md-editor-preview table td) {
-  border-color: #334155;
-  background: #0f172a;
-}
-
-[data-theme='dark'] :deep(.md-editor-preview table th) {
-  background: #1e293b;
-}
-
-/* Input area placeholder */
-:deep(.md-editor-textarea::placeholder) {
-  color: var(--el-text-color-placeholder);
-}
-
-[data-theme='dark'] :deep(.md-editor-textarea::placeholder) {
-  color: #64748b;
-}
-
-/* Ensure all editor child elements inherit correct colors */
-[data-theme='dark'] :deep(.md-editor-input) {
-  background: #1e293b;
-  color: #cbd5e1;
-}
-
-/* CodeMirror or other editor internals */
-[data-theme='dark'] :deep(.cm-editor) {
-  background: #1e293b;
-  color: #cbd5e1;
-}
-
-[data-theme='dark'] :deep(.cm-content) {
-  background: #1e293b;
-  color: #cbd5e1;
-}
-
-[data-theme='dark'] :deep(.cm-gutters) {
-  background: #0f172a;
-  border-right-color: #334155;
-  color: #64748b;
-}
-
-[data-theme='dark'] :deep(.cm-activeLineGutter) {
-  background: #334155;
-  color: #cbd5e1;
-}
-
 .editor-hint {
   padding: 6px 12px;
   background: var(--el-fill-color-lighter);
@@ -1877,32 +1747,120 @@ watch(
   padding: 20px;
 }
 
+/* Visual Score Bar */
+.score-visual-bar {
+  position: relative;
+  height: 60px;
+  margin-bottom: 16px;
+  padding: 0 10px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  overflow: visible;
+}
+
+.score-track {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  right: 10px;
+  height: 8px;
+  background: linear-gradient(to right, 
+    #ef4444 0%, 
+    #ef4444 25%,
+    #f97316 30%, 
+    #f59e0b 45%,
+    #3b82f6 65%, 
+    #10b981 85%,
+    #10b981 100%
+  );
+  border-radius: 4px;
+  transform: translateY(-50%);
+  opacity: 0.6;
+}
+
+.score-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 48px;
+  height: 32px;
+  line-height: 32px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: left 0.3s ease;
+  z-index: 10;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+/* Color classes for indicator - matches existing getScoreColorClass and ScoreRangeGuide */
+.score-indicator.score-excellent {
+  background: #10b981;
+  color: white;
+}
+
+.score-indicator.score-good {
+  background: #3b82f6;
+  color: white;
+}
+
+.score-indicator.score-acceptable {
+  background: #f59e0b;
+  color: white;
+}
+
+.score-indicator.score-needs-improvement {
+  background: #f97316;
+  color: white;
+}
+
+.score-indicator.score-poor {
+  background: #ef4444;
+  color: white;
+}
+
+.score-labels {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--el-text-color-secondary);
+  padding: 0 5px;
+}
+
+/* Score input wrapper */
+.score-input-wrapper {
+  width: 100%;
+  margin-top: 12px;
+}
+
+/* Style the input number for better UX */
+.score-dialog :deep(.el-input-number) {
+  width: 100%;
+}
+
+.score-dialog :deep(.el-input-number .el-input__inner) {
+  text-align: left;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
 .score-md-editor {
   height: 450px;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid var(--el-border-color);
 }
 
 /* Ensure editor content area scrolls properly */
 .score-md-editor :deep(.md-editor-content) {
   max-height: 380px;
   overflow-y: auto;
-}
-
-/* Dark theme scrollbar for editor */
-[data-theme='dark'] .score-md-editor :deep(.md-editor-content)::-webkit-scrollbar-thumb {
-  background: #475569;
-}
-
-[data-theme='dark'] .score-md-editor :deep(.md-editor-content)::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
-}
-
-/* MdEditor global dark mode overrides */
-[data-theme='dark'] .md-editor {
-  --md-bk-color: #1e293b !important;
-  --md-color: #cbd5e1 !important;
 }
 
 /* Reviewer cell with badge */
@@ -1927,6 +1885,112 @@ watch(
 @media (max-width: 768px) {
   .scores-card {
     margin-bottom: 30px;
+  }
+}
+
+/* Floating Navigation Styles */
+.floating-navigation {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.floating-nav-btn {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--el-color-primary);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  pointer-events: auto;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.floating-nav-btn:hover {
+  background: var(--el-color-primary-light-3);
+  transform: translateY(-50%) scale(1.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.floating-nav-prev {
+  left: 5px;
+}
+
+.floating-nav-next {
+  right: 5px;
+}
+
+/* Show buttons when hovering near the edges (within 50px from edge) */
+.review-detail:hover .floating-nav-prev,
+.floating-navigation:hover .floating-nav-prev {
+  opacity: 1;
+  visibility: visible;
+}
+
+.review-detail:hover .floating-nav-next,
+.floating-navigation:hover .floating-nav-next {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Transitions */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-50%) translateX(-10px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-50%) translateX(-10px);
+}
+
+.floating-nav-next.fade-slide-enter-from,
+.floating-nav-next.fade-slide-leave-to {
+  transform: translateY(-50%) translateX(10px);
+}
+
+/* Dark theme adjustments */
+[data-theme='dark'] .floating-nav-btn {
+  background: var(--el-color-primary-dark-2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='dark'] .floating-nav-btn:hover {
+  background: var(--el-color-primary-light-5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .floating-nav-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .floating-nav-prev {
+    left: 8px;
+  }
+
+  .floating-nav-next {
+    right: 8px;
   }
 }
 </style>

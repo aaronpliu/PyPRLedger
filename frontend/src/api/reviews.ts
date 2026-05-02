@@ -126,7 +126,11 @@ export interface ReviewAssignmentRequest {
 // NOTE: Reviews are created by Bitbucket webhook, not from UI
 export const reviewsApi = {
   // Get all reviews with pagination (using page/page_size to match backend API)
-  getReviews(params: { page?: number; page_size?: number }): Promise<{ total: number; items: Review[]; page: number; page_size: number }> {
+  getReviews(params: { 
+    page?: number
+    page_size?: number
+    project_key?: string
+  }): Promise<{ total: number; items: Review[]; page: number; page_size: number }> {
     return request.get('/reviews', { params })
   },
 

@@ -38,7 +38,7 @@ async def list_reviews(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     project_key: str | None = Query(None, description="Filter by project key"),
     reviewer: str | None = Query(None, description="Filter by reviewer"),
-    status: str | None = Query(None, description="Filter by PR status"),
+    pr_status: str | None = Query(None, description="Filter by PR status", alias="status"),
     app_names: str | None = Query(
         None,
         description="Filter by application names (comma-separated for multiple apps, e.g., 'member,tv,football')",
@@ -73,7 +73,7 @@ async def list_reviews(
             page_size=page_size,
             project_key=project_key,
             reviewer=reviewer,
-            status=status,
+            status=pr_status,
             app_names=app_names_list,
             pull_request_user=pull_request_user,
         )

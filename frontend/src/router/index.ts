@@ -16,6 +16,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/auth/RegisterView.vue'),
     meta: { requiresAuth: false },
   },
+  {
+    path: '/force-password-change',
+    name: 'ForcePasswordChange',
+    component: () => import('@/views/auth/ForcePasswordChangeView.vue'),
+    meta: { requiresAuth: true },
+  },
 
   // Main app routes
   {
@@ -142,6 +148,24 @@ router.beforeEach(async (to, _from) => {
 
   if (!authStore.isInitialized) {
     await authStore.initAuth()
+  }
+
+  // Check if user must change password (except when already on the force password change page)
+  if (
+    authStore.isAuthenticated &&
+    authStore.user?.must_change_password &&
+    to.path !== '/force-password-change'
+  ) {
+    return '/force-password-change'
+  }
+
+  // Prevent access to other pages if must_change_password is true
+  if (
+    authStore.isAuthenticated &&
+    authStore.user?.must_change_password &&
+    to.path === '/force-password-change'
+  ) {
+    return true // Allow access to force password change page
   }
 
   // Check if route requires authentication

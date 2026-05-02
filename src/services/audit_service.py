@@ -12,6 +12,7 @@ from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.audit_log import AuditLog
+from src.utils.timezone import utc_to_local
 
 
 if TYPE_CHECKING:
@@ -274,7 +275,7 @@ class AuditService:
                     log.response_status or "",
                     log.ip_address or "",
                     log.execution_time_ms or "",
-                    log.created_at.isoformat(),
+                    utc_to_local(log.created_at).isoformat(),
                     log.error_message or "",
                 ]
             )
@@ -299,7 +300,7 @@ class AuditService:
                 "response_status": log.response_status,
                 "execution_time_ms": log.execution_time_ms,
                 "error_message": log.error_message,
-                "created_at": log.created_at.isoformat(),
+                "created_at": utc_to_local(log.created_at).isoformat(),
             }
             for log in logs
         ]

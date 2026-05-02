@@ -1,6 +1,6 @@
 import logging
 import traceback
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
@@ -26,6 +26,7 @@ from src.schemas.pull_request import (
     ReviewListResponse,
     ReviewResponse,
     ReviewScoreCreate,
+    ReviewScoreListResponse,
     ReviewScoreResponse,
     ReviewScoreSummary,
     ReviewStats,
@@ -36,6 +37,7 @@ from src.services.rbac_service import RBACService
 from src.services.review_score_service import ReviewScoreService
 from src.services.review_service import ReviewService
 from src.utils.metrics import OperationTimer, metrics
+from src.utils.timezone import get_current_time
 
 
 logger = logging.getLogger(__name__)
@@ -148,7 +150,7 @@ async def get_reviewer_activity_trends(
     """
     try:
         # Calculate date range
-        end_date = datetime.now(UTC)
+        end_date = get_current_time()
         start_date = (
             end_date.replace(day=end_date.day - days)
             if end_date.day > days
@@ -267,7 +269,7 @@ async def get_score_trends(
         from src.models.pull_request import PullRequestScore
 
         # Calculate date range
-        end_date = datetime.now(UTC)
+        end_date = get_current_time()
         start_date = (
             end_date.replace(day=end_date.day - days)
             if end_date.day > days
@@ -355,7 +357,7 @@ async def get_project_repo_activity_trends(
     """
     try:
         # Calculate date range
-        end_date = datetime.now(UTC)
+        end_date = get_current_time()
         start_date = (
             end_date.replace(day=end_date.day - days)
             if end_date.day > days
@@ -482,7 +484,7 @@ async def get_good_suggestions_trends(
         from src.models.pull_request import PullRequestScore
 
         # Calculate date range
-        end_date = datetime.now(UTC)
+        end_date = get_current_time()
         start_date = (
             end_date.replace(day=end_date.day - days)
             if end_date.day > days
@@ -670,6 +672,7 @@ async def list_reviews(
             git_username = await _get_git_username(current_user.id, db)
 
             if git_username:
+                # Use visible_to_username to show both assigned reviews AND self-raised PRs
                 filters.visible_to_username = git_username
                 logger.info(
                     f"Regular user {current_user.username} filtered by visible_to={git_username}"
@@ -706,38 +709,6 @@ async def list_reviews(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to list reviews"},
-        )
-
-
-@router.get("/statistics", response_model=ReviewStats)
-async def get_review_statistics(
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    review_service: Annotated[ReviewService, Depends(get_review_service)],
-    project_key: str | None = Query(
-        None, min_length=1, max_length=32, description="Filter statistics by project key"
-    ),
-) -> ReviewStats:
-    """
-    Get pull request review statistics
-
-    Args:
-        project_key: Optional project key to filter statistics
-        db: Database session
-        review_service: Review service instance
-
-    Returns:
-        ReviewStats: Review statistics
-    """
-    try:
-        stats = await review_service.get_review_statistics(project_key, db)
-        return stats
-    except Exception:
-        metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/reviews/statistics"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get review statistics"},
         )
 
 
@@ -1016,6 +987,72 @@ async def update_review_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to update review status"},
+        )
+
+
+@router.get("/statistics", response_model=ReviewStats)
+async def get_review_statistics(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    project_key: str | None = Query(
+        None, min_length=1, max_length=32, description="Filter statistics by project key"
+    ),
+) -> ReviewStats:
+    """
+    Get pull request review statistics for current user
+
+    Statistics are filtered to show only data relevant to the current logged-in user:
+    - Reviews where user is the reviewer (assigned reviews)
+    - Scores given by the user
+    - PRs raised by the user (self-raised)
+
+    Args:
+        current_user: Current authenticated user
+        project_key: Optional project key to filter statistics
+        db: Database session
+        review_service: Review service instance
+
+    Returns:
+        ReviewStats: User-specific review statistics
+    """
+    try:
+        # Get the git username for the current user
+        git_username = await _get_git_username(current_user.id, db)
+
+        logger.info(
+            f"Getting review statistics for user: {current_user.username}, git_username: {git_username}"
+        )
+
+        if not git_username:
+            # If no linked git user, return empty stats
+            logger.warning(f"User {current_user.username} has no linked Bitbucket account")
+            return ReviewStats(
+                total_reviews=0,
+                open_reviews=0,
+                merged_reviews=0,
+                closed_reviews=0,
+                average_score=0.0,
+                reviews_today=0,
+                reviews_this_week=0,
+                reviews_this_month=0,
+            )
+
+        stats = await review_service.get_review_statistics(
+            project_key=project_key, db=db, reviewer_username=git_username
+        )
+        logger.info(
+            f"Statistics for {git_username}: total={stats.total_reviews}, avg_score={stats.average_score}"
+        )
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get review statistics: {str(e)}", exc_info=True)
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/reviews/statistics"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get review statistics"},
         )
 
 
@@ -1479,6 +1516,19 @@ async def upsert_score(
             include_details=True,
         )
 
+        # Invalidate stats cache for the reviewer
+        try:
+            from src.utils.redis import get_redis_client
+
+            redis_client = get_redis_client()
+            # Invalidate both global and project-specific stats caches
+            await redis_client.delete(f"stats:reviews:all:{git_username}")
+            if score_data.project_key:
+                await redis_client.delete(f"stats:reviews:{score_data.project_key}:{git_username}")
+            logger.info(f"Invalidated stats cache for reviewer {git_username}")
+        except Exception as e:
+            logger.warning(f"Failed to invalidate stats cache: {e}")
+
         # Return the Pydantic model directly - FastAPI will serialize it according to response_model
         # Note: Using fixed 200 OK status code as per response_model declaration
         return score
@@ -1609,6 +1659,94 @@ async def get_score_summary(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get score summary"},
+        )
+
+
+@router.get("/scores/list", response_model=ReviewScoreListResponse)
+async def list_scores(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
+    score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
+    reviewer: str | None = Query(None, description="Filter by reviewer username"),
+    project_key: str | None = Query(None, description="Filter by project key"),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
+) -> ReviewScoreListResponse:
+    """
+    List all scores with pagination and filtering
+
+    Access Control:
+    - review_admin: Can view ALL scores
+    - reviewer: Can only view their own scores (reviewer parameter forced to current user)
+
+    Args:
+        current_user: Current authenticated user
+        db: Database session
+        score_service: Review score service instance
+        reviewer: Filter by reviewer username (optional, restricted for non-admins)
+        project_key: Filter by project key (optional)
+        page: Page number (1-indexed)
+        page_size: Number of items per page (max 100)
+
+    Returns:
+        ReviewScoreListResponse: Paginated list of scores
+
+    Raises:
+        HTTPException: If an error occurs while fetching scores
+    """
+    try:
+        # Enforce access control
+        effective_reviewer = reviewer
+
+        # Check if user has review_admin role (by checking 'assign' permission)
+        rbac_service = RBACService(db)
+        is_review_admin = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="assign",
+            resource_type="reviews",
+        )
+
+        if not is_review_admin:
+            # Non-admin users can only see their own scores
+            effective_reviewer = current_user.username
+
+            # If they tried to filter by another reviewer, deny access
+            if reviewer and reviewer != current_user.username:
+                metrics.increment_error(
+                    error_type="FORBIDDEN",
+                    endpoint="GET /api/v1/reviews/scores/list",
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You can only view your own scores",
+                    },
+                )
+
+        # Fetch scores with pagination
+        result = await score_service.list_all_scores(
+            db=db,
+            reviewer=effective_reviewer,
+            project_key=project_key,
+            page=page,
+            page_size=page_size,
+        )
+
+        return ReviewScoreListResponse(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(f"Failed to list scores: {str(e)}\n{error_traceback}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint="GET /api/v1/reviews/scores/list",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to list scores"},
         )
 
 
@@ -1953,7 +2091,7 @@ async def assign_review_task(
         resource_type="reviews",
     )
 
-    # Get the Git username from the associated User record
+    # Get the git username for the current user
     git_username = await _get_git_username(current_user.id, db)
 
     if not git_username:
@@ -2012,7 +2150,7 @@ async def assign_review_task(
 
     if existing_review:
         existing_review.pull_request_user = assignment_data.pull_request_user
-        existing_review.updated_date = datetime.now(UTC)
+        existing_review.updated_date = get_current_time()
 
         if assignment_data.pull_request_commit_id:
             existing_review.pull_request_commit_id = assignment_data.pull_request_commit_id
@@ -2025,7 +2163,7 @@ async def assign_review_task(
             review_base_id=existing_review.id,
             reviewer=assignment_data.assignee_username,
             assigned_by=git_username,
-            assigned_date=datetime.now(UTC),
+            assigned_date=get_current_time(),
             assignment_status="assigned",
             reviewer_comments=assignment_data.reviewer_comments,
         )
@@ -2076,7 +2214,7 @@ async def assign_review_task(
         assignment = result.scalars().first()
         if assignment:
             assignment.assigned_by = git_username
-            assignment.assigned_date = datetime.now(UTC)
+            assignment.assigned_date = get_current_time()
             assignment.assignment_status = "assigned"
             await db.flush()
 

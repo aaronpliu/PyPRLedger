@@ -94,18 +94,27 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
+
         <el-table-column label="Actions" width="200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" @click="viewRoles(row)">
               Roles
             </el-button>
-            <el-button
-              size="small"
-              :type="row.is_active ? 'warning' : 'success'"
-              @click="toggleUserStatus(row)"
-            >
-              {{ row.is_active ? 'Deactivate' : 'Activate' }}
-            </el-button>
+            <el-dropdown trigger="click" @command="(command: string) => handleAction(command, row)">
+              <el-button size="small">
+                More<el-icon class="el-icon--right"><arrow-down /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item :command="'toggle'">
+                    {{ row.is_active ? 'Deactivate' : 'Activate' }}
+                  </el-dropdown-item>
+                  <el-dropdown-item :command="'reset'" divided>
+                    Reset Password
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
@@ -222,16 +231,71 @@
         </el-form>
       </div>
     </el-dialog>
+
+    <!-- Password Reset Dialog -->
+    <el-dialog v-model="showResetPasswordDialogVisible" title="Reset User Password" width="500px">
+      <div v-if="selectedUserForReset">
+        <p style="margin-bottom: 16px;">
+          Reset password for user: <strong>{{ selectedUserForReset.username }}</strong>
+        </p>
+        
+        <el-form :model="resetPasswordForm" :rules="resetPasswordRules" ref="resetPasswordFormRef" label-width="140px">
+          <el-form-item label="New Password" prop="new_password">
+            <el-input 
+              v-model="resetPasswordForm.new_password" 
+              type="password" 
+              placeholder="Enter new initial password" 
+              show-password 
+            />
+          </el-form-item>
+          
+          <el-form-item label="Confirm Password" prop="confirm_password">
+            <el-input 
+              v-model="resetPasswordForm.confirm_password" 
+              type="password" 
+              placeholder="Confirm new password" 
+              show-password 
+            />
+          </el-form-item>
+          
+          <el-form-item label="Force Change">
+            <el-checkbox v-model="resetPasswordForm.force_change">
+              Require user to change password on next login
+            </el-checkbox>
+          </el-form-item>
+        </el-form>
+        
+        <el-alert
+          title="Important"
+          type="warning"
+          :closable="false"
+          style="margin-top: 16px;"
+        >
+          <p>Please securely share this initial password with the user.</p>
+          <p v-if="resetPasswordForm.force_change">The user will be required to change it upon their next login.</p>
+        </el-alert>
+      </div>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showResetPasswordDialogVisible = false">Cancel</el-button>
+          <el-button type="primary" :loading="resettingPassword" @click="handleResetPassword">
+            Reset Password
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
-import { Plus, Search, Share } from '@element-plus/icons-vue'
+import { Plus, Search, Share, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
+import { authApi } from '@/api/auth'
 import { rbacApi } from '@/api/rbac'
 import { usersApi } from '@/api/users'
 import type { ResourceType, Role, RoleAssignment } from '@/types'
@@ -262,6 +326,17 @@ const roleForm = reactive({
   resource_id: '',
 })
 
+// Password reset state
+const showResetPasswordDialogVisible = ref(false)
+const selectedUserForReset = ref<any>(null)
+const resettingPassword = ref(false)
+const resetPasswordFormRef = ref<FormInstance>()
+const resetPasswordForm = reactive({
+  new_password: '',
+  confirm_password: '',
+  force_change: true,
+})
+
 const createForm = reactive({
   username: '',
   email: '',
@@ -283,11 +358,21 @@ const validatePass = (rule: any, value: string, callback: any) => {
 const validatePass2 = (rule: any, value: string, callback: any) => {
   if (value === '') {
     callback(new Error('Please input password again'))
-  } else if (value !== createForm.password) {
+  } else if (value !== resetPasswordForm.new_password) {
     callback(new Error("Two inputs don't match!"))
   } else {
     callback()
   }
+}
+
+const resetPasswordRules: FormRules = {
+  new_password: [
+    { required: true, message: 'Please input new password', trigger: 'blur' },
+    { min: 8, message: 'Password must be at least 8 characters', trigger: 'blur' },
+  ],
+  confirm_password: [
+    { validator: validatePass2, trigger: 'blur' },
+  ],
 }
 
 const createRules: FormRules = {
@@ -394,6 +479,14 @@ const handleCreate = async () => {
       }
     }
   })
+}
+
+const handleAction = async (command: string, user: any) => {
+  if (command === 'toggle') {
+    await toggleUserStatus(user)
+  } else if (command === 'reset') {
+    showResetPasswordDialogHandler(user)
+  }
 }
 
 const toggleUserStatus = async (user: any) => {
@@ -509,6 +602,44 @@ watch(showRoleDialog, (visible) => {
     roleForm.resource_id = ''
   }
 })
+
+// Password reset functions
+const showResetPasswordDialogHandler = (user: any) => {
+  selectedUserForReset.value = user
+  showResetPasswordDialogVisible.value = true
+  // Reset form
+  resetPasswordForm.new_password = ''
+  resetPasswordForm.confirm_password = ''
+  resetPasswordForm.force_change = true
+}
+
+const handleResetPassword = async () => {
+  if (!resetPasswordFormRef.value || !selectedUserForReset.value) return
+  
+  await resetPasswordFormRef.value.validate(async (valid) => {
+    if (valid) {
+      resettingPassword.value = true
+      try {
+        await authApi.adminResetPassword(selectedUserForReset.value.id, {
+          new_password: resetPasswordForm.new_password,
+          force_change: resetPasswordForm.force_change,
+        })
+        
+        ElMessage.success('Password reset successfully')
+        showResetPasswordDialogVisible.value = false
+        
+        // Clear sensitive data
+        resetPasswordForm.new_password = ''
+        resetPasswordForm.confirm_password = ''
+      } catch (error: any) {
+        console.error('Failed to reset password:', error)
+        ElMessage.error(error.response?.data?.detail || 'Failed to reset password')
+      } finally {
+        resettingPassword.value = false
+      }
+    }
+  })
+}
 
 onMounted(() => {
   loadUsers()

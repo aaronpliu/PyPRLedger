@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from src.core.database import Base
+from src.utils.timezone import get_current_time, utc_to_local
 
 
 if TYPE_CHECKING:
@@ -92,9 +93,9 @@ class AuditLog(Base):
 
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
+        default=get_current_time,
         index=True,
     )
 
@@ -121,5 +122,5 @@ class AuditLog(Base):
             "response_status": self.response_status,
             "execution_time_ms": self.execution_time_ms,
             "error_message": self.error_message,
-            "created_at": self.created_at.isoformat(),
+            "created_at": utc_to_local(self.created_at).isoformat(),
         }

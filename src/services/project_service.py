@@ -1,6 +1,5 @@
 import json
 import logging
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import and_, desc, func, or_, select
@@ -23,6 +22,7 @@ from src.schemas.project import (
 )
 from src.utils.metrics import MetricsCollector
 from src.utils.redis import get_redis_client
+from src.utils.timezone import get_current_time
 
 
 logger = logging.getLogger(__name__)
@@ -875,7 +875,7 @@ class ProjectService:
             List[Dict[str, Any]]: List of projects with review counts
         """
         # Calculate date threshold
-        date_threshold = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        date_threshold = get_current_time().replace(hour=0, minute=0, second=0, microsecond=0)
         date_threshold = (
             date_threshold.replace(day=date_threshold.day - days)
             if date_threshold.day > days
@@ -926,7 +926,7 @@ class ProjectService:
             List[Dict[str, Any]]: List of projects with active reviewer counts
         """
         # Calculate date threshold
-        date_threshold = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        date_threshold = get_current_time().replace(hour=0, minute=0, second=0, microsecond=0)
         date_threshold = (
             date_threshold.replace(day=date_threshold.day - days)
             if date_threshold.day > days

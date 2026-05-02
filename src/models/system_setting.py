@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.database import Base
+from src.utils.timezone import get_current_time
 
 
 class SystemSetting(Base):
@@ -49,14 +50,14 @@ class SystemSetting(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
+        default=get_current_time,
         nullable=False,
         comment="Timestamp when the setting was first created",
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=get_current_time,
+        onupdate=get_current_time,
         nullable=False,
         comment="Timestamp when the setting was last updated",
     )

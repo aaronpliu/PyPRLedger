@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(default=False)
     LOG_LEVEL: str = Field(default="INFO")
 
+    # Timezone configuration
+    TIMEZONE: str = Field(
+        default="Asia/Shanghai", description="Application timezone (e.g., Asia/Shanghai, UTC)"
+    )
+    USE_UTC_IN_DB: bool = Field(
+        default=False,
+        description="Store datetime in UTC in database. Set to False when MySQL is configured with local timezone (e.g., +08:00)",
+    )
+
     # Database configuration
     DATABASE_HOST: str = Field(default="localhost")
     DATABASE_PORT: int = Field(default=3306)

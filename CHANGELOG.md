@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Release Manager Skill** - Automated release workflow integration
+  - New `release-manager` skill for consistent version management
+  - Automated changelog generation and dependency synchronization
+  - Git tag creation with proper annotations
+
+- **Admin Password Reset** - Enhanced admin user management
+  - Admins can now reset passwords for other users
+  - New endpoint `POST /api/v1/admin/users/{user_id}/reset-password`
+  - Force password change on next login option
+
+- **Enhanced Score Management** - Improved score display and analytics
+  - Enhanced score table with better filtering and sorting
+  - Improved score analytics dashboard with advanced charts
+  - Better score visualization in review details
+
+- **Timezone Support** - Comprehensive timezone handling
+  - Added `timezone.py` utility module for timezone conversions
+  - Proper UTC timestamp handling across all models
+  - Enhanced datetime display with timezone awareness
+
+- **UI Navigation Enhancements** - Improved user experience
+  - Added floating navigation in review details page
+  - Better AI review result styling
+  - Improved data lazy loading performance
+
+### Fixed
+- **Reviewer Visibility** - Fixed visible reviews filtering for reviewer role
+- **Database Connection** - Enhanced connection handling and error recovery
+- **AI Review Integration** - Fixed AI review ID handling and theme compatibility
+- **Platform Compatibility** - Added tzdata dependency for cross-platform stability
+
+### Technical Details
+- **Backend Version**: 1.8.0 (FastAPI service)
+- **Frontend Version**: 1.3.0 (Vue 3 application)
+- **Database Migrations**: New migration for admin password reset functionality
+- **Dependencies**: Added tzdata for timezone support
+
 ---
 
 ## [1.7.1] - 2026-04-26

@@ -13,9 +13,9 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from src import __version__
 from src.api import api_router
 from src.core.config import settings
-from src.core.database import close_db, get_session_maker, init_db
+from src.core.database import close_db, get_db_context, init_db
 from src.core.exceptions import AppException, ErrorCode
-from src.core.middleware import LoggingMiddleware, RateLimitMiddleware
+from src.core.middleware import DatabaseConnectionMiddleware, LoggingMiddleware, RateLimitMiddleware
 from src.services.rbac_service import RBACService
 from src.utils.i18n import i18n
 from src.utils.log import get_logger, setup_logging
@@ -45,11 +45,10 @@ async def delegation_status_cleanup_task():
     Runs every 5 minutes by default.
     """
     cleanup_interval = 300  # 5 minutes
-    session_maker = get_session_maker()
 
     while True:
         try:
-            async with session_maker() as db:
+            async with get_db_context() as db:
                 rbac_service = RBACService(db)
 
                 # Update expired delegations (active -> expired)
@@ -63,7 +62,28 @@ async def delegation_status_cleanup_task():
                     logger.info(f"Auto-activated {activated_count} pending delegations")
 
         except Exception as e:
-            logger.error(f"Error in delegation status cleanup task: {e}", exc_info=True)
+            # Check if this is a database disconnection error
+            from sqlalchemy.exc import DBAPIError
+
+            if isinstance(e, DBAPIError) and getattr(e, "connection_invalidated", False):
+                logger.warning(
+                    "Database connection invalidated in delegation cleanup task, disposing engine...",
+                    exc_info=False,
+                )
+                # Dispose the old engine to force recreation of connections on next use
+                try:
+                    from src.core.database import get_engine
+
+                    engine = get_engine()
+                    await engine.dispose()
+                    logger.info("Database engine disposed successfully after disconnection")
+                except Exception as dispose_error:
+                    logger.error(
+                        f"Failed to dispose database engine: {dispose_error}", exc_info=True
+                    )
+            else:
+                # Log other exceptions with full traceback
+                logger.error(f"Error in delegation status cleanup task: {e}", exc_info=True)
 
         # Wait before next check
         await asyncio.sleep(cleanup_interval)
@@ -130,6 +150,7 @@ app.add_middleware(
 )
 
 # Add custom middleware
+app.add_middleware(DatabaseConnectionMiddleware)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware, max_requests=settings.RATE_LIMIT_MAX_REQUESTS)
 

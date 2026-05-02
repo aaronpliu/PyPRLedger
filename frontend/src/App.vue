@@ -37,6 +37,13 @@ html, body, #app {
   --el-fill-color-light: #1e293b;
   --el-menu-text-color: #cbd5e1;
   --el-menu-active-color: #409eff;
+  
+  /* Element Plus color variables for dark mode */
+  --el-color-primary: #409eff;
+  --el-color-success: #67c23a;
+  --el-color-warning: #e6a23c;
+  --el-color-danger: #f56c6c;
+  --el-color-info: #909399;
 }
 
 [data-theme='dark'] body {
@@ -120,5 +127,34 @@ html, body, #app {
 
 [data-theme='dark'] .el-message-box__content {
   color: #cbd5e1 !important;
+}
+
+/* Fix Menu and Submenu colors in dark mode */
+[data-theme='dark'] .el-menu--horizontal > .el-sub-menu .el-sub-menu__title {
+  color: #ffffff !important;
+}
+
+[data-theme='dark'] .el-menu--horizontal > .el-sub-menu .el-sub-menu__title:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-theme='dark'] .el-menu--popup {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+[data-theme='dark'] .el-menu--popup .el-menu-item {
+  color: #cbd5e1 !important;
+  background-color: #1e293b !important;
+}
+
+[data-theme='dark'] .el-menu--popup .el-menu-item:hover {
+  background-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme='dark'] .el-menu--popup .el-menu-item.is-active {
+  color: #409eff !important;
+  background-color: rgba(64, 158, 255, 0.1) !important;
 }
 </style>

@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -25,6 +26,11 @@ _engine: AsyncEngine | None = None
 _async_session_maker: async_sessionmaker | None = None
 
 
+def _is_disconnected_error(e: Exception) -> bool:
+    """Check if the given exception is a disconnected error"""
+    return isinstance(e, DBAPIError) and bool(e.connection_invalidated)
+
+
 def get_engine() -> AsyncEngine:
     """Get database engine"""
     global _engine
@@ -39,6 +45,7 @@ def create_engine() -> AsyncEngine:
     engine_kwargs = {
         "echo": settings.DEBUG,
         "pool_pre_ping": True,
+        "pool_use_lifo": True,
         "connect_args": {
             "charset": "utf8mb4",
             "connect_timeout": settings.DATABASE_POOL_TIMEOUT,
@@ -139,8 +146,11 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield session
             await session.commit()
-        except Exception:
+        except Exception as exc:
             await session.rollback()
+            if _is_disconnected_error(exc):
+                logger.warning("Database connection is disconnected. Reconnecting...")
+                await get_engine().dispose()
             raise
         finally:
             await session.close()
@@ -157,8 +167,11 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield session
             await session.commit()
-        except Exception:
+        except Exception as exc:
             await session.rollback()
+            if _is_disconnected_error(exc):
+                logger.warning("Database connection is disconnected. Reconnecting...")
+                await get_engine().dispose()
             raise
         finally:
             await session.close()
@@ -216,8 +229,11 @@ class DatabaseManager:
             try:
                 yield session
                 await session.commit()
-            except Exception:
+            except Exception as exc:
                 await session.rollback()
+                if _is_disconnected_error(exc):
+                    logger.warning("Database connection is disconnected. Reconnecting...")
+                    await self.engine.dispose()
                 raise
             finally:
                 await session.close()
@@ -232,8 +248,11 @@ class DatabaseManager:
             try:
                 yield session
                 await session.commit()
-            except Exception:
+            except Exception as exc:
                 await session.rollback()
+                if _is_disconnected_error(exc):
+                    logger.warning("Database connection is disconnected. Reconnecting...")
+                    await self.engine.dispose()
                 raise
             finally:
                 await session.close()

@@ -11,6 +11,7 @@ from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
 from src.schemas.auth import (
+    AdminPasswordResetRequest,
     AuthSessionResponse,
     ChangePasswordRequest,
     LoginRequest,
@@ -301,3 +302,32 @@ async def revoke_my_session(
     """Revoke one of the current user's active sessions by session id."""
     await auth_service.revoke_user_session(current_user.id, session_id)
     return {"message": "Session revoked successfully."}
+
+
+@router.post(
+    "/users/{auth_user_id}/reset-password",
+    summary="Admin reset user password",
+    description="Administrative endpoint to reset a user's password and optionally force password change on next login",
+)
+async def admin_reset_password(
+    auth_user_id: int,
+    reset_data: AdminPasswordResetRequest,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict[str, str]:
+    """Admin reset password endpoint
+
+    Allows administrators to reset a user's password to an initial value.
+    Can force the user to change password on next login.
+    """
+    # Check if current user has permission to manage users
+    await rbac_service.require_permission(current_user.id, "manage", "users")
+
+    await auth_service.admin_reset_password(
+        auth_user_id=auth_user_id,
+        new_password=reset_data.new_password,
+        force_change=reset_data.force_change,
+    )
+
+    return {"message": "Password reset successfully"}

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+from src.utils.timezone import get_current_time, utc_to_local
 
 
 if TYPE_CHECKING:
@@ -45,16 +46,19 @@ class AuthUser(Base):
     # Status fields
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, comment="Force password change on next login"
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), nullable=False, default=get_current_time
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=get_current_time,
+        onupdate=get_current_time,
     )
 
     # Relationships
@@ -85,6 +89,8 @@ class AuthUser(Base):
             "email": self.email,
             "user_id": self.user_id,
             "is_active": self.is_active,
-            "last_login_at": (self.last_login_at.isoformat() if self.last_login_at else None),
-            "created_at": self.created_at.isoformat(),
+            "last_login_at": (
+                utc_to_local(self.last_login_at).isoformat() if self.last_login_at else None
+            ),
+            "created_at": utc_to_local(self.created_at).isoformat(),
         }

@@ -1,5 +1,6 @@
 import request from '@/utils/request'
 import type {
+  AdminPasswordResetRequest,
   AuthSession,
   LoginRequest,
   RegisterRequest,
@@ -69,5 +70,10 @@ export const authApi = {
   // Change password
   changePassword(data: PasswordChangeRequest): Promise<void> {
     return request.post('/auth/change-password', data)
+  },
+
+  // Admin reset user password
+  adminResetPassword(authUserId: number, data: AdminPasswordResetRequest): Promise<{ message: string }> {
+    return request.post(`/auth/users/${authUserId}/reset-password`, data)
   },
 }

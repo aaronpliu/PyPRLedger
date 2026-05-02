@@ -37,6 +37,10 @@ class UserinfoResponse(BaseModel):
     git_username: str | None = None
     last_login_at: datetime | None = None
     created_at: datetime
+    must_change_password: bool = Field(
+        default=False,
+        description="Indicates if user must change password on next login",
+    )
     roles: list[str] = Field(
         default_factory=list,
         description="List of role names assigned to the user",
@@ -56,6 +60,16 @@ class ChangePasswordRequest(BaseModel):
 
     old_password: str = Field(..., description="Current password")
     new_password: str = Field(..., min_length=8, description="New password")
+
+
+class AdminPasswordResetRequest(BaseModel):
+    """Admin password reset request schema"""
+
+    new_password: str = Field(..., min_length=8, description="New initial password")
+    force_change: bool = Field(
+        default=True,
+        description="Force user to change password on next login",
+    )
 
 
 class TokenRefreshRequest(BaseModel):

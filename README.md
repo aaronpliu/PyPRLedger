@@ -255,9 +255,20 @@ See `.env.example` for all available environment variables.
 Key configuration options:
 - `DATABASE_*`: MySQL database configuration
 - `REDIS_*`: Redis cache configuration
+- `TIMEZONE`: Application timezone (default: Asia/Shanghai)
+- `USE_UTC_IN_DB`: Store datetime in UTC in database (default: True, recommended)
 - `PROMETHEUS_ENABLED`: Enable/disable Prometheus metrics
 - `RATE_LIMIT_*`: Rate limiting configuration
 - `CACHE_TTL_*`: Cache TTL settings
+
+### Timezone Configuration
+
+The application supports configurable timezones:
+- **Database Storage**: By default, all datetime values are stored in UTC (`USE_UTC_IN_DB=True`)
+- **Application Display**: Datetime values are converted to the configured timezone (`TIMEZONE=Asia/Shanghai`)
+- **MySQL Configuration**: When using Docker, MySQL is configured with `--default-time-zone='+08:00'`
+
+This ensures consistent datetime handling across different deployment environments while allowing users to view times in their local timezone.
 
 ## Database
 

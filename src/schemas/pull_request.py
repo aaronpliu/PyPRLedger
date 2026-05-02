@@ -197,6 +197,18 @@ class ReviewScoreResponse(ReviewScoreBase):
     created_date: datetime
     updated_date: datetime
 
+    # PR context fields (enriched from pull_request relationship)
+    pull_request_id: str | None = None  # PR ID for URL construction
+    project_key: str | None = None  # Project key for URL construction
+    repository_slug: str | None = None  # Repository slug for URL construction
+    pull_request_commit_id: str | None = None  # Commit ID for URL construction
+    pull_request_user: str | None = None  # PR author username
+    pull_request_user_info: dict[str, Any] | None = None  # PR author details
+    source_branch: str | None = None  # Source branch name
+    target_branch: str | None = None  # Target branch name
+    project_name: str | None = None  # Project display name
+    project_url: str | None = None  # Project base URL for constructing PR link
+
     model_config = {"from_attributes": True}
 
 
@@ -210,6 +222,15 @@ class ReviewScoreSummary(BaseModel):
     average_score: float
     max_score: float | None = Field(None, description="Maximum score when multiple scores exist")
     scores: list[ReviewScoreResponse]
+
+
+class ReviewScoreListResponse(BaseModel):
+    """Paginated list of review scores"""
+
+    total: int = Field(..., description="Total number of scores")
+    items: list[ReviewScoreResponse] = Field(..., description="List of scores")
+    page: int = Field(..., description="Current page number (1-indexed)")
+    page_size: int = Field(..., description="Number of items per page")
 
 
 class ReviewResponse(BaseModel):

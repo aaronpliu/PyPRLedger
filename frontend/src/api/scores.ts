@@ -15,6 +15,14 @@ export interface Score {
   repository_slug: string
   created_date: string
   updated_date?: string
+  // Enriched fields from review context
+  project_name?: string
+  project_url?: string
+  pull_request_commit_id?: string
+  pull_request_user?: string
+  pull_request_user_info?: Record<string, any> | null
+  source_branch?: string
+  target_branch?: string
 }
 
 export interface ScoreCreate {
@@ -87,5 +95,15 @@ export const scoresApi = {
   // Get score statistics
   getStats(params?: { project_key?: string; repository_slug?: string }): Promise<any> {
     return request.get('/reviews/statistics', { params })
+  },
+
+  // List all scores with pagination (new efficient endpoint)
+  listScores(params: {
+    reviewer?: string
+    project_key?: string
+    page?: number
+    page_size?: number
+  }): Promise<{ total: number; items: Score[]; page: number; page_size: number }> {
+    return request.get('/reviews/scores/list', { params })
   },
 }

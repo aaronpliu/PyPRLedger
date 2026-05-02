@@ -263,3 +263,54 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         response.headers["X-Request-ID"] = request_id
 
         return response
+
+
+class DatabaseConnectionMiddleware(BaseHTTPMiddleware):
+    """Database connection health check middleware
+
+    This middleware ensures that database connections are valid before processing requests.
+    It handles the case where database connections become stale after periods of inactivity,
+    particularly important for background tasks like delegation_status_cleanup_task.
+
+    Instead of pinging the database on every request, it catches disconnection errors
+    and triggers reconnection when needed.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        try:
+            # Process the request normally
+            response = await call_next(request)
+            return response
+
+        except Exception as exc:
+            # Check if this is a database disconnection error
+            from sqlalchemy.exc import DBAPIError
+
+            if isinstance(exc, DBAPIError) and getattr(exc, "connection_invalidated", False):
+                logger.warning(
+                    "Database connection invalidated detected, attempting to recover...",
+                    extra={
+                        "request_id": getattr(request.state, "request_id", "unknown"),
+                        "method": request.method,
+                        "path": request.url.path,
+                    },
+                )
+
+                # Dispose the old engine to force recreation of connections
+                from src.core.database import get_engine
+
+                try:
+                    engine = get_engine()
+                    await engine.dispose()
+                    logger.info("Database engine disposed successfully")
+                except Exception as dispose_error:
+                    logger.error(
+                        f"Failed to dispose database engine: {dispose_error}", exc_info=True
+                    )
+
+                # Re-raise the exception to be handled by exception handlers
+                # The next attempt will create fresh connections
+                raise
+
+            # For non-database errors, re-raise as-is
+            raise

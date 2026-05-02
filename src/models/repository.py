@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+from src.utils.timezone import get_current_time, utc_to_local
 
 
 if TYPE_CHECKING:
@@ -57,14 +58,14 @@ class Repository(Base):
 
     # Timestamps
     created_date: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime(timezone=True), nullable=False, default=get_current_time
     )
 
     updated_date: Mapped[datetime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC),
+        default=get_current_time,
+        onupdate=get_current_time,
     )
 
     # Indexes
@@ -90,8 +91,12 @@ class Repository(Base):
             "repository_name": self.repository_name,
             "repository_slug": self.repository_slug,
             "repository_url": self.repository_url,
-            "created_date": self.created_date.isoformat() if self.created_date else None,
-            "updated_date": self.updated_date.isoformat() if self.updated_date else None,
+            "created_date": utc_to_local(self.created_date).isoformat()
+            if self.created_date
+            else None,
+            "updated_date": utc_to_local(self.updated_date).isoformat()
+            if self.updated_date
+            else None,
         }
 
     @classmethod

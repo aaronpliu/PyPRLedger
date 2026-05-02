@@ -8,6 +8,7 @@ export interface User {
   git_username: string | null
   last_login_at: string | null
   created_at: string
+  must_change_password?: boolean
   roles: string[]
 }
 
@@ -34,6 +35,11 @@ export interface TokenResponse {
 export interface PasswordChangeRequest {
   old_password: string
   new_password: string
+}
+
+export interface AdminPasswordResetRequest {
+  new_password: string
+  force_change?: boolean
 }
 
 export interface AuthSession {
