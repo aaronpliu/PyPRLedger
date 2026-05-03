@@ -5,6 +5,28 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2026-05-03
+
+**Backend Version**: 1.9.1
+**Frontend Version**: 1.4.1
+
+### Features
+- **Toggle for Scored Reviews** - Added toggle button to hide/show scored reviews
+- **Bulk Task Assignment** - Added bulk operation for task assignment
+
+### Bug Fixes
+- **Remove Change PR Status** - Removed the "Change PR Status" feature
+- **Bulk Operation Enhancements** - Enhanced bulk operation for reviews
+- **Multiple Reviewers Display** - Enhanced display for multiple reviewers on same PR
+- **i18n Enhancements** - Enhanced internationalization for all pages
+- **Chart Labels & Axes** - Enhanced labels and x/y axis display
+- **Dark Theme Dashboard** - Enhanced dashboard in dark theme
+- **Score Calculation Fix** - Fixed score issue on first-time scoring
+- **Create Tag Script** - Fixed create_tag script issues
+
+---
+
+
 ## [1.9.0] - 2026-05-02
 
 **Backend Version**: 1.9.0
