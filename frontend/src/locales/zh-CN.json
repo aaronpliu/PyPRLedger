@@ -175,12 +175,7 @@
     "bulk_actions": {
       "selected_count": "已选择 {count} 项",
       "delete_selected": "删除选中项",
-      "change_pr_status": "更改PR状态",
-      "clear_selection": "清除选择",
-      "set_to_open": "设为开启",
-      "set_to_merged": "设为已合并",
-      "set_to_closed": "设为已关闭",
-      "set_to_draft": "设为草稿"
+      "clear_selection": "清除选择"
     },
     "filters": {
       "search_placeholder": "搜索PR ID或摘要...",

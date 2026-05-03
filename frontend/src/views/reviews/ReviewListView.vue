@@ -65,21 +65,6 @@
             <el-icon><Delete /></el-icon>
             {{ t('reviews.bulk_actions.delete_selected') }}
           </el-button>
-          <el-dropdown @command="handleBulkStatusChange">
-            <el-button size="small" type="warning">
-              <el-icon><Edit /></el-icon>
-              {{ t('reviews.bulk_actions.change_pr_status') }}
-              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="open">{{ t('reviews.bulk_actions.set_to_open') }}</el-dropdown-item>
-                <el-dropdown-item command="merged">{{ t('reviews.bulk_actions.set_to_merged') }}</el-dropdown-item>
-                <el-dropdown-item command="closed">{{ t('reviews.bulk_actions.set_to_closed') }}</el-dropdown-item>
-                <el-dropdown-item command="draft">{{ t('reviews.bulk_actions.set_to_draft') }}</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
           <el-button size="small" @click="clearSelection">
             <el-icon><Close /></el-icon>
             {{ t('reviews.bulk_actions.clear_selection') }}
@@ -339,7 +324,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu, Link, QuestionFilled } from '@element-plus/icons-vue'
+import { Search, CircleCheck, Delete, Close, Document, Refresh, Cpu, Link, QuestionFilled } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -825,60 +810,6 @@ const executeBulkDelete = async () => {
     ElMessage.error('Failed to delete reviews')
   } finally {
     bulkDeleting.value = false
-  }
-}
-
-const handleBulkStatusChange = async (status: string) => {
-  if (selectedReviews.value.length === 0) {
-    ElMessage.warning('Please select items to update')
-    return
-  }
-  
-  showProgressDialog.value = true
-  bulkOperationLoading.value = true
-  processedCount.value = 0
-  totalCount.value = selectedReviews.value.length
-  progressPercentage.value = 0
-  progressStatus.value = undefined
-  progressMessage.value = `Updating status to ${status}...`
-  
-  let successCount = 0
-  let failCount = 0
-  
-  try {
-    for (let i = 0; i < selectedReviews.value.length; i++) {
-      const review = selectedReviews.value[i]
-      try {
-        // TODO: Implement bulk status update API
-        // For now, simulate with delay
-        await new Promise(resolve => setTimeout(resolve, 200))
-        successCount++
-      } catch (error) {
-        console.error(`Failed to update review ${review.id}:`, error)
-        failCount++
-      }
-      
-      // Update progress
-      processedCount.value = i + 1
-      progressPercentage.value = Math.round(((i + 1) / selectedReviews.value.length) * 100)
-      progressMessage.value = `Updating review ${i + 1} of ${selectedReviews.value.length}...`
-    }
-    
-    // Complete
-    progressStatus.value = failCount > 0 ? 'warning' : 'success'
-    progressMessage.value = `Completed: ${successCount} succeeded, ${failCount} failed`
-    bulkOperationLoading.value = false
-    
-    ElMessage.success(`Successfully updated ${successCount} review${successCount !== 1 ? 's' : ''}`)
-    
-    // Reload data
-    await loadReviews()
-    clearSelection()
-  } catch (error) {
-    progressStatus.value = 'exception'
-    progressMessage.value = 'Bulk update failed'
-    bulkOperationLoading.value = false
-    ElMessage.error('Failed to update reviews')
   }
 }
 
