@@ -37,6 +37,24 @@
         @reset="handleResetFilters"
       />
         
+      <!-- Bulk Actions Toolbar -->
+      <div v-if="selectedReviews.length > 0" class="bulk-actions-toolbar">
+        <div class="selection-info">
+          <el-icon><CircleCheck /></el-icon>
+          <span>{{ selectedReviews.length }} item{{ selectedReviews.length > 1 ? 's' : '' }} selected</span>
+        </div>
+        <div class="bulk-actions">
+          <el-button size="small" type="primary" @click="showBulkAssignDialog">
+            <el-icon><Edit /></el-icon>
+            Assign Reviewer
+          </el-button>
+          <el-button size="small" @click="clearSelection">
+            <el-icon><Close /></el-icon>
+            Clear Selection
+          </el-button>
+        </div>
+      </div>
+      
       <!-- Reviews Table -->
       <el-table
         :data="reviews"
@@ -48,7 +66,10 @@
         :header-cell-style="{ textAlign: 'center' }"
         :cell-style="getCellStyle"
         :row-class-name="getRowClassName"
+        @selection-change="handleSelectionChange"
       >
+        <!-- Selection column for bulk operations -->
+        <el-table-column type="selection" width="55" fixed="left" />
         <el-table-column :label="t('task_assignment.seq_number')" width="80">
           <template #default="{ $index }">
             {{ (currentPage - 1) * pageSize + $index + 1 }}
@@ -307,6 +328,38 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- Bulk Assign Dialog -->
+    <el-dialog
+      v-model="showBulkAssignDialogVisible"
+      title="Bulk Assign Reviewer"
+      width="500px"
+    >
+      <p>Assign {{ selectedReviews.length }} review(s) to a reviewer:</p>
+      <el-form :model="bulkAssignForm" label-width="120px" style="margin-top: 20px">
+        <el-form-item label="Reviewer" required>
+          <el-select
+            v-model="bulkAssignForm.reviewer"
+            placeholder="Select reviewer"
+            filterable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="user in availableReviewers"
+              :key="user.username"
+              :label="formatReviewerOption(user)"
+              :value="user.username"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showBulkAssignDialogVisible = false">Cancel</el-button>
+        <el-button type="primary" :loading="bulkAssigning" @click="executeBulkAssign">
+          Assign {{ selectedReviews.length }} Items
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -314,7 +367,7 @@
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, ArrowUp, Refresh, Search, Link } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, Refresh, Search, Link, CircleCheck, Edit, Close } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
@@ -350,6 +403,7 @@ const allReviews = ref<ReviewV2[]>([]) // Store reviews from API (current page)
 const reviews = ref<ReviewV2[]>([]) // Filtered reviews for display
 const total = ref(0) // Total count from API
 const currentPage = ref(1)
+const tableRef = ref()
 
 // Filters
 const searchQuery = ref('')
@@ -382,6 +436,14 @@ const selectedReview = ref<ReviewV2 | null>(null)
 const assigning = ref(false)
 const loadingReviewers = ref(false)
 const assignForm = ref({
+  reviewer: '',
+})
+
+// Bulk assignment state
+const selectedReviews = ref<ReviewV2[]>([])
+const showBulkAssignDialogVisible = ref(false)
+const bulkAssigning = ref(false)
+const bulkAssignForm = ref({
   reviewer: '',
 })
 
@@ -696,6 +758,76 @@ const submitAssignment = async () => {
     ElMessage.error('Failed to assign reviewer')
   } finally {
     assigning.value = false
+  }
+}
+
+// Bulk assignment handlers
+const handleSelectionChange = (selection: ReviewV2[]) => {
+  selectedReviews.value = selection
+}
+
+const showBulkAssignDialog = async () => {
+  if (selectedReviews.value.length === 0) {
+    ElMessage.warning('Please select at least one review')
+    return
+  }
+  bulkAssignForm.value.reviewer = ''
+  showBulkAssignDialogVisible.value = true
+  await loadAvailableReviewersForBulk()
+}
+
+const clearSelection = () => {
+  // Clear table selection
+  if (tableRef.value) {
+    tableRef.value.clearSelection()
+  }
+  selectedReviews.value = []
+}
+
+const loadAvailableReviewersForBulk = async () => {
+  try {
+    const response = await usersApi.getReviewers(100)
+    availableReviewers.value = response.items
+  } catch (error) {
+    console.error('Failed to load reviewers:', error)
+    ElMessage.error('Failed to load reviewers')
+  }
+}
+
+const executeBulkAssign = async () => {
+  if (!bulkAssignForm.value.reviewer || selectedReviews.value.length === 0) {
+    ElMessage.warning('Please select a reviewer')
+    return
+  }
+
+  bulkAssigning.value = true
+  let successCount = 0
+  let failCount = 0
+
+  try {
+    for (const review of selectedReviews.value) {
+      try {
+        await taskAssignmentApi.assignReviewer(review.id, {
+          reviewer: bulkAssignForm.value.reviewer,
+        })
+        successCount++
+      } catch (error) {
+        console.error(`Failed to assign reviewer to review ${review.id}:`, error)
+        failCount++
+      }
+    }
+
+    ElMessage.success(
+      `Bulk assignment completed: ${successCount} succeeded, ${failCount} failed`
+    )
+    showBulkAssignDialogVisible.value = false
+    clearSelection()
+    await loadReviews()
+  } catch (error) {
+    console.error('Bulk assignment failed:', error)
+    ElMessage.error('Bulk assignment failed')
+  } finally {
+    bulkAssigning.value = false
   }
 }
 
@@ -1022,5 +1154,52 @@ onUnmounted(() => {
 
 [data-theme='dark'] :deep(.task-assignment-table.el-table--striped .el-table__body tr.unassigned-row td.el-table__cell) {
   background-color: #78350f !important; /* Amber-800 for dark theme - better contrast with light text */
+}
+
+/* Bulk Actions Toolbar */
+.bulk-actions-toolbar {
+  margin: 16px 0;
+  padding: 12px 16px;
+  background-color: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+[data-theme='dark'] .bulk-actions-toolbar {
+  background-color: var(--el-fill-color-dark);
+  border-color: var(--el-border-color-light);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.bulk-actions-toolbar:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] .bulk-actions-toolbar:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.selection-info .el-icon {
+  color: var(--el-color-success);
+  font-size: 18px;
+}
+
+.bulk-actions {
+  display: flex;
+  gap: 8px;
 }
 </style>
