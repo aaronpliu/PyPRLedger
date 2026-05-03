@@ -34,25 +34,42 @@
         </div>
       </template>
 
-      <!-- Filters -->
-      <FilterPopover
-        v-model:search-query="searchQuery"
-        v-model:app-filter="appFilter"
-        v-model:pr-user-filter="prUserFilter"
-        v-model:reviewer-filter="reviewerFilter"
-        v-model:scored-filter="scoredFilter"
-        v-model:severity-filter="severityFilter"
-        v-model:status-filter="statusFilter"
-        :app-options="availableApps"
-        :pr-user-options="availablePRUsers"
-        :reviewer-options="availableReviewers"
-        :pr-users-loading="prUsersLoading"
-        :reviewers-loading="reviewersLoading"
-        @search-pr-users="searchPRUsers"
-        @search-reviewers="searchReviewers"
-        @apply="applyFilters"
-        @reset="handleResetFilters"
-      />
+      <!-- Filters with Archived Toggle -->
+      <div class="filters-with-toggle">
+        <FilterPopover
+          v-model:search-query="searchQuery"
+          v-model:app-filter="appFilter"
+          v-model:pr-user-filter="prUserFilter"
+          v-model:reviewer-filter="reviewerFilter"
+          v-model:scored-filter="scoredFilter"
+          v-model:severity-filter="severityFilter"
+          v-model:status-filter="statusFilter"
+          :app-options="availableApps"
+          :pr-user-options="availablePRUsers"
+          :reviewer-options="availableReviewers"
+          :pr-users-loading="prUsersLoading"
+          :reviewers-loading="reviewersLoading"
+          @search-pr-users="searchPRUsers"
+          @search-reviewers="searchReviewers"
+          @apply="applyFilters"
+          @reset="handleResetFilters"
+        />
+        
+        <!-- Archived Toggle -->
+        <el-tooltip
+          :content="hideArchived ? t('reviews.archived_hint_hide', 'Showing only unscored reviews') : t('reviews.archived_hint_show', 'Showing all reviews including scored')"
+          placement="bottom"
+        >
+          <el-switch
+            v-model="hideArchived"
+            @change="applyFilters"
+            inline-prompt
+            :active-text="t('reviews.hide_archived', 'Hide Archived')"
+            :inactive-text="t('reviews.show_all', 'Show All')"
+            class="archived-toggle-switch"
+          />
+        </el-tooltip>
+      </div>
 
       <!-- Bulk Actions Toolbar - Only for Review Admins -->
       <div v-if="selectedReviews.length > 0 && isReviewAdmin" class="bulk-actions-toolbar">
@@ -392,6 +409,7 @@ const allReviewers = ref<ReviewerUser[]>([]) // Cache for client-side filtering
 const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
+const hideArchived = ref(true) // Default to hiding scored/archived reviews
 const tableRef = ref()
 
 // Bulk operation state
@@ -557,6 +575,13 @@ const fetchAllDataForExport = async (): Promise<Review[]> => {
       )
     }
     
+    // Apply hide archived toggle (hide scored reviews by default)
+    if (hideArchived.value) {
+      result = result.filter(review => 
+        !review.score_summary || review.score_summary.total_scores === 0
+      )
+    }
+    
     // Apply severity filter (check AI review issues)
     if (severityFilter.value) {
       const targetSeverity = severityFilter.value
@@ -645,6 +670,13 @@ const applyFilters = () => {
       review.score_summary && review.score_summary.total_scores > 0
     )
   } else if (scoredFilter.value === 'no') {
+    result = result.filter(review => 
+      !review.score_summary || review.score_summary.total_scores === 0
+    )
+  }
+  
+  // Apply hide archived toggle (hide scored reviews by default)
+  if (hideArchived.value) {
     result = result.filter(review => 
       !review.score_summary || review.score_summary.total_scores === 0
     )
@@ -992,6 +1024,26 @@ onUnmounted(() => {
 
 .filter-form {
   margin-bottom: 20px;
+}
+
+/* Filters with Toggle Layout */
+.filters-with-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* Archived Toggle Switch Styling */
+.archived-toggle-switch {
+  --el-switch-on-color: #409eff;
+  --el-switch-off-color: #dcdfe6;
+}
+
+[data-theme='dark'] .archived-toggle-switch {
+  --el-switch-on-color: #409eff;
+  --el-switch-off-color: #4c4d4f;
 }
 
 .pagination-container {

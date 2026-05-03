@@ -177,6 +177,10 @@
       "delete_selected": "刪除選取項目",
       "clear_selection": "清除選擇"
     },
+    "hide_archived": "隱藏已歸檔",
+    "show_all": "顯示全部",
+    "archived_hint_hide": "僅顯示未評分的審查",
+    "archived_hint_show": "顯示所有審查（包括已評分）",
     "filters": {
       "search_placeholder": "搜尋PR ID或摘要...",
       "app_filter": "應用",

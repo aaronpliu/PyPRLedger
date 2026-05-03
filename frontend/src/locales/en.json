@@ -177,6 +177,10 @@
       "delete_selected": "Delete Selected",
       "clear_selection": "Clear Selection"
     },
+    "hide_archived": "Hide Archived",
+    "show_all": "Show All",
+    "archived_hint_hide": "Showing only unscored reviews",
+    "archived_hint_show": "Showing all reviews including scored",
     "filters": {
       "search_placeholder": "Search by PR ID or summary...",
       "app_filter": "App",

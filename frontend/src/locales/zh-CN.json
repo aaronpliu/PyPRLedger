@@ -177,6 +177,10 @@
       "delete_selected": "删除选中项",
       "clear_selection": "清除选择"
     },
+    "hide_archived": "隐藏已归档",
+    "show_all": "显示全部",
+    "archived_hint_hide": "仅显示未评分的审查",
+    "archived_hint_show": "显示所有审查（包括已评分）",
     "filters": {
       "search_placeholder": "搜索PR ID或摘要...",
       "app_filter": "应用",
