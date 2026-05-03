@@ -54,8 +54,8 @@
         @reset="handleResetFilters"
       />
 
-      <!-- Bulk Actions Toolbar -->
-      <div v-if="selectedReviews.length > 0" class="bulk-actions-toolbar">
+      <!-- Bulk Actions Toolbar - Only for Review Admins -->
+      <div v-if="selectedReviews.length > 0 && isReviewAdmin" class="bulk-actions-toolbar">
         <div class="selection-info">
           <el-icon><CircleCheck /></el-icon>
           <span>{{ t('reviews.bulk_actions.selected_count', { count: selectedReviews.length, plural: selectedReviews.length > 1 ? 's' : '' }) }}</span>
@@ -95,7 +95,8 @@
         style="width: 100%"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="55" fixed="left" />
+        <!-- Selection column only for review admins -->
+        <el-table-column v-if="isReviewAdmin" type="selection" width="55" fixed="left" />
         <el-table-column :label="t('reviews.seq_number')" width="80">
           <template #default="{ $index }">
             {{ (currentPage - 1) * pageSize + $index + 1 }}
@@ -357,6 +358,7 @@ import { usePrUrl } from '@/composables/usePrUrl'
 
 const { t } = useI18n()
 const router = useRouter()
+const authStore = useAuthStore()
 const { hasPermission } = usePermission()
 const reviewNavigationStore = useReviewNavigationStore()
 const { getPrUrl } = usePrUrl()
@@ -378,7 +380,15 @@ const handleResize = () => {
 }
 
 // Check if user is review admin
-const isReviewAdmin = computed(() => hasPermission('assign', 'reviews'))
+const isReviewAdmin = computed(() => {
+  const result = hasPermission('assign', 'reviews')
+  console.log('[isReviewAdmin] Permission check:', {
+    username: authStore.currentUser?.username,
+    roles: authStore.currentUser?.roles,
+    hasPermission: result
+  })
+  return result
+})
 const loading = ref(false)
 const reviews = ref<Review[]>([])
 const total = ref(0)
