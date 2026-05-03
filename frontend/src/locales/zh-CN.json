@@ -31,7 +31,8 @@
     "enabled": "启用",
     "disabled": "禁用",
     "fullscreen": "全屏",
-    "exitFullscreen": "退出全屏"
+    "exitFullscreen": "退出全屏",
+    "page": "页"
   },
   "menu": {
     "dashboard": "仪表板",
@@ -152,6 +153,10 @@
     "code_reviews": "代码审查",
     "ai_powered": "AI驱动",
     "refresh": "刷新",
+    "visibility_title": "您可以查看：",
+    "visibility_assigned": "分配给您的审查",
+    "visibility_raised": "您发起的PR（所有审查者）",
+    "visibility_admin": "所有审查（管理员权限）",
     "seq_number": "序号",
     "app_name": "应用名称",
     "pr_info": "PR信息",
@@ -226,6 +231,8 @@
     "merged": "已合并",
     "closed": "已关闭",
     "draft": "草稿",
+    "unassigned": "未分配",
+    "more": "更多",
     "assignment_status_descriptions": {
       "pending": "审查任务尚未分配给任何审查者",
       "assigned": "任务已由审查管理员分配给审查者",

@@ -31,7 +31,8 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "fullscreen": "Fullscreen",
-    "exitFullscreen": "Exit Fullscreen"
+    "exitFullscreen": "Exit Fullscreen",
+    "page": "Page"
   },
   "menu": {
     "dashboard": "Dashboard",
@@ -152,6 +153,10 @@
     "code_reviews": "Code Reviews",
     "ai_powered": "AI-Powered",
     "refresh": "Refresh",
+    "visibility_title": "You can see:",
+    "visibility_assigned": "Reviews assigned to you",
+    "visibility_raised": "PRs you raised (all reviewers)",
+    "visibility_admin": "All reviews (Admin access)",
     "seq_number": "Seq#",
     "app_name": "App Name",
     "pr_info": "PR Info",
@@ -226,6 +231,8 @@
     "merged": "Merged",
     "closed": "Closed",
     "draft": "Draft",
+    "unassigned": "Unassigned",
+    "more": "more",
     "assignment_status_descriptions": {
       "pending": "Review task has not been assigned to any reviewer yet",
       "assigned": "Task has been assigned to a reviewer by the review admin",

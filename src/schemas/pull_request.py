@@ -294,6 +294,15 @@ class ReviewResponse(BaseModel):
         None, description="Full information about reviewer"
     )
 
+    # Multi-reviewer display fields (for PR owner view)
+    total_reviewers: int | None = Field(
+        None, description="Total number of reviewers assigned to this review"
+    )
+    all_reviewers: list[dict[str, str]] | None = Field(
+        None,
+        description="List of all reviewers with username and display_name for tooltip display",
+    )
+
     # Score summary - includes aggregated stats and individual scores
     score_summary: ReviewScoreSummary | None = Field(
         None, description="Aggregated score statistics including all reviewer scores"

@@ -42,6 +42,13 @@ export interface Review {
   pull_request_user_info?: Record<string, any> | null
   reviewer_info?: Record<string, any> | null
   
+  // Multi-reviewer display fields (for PR owner view)
+  total_reviewers?: number
+  all_reviewers?: Array<{
+    username: string
+    display_name: string
+  }>
+  
   // Score summary
   score_summary?: ReviewScoreSummary | null
   

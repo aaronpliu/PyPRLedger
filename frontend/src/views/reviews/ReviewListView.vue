@@ -5,6 +5,19 @@
         <div class="card-header">
           <div class="header-title-group">
             <h2>{{ t('reviews.code_reviews') }}</h2>
+            <el-tooltip placement="bottom" effect="light">
+              <template #content>
+                <div class="review-tooltip">
+                  <p><strong>{{ t('reviews.visibility_title', 'You can see:') }}</strong></p>
+                  <ul>
+                    <li>{{ t('reviews.visibility_assigned', 'Reviews assigned to you') }}</li>
+                    <li>{{ t('reviews.visibility_raised', 'PRs you raised (all reviewers)') }}</li>
+                    <li v-if="isReviewAdmin">{{ t('reviews.visibility_admin', 'All reviews (Admin access)') }}</li>
+                  </ul>
+                </div>
+              </template>
+              <el-icon class="help-icon" :size="18"><QuestionFilled /></el-icon>
+            </el-tooltip>
             <el-tag type="success" effect="dark" size="small" class="ai-badge">{{ t('reviews.ai_powered') }}</el-tag>
           </div>
           <div class="header-actions">
@@ -154,15 +167,46 @@
         <el-table-column :label="t('reviews.reviewer')" width="200">
           <template #default="{ row }">
             <div>
-              <div v-if="row.reviewer || row.reviewer_info?.display_name">
+              <!-- Case 1: Multi-reviewer (PR owner view with all_reviewers) -->
+              <div v-if="row.all_reviewers && row.all_reviewers.length > 0">
+                <el-tooltip placement="top" effect="light">
+                  <template #content>
+                    <div class="reviewer-tooltip">
+                      <div
+                        v-for="rev in row.all_reviewers"
+                        :key="rev.username"
+                        class="tooltip-item"
+                      >
+                        {{ rev.display_name }} ({{ rev.username }})
+                      </div>
+                    </div>
+                  </template>
+                  <div class="reviewer-display">
+                    <!-- Show primary reviewer (current user if in list, otherwise first) -->
+                    <span>{{ getPrimaryReviewer(row) }}</span>
+                    <!-- Show compact "+N more" if multiple reviewers -->
+                    <span v-if="row.total_reviewers > 1" class="more-indicator">
+                      +{{ row.total_reviewers - 1 }} {{ t('reviews.more', 'more') }}
+                    </span>
+                  </div>
+                </el-tooltip>
+                <div class="text-secondary" style="font-size: 0.8rem">
+                  {{ row.source_filename ? '📄 File-level' : ' PR-level' }}
+                </div>
+              </div>
+
+              <!-- Case 2: Single reviewer (normal assignment view) -->
+              <div v-else-if="row.reviewer || row.reviewer_info?.display_name">
                 {{ row.reviewer_info?.display_name || row.reviewer }}
+                <div class="text-secondary" style="font-size: 0.8rem">
+                  {{ row.source_filename ? ' File-level' : '📋 PR-level' }}
+                </div>
               </div>
+
+              <!-- Case 3: Truly unassigned (no reviewers at all) -->
               <el-tag v-else type="warning" effect="dark" size="small">
-                ⚠️ Unassigned
+                ⚠️ {{ t('reviews.unassigned', 'Unassigned') }}
               </el-tag>
-              <div class="text-secondary" style="font-size: 0.8rem;">
-                {{ row.source_filename ? '📄 File-level' : '📋 PR-level' }}
-              </div>
             </div>
           </template>
         </el-table-column>
@@ -294,7 +338,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu, Link } from '@element-plus/icons-vue'
+import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu, Link, QuestionFilled } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -305,6 +349,7 @@ import FilterPopover from '@/components/common/FilterPopover.vue'
 import ExportMenu from '@/components/common/ExportMenu.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useReviewNavigationStore } from '@/stores/reviewNavigation'
+import { useAuthStore } from '@/stores/auth'
 import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
 import { usersApi, type ReviewerUser } from '@/api/users'
@@ -385,6 +430,31 @@ const getStatusType = (status: string) => {
     pending: 'info',
   }
   return types[status] || 'info'
+}
+
+// Get primary reviewer for multi-reviewer display
+// Prioritize current user if they're in the reviewer list
+const getPrimaryReviewer = (row: any) => {
+  if (!row.all_reviewers || row.all_reviewers.length === 0) {
+    return row.reviewer_info?.display_name || row.reviewer || ''
+  }
+  
+  // Get current user's username from auth store
+  const authStore = useAuthStore()
+  const currentUsername = authStore.currentUser?.username
+  
+  // Find current user in reviewer list
+  const currentUserReviewer = row.all_reviewers.find(
+    (rev: any) => rev.username === currentUsername
+  )
+  
+  // If current user is a reviewer, show them first
+  if (currentUserReviewer) {
+    return currentUserReviewer.display_name
+  }
+  
+  // Otherwise show first reviewer
+  return row.all_reviewers[0].display_name
 }
 
 const loadReviews = async () => {
@@ -932,6 +1002,44 @@ onUnmounted(() => {
   font-size: 20px;
 }
 
+.help-icon {
+  color: #909399;
+  cursor: help;
+  transition: color 0.2s;
+}
+
+.help-icon:hover {
+  color: #409eff;
+}
+
+[data-theme="dark"] .help-icon {
+  color: #a0aec0;
+}
+
+[data-theme="dark"] .help-icon:hover {
+  color: #63b3ed;
+}
+
+.review-tooltip {
+  max-width: 300px;
+  padding: 4px 0;
+}
+
+.review-tooltip p {
+  margin: 0 0 8px 0;
+  font-weight: 600;
+}
+
+.review-tooltip ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.review-tooltip li {
+  margin: 4px 0;
+  font-size: 0.9em;
+}
+
 .ai-badge {
   margin-top: 2px; /* Optional: slight adjustment for vertical alignment */
 }
@@ -953,6 +1061,39 @@ onUnmounted(() => {
 
 .el-table {
   cursor: pointer;
+}
+
+/* Reviewer display styling */
+.reviewer-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.more-indicator {
+  color: #909399;
+  font-size: 0.85em;
+}
+
+[data-theme="dark"] .more-indicator {
+  color: #a0aec0;
+}
+
+.reviewer-tooltip {
+  max-width: 300px;
+}
+
+.tooltip-item {
+  padding: 4px 0;
+  border-bottom: 1px solid #eee;
+}
+
+[data-theme="dark"] .tooltip-item {
+  border-bottom-color: #334155;
+}
+
+.tooltip-item:last-child {
+  border-bottom: none;
 }
 
 .bulk-actions-toolbar {

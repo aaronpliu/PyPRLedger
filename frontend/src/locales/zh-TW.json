@@ -31,7 +31,8 @@
     "enabled": "啟用",
     "disabled": "停用",
     "fullscreen": "全螢幕",
-    "exitFullscreen": "退出全螢幕"
+    "exitFullscreen": "退出全螢幕",
+    "page": "頁"
   },
   "menu": {
     "dashboard": "儀表板",
@@ -152,6 +153,10 @@
     "code_reviews": "程式碼審查",
     "ai_powered": "AI驅動",
     "refresh": "重新整理",
+    "visibility_title": "您可以查看：",
+    "visibility_assigned": "分配給您的審查",
+    "visibility_raised": "您發起的PR（所有審查者）",
+    "visibility_admin": "所有審查（管理員權限）",
     "seq_number": "序號",
     "app_name": "應用名稱",
     "pr_info": "PR資訊",
@@ -226,6 +231,8 @@
     "merged": "已合併",
     "closed": "已關閉",
     "draft": "草稿",
+    "unassigned": "未分配",
+    "more": "更多",
     "assignment_status_descriptions": {
       "pending": "審查任務尚未分配給任何審查者",
       "assigned": "任務已由審查管理員分配給審查者",

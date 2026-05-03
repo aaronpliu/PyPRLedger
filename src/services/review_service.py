@@ -4,7 +4,7 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -187,37 +187,68 @@ class ReviewService:
 
         for base in bases:
             assignments = list(base.assignments)
+
+            # Determine which assignments to show based on user context
             if reviewer:
+                # Admin filtering by specific reviewer
                 assignments = [
                     assignment for assignment in assignments if assignment.reviewer == reviewer
                 ]
 
             if visible_to_username:
-                # A matched review base can have multiple reviewer assignments. For a regular
-                # reviewer, only return their own assignment rows; if they raised the PR, return
-                # a single owner row instead of leaking sibling reviewer assignments.
+                # Regular user view - filter to their own assignments
                 visible_assignments = [
                     assignment
                     for assignment in assignments
                     if assignment.reviewer == visible_to_username
                 ]
 
-                if visible_assignments:
-                    reviews.extend(
-                        ReviewService._serialize_review(base, assignment)
-                        for assignment in visible_assignments
-                    )
-                elif reviewer is None and base.pull_request_user == visible_to_username:
-                    reviews.append(ReviewService._serialize_review(base))
-
+                if base.pull_request_user == visible_to_username:
+                    # PR owner ALWAYS sees ONE row with all reviewer info
+                    review_dict = ReviewService._serialize_review(base)
+                    if assignments:
+                        review_dict["all_reviewers"] = [
+                            {
+                                "username": a.reviewer,
+                                "display_name": (
+                                    a.reviewer_rel.display_name if a.reviewer_rel else a.reviewer
+                                ),
+                            }
+                            for a in assignments
+                        ]
+                        review_dict["total_reviewers"] = len(assignments)
+                    reviews.append(review_dict)
+                elif visible_assignments:
+                    # Regular reviewer sees ONE row with multi-reviewer info
+                    review_dict = ReviewService._serialize_review(base, visible_assignments[0])
+                    if assignments:
+                        review_dict["all_reviewers"] = [
+                            {
+                                "username": a.reviewer,
+                                "display_name": (
+                                    a.reviewer_rel.display_name if a.reviewer_rel else a.reviewer
+                                ),
+                            }
+                            for a in assignments
+                        ]
+                        review_dict["total_reviewers"] = len(assignments)
+                    reviews.append(review_dict)
                 continue
 
+            # Admin view or general listing - ALWAYS show ONE row per PR with all reviewers
+            review_dict = ReviewService._serialize_review(base)
             if assignments:
-                reviews.extend(
-                    ReviewService._serialize_review(base, assignment) for assignment in assignments
-                )
-            elif reviewer is None:
-                reviews.append(ReviewService._serialize_review(base))
+                review_dict["all_reviewers"] = [
+                    {
+                        "username": a.reviewer,
+                        "display_name": (
+                            a.reviewer_rel.display_name if a.reviewer_rel else a.reviewer
+                        ),
+                    }
+                    for a in assignments
+                ]
+                review_dict["total_reviewers"] = len(assignments)
+            reviews.append(review_dict)
 
         return reviews
 
@@ -748,14 +779,33 @@ class ReviewService:
                 PullRequestReviewBase.pull_request_user == filters.pull_request_user
             )
         if filters.reviewer:
-            query = query.join(PullRequestReviewBase.assignments).where(
-                PullRequestReviewAssignment.reviewer == filters.reviewer
+            # Use EXISTS to avoid creating duplicate rows from JOIN
+            query = query.where(
+                exists(
+                    select(1).where(
+                        and_(
+                            PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
+                            PullRequestReviewAssignment.reviewer == filters.reviewer,
+                        )
+                    )
+                )
             )
         if filters.visible_to_username:
-            query = query.outerjoin(PullRequestReviewBase.assignments).where(
+            # Don't join - just filter by base table fields
+            # The _flatten_reviews method will handle assignment filtering
+            query = query.where(
                 or_(
                     PullRequestReviewBase.pull_request_user == filters.visible_to_username,
-                    PullRequestReviewAssignment.reviewer == filters.visible_to_username,
+                    # Use EXISTS subquery to check if user is a reviewer without creating duplicates
+                    exists(
+                        select(1).where(
+                            and_(
+                                PullRequestReviewAssignment.review_base_id
+                                == PullRequestReviewBase.id,
+                                PullRequestReviewAssignment.reviewer == filters.visible_to_username,
+                            )
+                        )
+                    ),
                 )
             )
         if filters.source_branch:
@@ -815,6 +865,7 @@ class ReviewService:
         query = query.order_by(desc(PullRequestReviewBase.created_date)).distinct()
         result = await db.execute(query)
         bases = result.scalars().unique().all()
+
         flattened_reviews = self._flatten_reviews(
             list(bases), filters.reviewer, filters.visible_to_username
         )
@@ -1777,7 +1828,11 @@ class ReviewService:
         Returns:
             Enriched review dict with nested entity objects
         """
-        return {
+        # Preserve multi-reviewer fields if they exist
+        all_reviewers = review_dict.get("all_reviewers")
+        total_reviewers = review_dict.get("total_reviewers")
+
+        enriched = {
             "id": review_dict["id"],
             "pull_request_id": review_dict["pull_request_id"],
             "pull_request_commit_id": review_dict["pull_request_commit_id"],
@@ -1798,13 +1853,21 @@ class ReviewService:
             "metadata": review_dict.get("metadata"),
             "ai_review_id": review_dict.get("ai_review_id"),
             "created_date": review_dict["created_date"],
-            "updated_date": review_dict["updated_date"],
+            "updated_date": review_dict.get("updated_date"),
+            # Embedded entity information
             "project": project,
             "repository": repository,
             "pull_request_user_info": pr_user,
             "reviewer_info": reviewer_user,
-            "score_summary": None,
         }
+
+        # Add multi-reviewer fields if they exist
+        if all_reviewers is not None:
+            enriched["all_reviewers"] = all_reviewers
+        if total_reviewers is not None:
+            enriched["total_reviewers"] = total_reviewers
+
+        return enriched
 
     async def list_reviews_with_entities(
         self,
