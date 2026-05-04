@@ -333,4 +333,20 @@ export const reviewsApi = {
   }> {
     return request.post(`/reviews/validation/retry/${rawRecordId}`)
   },
+
+  /**
+   * Get all scores for a specific review (returns array of individual scores)
+   */
+  getReviewScores(params: {
+    project_key: string
+    repository_slug: string
+    pull_request_id: string
+    reviewer?: string
+    source_filename?: string
+  }): Promise<{ items: ReviewScoreResponse[] }> {
+    // Backend returns array directly, request interceptor unwraps response.data
+    return request.get('/reviews/scores', { params }).then((scores) => ({
+      items: Array.isArray(scores) ? scores : []
+    }))
+  },
 }

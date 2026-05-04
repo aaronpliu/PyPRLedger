@@ -94,7 +94,103 @@
         v-loading="loading"
         style="width: 100%"
         @selection-change="handleSelectionChange"
+        @expand-change="handleExpandChange"
+        :expand-row-keys="expandedRows"
+        row-key="id"
       >
+        <!-- Expandable column for scores -->
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="expanded-scores-section">
+              <!-- Loading State -->
+              <div v-if="loadingScores[row.id]" class="scores-loading">
+                <el-icon class="is-loading"><Loading /></el-icon>
+                <span>{{ t('common.loading') }}</span>
+              </div>
+              
+              <!-- No Scores -->
+              <el-empty 
+                v-else-if="!reviewScores[row.id] || reviewScores[row.id].length === 0"
+                :description="t('reviews.detail.no_scores', 'No scores available')"
+                :image-size="80"
+              />
+              
+              <!-- Scores Table - Match ReviewDetailView structure -->
+              <el-card v-else class="nested-scores-card">
+                <template #header>
+                  <div class="card-header">
+                    <span class="card-title">{{ t('reviews.detail.scores', 'Scores') }} ({{ reviewScores[row.id].length }})</span>
+                  </div>
+                </template>
+                
+                <el-table :data="reviewScores[row.id]" stripe size="small">
+                  <!-- Reviewer Column -->
+                  <el-table-column prop="reviewer" :label="t('reviews.detail.reviewer')" width="200">
+                    <template #default="{ row: scoreRow }">
+                      <div class="reviewer-cell">
+                        <span>{{ scoreRow.reviewer_info?.display_name || scoreRow.reviewer }}</span>
+                        <el-tag 
+                          v-if="scoreRow.reviewer === row.reviewer" 
+                          size="small" 
+                          type="primary" 
+                          effect="plain"
+                          class="primary-reviewer-badge"
+                        >
+                          {{ t('reviews.detail.primary_reviewer', 'Primary') }}
+                        </el-tag>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  
+                  <!-- AI Review ID Column -->
+                  <el-table-column :label="t('reviews.detail.ai_review_id')" min-width="200" align="center">
+                    <template #default>
+                      <div v-if="row.ai_review_id" class="ai-review-id-cell">
+                        <el-tag size="small" type="info">
+                          {{ row.ai_review_id }}
+                        </el-tag>
+                        <el-button
+                          size="small"
+                          text
+                          @click="copyToClipboard(row.ai_review_id)"
+                        >
+                          <el-icon><CopyDocument /></el-icon>
+                        </el-button>
+                      </div>
+                      <span v-else class="empty-value">{{ t('reviews.detail.na', 'N/A') }}</span>
+                    </template>
+                  </el-table-column>
+                  
+                  <!-- Score Column -->
+                  <el-table-column prop="score" :label="t('reviews.detail.score')" width="120">
+                    <template #default="{ row: scoreRow }">
+                      <span :class="['score-value', getScoreColorClass(scoreRow.score)]">{{ scoreRow.score }}</span>
+                      <span v-if="scoreRow.max_score" class="score-max"> / {{ scoreRow.max_score }}</span>
+                    </template>
+                  </el-table-column>
+                  
+                  <!-- Comments Column -->
+                  <el-table-column prop="reviewer_comments" :label="t('reviews.detail.comments')" min-width="200" show-overflow-tooltip />
+                  
+                  <!-- Created Date Column -->
+                  <el-table-column prop="created_date" :label="t('reviews.detail.created')" width="160">
+                    <template #default="{ row: scoreRow }">
+                      {{ formatDate(scoreRow.created_date || '') }}
+                    </template>
+                  </el-table-column>
+                  
+                  <!-- Updated Date Column -->
+                  <el-table-column prop="updated_date" :label="t('reviews.detail.updated')" width="160">
+                    <template #default="{ row: scoreRow }">
+                      {{ scoreRow.updated_date ? formatDate(scoreRow.updated_date) : '-' }}
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </el-card>
+            </div>
+          </template>
+        </el-table-column>
+        
         <!-- Selection column only for review admins -->
         <el-table-column v-if="isReviewAdmin" type="selection" width="55" fixed="left" />
         <el-table-column :label="t('reviews.seq_number')" width="80">
@@ -339,7 +435,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Search, CircleCheck, Delete, Close, Document, Refresh, Cpu, Link, QuestionFilled } from '@element-plus/icons-vue'
+import { Search, CircleCheck, Delete, Close, Document, Refresh, Cpu, Link, QuestionFilled, Loading } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -411,6 +507,11 @@ const severityFilter = ref('')
 const hideArchived = ref(true) // Default to hiding scored/archived reviews
 const tableRef = ref()
 
+// Expandable scores section state
+const expandedRows = ref<number[]>([])
+const reviewScores = ref<Record<number, any[]>>({})
+const loadingScores = ref<Record<number, boolean>>({})
+
 // Bulk operation state
 const selectedReviews = ref<Review[]>([])
 const showBulkDeleteDialogVisible = ref(false)
@@ -429,6 +530,67 @@ const totalCount = ref(0)
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
+}
+
+// Get score color class for visual indication
+const getScoreColorClass = (score: number) => {
+  if (score >= 8) return 'score-high'
+  if (score >= 6) return 'score-medium'
+  if (score >= 4) return 'score-low'
+  return 'score-critical'
+}
+
+// Copy text to clipboard
+const copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('Copied to clipboard')
+  }).catch(() => {
+    ElMessage.error('Failed to copy to clipboard')
+  })
+}
+
+// Handle row expand/collapse - load scores when expanded
+const handleExpandChange = (row: Review, expandedRows: Review[]) => {
+  // Check if this row is now expanded
+  const isExpanded = expandedRows.some(r => r.id === row.id)
+  if (isExpanded) {
+    loadScoresForReview(row)
+  }
+}
+
+// Load scores for a specific review when expanded
+const loadScoresForReview = async (review: Review) => {
+  console.log('[ReviewListView] Loading scores for review:', review.id, review.pull_request_id)
+  
+  // If already loaded, skip
+  if (reviewScores.value[review.id]) {
+    console.log('[ReviewListView] Scores already cached for review:', review.id)
+    return
+  }
+  
+  loadingScores.value[review.id] = true
+  try {
+    // Match ReviewDetailView behavior: get ALL scores for the PR (no reviewer filter)
+    const params = {
+      project_key: review.project_key,
+      repository_slug: review.repository_slug,
+      pull_request_id: review.pull_request_id,
+      source_filename: review.source_filename || undefined,
+    }
+    console.log('[ReviewListView] API params:', params)
+    
+    const response = await reviewsApi.getReviewScores(params)
+    console.log('[ReviewListView] API response:', response)
+    
+    reviewScores.value[review.id] = response.items || []
+    console.log('[ReviewListView] Loaded', reviewScores.value[review.id].length, 'scores for review:', review.id)
+  } catch (error) {
+    console.error('[ReviewListView] Failed to load scores:', error)
+    ElMessage.error('Failed to load scores')
+    reviewScores.value[review.id] = []
+  } finally {
+    loadingScores.value[review.id] = false
+  }
 }
 
 const truncateUrl = (url: string) => {
@@ -1267,5 +1429,111 @@ html.dark .el-tag--danger {
   --el-tag-bg-color: rgba(245, 108, 108, 0.1);
   --el-tag-border-color: rgba(245, 108, 108, 0.3);
   --el-tag-text-color: #f87171;
+}
+
+/* Expanded Scores Section */
+.expanded-scores-section {
+  padding: 16px;
+}
+
+.scores-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 0;
+  color: var(--el-text-color-secondary);
+}
+
+.nested-scores-card {
+  margin-top: 0;
+}
+
+.nested-scores-card :deep(.el-card__header) {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--el-text-color-primary);
+}
+
+/* Reviewer Cell */
+.reviewer-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.primary-reviewer-badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* AI Review ID Cell */
+.ai-review-id-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.empty-value {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+/* Score Value Styles - Match ReviewDetailView */
+.score-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.score-high {
+  color: #10b981;
+}
+
+.score-medium {
+  color: #3b82f6;
+}
+
+.score-low {
+  color: #f59e0b;
+}
+
+.score-critical {
+  color: #ef4444;
+}
+
+.score-max {
+  font-size: 0.9rem;
+  color: var(--el-text-color-secondary);
+}
+
+/* Dark mode adjustments */
+[data-theme='dark'] .score-high {
+  color: #10b981;
+}
+
+[data-theme='dark'] .score-medium {
+  color: #3b82f6;
+}
+
+[data-theme='dark'] .score-low {
+  color: #f59e0b;
+}
+
+[data-theme='dark'] .score-critical {
+  color: #ef4444;
 }
 </style>
