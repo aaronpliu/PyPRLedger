@@ -140,9 +140,9 @@
         </el-card>
 
         <!-- Dual Column Layout: Code Diff + AI Review -->
-        <el-row :gutter="16" style="margin-top: 16px" v-if="review.git_code_diff || review.ai_suggestions">
+        <el-row :gutter="16" style="margin-top: 16px" v-if="review.git_code_diff">
           <!-- Code Diff Column -->
-          <el-col :xs="24" :sm="24" :md="review.ai_suggestions ? 14 : 24" :lg="review.ai_suggestions ? 14 : 24" :xl="review.ai_suggestions ? 15 : 24">
+          <el-col :xs="24" :sm="24" :md="14" :lg="14" :xl="15">
             <div class="analysis-column">
               <div class="analysis-column-header">
                 <span>{{ t('reviews.detail.code_changes') }}</span>
@@ -161,8 +161,8 @@
             </div>
           </el-col>
 
-          <!-- AI Review Column -->
-          <el-col :xs="24" :sm="24" :md="review.ai_suggestions ? 10 : 0" :lg="review.ai_suggestions ? 10 : 0" :xl="review.ai_suggestions ? 9 : 0" v-if="review.ai_suggestions">
+          <!-- AI Review Column - Always shown with placeholder if no data -->
+          <el-col :xs="24" :sm="24" :md="10" :lg="10" :xl="9">
             <div class="analysis-column">
               <div class="analysis-column-header ai-review-header">
                 <span class="ai-review-title">
@@ -183,7 +183,25 @@
                 </el-button>
               </div>
               <div class="analysis-column-body">
-                <AIReviewResults :suggestions="review.ai_suggestions" />
+                <!-- Show AI results if available -->
+                <AIReviewResults v-if="review.ai_suggestions" :suggestions="review.ai_suggestions" />
+                
+                <!-- Placeholder when no AI suggestions -->
+                <div v-else class="no-ai-results-placeholder">
+                  <el-empty
+                    :image-size="120"
+                    :description="t('reviews.detail.no_ai_results', 'No AI review results available')"
+                  >
+                    <template #image>
+                      <el-icon :size="80" color="var(--el-text-color-secondary)">
+                        <InfoFilled />
+                      </el-icon>
+                    </template>
+                    <p class="placeholder-hint">
+                      {{ t('reviews.detail.no_ai_hint', 'This PR was submitted without AI analysis. AI suggestions will appear here when available.') }}
+                    </p>
+                  </el-empty>
+                </div>
               </div>
             </div>
           </el-col>
@@ -438,7 +456,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link, InfoFilled } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
@@ -2049,5 +2067,27 @@ watch(
   .floating-nav-next {
     right: 8px;
   }
+}
+
+/* No AI Results Placeholder Styling */
+.no-ai-results-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 20px;
+}
+
+.placeholder-hint {
+  margin-top: 16px;
+  color: var(--el-text-color-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  text-align: center;
+  max-width: 280px;
+}
+
+[data-theme='dark'] .placeholder-hint {
+  color: var(--el-text-color-secondary);
 }
 </style>
