@@ -18,6 +18,24 @@ export interface ReviewNavigationContext {
   pageSize: number
   totalItems: number
   hasMorePages: boolean
+  // Store filter parameters to maintain consistency when navigating pages
+  filters?: {
+    project_key?: string
+    repository_slug?: string
+    pull_request_id?: string
+    pull_request_user?: string
+    reviewer?: string
+    source_branch?: string
+    target_branch?: string
+    pull_request_status?: string
+    pull_request_commit_id?: string
+    date_from?: string
+    date_to?: string
+    app_names?: string
+    search_query?: string
+    has_scores?: boolean
+    severity?: string
+  }
 }
 
 function loadStoredContext(): ReviewNavigationContext | null {
@@ -53,6 +71,7 @@ export const useReviewNavigationStore = defineStore('reviewNavigation', () => {
   const pageSize = computed(() => context.value?.pageSize || 20)
   const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
   const hasMorePages = computed(() => context.value?.hasMorePages || false)
+  const filters = computed(() => context.value?.filters || {})
 
   const persist = () => {
     if (!context.value || context.value.items.length === 0) {
@@ -80,6 +99,7 @@ export const useReviewNavigationStore = defineStore('reviewNavigation', () => {
     pageSize,
     totalPages,
     hasMorePages,
+    filters,
     setContext,
     clear,
   }

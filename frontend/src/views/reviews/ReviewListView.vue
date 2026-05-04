@@ -581,6 +581,30 @@ const viewReview = (review: Review) => {
   const totalPages = Math.ceil(total.value / pageSize.value)
   const hasMorePages = currentPage.value < totalPages
 
+  // Build filter parameters to maintain consistency when navigating
+  const filterParams: any = {}
+  if (appFilter.value && appFilter.value.length > 0) filterParams.app_names = appFilter.value.join(',')
+  if (prUserFilter.value) filterParams.pull_request_user = prUserFilter.value
+  if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+    filterParams.reviewer = reviewerFilter.value
+  }
+  if (statusFilter.value) filterParams.pull_request_status = statusFilter.value
+  if (searchQuery.value) filterParams.search_query = searchQuery.value
+  
+  // Convert scored filter to has_scores parameter
+  if (scoredFilter.value === 'yes') {
+    filterParams.has_scores = true
+  } else if (scoredFilter.value === 'no') {
+    filterParams.has_scores = false
+  }
+  
+  // Convert hideArchived toggle to has_scores
+  if (hideArchived.value && !scoredFilter.value) {
+    filterParams.has_scores = false
+  }
+  
+  if (severityFilter.value) filterParams.severity = severityFilter.value
+
   reviewNavigationStore.setContext({
     items: reviews.value.map(item => ({
       id: item.id,
@@ -594,6 +618,7 @@ const viewReview = (review: Review) => {
     pageSize: pageSize.value,
     totalItems: total.value,
     hasMorePages: hasMorePages,
+    filters: filterParams, // Store filters for pagination consistency
   })
 
   router.push({

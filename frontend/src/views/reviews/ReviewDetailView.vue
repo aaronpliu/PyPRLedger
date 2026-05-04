@@ -997,11 +997,23 @@ const loadNextPage = async () => {
   try {
     const nextPage = reviewNavigationStore.currentPage + 1
     
-    // Fetch next page from API
-    const response = await reviewsApi.getReviews({
+    // Fetch next page from API WITH FILTERS to maintain consistency
+    const params: any = {
       page: nextPage,
       page_size: reviewNavigationStore.pageSize,
-    })
+    }
+    
+    // Apply stored filters
+    const storedFilters = reviewNavigationStore.filters || {}
+    if (storedFilters.app_names) params.app_names = storedFilters.app_names
+    if (storedFilters.pull_request_user) params.pull_request_user = storedFilters.pull_request_user
+    if (storedFilters.reviewer) params.reviewer = storedFilters.reviewer
+    if (storedFilters.pull_request_status) params.pull_request_status = storedFilters.pull_request_status
+    if (storedFilters.search_query) params.search_query = storedFilters.search_query
+    if (storedFilters.has_scores !== undefined) params.has_scores = storedFilters.has_scores
+    if (storedFilters.severity) params.severity = storedFilters.severity
+    
+    const response = await reviewsApi.getReviews(params)
 
     if (response.items.length === 0) {
       ElMessage.warning('No more reviews available')
@@ -1023,6 +1035,7 @@ const loadNextPage = async () => {
       pageSize: reviewNavigationStore.pageSize,
       totalItems: response.total,
       hasMorePages: nextPage < totalPages,
+      filters: storedFilters, // Preserve filters for subsequent navigation
     })
 
     // Navigate to first review on the new page
@@ -1056,11 +1069,23 @@ const loadPreviousPage = async () => {
   try {
     const prevPage = reviewNavigationStore.currentPage - 1
     
-    // Fetch previous page from API
-    const response = await reviewsApi.getReviews({
+    // Fetch previous page from API WITH FILTERS to maintain consistency
+    const params: any = {
       page: prevPage,
       page_size: reviewNavigationStore.pageSize,
-    })
+    }
+    
+    // Apply stored filters
+    const storedFilters = reviewNavigationStore.filters || {}
+    if (storedFilters.app_names) params.app_names = storedFilters.app_names
+    if (storedFilters.pull_request_user) params.pull_request_user = storedFilters.pull_request_user
+    if (storedFilters.reviewer) params.reviewer = storedFilters.reviewer
+    if (storedFilters.pull_request_status) params.pull_request_status = storedFilters.pull_request_status
+    if (storedFilters.search_query) params.search_query = storedFilters.search_query
+    if (storedFilters.has_scores !== undefined) params.has_scores = storedFilters.has_scores
+    if (storedFilters.severity) params.severity = storedFilters.severity
+    
+    const response = await reviewsApi.getReviews(params)
 
     if (response.items.length === 0) {
       ElMessage.warning('No more reviews available')
@@ -1082,6 +1107,7 @@ const loadPreviousPage = async () => {
       pageSize: reviewNavigationStore.pageSize,
       totalItems: response.total,
       hasMorePages: prevPage < totalPages,
+      filters: storedFilters, // Preserve filters for subsequent navigation
     })
 
     // Navigate to last review on the new page
