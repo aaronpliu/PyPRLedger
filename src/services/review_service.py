@@ -560,8 +560,6 @@ class ReviewService:
                 # Also clean up any other failed raw records for the same PR commit/file
                 # This handles the case where user retries multiple times or re-posts the same PR
                 # Use JSON_EXTRACT for MySQL compatibility
-                from sqlalchemy import func
-
                 cleanup_query = select(PullRequestReviewRaw).where(
                     and_(
                         PullRequestReviewRaw.status == "failed",
