@@ -301,6 +301,8 @@
   "scores": {
     "score_list": "Score List",
     "score_analytics": "Score Analytics",
+    "page_title_list": "Scores Management",
+    "page_title_analytics": "Score Analytics Dashboard",
     "refresh": "Refresh",
     "export": "Export",
     "seq_number": "Seq#",
@@ -312,11 +314,17 @@
     "score": "Score",
     "score_description": "Description",
     "comments": "Comments",
+    "no_comments": "No comments",
     "created": "Created",
+    "updated": "Updated",
     "actions": "Actions",
     "view": "View",
     "edit": "Edit",
     "delete": "Delete",
+    "confirm_delete": "Confirm Delete",
+    "delete_score_confirm": "Are you sure you want to delete this score? This action cannot be undone.",
+    "delete_success": "Score deleted successfully",
+    "delete_failed": "Failed to delete score",
     "no_data": "No Data",
     "filters": {
       "search_placeholder": "Search by PR ID, reviewer, or file...",
@@ -328,8 +336,16 @@
       "all_projects": "All Projects",
       "all_repositories": "All Repositories",
       "all_reviewers": "All Reviewers",
+      "all_levels": "All Levels",
+      "pr_level": "PR-Level",
+      "file_level": "File-Level",
       "apply_filters": "Apply Filters",
       "reset_filters": "Reset"
+    },
+    "statistics": {
+      "average_score": "Average Score",
+      "total_reviews": "Total Reviews",
+      "total_scores": "Total Scores"
     },
     "analytics": {
       "title": "Score Analytics",
@@ -347,7 +363,14 @@
       "last_7_days": "Last 7 Days",
       "last_30_days": "Last 30 Days",
       "last_90_days": "Last 90 Days",
-      "custom_range": "Custom Range"
+      "custom_range": "Custom Range",
+      "start_date": "Start date",
+      "end_date": "End date",
+      "reset": "Reset",
+      "reviews_this_week": "Reviews This Week",
+      "reviews_today": "Reviews Today",
+      "pr_status_distribution": "Pull Request Status Distribution",
+      "review_status_breakdown": "Review Status Breakdown"
     },
     "messages": {
       "load_failed": "Failed to load scores",

@@ -40,81 +40,122 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const isMounted = ref(false)
+const isDarkTheme = ref(false)
 
 onMounted(() => {
   // Ensure DOM is ready before rendering chart
   isMounted.value = true
+  checkTheme()
+  
+  // Watch for theme changes
+  const observer = new MutationObserver(checkTheme)
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  })
 })
 
-const chartOption = computed(() => ({
-  title: {
-    text: props.title,
-    left: 'center',
-    textStyle: {
-      color: 'var(--el-text-color-primary)',
-    },
-  },
-  tooltip: {
-    trigger: 'axis',
-    axisPointer: {
-      type: 'shadow',
-    },
-  },
-  grid: {
-    left: '3%',
-    right: '4%',
-    bottom: '15%',
-    top: '15%',
-    containLabel: true,
-  },
-  xAxis: {
-    type: 'category',
-    data: props.data.map(d => d.name),
-    axisLabel: {
-      rotate: 45,
-      color: 'var(--el-text-color-secondary)',
-      interval: 0,
-    },
-    axisLine: {
-      lineStyle: {
-        color: 'var(--el-border-color)',
+const checkTheme = () => {
+  isDarkTheme.value = document.documentElement.getAttribute('data-theme') === 'dark'
+}
+
+const chartOption = computed(() => {
+  const dark = isDarkTheme.value
+  
+  return {
+    title: {
+      text: props.title,
+      left: 'center',
+      textStyle: {
+        color: dark ? '#e5eaf3' : '#303133',
+        fontSize: 14,
+        fontWeight: 600,
       },
     },
-  },
-  yAxis: {
-    type: 'value',
-    axisLabel: {
-      color: 'var(--el-text-color-secondary)',
-    },
-    axisLine: {
-      lineStyle: {
-        color: 'var(--el-border-color)',
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow',
+      },
+      backgroundColor: dark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(50, 50, 50, 0.9)',
+      borderColor: dark ? '#444' : '#333',
+      borderWidth: 1,
+      textStyle: {
+        color: '#fff',
       },
     },
-    splitLine: {
-      lineStyle: {
-        color: 'var(--el-border-color-lighter)',
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '15%',
+      top: '15%',
+      containLabel: true,
+    },
+    xAxis: {
+      type: 'category',
+      data: props.data.map(d => d.name),
+      axisLabel: {
+        rotate: 45,
+        color: dark ? '#a3a6ad' : '#606266',
+        interval: 0,
+        fontSize: 11,
+      },
+      axisLine: {
+        lineStyle: {
+          color: dark ? '#4c4d4f' : '#dcdfe6',
+        },
+      },
+      axisTick: {
+        lineStyle: {
+          color: dark ? '#4c4d4f' : '#dcdfe6',
+        },
       },
     },
-  },
-  series: [
-    {
-      name: 'Value',
-      type: 'bar',
-      data: props.data.map(d => d.value),
-      itemStyle: {
-        color: props.color,
-        borderRadius: [4, 4, 0, 0],
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        color: dark ? '#a3a6ad' : '#606266',
+        fontSize: 11,
       },
-      label: {
-        show: true,
-        position: 'top',
-        color: 'var(--el-text-color-primary)',
-        fontSize: 12,
+      axisLine: {
+        show: false,
+      },
+      axisTick: {
+        show: false,
+      },
+      splitLine: {
+        lineStyle: {
+          color: dark ? '#363637' : '#ebeef5',
+          type: 'dashed',
+        },
       },
     },
-  ],
-}))
+    series: [
+      {
+        name: 'Value',
+        type: 'bar',
+        data: props.data.map(d => d.value),
+        itemStyle: {
+          color: props.color,
+          borderRadius: [4, 4, 0, 0],
+        },
+        emphasis: {
+          itemStyle: {
+            shadowBlur: 10,
+            shadowColor: 'rgba(0, 0, 0, 0.3)',
+          },
+        },
+        label: {
+          show: true,
+          position: 'top',
+          color: dark ? '#e5eaf3' : '#303133',
+          fontSize: 11,
+          fontWeight: 500,
+        },
+      },
+    ],
+  }
+})
 </script>
 
 <style scoped>
@@ -126,5 +167,11 @@ const chartOption = computed(() => ({
 .chart {
   width: 100%;
   height: 100%;
+}
+
+/* Dark theme optimizations */
+[data-theme='dark'] .chart :deep(.echarts-tooltip) {
+  background-color: #1f1f1f !important;
+  border-color: #333 !important;
 }
 </style>

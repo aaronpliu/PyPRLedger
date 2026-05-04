@@ -2,15 +2,15 @@
   <div class="score-list-container">
     <el-card>
       <template #header>
-        <h2>Scores Management</h2>
+        <h2>{{ t('scores.page_title_list') }}</h2>
       </template>
 
       <!-- Filters -->
       <el-form :inline="true" class="filter-form">
-        <el-form-item label="Project">
+        <el-form-item :label="t('scores.filters.project_filter')">
           <el-select 
             v-model="projectFilter" 
-            placeholder="All Projects" 
+            :placeholder="t('scores.filters.all_projects')" 
             clearable 
             style="width: 200px" 
             @change="loadScores"
@@ -25,16 +25,16 @@
           </el-select>
         </el-form-item>
         
-        <el-form-item label="Score Level">
+        <el-form-item :label="t('scores.filters.score_range')">
           <el-select 
             v-model="levelFilter" 
-            placeholder="All Levels" 
+            :placeholder="t('scores.filters.all_levels')" 
             clearable 
             style="width: 200px" 
             @change="loadScores"
           >
-            <el-option label="PR-Level" value="pr" />
-            <el-option label="File-Level" value="file" />
+            <el-option :label="t('scores.filters.pr_level')" value="pr" />
+            <el-option :label="t('scores.filters.file_level')" value="file" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -48,17 +48,17 @@
             </el-empty>
           </div>
         </template>
-        <el-table-column label="Seq#" width="70">
+        <el-table-column :label="t('scores.seq_number')" width="70">
           <template #default="{ $index }">
             <span class="seq-number">{{ (currentPage - 1) * pageSize + $index + 1 }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="project_key" label="Project" width="120">
+        <el-table-column prop="project_key" :label="t('scores.project_repo')" width="120">
           <template #default="{ row }">
             <span class="project-key">{{ row.project_name || row.project_key }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="pull_request_user" label="PR User" width="150">
+        <el-table-column prop="pull_request_user" :label="t('scores.pr_user')" width="150">
           <template #default="{ row }">
             <div class="user-cell">
               <el-avatar :size="24" v-if="row.pull_request_user_info?.avatar_url">
@@ -72,7 +72,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="reviewer" label="Reviewer" width="150">
+        <el-table-column prop="reviewer" :label="t('scores.reviewer')" width="150">
           <template #default="{ row }">
             <div class="reviewer-cell">
               <el-avatar :size="28" v-if="row.reviewer_info?.avatar_url">
@@ -86,7 +86,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="pull_request_id" label="PR ID" width="110">
+        <el-table-column prop="pull_request_id" :label="t('reviews.detail.pull_request_id', 'PR ID')" width="110">
           <template #default="{ row }">
             <el-link 
               v-if="getPRUrl(row)"
@@ -101,7 +101,7 @@
             <el-tag v-else size="small">{{ truncateId(row.pull_request_id) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="branch_info" label="Branch" width="180">
+        <el-table-column prop="branch_info" :label="t('scores.filters.branch', 'Branch')" width="180">
           <template #default="{ row }">
             <div class="branch-info" :class="{ 'branch-info-multiline': isLongBranch(row.source_branch, row.target_branch) }">
               <div class="branch-line">
@@ -117,20 +117,20 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="source_filename" label="Scope" width="130">
+        <el-table-column prop="source_filename" :label="t('scores.scope', 'Scope')" width="130">
           <template #default="{ row }">
             <el-tag 
               :type="row.source_filename ? 'info' : 'success'" 
               size="small"
             >
-              {{ row.source_filename ? 'File-Level' : 'PR-Level' }}
+              {{ row.source_filename ? t('scores.filters.file_level') : t('scores.filters.pr_level') }}
             </el-tag>
             <div v-if="row.source_filename" class="filename-text" :title="row.source_filename">
               {{ truncateFilename(row.source_filename) }}
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="score" label="Score" width="160">
+        <el-table-column prop="score" :label="t('scores.score')" width="160">
           <template #default="{ row }">
             <div class="score-cell">
               <el-progress
@@ -142,28 +142,28 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="reviewer_comments" label="Comments" min-width="200" show-overflow-tooltip>
+        <el-table-column prop="reviewer_comments" :label="t('scores.comments')" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <span v-if="row.reviewer_comments" class="comments-text">
               {{ row.reviewer_comments }}
             </span>
-            <span v-else class="no-comments">No comments</span>
+            <span v-else class="no-comments">{{ t('scores.no_comments') }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="created_date" label="Created" width="160">
+        <el-table-column prop="created_date" :label="t('scores.created')" width="160">
           <template #default="{ row }">
             {{ formatDate(row.created_date) }}
           </template>
         </el-table-column>
-        <el-table-column prop="updated_date" label="Updated" width="160">
+        <el-table-column prop="updated_date" :label="t('scores.updated')" width="160">
           <template #default="{ row }">
             {{ formatDate(row.updated_date || row.created_date) }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="90" fixed="right">
+        <el-table-column :label="t('scores.actions')" width="90" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="danger" @click="confirmDelete(row)" :disabled="!canDeleteScore(row)">
-              Delete
+              {{ t('scores.delete') }}
             </el-button>
           </template>
         </el-table-column>
@@ -186,13 +186,13 @@
       <el-divider />
       <el-row :gutter="20" class="stats-row">
         <el-col :span="8">
-          <el-statistic title="Average Score" :value="stats.average_score" :precision="1" class="theme-aware-statistic" />
+          <el-statistic :title="t('scores.statistics.average_score')" :value="stats.average_score" :precision="1" class="theme-aware-statistic" />
         </el-col>
         <el-col :span="8">
-          <el-statistic title="Total Reviews" :value="stats.total_reviews" class="theme-aware-statistic" />
+          <el-statistic :title="t('scores.statistics.total_reviews')" :value="stats.total_reviews" class="theme-aware-statistic" />
         </el-col>
         <el-col :span="8">
-          <el-statistic title="Total Scores" :value="totalScores" class="theme-aware-statistic" />
+          <el-statistic :title="t('scores.statistics.total_scores')" :value="totalScores" class="theme-aware-statistic" />
         </el-col>
       </el-row>
     </el-card>
@@ -202,6 +202,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { scoresApi } from '@/api/scores'
 import { reviewsApi } from '@/api/reviews'
 import { projectsApi } from '@/api/projects'
@@ -210,6 +211,8 @@ import type { ProjectSummary } from '@/api/projects'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { useAuthStore } from '@/stores/auth'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const authStore = useAuthStore()

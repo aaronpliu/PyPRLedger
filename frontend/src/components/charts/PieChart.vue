@@ -5,7 +5,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { PieChart } from 'echarts/charts'
@@ -36,67 +36,104 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const isMounted = ref(false)
+const isDarkTheme = ref(false)
 
 onMounted(() => {
   // Ensure DOM is ready before rendering chart
   isMounted.value = true
+  checkTheme()
+  
+  // Watch for theme changes
+  const observer = new MutationObserver(checkTheme)
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  })
 })
 
-const chartOption = computed(() => ({
-  title: {
-    text: props.title,
-    left: 'center',
-    textStyle: {
-      color: 'var(--el-text-color-primary)',
-    },
-  },
-  tooltip: {
-    trigger: 'item',
-    formatter: '{b}: {c} ({d}%)',
-  },
-  legend: {
-    orient: 'vertical',
-    left: 'left',
-    top: 'middle',
-    textStyle: {
-      color: 'var(--el-text-color-secondary)',
-    },
-  },
-  series: [
-    {
-      name: props.title,
-      type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['60%', '50%'],
-      avoidLabelOverlap: true,
-      itemStyle: {
-        borderRadius: 10,
-        borderColor: 'var(--el-bg-color)',
-        borderWidth: 2,
+const checkTheme = () => {
+  isDarkTheme.value = document.documentElement.getAttribute('data-theme') === 'dark'
+}
+
+const chartOption = computed(() => {
+  const dark = isDarkTheme.value
+  
+  return {
+    title: {
+      text: props.title,
+      left: 'center',
+      textStyle: {
+        color: dark ? '#e5eaf3' : '#303133',
+        fontSize: 14,
+        fontWeight: 600,
       },
-      label: {
-        show: true,
-        formatter: '{b}: {d}%',
-        color: 'var(--el-text-color-primary)',
-        fontSize: 12,
+    },
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c} ({d}%)',
+      backgroundColor: dark ? 'rgba(30, 30, 30, 0.95)' : 'rgba(50, 50, 50, 0.9)',
+      borderColor: dark ? '#444' : '#333',
+      borderWidth: 1,
+      textStyle: {
+        color: '#fff',
       },
-      emphasis: {
+    },
+    legend: {
+      orient: 'vertical',
+      left: 'left',
+      top: 'middle',
+      textStyle: {
+        color: dark ? '#a3a6ad' : '#606266',
+        fontSize: 11,
+      },
+      itemWidth: 10,
+      itemHeight: 10,
+    },
+    series: [
+      {
+        name: props.title,
+        type: 'pie',
+        radius: ['35%', '65%'],
+        center: ['60%', '55%'],
+        avoidLabelOverlap: true,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: dark ? '#1a1a1a' : '#fff',
+          borderWidth: 2,
+        },
+        emphasis: {
+          itemStyle: {
+            shadowBlur: 10,
+            shadowOffsetX: 0,
+            shadowColor: 'rgba(0, 0, 0, 0.3)',
+          },
+          label: {
+            show: true,
+            fontSize: 13,
+            fontWeight: 'bold',
+          },
+        },
         label: {
           show: true,
-          fontSize: 14,
-          fontWeight: 'bold',
+          formatter: '{b}: {d}%',
+          color: dark ? '#e5eaf3' : '#303133',
+          fontSize: 11,
+          fontWeight: 500,
         },
-      },
-      labelLine: {
-        show: true,
-        lineStyle: {
-          color: 'var(--el-border-color)',
+        labelLine: {
+          show: true,
+          length: 15,
+          length2: 10,
+          lineStyle: {
+            color: dark ? '#4c4d4f' : '#dcdfe6',
+            width: 1,
+          },
         },
+        data: props.data,
       },
-      data: props.data,
-    },
-  ],
-}))
+    ],
+  }
+})
 </script>
 
 <style scoped>

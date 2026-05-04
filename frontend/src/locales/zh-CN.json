@@ -301,6 +301,8 @@
   "scores": {
     "score_list": "评分列表",
     "score_analytics": "评分分析",
+    "page_title_list": "评分管理",
+    "page_title_analytics": "评分分析仪表板",
     "refresh": "刷新",
     "export": "导出",
     "seq_number": "序号",
@@ -312,12 +314,18 @@
     "score": "评分",
     "score_description": "描述",
     "comments": "评论",
+    "no_comments": "无评论",
     "created": "创建时间",
+    "updated": "更新时间",
     "actions": "操作",
     "view": "查看",
     "edit": "编辑",
     "delete": "删除",
-    "no_data": "暂无数据",
+    "confirm_delete": "确认删除",
+    "delete_score_confirm": "确定要删除此评分吗？此操作无法撤销。",
+    "delete_success": "评分删除成功",
+    "delete_failed": "删除评分失败",
+    "no_data": "无数据",
     "filters": {
       "search_placeholder": "搜索PR ID、审查者或文件...",
       "project_filter": "项目",
@@ -328,8 +336,16 @@
       "all_projects": "所有项目",
       "all_repositories": "所有仓库",
       "all_reviewers": "所有审查者",
+      "all_levels": "所有级别",
+      "pr_level": "PR级别",
+      "file_level": "文件级别",
       "apply_filters": "应用筛选",
       "reset_filters": "重置"
+    },
+    "statistics": {
+      "average_score": "平均评分",
+      "total_reviews": "总审查数",
+      "total_scores": "总评分数"
     },
     "analytics": {
       "title": "评分分析",
@@ -343,11 +359,18 @@
       "by_project": "按项目",
       "by_repository": "按仓库",
       "by_file": "按文件",
-      "period": "时间段",
+      "period": "周期",
       "last_7_days": "最近7天",
       "last_30_days": "最近30天",
       "last_90_days": "最近90天",
-      "custom_range": "自定义范围"
+      "custom_range": "自定义范围",
+      "start_date": "开始日期",
+      "end_date": "结束日期",
+      "reset": "重置",
+      "reviews_this_week": "本周审查",
+      "reviews_today": "今日审查",
+      "pr_status_distribution": "PR状态分布",
+      "review_status_breakdown": "审查状态细分"
     },
     "messages": {
       "load_failed": "加载评分失败",
