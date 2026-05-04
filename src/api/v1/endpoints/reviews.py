@@ -808,6 +808,23 @@ async def get_review(
         NotFoundException: If no reviews are found
     """
     try:
+        # Check if user has review_admin role (by checking 'assign' permission)
+        rbac_service = RBACService(db)
+        is_review_admin = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="assign",
+            resource_type="reviews",
+        )
+
+        # Determine visible_to_username based on user role
+        # Admin: sees all reviews (including unassigned)
+        # Regular user: only sees their assigned reviews and self-raised PRs
+        visible_to_username = None if is_review_admin else current_user.username
+
+        logger.info(
+            f"User {current_user.username} (admin={is_review_admin}) viewing PR {pull_request_id}"
+        )
+
         # Get all reviews for this PR (may have multiple reviews from different reviewers)
         reviews = await review_service.get_review(
             project_key=project_key,
@@ -816,7 +833,7 @@ async def get_review(
             reviewer=reviewer,
             source_filename=source_filename,
             db=db,
-            visible_to_username=current_user.username,  # Pass current user for multi-reviewer display
+            visible_to_username=visible_to_username,
         )
 
         if not reviews:
