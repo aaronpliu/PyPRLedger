@@ -863,7 +863,36 @@ class ReviewService:
             except Exception as e:
                 logger.warning(f"Failed to get review list from cache: {str(e)}")
 
-        query = query.order_by(desc(PullRequestReviewBase.created_date)).distinct()
+        # Custom sorting: unscored reviews first, then scored reviews by updated_date desc
+        # Use LEFT JOIN with score table to check if review has scores
+        from sqlalchemy import case
+
+        # Create a subquery to check if review has any scores
+        has_scores_subquery = (
+            select(1)
+            .where(
+                and_(
+                    PullRequestScore.pull_request_id == PullRequestReviewBase.pull_request_id,
+                    PullRequestScore.project_key == PullRequestReviewBase.project_key,
+                    PullRequestScore.repository_slug == PullRequestReviewBase.repository_slug,
+                    or_(
+                        and_(
+                            PullRequestScore.source_filename.is_(None),
+                            PullRequestReviewBase.source_filename.is_(None),
+                        ),
+                        PullRequestScore.source_filename == PullRequestReviewBase.source_filename,
+                    ),
+                )
+            )
+            .correlate(PullRequestReviewBase)
+            .exists()
+        )
+
+        # Order by: unscored first (0), then scored (1), within each group by updated_date desc
+        query = query.order_by(
+            case((has_scores_subquery, 1), else_=0),  # Unscored=0 (first), Scored=1 (second)
+            desc(PullRequestReviewBase.updated_date),  # Within each group, newest first
+        ).distinct()
         result = await db.execute(query)
         bases = result.scalars().unique().all()
 
