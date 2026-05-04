@@ -6,6 +6,7 @@ with SQLAlchemy before any relationships are resolved.
 
 from src.models.audit_log import AuditLog
 from src.models.auth_user import AuthUser
+from src.models.notification import Notification, NotificationPreference
 from src.models.organization import OrganizationGroup
 from src.models.project import Project
 from src.models.project_registry import ProjectRegistry
@@ -33,4 +34,6 @@ __all__ = [
     "AuditLog",
     "ProjectRegistry",
     "SystemSetting",
+    "Notification",
+    "NotificationPreference",
 ]

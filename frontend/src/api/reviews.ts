@@ -184,8 +184,14 @@ export const reviewsApi = {
 
   // Get review by ID - fetches from list and finds by ID
   async getReviewById(id: number): Promise<Review> {
-    // First try to get all reviews and find by ID
-    const response = await request.get('/reviews', { params: { page: 1, page_size: 100 } })
+    // Fetch all reviews (including archived/scored) to find by ID
+    // Use large page_size to ensure we get all reviews
+    const response = await request.get('/reviews', { 
+      params: { 
+        page: 1, 
+        page_size: 1000  // Large size to get all reviews
+      } 
+    })
     const data = response.data || response
     const review = data.items?.find((r: Review) => r.id === id)
     if (!review) {

@@ -340,7 +340,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { Search, CircleCheck, Delete, Close, Document, Refresh, Cpu, Link, QuestionFilled } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review } from '@/api/reviews'
@@ -360,6 +360,7 @@ import { usePrUrl } from '@/composables/usePrUrl'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const { hasPermission } = usePermission()
 const reviewNavigationStore = useReviewNavigationStore()
@@ -941,6 +942,21 @@ let filterChangeTimeout: ReturnType<typeof setTimeout>
 // Load reviews when component mounts
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  
+  // Check for query parameters from notification navigation
+  const prId = route.query.pr_id as string | undefined
+  const fromNotification = route.query.from_notification === 'true'
+  
+  // If coming from notification, disable hideArchived filter to show all reviews
+  if (fromNotification) {
+    hideArchived.value = false
+  }
+  
+  // If PR ID is specified in query, set it as search query
+  if (prId) {
+    searchQuery.value = prId
+  }
+  
   loadReviews()
   loadAvailableApps()
   loadPRUsers()

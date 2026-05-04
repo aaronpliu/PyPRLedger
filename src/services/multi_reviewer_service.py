@@ -13,11 +13,13 @@ from sqlalchemy.orm import selectinload
 from src.core.exceptions import ReviewNotFoundException
 from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import PullRequestReviewAssignment, PullRequestReviewBase
+from src.schemas.notification import NotificationCreate
 from src.schemas.review import (
     AssignReviewerRequest,
     ReviewBaseResponse,
     ReviewWithAssignmentsResponse,
 )
+from src.services.notification_service import NotificationService
 from src.services.project_registry_service import ProjectRegistryService
 from src.utils.metrics import MetricsCollector
 from src.utils.timezone import get_current_time
@@ -31,6 +33,49 @@ class MultiReviewerService:
 
     def __init__(self, metrics_collector: MetricsCollector | None = None):
         self.metrics = metrics_collector or MetricsCollector()
+        self._notification_service: NotificationService | None = None
+
+    @property
+    def notification_service(self) -> NotificationService:
+        """Lazy initialization of notification service"""
+        if self._notification_service is None:
+            try:
+                from src.utils.redis import get_redis_client, init_redis
+
+                # Try to initialize Redis if not already done
+                try:
+                    get_redis_client()
+                except RuntimeError:
+                    # Redis not initialized yet, try to initialize it
+                    logger.info("Initializing Redis for notifications")
+                    init_redis()
+
+                self._notification_service = NotificationService()
+            except Exception as e:
+                # Redis not available, create service without caching
+                logger.warning(f"Redis not available, notifications will work without caching: {e}")
+                self._notification_service = NotificationService.__new__(NotificationService)
+                self._notification_service.metrics = self.metrics
+
+                # Mock redis client that does nothing
+                class MockRedis:
+                    async def get(self, key):
+                        return None
+
+                    async def setex(self, key, ttl, value):
+                        pass
+
+                    async def delete(self, key):
+                        pass
+
+                    async def incr(self, key):
+                        pass
+
+                    async def expireat(self, key, timestamp):
+                        pass
+
+                self._notification_service.redis_client = MockRedis()
+        return self._notification_service
 
     async def get_reviews(
         self,
@@ -288,6 +333,18 @@ class MultiReviewerService:
         # Load reviewer info
         await db.refresh(assignment, ["reviewer_rel"])
 
+        # Dispatch notification (synchronous to ensure it completes before returning)
+        try:
+            await self._dispatch_review_assigned_notification(
+                db=db,
+                reviewer_username=assignment_data.reviewer,
+                review_base_id=review_base_id,
+                assigned_by=assigned_by,
+            )
+        except Exception as e:
+            # Log error but don't fail the assignment
+            logger.error(f"Failed to dispatch notification: {e}", exc_info=True)
+
         return {
             "message": "Reviewer assigned successfully",
             "assignment": assignment.to_dict(),
@@ -334,6 +391,16 @@ class MultiReviewerService:
 
         await db.flush()
         await db.refresh(assignment)
+
+        # Dispatch notification if assignment is completed
+        if status == "completed":
+            try:
+                await self._dispatch_review_completed_notification(
+                    db=db,
+                    assignment=assignment,
+                )
+            except Exception as e:
+                logger.error(f"Failed to dispatch completion notification: {e}", exc_info=True)
 
         return {"message": "Status updated", "assignment": assignment.to_dict()}
 
@@ -399,3 +466,108 @@ class MultiReviewerService:
             completed_reviewers=completed,
             pending_reviewers=pending,
         )
+
+    async def _dispatch_review_assigned_notification(
+        self,
+        db: AsyncSession,
+        reviewer_username: str,
+        review_base_id: int,
+        assigned_by: str | None = None,
+    ) -> None:
+        """Dispatch notification when a reviewer is assigned (async, non-blocking)"""
+        try:
+            # Get review base info
+            stmt = select(PullRequestReviewBase).where(PullRequestReviewBase.id == review_base_id)
+            result = await db.execute(stmt)
+            review_base = result.scalar_one_or_none()
+
+            if not review_base:
+                logger.warning(f"Review base {review_base_id} not found for notification")
+                return
+
+            # Create notification
+            notification_data = NotificationCreate(
+                user_id=reviewer_username,
+                type="review_assigned",
+                title=f"New Review Assigned: PR #{review_base.pull_request_id}",
+                message=(
+                    f"You have been assigned to review PR #{review_base.pull_request_id} "
+                    f"in {review_base.project_key}/{review_base.repository_slug}"
+                ),
+                related_id=str(review_base.pull_request_id),
+                related_type="pull_request",
+                priority="high",
+                channel="in_app",
+            )
+
+            await self.notification_service.create_notification(
+                db=db, notification_data=notification_data
+            )
+
+            logger.info(
+                f"Notification dispatched: reviewer={reviewer_username}, "
+                f"pr_id={review_base.pull_request_id}"
+            )
+        except Exception as e:
+            # Don't fail the assignment if notification fails
+            logger.error(f"Failed to dispatch review assignment notification: {e}", exc_info=True)
+
+    async def _dispatch_review_completed_notification(
+        self,
+        db: AsyncSession,
+        assignment: PullRequestReviewAssignment,
+    ) -> None:
+        """Dispatch notification when a reviewer completes their assignment (async, non-blocking)"""
+        try:
+            # Get review base info
+            stmt = select(PullRequestReviewBase).where(
+                PullRequestReviewBase.id == assignment.review_base_id
+            )
+            result = await db.execute(stmt)
+            review_base = result.scalar_one_or_none()
+
+            if not review_base:
+                logger.warning(
+                    f"Review base {assignment.review_base_id} not found for notification"
+                )
+                return
+
+            # Notify the PR author (if we can determine who created the PR)
+            # For now, we'll notify all other reviewers on this PR
+            stmt = (
+                select(PullRequestReviewAssignment)
+                .where(PullRequestReviewAssignment.review_base_id == assignment.review_base_id)
+                .where(PullRequestReviewAssignment.reviewer != assignment.reviewer)
+            )
+            result = await db.execute(stmt)
+            other_assignments = result.scalars().all()
+
+            # Also notify review admins (we'd need to query for users with review_admin role)
+            # For simplicity, just notify other reviewers for now
+
+            for other_assignment in other_assignments:
+                notification_data = NotificationCreate(
+                    user_id=other_assignment.reviewer,
+                    type="review_completed",
+                    title=f"Review Completed: PR #{review_base.pull_request_id}",
+                    message=(
+                        f"{assignment.reviewer} has completed their review of PR #{review_base.pull_request_id} "
+                        f"in {review_base.project_key}/{review_base.repository_slug}"
+                    ),
+                    related_id=str(review_base.pull_request_id),
+                    related_type="pull_request",
+                    priority="normal",
+                    channel="in_app",
+                )
+
+                await self.notification_service.create_notification(
+                    db=db, notification_data=notification_data
+                )
+
+            logger.info(
+                f"Notification dispatched: {len(other_assignments)} reviewers notified, "
+                f"completed_by={assignment.reviewer}, pr_id={review_base.pull_request_id}"
+            )
+        except Exception as e:
+            # Don't fail the status update if notification fails
+            logger.error(f"Failed to dispatch review completion notification: {e}", exc_info=True)

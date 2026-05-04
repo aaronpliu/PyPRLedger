@@ -12,6 +12,7 @@ from src.utils.timezone import get_current_time, utc_to_local
 
 if TYPE_CHECKING:
     from src.models.auth_user import AuthUser
+    from src.models.notification import Notification, NotificationPreference
     from src.models.pull_request import (
         PullRequestReviewAssignment,
         PullRequestReviewBase,
@@ -76,6 +77,16 @@ class User(Base):
     # Score records given by this user
     scores_given: Mapped[list[PullRequestScore]] = relationship(
         foreign_keys="PullRequestScore.reviewer", back_populates="reviewer_rel"
+    )
+
+    # Notifications
+    notifications: Mapped[list[Notification]] = relationship(
+        "Notification", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    # Notification preferences
+    notification_preferences: Mapped[list[NotificationPreference]] = relationship(
+        "NotificationPreference", back_populates="user", cascade="all, delete-orphan"
     )
 
     # Indexes
