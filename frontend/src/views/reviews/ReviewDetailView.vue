@@ -538,13 +538,20 @@ const canCreateScore = computed(() => {
   return isCurrentReviewAssignedToUser.value
 })
 
-// Check if current user is assigned as the reviewer for this review
+// Check if current user is assigned as a reviewer for this review
 const isCurrentReviewAssignedToUser = computed(() => {
   if (!review.value || !effectiveReviewerUsername.value) {
     return false
   }
 
-  // Check if user is the assigned reviewer
+  // For multi-reviewer reviews, check if user is in the all_reviewers array
+  if (review.value.all_reviewers && review.value.all_reviewers.length > 0) {
+    return review.value.all_reviewers.some(
+      (r: { username: string; display_name: string }) => r.username === effectiveReviewerUsername.value
+    )
+  }
+
+  // Fallback: check single reviewer field (legacy)
   return review.value.reviewer === effectiveReviewerUsername.value
 })
 
@@ -557,7 +564,9 @@ const scoreActionDisabledReason = computed(() => {
     return 'Link your account to a Bitbucket user before submitting scores.'
   }
 
-  if (!review.value?.reviewer) {
+  // Check if review has any reviewers assigned (single or multi-reviewer)
+  const hasAnyReviewer = review.value?.reviewer || (review.value?.all_reviewers && review.value.all_reviewers.length > 0)
+  if (!hasAnyReviewer) {
     return 'This review is visible because you raised the PR, but scoring is only allowed after review admin assigns it to you.'
   }
 

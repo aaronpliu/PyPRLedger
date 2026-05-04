@@ -786,6 +786,7 @@ async def get_review(
     pull_request_id: Annotated[str, Path(description="Pull request ID")],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     reviewer: str | None = Query(None, description="Filter by reviewer username"),
     source_filename: str | None = Query(None, description="Filter by source filename"),
 ) -> ReviewListResponse:
@@ -815,6 +816,7 @@ async def get_review(
             reviewer=reviewer,
             source_filename=source_filename,
             db=db,
+            visible_to_username=current_user.username,  # Pass current user for multi-reviewer display
         )
 
         if not reviews:

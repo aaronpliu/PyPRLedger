@@ -647,6 +647,7 @@ class ReviewService:
         reviewer: str | None,
         source_filename: str | None,
         db: AsyncSession,
+        visible_to_username: str | None = None,  # Current user for multi-reviewer display
     ) -> list[dict[str, Any]]:
         """
         Get all pull request reviews by composite business key
@@ -689,7 +690,7 @@ class ReviewService:
 
             result = await db.execute(query)
             bases = result.scalars().unique().all()
-            reviews = self._flatten_reviews(list(bases), reviewer)
+            reviews = self._flatten_reviews(list(bases), reviewer, visible_to_username)
 
             if reviews:
                 logger.info(f"Found {len(reviews)} review(s) for PR: {pull_request_id}")
