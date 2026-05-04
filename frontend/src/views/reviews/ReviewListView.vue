@@ -4,8 +4,21 @@
       <template #header>
         <div class="card-header">
           <div class="header-title-group">
-            <h2>Code Reviews</h2>
-            <el-tag type="success" effect="dark" size="small" class="ai-badge">AI-Powered</el-tag>
+            <h2>{{ t('reviews.code_reviews') }}</h2>
+            <el-tooltip placement="bottom" effect="light">
+              <template #content>
+                <div class="review-tooltip">
+                  <p><strong>{{ t('reviews.visibility_title', 'You can see:') }}</strong></p>
+                  <ul>
+                    <li>{{ t('reviews.visibility_assigned', 'Reviews assigned to you') }}</li>
+                    <li>{{ t('reviews.visibility_raised', 'PRs you raised (all reviewers)') }}</li>
+                    <li v-if="isReviewAdmin">{{ t('reviews.visibility_admin', 'All reviews (Admin access)') }}</li>
+                  </ul>
+                </div>
+              </template>
+              <el-icon class="help-icon" :size="18"><QuestionFilled /></el-icon>
+            </el-tooltip>
+            <el-tag type="success" effect="dark" size="small" class="ai-badge">{{ t('reviews.ai_powered') }}</el-tag>
           </div>
           <div class="header-actions">
             <ExportMenu
@@ -15,61 +28,63 @@
             />
             <el-button @click="loadReviews">
               <el-icon><Refresh /></el-icon>
-              Refresh
+              {{ t('reviews.refresh') }}
             </el-button>
           </div>
         </div>
       </template>
 
-      <!-- Filters -->
-      <FilterPopover
-        v-model:search-query="searchQuery"
-        v-model:app-filter="appFilter"
-        v-model:pr-user-filter="prUserFilter"
-        v-model:reviewer-filter="reviewerFilter"
-        v-model:scored-filter="scoredFilter"
-        v-model:severity-filter="severityFilter"
-        v-model:status-filter="statusFilter"
-        :app-options="availableApps"
-        :pr-user-options="availablePRUsers"
-        :reviewer-options="availableReviewers"
-        :pr-users-loading="prUsersLoading"
-        :reviewers-loading="reviewersLoading"
-        @search-pr-users="searchPRUsers"
-        @search-reviewers="searchReviewers"
-        @apply="applyFilters"
-        @reset="handleResetFilters"
-      />
+      <!-- Filters with Archived Toggle -->
+      <div class="filters-with-toggle">
+        <FilterPopover
+          v-model:search-query="searchQuery"
+          v-model:app-filter="appFilter"
+          v-model:pr-user-filter="prUserFilter"
+          v-model:reviewer-filter="reviewerFilter"
+          v-model:scored-filter="scoredFilter"
+          v-model:severity-filter="severityFilter"
+          v-model:status-filter="statusFilter"
+          :app-options="availableApps"
+          :pr-user-options="availablePRUsers"
+          :reviewer-options="availableReviewers"
+          :pr-users-loading="prUsersLoading"
+          :reviewers-loading="reviewersLoading"
+          @search-pr-users="searchPRUsers"
+          @search-reviewers="searchReviewers"
+          @apply="applyFilters"
+          @reset="handleResetFilters"
+        />
+        
+        <!-- Archived Toggle -->
+        <el-tooltip
+          :content="hideArchived ? t('reviews.archived_hint_hide', 'Showing only unscored reviews') : t('reviews.archived_hint_show', 'Showing all reviews including scored')"
+          placement="bottom"
+        >
+          <el-switch
+            v-model="hideArchived"
+            @change="applyFilters"
+            inline-prompt
+            :active-text="t('reviews.hide_archived', 'Hide Archived')"
+            :inactive-text="t('reviews.show_all', 'Show All')"
+            class="archived-toggle-switch"
+          />
+        </el-tooltip>
+      </div>
 
-      <!-- Bulk Actions Toolbar -->
-      <div v-if="selectedReviews.length > 0" class="bulk-actions-toolbar">
+      <!-- Bulk Actions Toolbar - Only for Review Admins -->
+      <div v-if="selectedReviews.length > 0 && isReviewAdmin" class="bulk-actions-toolbar">
         <div class="selection-info">
           <el-icon><CircleCheck /></el-icon>
-          <span>{{ selectedReviews.length }} item{{ selectedReviews.length > 1 ? 's' : '' }} selected</span>
+          <span>{{ t('reviews.bulk_actions.selected_count', { count: selectedReviews.length, plural: selectedReviews.length > 1 ? 's' : '' }) }}</span>
         </div>
         <div class="bulk-actions">
           <el-button size="small" type="danger" @click="showBulkDeleteDialog">
             <el-icon><Delete /></el-icon>
-            Delete Selected
+            {{ t('reviews.bulk_actions.delete_selected') }}
           </el-button>
-          <el-dropdown @command="handleBulkStatusChange">
-            <el-button size="small" type="warning">
-              <el-icon><Edit /></el-icon>
-              Change PR Status
-              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="open">Set to Open</el-dropdown-item>
-                <el-dropdown-item command="merged">Set to Merged</el-dropdown-item>
-                <el-dropdown-item command="closed">Set to Closed</el-dropdown-item>
-                <el-dropdown-item command="draft">Set to Draft</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
           <el-button size="small" @click="clearSelection">
             <el-icon><Close /></el-icon>
-            Clear Selection
+            {{ t('reviews.bulk_actions.clear_selection') }}
           </el-button>
         </div>
       </div>
@@ -82,25 +97,26 @@
         style="width: 100%"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="55" fixed="left" />
-        <el-table-column label="Seq#" width="80">
+        <!-- Selection column only for review admins -->
+        <el-table-column v-if="isReviewAdmin" type="selection" width="55" fixed="left" />
+        <el-table-column :label="t('reviews.seq_number')" width="80">
           <template #default="{ $index }">
             {{ (currentPage - 1) * pageSize + $index + 1 }}
           </template>
         </el-table-column>
         
         <!-- App Name -->
-        <el-table-column label="App Name" width="150">
+        <el-table-column :label="t('reviews.app_name')" width="150">
           <template #default="{ row }">
             <el-tag v-if="row.app_name && row.app_name !== 'Unknown'" type="primary" size="small">
               {{ row.app_name }}
             </el-tag>
-            <span v-else class="text-secondary">Unknown</span>
+            <span v-else class="text-secondary">{{ t('reviews.unknown') }}</span>
           </template>
         </el-table-column>
         
         <!-- PR Info Group -->
-        <el-table-column label="PR Info" min-width="200">
+        <el-table-column :label="t('reviews.pr_info')" min-width="200">
           <template #default="{ row }">
             <div class="pr-info-cell">
               <div class="pr-id">
@@ -131,7 +147,7 @@
         </el-table-column>
         
         <!-- Project/Repo -->
-        <el-table-column label="Project/Repo" width="180">
+        <el-table-column :label="t('scores.project_repo')" width="180">
           <template #default="{ row }">
             <div>
               <div><strong>{{ row.project_key }}</strong></div>
@@ -141,7 +157,7 @@
         </el-table-column>
         
         <!-- PR User -->
-        <el-table-column label="PR User" width="150">
+        <el-table-column :label="t('reviews.pr_user')" width="150">
           <template #default="{ row }">
             <div>
               <div>{{ row.pull_request_user_info?.display_name || row.pull_request_user }}</div>
@@ -151,24 +167,55 @@
         </el-table-column>
         
         <!-- Reviewer -->
-        <el-table-column label="Reviewer" width="200">
+        <el-table-column :label="t('reviews.reviewer')" width="200">
           <template #default="{ row }">
             <div>
-              <div v-if="row.reviewer || row.reviewer_info?.display_name">
+              <!-- Case 1: Multi-reviewer (PR owner view with all_reviewers) -->
+              <div v-if="row.all_reviewers && row.all_reviewers.length > 0">
+                <el-tooltip placement="top" effect="light">
+                  <template #content>
+                    <div class="reviewer-tooltip">
+                      <div
+                        v-for="rev in row.all_reviewers"
+                        :key="rev.username"
+                        class="tooltip-item"
+                      >
+                        {{ rev.display_name }} ({{ rev.username }})
+                      </div>
+                    </div>
+                  </template>
+                  <div class="reviewer-display">
+                    <!-- Show primary reviewer (current user if in list, otherwise first) -->
+                    <span>{{ getPrimaryReviewer(row) }}</span>
+                    <!-- Show compact "+N more" if multiple reviewers -->
+                    <span v-if="row.total_reviewers > 1" class="more-indicator">
+                      +{{ row.total_reviewers - 1 }} {{ t('reviews.more', 'more') }}
+                    </span>
+                  </div>
+                </el-tooltip>
+                <div class="text-secondary" style="font-size: 0.8rem">
+                  {{ row.source_filename ? '📄 File-level' : ' PR-level' }}
+                </div>
+              </div>
+
+              <!-- Case 2: Single reviewer (normal assignment view) -->
+              <div v-else-if="row.reviewer || row.reviewer_info?.display_name">
                 {{ row.reviewer_info?.display_name || row.reviewer }}
+                <div class="text-secondary" style="font-size: 0.8rem">
+                  {{ row.source_filename ? ' File-level' : '📋 PR-level' }}
+                </div>
               </div>
+
+              <!-- Case 3: Truly unassigned (no reviewers at all) -->
               <el-tag v-else type="warning" effect="dark" size="small">
-                ⚠️ Unassigned
+                ⚠️ {{ t('reviews.unassigned', 'Unassigned') }}
               </el-tag>
-              <div class="text-secondary" style="font-size: 0.8rem;">
-                {{ row.source_filename ? '📄 File-level' : '📋 PR-level' }}
-              </div>
             </div>
           </template>
         </el-table-column>
         
         <!-- Status -->
-        <el-table-column prop="pull_request_status" label="PR Status" width="120">
+        <el-table-column prop="pull_request_status" :label="t('reviews.pr_status')" width="120">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.pull_request_status)">
               {{ row.pull_request_status }}
@@ -177,38 +224,38 @@
         </el-table-column>
         
         <!-- Scores Summary -->
-        <el-table-column label="Scores" width="120">
+        <el-table-column :label="t('reviews.scores')" width="120">
           <template #default="{ row }">
             <div v-if="row.score_summary && row.score_summary.total_scores > 0">
               <div class="score-summary">
                 <span class="avg-score">{{ row.score_summary.max_score?.toFixed(1) || row.score_summary.average_score?.toFixed(1) }}</span>
                 <span class="score-count">({{ row.score_summary.total_scores }})</span>
-                <el-tag v-if="row.score_summary.max_score" size="small" type="warning" style="margin-left: 4px; font-size: 0.7rem;">max</el-tag>
+                <el-tag v-if="row.score_summary.max_score" size="small" type="warning" style="margin-left: 4px; font-size: 0.7rem;">{{ t('reviews.max_score_label') }}</el-tag>
               </div>
             </div>
-            <span v-else class="text-secondary">No scores</span>
+            <span v-else class="text-secondary">{{ t('reviews.no_scores') }}</span>
           </template>
         </el-table-column>
         
         <!-- Created Date -->
-        <el-table-column prop="created_date" label="Created" width="160">
+        <el-table-column prop="created_date" :label="t('reviews.created')" width="160">
           <template #default="{ row }">
             {{ formatDate(row.created_date || '') }}
           </template>
         </el-table-column>
         
         <!-- Updated Date -->
-        <el-table-column prop="updated_date" label="Updated" width="160">
+        <el-table-column prop="updated_date" :label="t('common.update')" width="160">
           <template #default="{ row }">
             {{ formatDate(row.updated_date || '') }}
           </template>
         </el-table-column>
         
         <!-- Actions -->
-        <el-table-column label="Actions" width="120" fixed="right">
+        <el-table-column :label="t('reviews.actions')" width="120" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" @click.stop="viewReview(row)">
-              View
+              {{ t('reviews.view') }}
             </el-button>
           </template>
         </el-table-column>
@@ -231,7 +278,7 @@
     <!-- Bulk Delete Confirmation Dialog -->
     <el-dialog
       v-model="showBulkDeleteDialogVisible"
-      title="Confirm Bulk Delete"
+      :title="t('common.confirm')"
       width="500px"
     >
       <el-alert
@@ -240,8 +287,7 @@
         style="margin-bottom: 16px"
       >
         <template #title>
-          Are you sure you want to delete {{ selectedReviews.length }} review{{ selectedReviews.length > 1 ? 's' : '' }}?
-          This action cannot be undone.
+          {{ t('reviews.bulk_delete_confirm', { count: selectedReviews.length }) }}
         </template>
       </el-alert>
       
@@ -295,22 +341,26 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, CircleCheck, Delete, Edit, ArrowDown, Close, Document, Refresh, Cpu, Link } from '@element-plus/icons-vue'
+import { Search, CircleCheck, Delete, Close, Document, Refresh, Cpu, Link, QuestionFilled } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
+import { useI18n } from 'vue-i18n'
 import FilterPopover from '@/components/common/FilterPopover.vue'
 import ExportMenu from '@/components/common/ExportMenu.vue'
 import { usePermission } from '@/composables/usePermission'
 import { useReviewNavigationStore } from '@/stores/reviewNavigation'
+import { useAuthStore } from '@/stores/auth'
 import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
 import { usersApi, type ReviewerUser } from '@/api/users'
 import { usePrUrl } from '@/composables/usePrUrl'
 
+const { t } = useI18n()
 const router = useRouter()
+const authStore = useAuthStore()
 const { hasPermission } = usePermission()
 const reviewNavigationStore = useReviewNavigationStore()
 const { getPrUrl } = usePrUrl()
@@ -332,7 +382,15 @@ const handleResize = () => {
 }
 
 // Check if user is review admin
-const isReviewAdmin = computed(() => hasPermission('assign', 'reviews'))
+const isReviewAdmin = computed(() => {
+  const result = hasPermission('assign', 'reviews')
+  console.log('[isReviewAdmin] Permission check:', {
+    username: authStore.currentUser?.username,
+    roles: authStore.currentUser?.roles,
+    hasPermission: result
+  })
+  return result
+})
 const loading = ref(false)
 const reviews = ref<Review[]>([])
 const total = ref(0)
@@ -351,6 +409,7 @@ const allReviewers = ref<ReviewerUser[]>([]) // Cache for client-side filtering
 const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
+const hideArchived = ref(true) // Default to hiding scored/archived reviews
 const tableRef = ref()
 
 // Bulk operation state
@@ -384,6 +443,31 @@ const getStatusType = (status: string) => {
     pending: 'info',
   }
   return types[status] || 'info'
+}
+
+// Get primary reviewer for multi-reviewer display
+// Prioritize current user if they're in the reviewer list
+const getPrimaryReviewer = (row: any) => {
+  if (!row.all_reviewers || row.all_reviewers.length === 0) {
+    return row.reviewer_info?.display_name || row.reviewer || ''
+  }
+  
+  // Get current user's username from auth store
+  const authStore = useAuthStore()
+  const currentUsername = authStore.currentUser?.username
+  
+  // Find current user in reviewer list
+  const currentUserReviewer = row.all_reviewers.find(
+    (rev: any) => rev.username === currentUsername
+  )
+  
+  // If current user is a reviewer, show them first
+  if (currentUserReviewer) {
+    return currentUserReviewer.display_name
+  }
+  
+  // Otherwise show first reviewer
+  return row.all_reviewers[0].display_name
 }
 
 const loadReviews = async () => {
@@ -491,6 +575,13 @@ const fetchAllDataForExport = async (): Promise<Review[]> => {
       )
     }
     
+    // Apply hide archived toggle (hide scored reviews by default)
+    if (hideArchived.value) {
+      result = result.filter(review => 
+        !review.score_summary || review.score_summary.total_scores === 0
+      )
+    }
+    
     // Apply severity filter (check AI review issues)
     if (severityFilter.value) {
       const targetSeverity = severityFilter.value
@@ -579,6 +670,13 @@ const applyFilters = () => {
       review.score_summary && review.score_summary.total_scores > 0
     )
   } else if (scoredFilter.value === 'no') {
+    result = result.filter(review => 
+      !review.score_summary || review.score_summary.total_scores === 0
+    )
+  }
+  
+  // Apply hide archived toggle (hide scored reviews by default)
+  if (hideArchived.value) {
     result = result.filter(review => 
       !review.score_summary || review.score_summary.total_scores === 0
     )
@@ -747,60 +845,6 @@ const executeBulkDelete = async () => {
   }
 }
 
-const handleBulkStatusChange = async (status: string) => {
-  if (selectedReviews.value.length === 0) {
-    ElMessage.warning('Please select items to update')
-    return
-  }
-  
-  showProgressDialog.value = true
-  bulkOperationLoading.value = true
-  processedCount.value = 0
-  totalCount.value = selectedReviews.value.length
-  progressPercentage.value = 0
-  progressStatus.value = undefined
-  progressMessage.value = `Updating status to ${status}...`
-  
-  let successCount = 0
-  let failCount = 0
-  
-  try {
-    for (let i = 0; i < selectedReviews.value.length; i++) {
-      const review = selectedReviews.value[i]
-      try {
-        // TODO: Implement bulk status update API
-        // For now, simulate with delay
-        await new Promise(resolve => setTimeout(resolve, 200))
-        successCount++
-      } catch (error) {
-        console.error(`Failed to update review ${review.id}:`, error)
-        failCount++
-      }
-      
-      // Update progress
-      processedCount.value = i + 1
-      progressPercentage.value = Math.round(((i + 1) / selectedReviews.value.length) * 100)
-      progressMessage.value = `Updating review ${i + 1} of ${selectedReviews.value.length}...`
-    }
-    
-    // Complete
-    progressStatus.value = failCount > 0 ? 'warning' : 'success'
-    progressMessage.value = `Completed: ${successCount} succeeded, ${failCount} failed`
-    bulkOperationLoading.value = false
-    
-    ElMessage.success(`Successfully updated ${successCount} review${successCount !== 1 ? 's' : ''}`)
-    
-    // Reload data
-    await loadReviews()
-    clearSelection()
-  } catch (error) {
-    progressStatus.value = 'exception'
-    progressMessage.value = 'Bulk update failed'
-    bulkOperationLoading.value = false
-    ElMessage.error('Failed to update reviews')
-  }
-}
-
 const closeProgressDialog = () => {
   showProgressDialog.value = false
 }
@@ -931,6 +975,44 @@ onUnmounted(() => {
   font-size: 20px;
 }
 
+.help-icon {
+  color: #909399;
+  cursor: help;
+  transition: color 0.2s;
+}
+
+.help-icon:hover {
+  color: #409eff;
+}
+
+[data-theme="dark"] .help-icon {
+  color: #a0aec0;
+}
+
+[data-theme="dark"] .help-icon:hover {
+  color: #63b3ed;
+}
+
+.review-tooltip {
+  max-width: 300px;
+  padding: 4px 0;
+}
+
+.review-tooltip p {
+  margin: 0 0 8px 0;
+  font-weight: 600;
+}
+
+.review-tooltip ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.review-tooltip li {
+  margin: 4px 0;
+  font-size: 0.9em;
+}
+
 .ai-badge {
   margin-top: 2px; /* Optional: slight adjustment for vertical alignment */
 }
@@ -944,6 +1026,26 @@ onUnmounted(() => {
   margin-bottom: 20px;
 }
 
+/* Filters with Toggle Layout */
+.filters-with-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* Archived Toggle Switch Styling */
+.archived-toggle-switch {
+  --el-switch-on-color: #409eff;
+  --el-switch-off-color: #dcdfe6;
+}
+
+[data-theme='dark'] .archived-toggle-switch {
+  --el-switch-on-color: #409eff;
+  --el-switch-off-color: #4c4d4f;
+}
+
 .pagination-container {
   margin-top: 20px;
   display: flex;
@@ -952,6 +1054,39 @@ onUnmounted(() => {
 
 .el-table {
   cursor: pointer;
+}
+
+/* Reviewer display styling */
+.reviewer-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.more-indicator {
+  color: #909399;
+  font-size: 0.85em;
+}
+
+[data-theme="dark"] .more-indicator {
+  color: #a0aec0;
+}
+
+.reviewer-tooltip {
+  max-width: 300px;
+}
+
+.tooltip-item {
+  padding: 4px 0;
+  border-bottom: 1px solid #eee;
+}
+
+[data-theme="dark"] .tooltip-item {
+  border-bottom-color: #334155;
+}
+
+.tooltip-item:last-child {
+  border-bottom: none;
 }
 
 .bulk-actions-toolbar {

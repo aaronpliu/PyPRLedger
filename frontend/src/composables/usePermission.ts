@@ -8,8 +8,7 @@ export function usePermission() {
 
   // Check if user has specific permission
   const hasPermission = (action: string, resourceType: string, resourceId?: string): boolean => {
-    // TODO: Implement actual permission checking logic
-    // For now, return true if authenticated
+    // Not authenticated - no permissions
     if (!authStore.isAuthenticated) {
       return false
     }
@@ -19,9 +18,13 @@ export function usePermission() {
       return true
     }
 
-    // Check user's roles and permissions
-    // This will be implemented when we fetch user roles
-    return true
+    // Check if user has review_admin role for review-related actions
+    if ((resourceType === 'review' || resourceType === 'reviews') && authStore.user?.roles?.includes('review_admin')) {
+      return true
+    }
+
+    // Default: deny access
+    return false
   }
 
   // Convenience methods
@@ -42,8 +45,8 @@ export function usePermission() {
   }
 
   const isAdmin = computed(() => {
-    // Check if user has admin role
-    return authStore.user?.username === 'admin'
+    // Check if user has admin username or admin role
+    return authStore.user?.username === 'admin' || authStore.user?.roles?.includes('admin')
   })
 
   return {

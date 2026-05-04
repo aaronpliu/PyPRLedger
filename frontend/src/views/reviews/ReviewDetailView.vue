@@ -1,14 +1,14 @@
 <template>
   <div class="review-detail" v-loading="loading">
-    <el-page-header @back="$router.back()" title="Back">
+    <el-page-header @back="$router.back()" :title="t('reviews.detail.back')">
       <template #content>
-        <span class="header-content-title">Review Details</span>
+        <span class="header-content-title">{{ t('reviews.detail.title') }}</span>
       </template>
       <template #extra>
         <div class="detail-navigation-actions">
           <!-- Display format: "Page X - Y/Z" matching Code Reviews style -->
           <span v-if="currentReviewIndex >= 0" class="detail-navigation-position">
-            Page {{ reviewNavigationStore.currentPage }} · {{ currentReviewIndex + 1 }}/{{ reviewNavigationStore.items.length }}
+            {{ t('common.page') }} {{ reviewNavigationStore.currentPage }} · {{ currentReviewIndex + 1 }}/{{ reviewNavigationStore.items.length }}
           </span>
           <el-button 
             class="detail-navigation-button" 
@@ -16,7 +16,7 @@
             @click="goToPreviousReview"
           >
             <el-icon><ArrowLeft /></el-icon>
-            Previous
+            {{ t('reviews.detail.previous') }}
           </el-button>
           
           <el-button 
@@ -24,7 +24,7 @@
             :disabled="!canGoToNextPage || navigatingPage"
             @click="goToNextReview"
           >
-            Next
+            {{ t('reviews.detail.next') }}
             <el-icon><ArrowRight /></el-icon>
           </el-button>
         </div>
@@ -44,20 +44,20 @@
                 >
                   <ArrowDown />
                 </el-icon>
-                <span class="card-title">📋 Review Information (#{{ review.pull_request_id }})</span>
+                <span class="card-title">{{ t('reviews.detail.review_information') }} (#{{ review.pull_request_id }})</span>
               </div>
               <el-space>
                 <!-- Add Score Button - Only show if user has permission -->
                 <template v-if="hasScorePermissionRole">
                   <el-tooltip
                     v-if="currentUserHasScore"
-                    content="You already have a score. Use the 'Update' button in the Scores table below to modify it."
+                    :content="t('reviews.detail.already_has_score')"
                     placement="top"
                   >
                     <span>
                       <el-button type="success" size="small" disabled>
                         <el-icon><Plus /></el-icon>
-                        Add Score
+                        {{ t('reviews.detail.add_score') }}
                       </el-button>
                     </span>
                   </el-tooltip>
@@ -65,13 +65,13 @@
                     <span>
                       <el-button type="success" size="small" disabled>
                         <el-icon><Plus /></el-icon>
-                        Add Score
+                        {{ t('reviews.detail.add_score') }}
                       </el-button>
                     </span>
                   </el-tooltip>
                   <el-button v-else type="success" size="small" @click="showScoreDialog = true">
                     <el-icon><Plus /></el-icon>
-                    Add Score
+                    {{ t('reviews.detail.add_score') }}
                   </el-button>
                 </template>
                 
@@ -83,7 +83,7 @@
                   @click="confirmDelete"
                 >
                   <el-icon><Delete /></el-icon>
-                  Delete
+                  {{ t('reviews.detail.delete') }}
                 </el-button>
               </el-space>
             </div>
@@ -91,7 +91,7 @@
 
           <el-collapse-transition>
             <el-descriptions v-if="isInfoExpanded" :column="3" border size="default">
-              <el-descriptions-item label="PR ID" label-align="right">
+              <el-descriptions-item :label="t('reviews.detail.pr_id')" label-align="right">
                 <a 
                   v-if="review && getPrUrl(review)" 
                   :href="getPrUrl(review) || undefined" 
@@ -106,33 +106,33 @@
                 </a>
                 <el-tag v-else type="info" size="small">{{ review?.pull_request_id }}</el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="Commit ID" v-if="review.pull_request_commit_id" label-align="right">
+              <el-descriptions-item :label="t('reviews.detail.commit_id')" v-if="review.pull_request_commit_id" label-align="right">
                 <el-tag type="success" size="small">{{ review.pull_request_commit_id.substring(0, 8) }}</el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="Project" label-align="right">
+              <el-descriptions-item :label="t('reviews.detail.project')" label-align="right">
                 <strong>{{ review.project_key }}</strong> / {{ review.repository_slug }}
               </el-descriptions-item>
-              <el-descriptions-item label="Reviewer" label-align="right">
+              <el-descriptions-item :label="t('reviews.detail.reviewer')" label-align="right">
                 <el-avatar :size="24" class="reviewer-avatar">{{ getInitials(getReviewerDisplayName(review)) }}</el-avatar>
                 {{ getReviewerDisplayName(review) }}
               </el-descriptions-item>
-              <el-descriptions-item label="Status" label-align="right">
+              <el-descriptions-item :label="t('reviews.detail.status')" label-align="right">
                 <el-tag :type="getStatusType(review.pull_request_status)" effect="dark">
                   {{ review.pull_request_status }}
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="Level" label-align="right">
+              <el-descriptions-item :label="t('reviews.detail.level')" label-align="right">
                 <el-tag :type="review.source_filename ? 'warning' : 'success'" size="small">
-                  {{ review.source_filename ? '📄 File-Level' : '📋 PR-Level' }}
+                  {{ review.source_filename ? t('reviews.detail.file_level') : t('reviews.detail.pr_level') }}
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="Summary" :span="3" label-align="right">
-                <div class="summary-text">{{ review.reviewer_comments || 'No summary provided' }}</div>
+              <el-descriptions-item :label="t('reviews.detail.summary')" :span="3" label-align="right">
+                <div class="summary-text">{{ review.reviewer_comments || t('reviews.detail.no_summary') }}</div>
               </el-descriptions-item>
-              <el-descriptions-item label="Created" label-align="right">
+              <el-descriptions-item :label="t('reviews.detail.created')" label-align="right">
                 <el-icon><Clock /></el-icon> {{ formatDate(review.created_date || '') }}
               </el-descriptions-item>
-              <el-descriptions-item label="Updated" label-align="right">
+              <el-descriptions-item :label="t('reviews.detail.updated')" label-align="right">
                 <el-icon><Clock /></el-icon> {{ formatDate(review.updated_date || '') }}
               </el-descriptions-item>
             </el-descriptions>
@@ -145,10 +145,10 @@
           <el-col :xs="24" :sm="24" :md="review.ai_suggestions ? 14 : 24" :lg="review.ai_suggestions ? 14 : 24" :xl="review.ai_suggestions ? 15 : 24">
             <div class="analysis-column">
               <div class="analysis-column-header">
-                <span>📝 Code Changes</span>
+                <span>{{ t('reviews.detail.code_changes') }}</span>
                 <el-radio-group v-model="diffFormat" size="small" class="diff-format-toggle">
-                  <el-radio-button value="line-by-line">Line by Line</el-radio-button>
-                  <el-radio-button value="side-by-side">Side by Side</el-radio-button>
+                  <el-radio-button value="line-by-line">{{ t('reviews.detail.line_by_line') }}</el-radio-button>
+                  <el-radio-button value="side-by-side">{{ t('reviews.detail.side_by_side') }}</el-radio-button>
                 </el-radio-group>
               </div>
               <div class="analysis-column-body">
@@ -166,7 +166,7 @@
             <div class="analysis-column">
               <div class="analysis-column-header ai-review-header">
                 <span class="ai-review-title">
-                  🤖 AI Review Result
+                  {{ t('reviews.detail.ai_review_result') }}
                   <el-tag v-if="review.ai_review_id" size="small" type="info" style="margin-left: 8px">
                     {{ review.ai_review_id }}
                   </el-tag>
@@ -179,7 +179,7 @@
                   class="copy-ai-id-btn"
                 >
                   <el-icon><CopyDocument /></el-icon>
-                  Copy ID
+                  {{ t('reviews.detail.copy_id') }}
                 </el-button>
               </div>
               <div class="analysis-column-body">
@@ -193,18 +193,18 @@
         <el-card class="scores-card" style="margin-top: 20px; margin-bottom: 40px">
           <template #header>
             <div class="card-header">
-              <span class="card-title">📊 Scores ({{ scores.length }})</span>
+              <span class="card-title">{{ t('reviews.detail.scores') }} ({{ scores.length }})</span>
               <!-- Add Score Button - Only show if user has permission -->
               <template v-if="hasScorePermissionRole">
                 <el-tooltip
                   v-if="currentUserHasScore"
-                  content="You already have a score. Use the 'Update' button in the table to modify it."
+                  :content="t('reviews.detail.already_has_score_short')"
                   placement="top"
                 >
                   <span>
                     <el-button type="primary" size="small" disabled>
                       <el-icon><Plus /></el-icon>
-                      Add Score
+                      {{ t('reviews.detail.add_score') }}
                     </el-button>
                   </span>
                 </el-tooltip>
@@ -212,20 +212,20 @@
                   <span>
                     <el-button type="primary" size="small" disabled>
                       <el-icon><Plus /></el-icon>
-                      Add Score
+                      {{ t('reviews.detail.add_score') }}
                     </el-button>
                   </span>
                 </el-tooltip>
                 <el-button v-else type="primary" size="small" @click="showScoreDialog = true">
                   <el-icon><Plus /></el-icon>
-                  Add Score
+                  {{ t('reviews.detail.add_score') }}
                 </el-button>
               </template>
             </div>
           </template>
 
           <el-table :data="scores" stripe>
-            <el-table-column prop="reviewer" label="Reviewer" width="200">
+            <el-table-column prop="reviewer" :label="t('reviews.detail.reviewer')" width="200">
               <template #default="{ row }">
                 <div class="reviewer-cell">
                   <span>{{ row.reviewer_info?.display_name || row.reviewer }}</span>
@@ -236,12 +236,12 @@
                     effect="plain"
                     class="primary-reviewer-badge"
                   >
-                    Primary Reviewer
+                    {{ t('reviews.detail.primary_reviewer') }}
                   </el-tag>
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="AI Review ID" min-width="200" align="center">
+            <el-table-column :label="t('reviews.detail.ai_review_id')" min-width="200" align="center">
               <template #default>
                 <div v-if="review?.ai_review_id" class="ai-review-id-cell">
                   <el-tag size="small" type="info">
@@ -255,27 +255,27 @@
                     <el-icon><CopyDocument /></el-icon>
                   </el-button>
                 </div>
-                <span v-else class="empty-value">N/A</span>
+                <span v-else class="empty-value">{{ t('reviews.detail.na') }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="score" label="Score" width="120">
+            <el-table-column prop="score" :label="t('reviews.detail.score')" width="120">
               <template #default="{ row }">
                 <span :class="['score-value', getScoreColorClass(row.score)]">{{ row.score }}</span>
                 <span v-if="row.max_score" class="score-max"> / {{ row.max_score }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="reviewer_comments" label="Comments" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="created_date" label="Created" width="160">
+            <el-table-column prop="reviewer_comments" :label="t('reviews.detail.comments')" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="created_date" :label="t('reviews.detail.created')" width="160">
               <template #default="{ row }">
                 {{ formatDate(row.created_date || '') }}
               </template>
             </el-table-column>
-            <el-table-column prop="updated_date" label="Updated" width="160">
+            <el-table-column prop="updated_date" :label="t('reviews.detail.updated')" width="160">
               <template #default="{ row }">
                 {{ row.updated_date ? formatDate(row.updated_date) : '-' }}
               </template>
             </el-table-column>
-            <el-table-column label="Actions" width="180">
+            <el-table-column :label="t('reviews.detail.actions')" width="180">
               <template #default="{ row }">
                 <!-- Update button: 
                      - reviewer: can only update their own score
@@ -287,7 +287,7 @@
                   type="primary" 
                   @click="editScore(row)"
                 >
-                  Update
+                  {{ t('reviews.detail.update') }}
                 </el-button>
                 <!-- Delete button: 
                      - review_admin+: can delete any score
@@ -299,13 +299,13 @@
                   type="danger" 
                   @click="deleteScore(row)"
                 >
-                  Delete
+                  {{ t('reviews.detail.delete') }}
                 </el-button>
               </template>
             </el-table-column>
           </el-table>
 
-          <el-empty v-if="scores.length === 0" description="No scores yet" />
+          <el-empty v-if="scores.length === 0" :description="t('reviews.detail.no_scores')" />
         </el-card>
       </el-col>
     </el-row>
@@ -313,7 +313,7 @@
     <!-- Add Score Dialog -->
     <el-dialog 
       v-model="showScoreDialog" 
-      :title="editingScore ? 'Update Score' : 'Add Score'" 
+      :title="editingScore ? t('reviews.detail.update_score') : t('reviews.detail.add_score')" 
       width="1100px"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
@@ -325,22 +325,22 @@
       <ScoreRangeGuide />
       
       <el-form :model="scoreForm" :rules="scoreRules" ref="scoreFormRef" label-width="120px">
-        <el-form-item label="Reviewer">
+        <el-form-item :label="t('reviews.detail.reviewer')">
           <el-input 
             v-model="scoreForm.reviewer" 
             disabled
-            placeholder="Current user"
+            :placeholder="t('reviews.detail.current_user')"
           >
             <template #prefix>
               <el-icon><User /></el-icon>
             </template>
           </el-input>
           <div class="form-item-hint">
-            Score will be attributed to your account
+            {{ t('reviews.detail.score_attributed') }}
           </div>
         </el-form-item>
         
-        <el-form-item label="Score" prop="score">
+        <el-form-item :label="t('reviews.detail.score')" prop="score">
           <div class="score-input-container">
             <!-- Visual Score Bar -->
             <div class="score-visual-bar">
@@ -376,11 +376,11 @@
             </div>
           </div>
           <div class="form-item-hint">
-            Click quick buttons or adjust manually (0-10, step 0.5)
+            {{ t('reviews.detail.quick_buttons_hint') }}
           </div>
         </el-form-item>
         
-        <el-form-item label="Comments">
+        <el-form-item :label="t('reviews.detail.comments')">
           <MdEditor
             v-model="scoreForm.reviewer_comments"
             :toolbars="toolbars"
@@ -389,18 +389,18 @@
             preview-theme="vuepress"
             code-theme="atom"
             class="score-md-editor"
-            placeholder="Add your comments here... (supports Markdown)"
+            :placeholder="t('reviews.detail.comments_placeholder')"
           />
           <div class="editor-hint">
-            💡 Supports Markdown formatting. Use the toolbar above or type directly.
+            {{ t('reviews.detail.markdown_hint') }}
           </div>
         </el-form-item>
       </el-form>
       
       <template #footer>
-        <el-button @click="handleCloseDialog">Cancel</el-button>
+        <el-button @click="handleCloseDialog">{{ t('reviews.detail.cancel') }}</el-button>
         <el-button type="primary" :loading="addingScore" @click="handleAddScore">
-          {{ editingScore ? 'Update' : 'Add' }} Score
+          {{ editingScore ? t('reviews.detail.update_score') : t('reviews.detail.add_score') }}
         </el-button>
       </template>
     </el-dialog>
@@ -449,6 +449,7 @@ import type { Score, ScoreCreate } from '@/api/scores'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
+import { useI18n } from 'vue-i18n'
 import CodeDiffViewer from '@/components/review/CodeDiffViewer.vue'
 import QuickScoreButtons from '@/components/review/QuickScoreButtons.vue'
 import ScoreRangeGuide from '@/components/review/ScoreRangeGuide.vue'
@@ -457,6 +458,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useReviewNavigationStore, type ReviewNavigationItem } from '@/stores/reviewNavigation'
 import { usePrUrl } from '@/composables/usePrUrl'
 import { useTheme } from '@/composables/useTheme'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()

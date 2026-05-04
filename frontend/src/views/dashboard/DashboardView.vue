@@ -39,7 +39,20 @@
           <template #header>
             <div class="chart-header">
               <span>{{ t('dashboard.reviewer_activity_trend') }}</span>
-              <el-tag type="info">{{ t('dashboard.assigned_vs_self_raised') }}</el-tag>
+              <div class="chart-actions">
+                <el-tag type="info">{{ t('dashboard.assigned_vs_self_raised') }}</el-tag>
+                <el-tooltip 
+                  :content="fullscreenChart === 'activity' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                  placement="top"
+                >
+                  <el-button 
+                    text 
+                    size="small" 
+                    @click="toggleFullscreen('activity')"
+                    :icon="fullscreenChart === 'activity' ? Close : FullScreen"
+                  />
+                </el-tooltip>
+              </div>
             </div>
           </template>
           <div class="chart-container" ref="activityChartRef"></div>
@@ -52,7 +65,20 @@
           <template #header>
             <div class="chart-header">
               <span>{{ t('dashboard.score_trend') }}</span>
-              <el-tag type="success">{{ t('dashboard.average_scores_given') }}</el-tag>
+              <div class="chart-actions">
+                <el-tag type="success">{{ t('dashboard.average_scores_given') }}</el-tag>
+                <el-tooltip 
+                  :content="fullscreenChart === 'score' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                  placement="top"
+                >
+                  <el-button 
+                    text 
+                    size="small" 
+                    @click="toggleFullscreen('score')"
+                    :icon="fullscreenChart === 'score' ? Close : FullScreen"
+                  />
+                </el-tooltip>
+              </div>
             </div>
           </template>
           <div class="chart-container" ref="scoreChartRef"></div>
@@ -65,7 +91,20 @@
           <template #header>
             <div class="chart-header">
               <span>{{ t('dashboard.project_repo_activity') }}</span>
-              <el-tag type="warning">{{ t('dashboard.unique_projects_repos') }}</el-tag>
+              <div class="chart-actions">
+                <el-tag type="warning">{{ t('dashboard.unique_projects_repos') }}</el-tag>
+                <el-tooltip 
+                  :content="fullscreenChart === 'project' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                  placement="top"
+                >
+                  <el-button 
+                    text 
+                    size="small" 
+                    @click="toggleFullscreen('project')"
+                    :icon="fullscreenChart === 'project' ? Close : FullScreen"
+                  />
+                </el-tooltip>
+              </div>
             </div>
           </template>
           <div class="chart-container" ref="projectChartRef"></div>
@@ -78,7 +117,20 @@
           <template #header>
             <div class="chart-header">
               <span>{{ t('dashboard.good_suggestions_trend') }}</span>
-              <el-tag type="danger">{{ t('dashboard.score_gte_8') }}</el-tag>
+              <div class="chart-actions">
+                <el-tag type="danger">{{ t('dashboard.score_gte_8') }}</el-tag>
+                <el-tooltip 
+                  :content="fullscreenChart === 'suggestions' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                  placement="top"
+                >
+                  <el-button 
+                    text 
+                    size="small" 
+                    @click="toggleFullscreen('suggestions')"
+                    :icon="fullscreenChart === 'suggestions' ? Close : FullScreen"
+                  />
+                </el-tooltip>
+              </div>
             </div>
           </template>
           <div class="chart-container" ref="suggestionsChartRef"></div>
@@ -191,10 +243,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { TrendCharts, Refresh, Link } from '@element-plus/icons-vue'
+import { TrendCharts, Refresh, Link, FullScreen, Close } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import { reviewsApi } from '@/api/reviews'
@@ -202,8 +254,20 @@ import type { Review } from '@/api/reviews'
 import dayjs from 'dayjs'
 import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
+
+// Helper function to get chart axis colors based on theme
+const getAxisColors = () => {
+  // Check current theme from DOM
+  const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark'
+  return {
+    axisLabelColor: isDarkMode ? '#cbd5e1' : '#64748b',
+    axisLineColor: isDarkMode ? '#475569' : '#e2e8f0',
+    splitLineColor: isDarkMode ? '#334155' : '#f1f5f9',
+    nameColor: isDarkMode ? '#94a3b8' : '#64748b',
+  }
+}
 
 // Time period controls
 const selectedPeriod = ref<'daily' | 'weekly' | 'monthly'>('weekly')
@@ -220,6 +284,9 @@ let activityChart: echarts.ECharts | null = null
 let scoreChart: echarts.ECharts | null = null
 let projectChart: echarts.ECharts | null = null
 let suggestionsChart: echarts.ECharts | null = null
+
+// Fullscreen state
+const fullscreenChart = ref<'activity' | 'score' | 'project' | 'suggestions' | null>(null)
 
 // Loading states
 const loading = ref(false)
@@ -274,6 +341,35 @@ const handleResize = () => {
   suggestionsChart?.resize()
 }
 
+// Toggle fullscreen for a specific chart
+const toggleFullscreen = (chartName: 'activity' | 'score' | 'project' | 'suggestions') => {
+  if (fullscreenChart.value === chartName) {
+    // Exit fullscreen
+    fullscreenChart.value = null
+    document.exitFullscreen().catch(console.error)
+  } else {
+    // Enter fullscreen
+    fullscreenChart.value = chartName
+    const chartRef = 
+      chartName === 'activity' ? activityChartRef.value :
+      chartName === 'score' ? scoreChartRef.value :
+      chartName === 'project' ? projectChartRef.value :
+      suggestionsChartRef.value
+    
+    if (chartRef) {
+      const cardElement = chartRef.closest('.chart-card')
+      if (cardElement && cardElement.requestFullscreen) {
+        cardElement.requestFullscreen().catch(console.error)
+      }
+    }
+  }
+  
+  // Resize chart after fullscreen transition
+  setTimeout(() => {
+    handleResize()
+  }, 300)
+}
+
 // Load reviewer activity trends
 const loadActivityTrends = async () => {
   loadingCharts.value.activity = true
@@ -301,6 +397,12 @@ const renderActivityChart = () => {
   const selfRaisedData = trendData.value.activity.map(d => d.self_raised_prs)
   const totalData = trendData.value.activity.map(d => d.total)
 
+  const colors = getAxisColors()
+
+  // Calculate y-axis max value with padding for better visualization
+  const maxValue = Math.max(...totalData, ...assignedData, ...selfRaisedData)
+  const yAxisMax = maxValue > 0 ? Math.ceil(maxValue * 1.2) : 10 // Add 20% padding
+
   const option: EChartsOption = {
     tooltip: {
       trigger: 'axis',
@@ -308,11 +410,15 @@ const renderActivityChart = () => {
     },
     legend: {
       data: [t('dashboard.assigned_reviews'), t('dashboard.self_raised_prs'), t('dashboard.total')],
+      textStyle: {
+        color: colors.axisLabelColor,
+      },
     },
     grid: {
       left: '3%',
       right: '4%',
       bottom: '15%',
+      top: '10%',
       containLabel: true,
     },
     xAxis: {
@@ -320,13 +426,60 @@ const renderActivityChart = () => {
       data: dates,
       axisLabel: { 
         rotate: 45,
-        interval: 0,
+        interval: 'auto', // Auto-adjust interval to prevent overlap
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
       },
     },
     yAxis: {
       type: 'value',
       name: t('dashboard.count'),
+      min: 0,
+      max: yAxisMax,
+      nameTextStyle: {
+        color: colors.nameColor,
+      },
+      axisLabel: {
+        color: colors.axisLabelColor,
+        formatter: (value: number) => {
+          // Format large numbers with K suffix
+          if (value >= 1000) {
+            return (value / 1000).toFixed(1) + 'K'
+          }
+          return value.toString()
+        },
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
+      },
+      splitLine: {
+        lineStyle: {
+          color: colors.splitLineColor,
+        },
+      },
     },
+    // Add dataZoom for cases with many data points
+    dataZoom: [
+      {
+        type: 'inside', // Enable mouse wheel zoom
+        start: 0,
+        end: 100,
+      },
+      {
+        type: 'slider', // Show slider at bottom
+        show: totalData.length > 30, // Only show if more than 30 data points
+        start: 0,
+        end: 100,
+        bottom: '5%',
+        height: 20,
+      },
+    ],
     series: [
       {
         name: t('dashboard.assigned_reviews'),
@@ -382,12 +535,17 @@ const renderScoreChart = () => {
   const minScores = trendData.value.scores.map(d => d.min_score)
   const maxScores = trendData.value.scores.map(d => d.max_score)
 
+  const colors = getAxisColors()
+
   const option: EChartsOption = {
     tooltip: {
       trigger: 'axis',
     },
     legend: {
       data: [t('dashboard.avg_score'), t('dashboard.min_score'), t('dashboard.max_score')],
+      textStyle: {
+        color: colors.axisLabelColor,
+      },
     },
     grid: {
       left: '3%',
@@ -401,6 +559,12 @@ const renderScoreChart = () => {
       axisLabel: { 
         rotate: 45,
         interval: 0,
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
       },
     },
     yAxis: {
@@ -408,6 +572,22 @@ const renderScoreChart = () => {
       name: t('dashboard.score'),
       min: 0,
       max: 10,
+      nameTextStyle: {
+        color: colors.nameColor,
+      },
+      axisLabel: {
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
+      },
+      splitLine: {
+        lineStyle: {
+          color: colors.splitLineColor,
+        },
+      },
     },
     series: [
       {
@@ -469,6 +649,8 @@ const renderProjectChart = () => {
   const projects = trendData.value.projects.map(d => d.unique_projects)
   const repos = trendData.value.projects.map(d => d.unique_repositories)
 
+  const colors = getAxisColors()
+
   const option: EChartsOption = {
     tooltip: {
       trigger: 'axis',
@@ -476,6 +658,9 @@ const renderProjectChart = () => {
     },
     legend: {
       data: [t('dashboard.unique_projects'), t('dashboard.unique_repos')],
+      textStyle: {
+        color: colors.axisLabelColor,
+      },
     },
     grid: {
       left: '3%',
@@ -489,11 +674,33 @@ const renderProjectChart = () => {
       axisLabel: { 
         rotate: 45,
         interval: 0,
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
       },
     },
     yAxis: {
       type: 'value',
       name: t('dashboard.count'),
+      nameTextStyle: {
+        color: colors.nameColor,
+      },
+      axisLabel: {
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
+      },
+      splitLine: {
+        lineStyle: {
+          color: colors.splitLineColor,
+        },
+      },
     },
     series: [
       {
@@ -541,6 +748,8 @@ const renderSuggestionsChart = () => {
   const goodSuggestions = trendData.value.suggestions.map(d => d.good_suggestions)
   const percentages = trendData.value.suggestions.map(d => d.percentage)
 
+  const colors = getAxisColors()
+
   const option: EChartsOption = {
     tooltip: {
       trigger: 'axis',
@@ -548,6 +757,9 @@ const renderSuggestionsChart = () => {
     },
     legend: {
       data: [t('dashboard.good_suggestions'), t('dashboard.percentage')],
+      textStyle: {
+        color: colors.axisLabelColor,
+      },
     },
     grid: {
       left: '3%',
@@ -558,19 +770,57 @@ const renderSuggestionsChart = () => {
     xAxis: {
       type: 'category',
       data: dates,
-      axisLabel: { rotate: 45 },
+      axisLabel: { 
+        rotate: 45,
+        color: colors.axisLabelColor,
+      },
+      axisLine: {
+        lineStyle: {
+          color: colors.axisLineColor,
+        },
+      },
     },
     yAxis: [
       {
         type: 'value',
         name: t('dashboard.count'),
         position: 'left',
+        nameTextStyle: {
+          color: colors.nameColor,
+        },
+        axisLabel: {
+          color: colors.axisLabelColor,
+        },
+        axisLine: {
+          lineStyle: {
+            color: colors.axisLineColor,
+          },
+        },
+        splitLine: {
+          lineStyle: {
+            color: colors.splitLineColor,
+          },
+        },
       },
       {
         type: 'value',
         name: t('dashboard.percentage'),
         position: 'right',
-        axisLabel: { formatter: '{value}%' },
+        nameTextStyle: {
+          color: colors.nameColor,
+        },
+        axisLabel: { 
+          formatter: '{value}%',
+          color: colors.axisLabelColor,
+        },
+        axisLine: {
+          lineStyle: {
+            color: colors.axisLineColor,
+          },
+        },
+        splitLine: {
+          show: false,
+        },
       },
     ],
     series: [
@@ -673,16 +923,64 @@ const getPrUrl = (review: Review): string | null => {
 onMounted(() => {
   initCharts()
   window.addEventListener('resize', handleResize)
+  
+  // Listen for fullscreen changes
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+  
   loadTrendData()
   loadRecentReviews()
+  
+  // Watch for theme changes via MutationObserver
+  const observer = new MutationObserver(() => {
+    // Re-render all charts with new theme colors when theme changes
+    if (trendData.value.activity.length > 0) renderActivityChart()
+    if (trendData.value.scores.length > 0) renderScoreChart()
+    if (trendData.value.projects.length > 0) renderProjectChart()
+    if (trendData.value.suggestions.length > 0) renderSuggestionsChart()
+  })
+  
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme']
+  })
+  
+  // Store observer reference for cleanup
+  ;(window as any).__themeObserver = observer
 })
+
+// Watch for locale changes and re-render charts with new translations
+watch(locale, () => {
+  // Re-render all charts with new language labels
+  if (trendData.value.activity.length > 0) renderActivityChart()
+  if (trendData.value.scores.length > 0) renderScoreChart()
+  if (trendData.value.projects.length > 0) renderProjectChart()
+  if (trendData.value.suggestions.length > 0) renderSuggestionsChart()
+})
+
+// Handle fullscreen change events
+const handleFullscreenChange = () => {
+  if (!document.fullscreenElement) {
+    // Exited fullscreen
+    fullscreenChart.value = null
+    setTimeout(() => {
+      handleResize()
+    }, 100)
+  }
+}
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
   activityChart?.dispose()
   scoreChart?.dispose()
   projectChart?.dispose()
   suggestionsChart?.dispose()
+  
+  // Cleanup theme observer
+  if ((window as any).__themeObserver) {
+    (window as any).__themeObserver.disconnect()
+    delete (window as any).__themeObserver
+  }
 })
 </script>
 
@@ -721,9 +1019,54 @@ onUnmounted(() => {
   align-items: center;
 }
 
+.chart-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .chart-container {
   width: 100%;
   height: 350px;
+  transition: all 0.3s ease;
+  overflow: hidden; /* Prevent any overflow */
+}
+
+/* Fullscreen mode styles */
+.chart-card:fullscreen {
+  padding: 20px;
+  background: var(--el-bg-color);
+}
+
+.chart-card:fullscreen .chart-container {
+  height: calc(100vh - 150px);
+  min-height: 600px;
+}
+
+.chart-card:fullscreen .chart-header {
+  margin-bottom: 20px;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.chart-card:-webkit-full-screen {
+  padding: 20px;
+  background: var(--el-bg-color);
+}
+
+.chart-card:-webkit-full-screen .chart-container {
+  height: calc(100vh - 150px);
+  min-height: 600px;
+}
+
+/* Firefox */
+.chart-card:-moz-full-screen {
+  padding: 20px;
+  background: var(--el-bg-color);
+}
+
+.chart-card:-moz-full-screen .chart-container {
+  height: calc(100vh - 150px);
+  min-height: 600px;
 }
 
 .recent-reviews {

@@ -134,7 +134,25 @@ class ReviewScoreService:
             reviewer=reviewer.username,
         )
         await db.commit()
+
+        # Refresh with eager loading of relationships to avoid lazy loading issues
         await db.refresh(score_obj)
+
+        # Re-query the score with eager-loaded relationships for enrichment
+        stmt = (
+            select(PullRequestScore)
+            .where(PullRequestScore.id == score_obj.id)
+            .options(
+                selectinload(PullRequestScore.project),
+                selectinload(PullRequestScore.repository),
+                selectinload(PullRequestScore.reviewer_rel),
+                selectinload(PullRequestScore.pull_request).selectinload(
+                    PullRequestReviewBase.pull_request_user_rel
+                ),
+            )
+        )
+        result = await db.execute(stmt)
+        score_obj = result.scalar_one()
 
         # Cache invalidation
         # Invalidate both specific file cache and PR-level (all_files) cache
@@ -766,7 +784,7 @@ class ReviewScoreService:
         if include_details:
             # Use provided reviewer_obj if available, otherwise try to load from relationship
             reviewer = reviewer_obj
-            if not reviewer and score.reviewer_rel:
+            if not reviewer and "reviewer_rel" in score.__dict__ and score.reviewer_rel:
                 reviewer = score.reviewer_rel
 
             if reviewer:
@@ -777,7 +795,10 @@ class ReviewScoreService:
                 }
 
             # Enrich with PR context if pull_request relationship is loaded
-            pr = score.pull_request
+            # Check if relationship is already loaded to avoid lazy loading issues
+            pr = None
+            if "pull_request" in score.__dict__:
+                pr = score.pull_request
             # Also check for temporarily attached PR (from batch loading)
             if not pr and hasattr(score, "_temp_pr"):
                 pr = score._temp_pr
@@ -798,7 +819,7 @@ class ReviewScoreService:
                     }
 
             # Get project information
-            if score.project:
+            if "project" in score.__dict__ and score.project:
                 score_dict["project_name"] = score.project.project_name or score.project_key
                 score_dict["project_url"] = score.project.project_url
         return ReviewScoreResponse(**score_dict)
