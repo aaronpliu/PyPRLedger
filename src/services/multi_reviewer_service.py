@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sqlalchemy import and_, case, desc, exists, func, or_, select
+from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -171,17 +171,23 @@ class MultiReviewerService:
 
         # Create a CASE expression to prioritize unassigned tasks
         # Priority 0 = unassigned (no active reviewers), Priority 1 = assigned
+
+        # Build EXISTS subquery to check if review has any non-pending assignments
+        has_active_reviewers = (
+            select(1)
+            .where(
+                and_(
+                    PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
+                    PullRequestReviewAssignment.assignment_status != "pending",
+                )
+            )
+            .correlate(PullRequestReviewBase)  # Explicitly correlate with outer query
+            .exists()
+        )
+
         priority_case = case(
-            (
-                ~exists().where(
-                    and_(
-                        PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
-                        PullRequestReviewAssignment.assignment_status != "pending",
-                    )
-                ),
-                0,
-            ),
-            else_=1,
+            (~has_active_reviewers, 0),  # No active reviewers = unassigned (priority 0)
+            else_=1,  # Has active reviewers = assigned (priority 1)
         )
 
         stmt = stmt.order_by(priority_case, desc(PullRequestReviewBase.created_date))

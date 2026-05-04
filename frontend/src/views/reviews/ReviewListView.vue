@@ -51,7 +51,6 @@
           :reviewers-loading="reviewersLoading"
           @search-pr-users="searchPRUsers"
           @search-reviewers="searchReviewers"
-          @apply="applyFilters"
           @reset="handleResetFilters"
         />
         
@@ -62,7 +61,6 @@
         >
           <el-switch
             v-model="hideArchived"
-            @change="applyFilters"
             inline-prompt
             :active-text="t('reviews.hide_archived', 'Hide Archived')"
             :inactive-text="t('reviews.show_all', 'Show All')"
@@ -479,22 +477,40 @@ const loadReviews = async () => {
       page_size: pageSize.value,
     }
     
-    // Add filter parameters for server-side filtering (only supported fields)
+    // Add ALL filter parameters for server-side filtering
     if (appFilter.value && appFilter.value.length > 0) params.app_names = appFilter.value.join(',')
     if (prUserFilter.value) params.pull_request_user = prUserFilter.value
     if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
       params.reviewer = reviewerFilter.value
     }
     if (statusFilter.value) params.pull_request_status = statusFilter.value
+    if (searchQuery.value) params.search_query = searchQuery.value
+    
+    // Convert scored filter to has_scores parameter
+    if (scoredFilter.value === 'yes') {
+      params.has_scores = true
+    } else if (scoredFilter.value === 'no') {
+      params.has_scores = false
+    }
+    // If scoredFilter is empty, don't send has_scores (shows all)
+    
+    // Convert hideArchived toggle to has_scores (hideArchived=true means show only unscored)
+    if (hideArchived.value && !scoredFilter.value) {
+      // Only apply if scoredFilter is not already set
+      params.has_scores = false
+    }
+    
+    if (severityFilter.value) params.severity = severityFilter.value
 
     console.log('Loading reviews with params:', params)
     const data = await reviewsApi.getReviews(params)
-    console.log('Reviews loaded:', data.items.length, 'items')
-    allReviews.value = data.items
-    total.value = data.total
+    console.log('Reviews loaded:', data.items.length, 'items, total:', data.total)
     
-    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned reviewer)
-    applyFilters()
+    // All filtering is now done server-side, just display the results
+    allReviews.value = data.items
+    filteredReviews.value = data.items
+    reviews.value = data.items
+    total.value = data.total
   } catch (error: any) {
     console.error('Failed to load reviews:', error)
     console.error('Error details:', error.response?.data || error.message)
@@ -516,87 +532,31 @@ const fetchAllDataForExport = async (): Promise<Review[]> => {
       page_size: 10000, // Large page size to get all data
     }
     
-    // Add filter parameters for server-side filtering (only supported fields)
+    // Add ALL filter parameters for server-side filtering
     if (appFilter.value && appFilter.value.length > 0) params.app_names = appFilter.value.join(',')
     if (prUserFilter.value) params.pull_request_user = prUserFilter.value
     if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
       params.reviewer = reviewerFilter.value
     }
     if (statusFilter.value) params.pull_request_status = statusFilter.value
+    if (searchQuery.value) params.search_query = searchQuery.value
+    
+    // Convert scored filter to has_scores parameter
+    if (scoredFilter.value === 'yes') {
+      params.has_scores = true
+    } else if (scoredFilter.value === 'no') {
+      params.has_scores = false
+    }
+    
+    // Convert hideArchived toggle to has_scores
+    if (hideArchived.value && !scoredFilter.value) {
+      params.has_scores = false
+    }
+    
+    if (severityFilter.value) params.severity = severityFilter.value
 
     const data = await reviewsApi.getReviews(params)
-    let result = data.items
-    
-    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned reviewer)
-    if (searchQuery.value) {
-      const query = searchQuery.value.toLowerCase()
-      result = result.filter(review => {
-        return (
-          review.pull_request_id?.toLowerCase().includes(query) ||
-          review.reviewer?.toLowerCase().includes(query) ||
-          review.project_key?.toLowerCase().includes(query) ||
-          review.repository_slug?.toLowerCase().includes(query) ||
-          review.reviewer_comments?.toLowerCase().includes(query)
-        )
-      })
-    }
-    
-    // Apply PR user filter (client-side refinement if needed, though mostly server-side)
-    if (prUserFilter.value) {
-      const prUser = prUserFilter.value.toLowerCase()
-      result = result.filter(review => 
-        review.pull_request_user?.toLowerCase().includes(prUser) ||
-        review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
-      )
-    }
-    
-    // Apply reviewer filter (client-side refinement for unassigned or text search)
-    if (reviewerFilter.value) {
-      if (reviewerFilter.value === '__unassigned__') {
-        result = result.filter(review => 
-          !review.reviewer && !review.reviewer_info?.display_name
-        )
-      } else {
-        const reviewer = reviewerFilter.value.toLowerCase()
-        result = result.filter(review => 
-          review.reviewer?.toLowerCase().includes(reviewer) ||
-          review.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
-        )
-      }
-    }
-    
-    // Apply scored filter
-    if (scoredFilter.value === 'yes') {
-      result = result.filter(review => 
-        review.score_summary && review.score_summary.total_scores > 0
-      )
-    } else if (scoredFilter.value === 'no') {
-      result = result.filter(review => 
-        !review.score_summary || review.score_summary.total_scores === 0
-      )
-    }
-    
-    // Apply hide archived toggle (hide scored reviews by default)
-    if (hideArchived.value) {
-      result = result.filter(review => 
-        !review.score_summary || review.score_summary.total_scores === 0
-      )
-    }
-    
-    // Apply severity filter (check AI review issues)
-    if (severityFilter.value) {
-      const targetSeverity = severityFilter.value
-      result = result.filter(review => {
-        if (!review.ai_suggestions?.issues || review.ai_suggestions.issues.length === 0) {
-          return false
-        }
-        return review.ai_suggestions.issues.some(
-          issue => issue.severity === targetSeverity
-        )
-      })
-    }
-    
-    return result
+    return data.items
   } catch (error) {
     console.error('Failed to fetch all data for export:', error)
     throw error
@@ -611,104 +571,9 @@ const handleResetFilters = () => {
   scoredFilter.value = ''
   severityFilter.value = ''
   statusFilter.value = ''
-  applyFilters()
-}
-
-const applyFilters = () => {
-  let result = [...allReviews.value]
-  
-  // Apply search filter
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    result = result.filter(review => {
-      return (
-        review.pull_request_id?.toLowerCase().includes(query) ||
-        review.reviewer?.toLowerCase().includes(query) ||
-        review.project_key?.toLowerCase().includes(query) ||
-        review.repository_slug?.toLowerCase().includes(query) ||
-        review.reviewer_comments?.toLowerCase().includes(query)
-      )
-    })
-  }
-  
-  // Apply PR user filter
-  if (prUserFilter.value) {
-    const prUser = prUserFilter.value.toLowerCase()
-    result = result.filter(review => 
-      review.pull_request_user?.toLowerCase().includes(prUser) ||
-      review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
-    )
-  }
-  
-  // Apply app name filter (multi-select)
-  if (appFilter.value && appFilter.value.length > 0) {
-    const selectedApps = appFilter.value.map(app => app.toLowerCase())
-    result = result.filter(review => 
-      review.app_name && selectedApps.includes(review.app_name.toLowerCase())
-    )
-  }
-  
-  // Apply reviewer filter
-  if (reviewerFilter.value) {
-    // Special handling for unassigned option
-    if (reviewerFilter.value === '__unassigned__') {
-      result = result.filter(review => 
-        !review.reviewer && !review.reviewer_info?.display_name
-      )
-    } else {
-      // Normal text search for assigned reviewers
-      const reviewer = reviewerFilter.value.toLowerCase()
-      result = result.filter(review => 
-        review.reviewer?.toLowerCase().includes(reviewer) ||
-        review.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
-      )
-    }
-  }
-  
-  // Apply scored filter
-  if (scoredFilter.value === 'yes') {
-    result = result.filter(review => 
-      review.score_summary && review.score_summary.total_scores > 0
-    )
-  } else if (scoredFilter.value === 'no') {
-    result = result.filter(review => 
-      !review.score_summary || review.score_summary.total_scores === 0
-    )
-  }
-  
-  // Apply hide archived toggle (hide scored reviews by default)
-  if (hideArchived.value) {
-    result = result.filter(review => 
-      !review.score_summary || review.score_summary.total_scores === 0
-    )
-  }
-  
-  // Apply severity filter (check AI review issues)
-  if (severityFilter.value) {
-    const targetSeverity = severityFilter.value
-    result = result.filter(review => {
-      // Check if review has AI suggestions with issues
-      if (!review.ai_suggestions?.issues || review.ai_suggestions.issues.length === 0) {
-        return false
-      }
-      // Check if any issue matches the selected severity
-      return review.ai_suggestions.issues.some(
-        issue => issue.severity === targetSeverity
-      )
-    })
-  }
-  
-  // Apply status filter
-  if (statusFilter.value) {
-    result = result.filter(review => review.pull_request_status === statusFilter.value)
-  }
-  
-  filteredReviews.value = result
-  reviews.value = result
-  
-  // Keep backend's total count for pagination.
-  // Client-side filters (search, scored, severity) reduce visible items but don't change total pages.
-  // Only server-side filters (app, pr_user, reviewer, status) affect the total count from backend.
+  hideArchived.value = true // Reset to default (hide scored reviews)
+  currentPage.value = 1 // Reset to first page
+  loadReviews() // Reload from backend with reset filters
 }
 
 const viewReview = (review: Review) => {
@@ -924,13 +789,14 @@ const searchReviewers = (query: string) => {
   )
 }
 
-// Watch for filter changes and reload data
+// Watch for filter changes and reload data from backend
 watch(
-  [searchQuery, appFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter],
+  [searchQuery, appFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter, hideArchived],
   () => {
     // Debounce the reload to avoid multiple rapid requests
     clearTimeout(filterChangeTimeout)
     filterChangeTimeout = setTimeout(() => {
+      currentPage.value = 1 // Reset to first page when filters change
       loadReviews()
     }, 300)
   },

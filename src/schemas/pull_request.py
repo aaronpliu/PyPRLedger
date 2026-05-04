@@ -538,6 +538,19 @@ class ReviewFilter(BaseModel):
         max_length=64,
         description="Filter reviews assigned to or raised by this username",
     )
+    search_query: str | None = Field(
+        None,
+        max_length=256,
+        description="Search across PR ID, reviewer, project, repo, and comments",
+    )
+    has_scores: bool | None = Field(
+        None,
+        description="Filter by scored status: True=scored only, False=unscored only, None=all",
+    )
+    severity: str | None = Field(
+        None,
+        description="Filter by AI issue severity (critical, high, medium, low)",
+    )
 
     @field_validator("pull_request_status")
     def validate_status(cls, v):

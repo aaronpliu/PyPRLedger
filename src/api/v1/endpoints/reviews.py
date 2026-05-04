@@ -609,6 +609,19 @@ async def list_reviews(
         None,
         description="Filter by application names (comma-separated for multiple apps, e.g., 'member,tv,football')",
     ),
+    search_query: str | None = Query(
+        None,
+        max_length=256,
+        description="Search across PR ID, reviewer, project, repo, and comments",
+    ),
+    has_scores: bool | None = Query(
+        None,
+        description="Filter by scored status: True=scored only, False=unscored only, None=all",
+    ),
+    severity: str | None = Query(
+        None,
+        description="Filter by AI issue severity (critical, high, medium, low)",
+    ),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> ReviewListResponse:
@@ -666,6 +679,9 @@ async def list_reviews(
             pull_request_commit_id=pull_request_commit_id,
             date_from=date_from,
             date_to=date_to,
+            search_query=search_query,
+            has_scores=has_scores,
+            severity=severity,
         )
 
         # Apply role-based filtering

@@ -162,6 +162,20 @@ export const reviewsApi = {
     page?: number
     page_size?: number
     project_key?: string
+    repository_slug?: string
+    pull_request_id?: string
+    pull_request_user?: string
+    reviewer?: string
+    source_branch?: string
+    target_branch?: string
+    pull_request_status?: string
+    pull_request_commit_id?: string
+    date_from?: string
+    date_to?: string
+    app_names?: string
+    search_query?: string
+    has_scores?: boolean
+    severity?: string
   }): Promise<{ total: number; items: Review[]; page: number; page_size: number }> {
     return request.get('/reviews', { params })
   },
