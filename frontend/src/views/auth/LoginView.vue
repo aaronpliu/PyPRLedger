@@ -1,9 +1,7 @@
 <template>
   <div class="auth-container">
-    <!-- Background Pattern -->
-    <div class="auth-background">
-      <div class="gradient-overlay"></div>
-    </div>
+    <!-- Background Image Slider -->
+    <AuthBackground />
 
     <!-- Main Content -->
     <div class="auth-content">
@@ -96,6 +94,7 @@ import { User, Lock } from '@element-plus/icons-vue'
 import { rbacApi } from '@/api/rbac'
 import { useI18n } from 'vue-i18n'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
+import AuthBackground from '@/components/auth/AuthBackground.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -177,29 +176,6 @@ const handleLogin = async () => {
   background: var(--el-bg-color);
 }
 
-/* Background Pattern */
-.auth-background {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-}
-
-.gradient-overlay {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-              radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.06) 0%, transparent 40%);
-}
-
-[data-theme='dark'] .gradient-overlay {
-  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 50%),
-              radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.1) 0%, transparent 40%);
-}
-
 /* Main Content */
 .auth-content {
   position: relative;
@@ -223,15 +199,33 @@ const handleLogin = async () => {
   font-size: 2.25rem;
   font-weight: 700;
   margin: 0 0 8px 0;
-  color: var(--el-text-color-primary);
+  color: #ffffff;
   letter-spacing: -0.02em;
+  /* Ensure visibility against rotating backgrounds */
+  text-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(0, 0, 0, 0.2),
+    0 0 40px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.brand-title:hover {
+  text-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(0, 0, 0, 0.3),
+    0 0 60px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
 }
 
 .brand-subtitle {
   font-size: 0.95rem;
-  color: var(--el-text-color-secondary);
+  color: rgba(255, 255, 255, 0.9);
   margin: 0 0 16px 0;
   font-weight: 400;
+  /* Ensure visibility against rotating backgrounds */
+  text-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 0 10px rgba(0, 0, 0, 0.15);
 }
 
 .rainbow-line {
@@ -240,24 +234,22 @@ const handleLogin = async () => {
   height: 3px;
   margin: 0 auto 24px auto;
   background: linear-gradient(90deg, 
-    rgba(99, 102, 241, 0.3) 0%, 
-    rgba(139, 92, 246, 0.3) 25%, 
-    rgba(236, 72, 153, 0.3) 50%, 
-    rgba(245, 158, 11, 0.3) 75%, 
-    rgba(16, 185, 129, 0.3) 100%);
+    rgba(99, 102, 241, 0.8) 0%, 
+    rgba(139, 92, 246, 0.8) 25%, 
+    rgba(236, 72, 153, 0.8) 50%, 
+    rgba(245, 158, 11, 0.8) 75%, 
+    rgba(16, 185, 129, 0.8) 100%);
   border-radius: 2px;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+  box-shadow: 
+    0 2px 8px rgba(99, 102, 241, 0.4),
+    0 0 20px rgba(139, 92, 246, 0.2);
   animation: pulse 3s ease-in-out infinite;
 }
 
 [data-theme='dark'] .rainbow-line {
-  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.25);
-  background: linear-gradient(90deg, 
-    rgba(99, 102, 241, 0.4) 0%, 
-    rgba(139, 92, 246, 0.4) 25%, 
-    rgba(236, 72, 153, 0.4) 50%, 
-    rgba(245, 158, 11, 0.4) 75%, 
-    rgba(16, 185, 129, 0.4) 100%);
+  box-shadow: 
+    0 2px 12px rgba(99, 102, 241, 0.5),
+    0 0 30px rgba(139, 92, 246, 0.3);
 }
 
 @keyframes pulse {

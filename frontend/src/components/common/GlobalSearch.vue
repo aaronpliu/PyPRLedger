@@ -141,6 +141,10 @@ import { useRouter } from 'vue-router'
 import { Search, Clock, Guide } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
+
+// Extend dayjs with relativeTime plugin
+dayjs.extend(relativeTime)
 
 interface SearchResult {
   id: string | number
