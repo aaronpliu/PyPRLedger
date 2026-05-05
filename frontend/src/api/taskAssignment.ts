@@ -144,4 +144,19 @@ export const taskAssignmentApi = {
   }): Promise<ReviewListResponse> {
     return request.get('/task-assignment/my-tasks', { params })
   },
+
+  /**
+   * Get all reviews for analytics (with pagination support for large datasets)
+   */
+  getReviewsForAnalytics(params: {
+    page?: number
+    page_size?: number
+    project_key?: string
+    reviewer?: string
+    pull_request_user?: string
+    date_from?: string
+    date_to?: string
+  }): Promise<ReviewListResponse> {
+    return request.get('/task-assignment/', { params })
+  },
 }

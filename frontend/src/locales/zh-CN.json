@@ -468,25 +468,60 @@
       "copy_id": "复制ID",
       "issues_found": "发现的问题",
       "description": "描述",
-      "suggestion": "建议",
-      "code_diff": "代码差异",
-      "line_by_line": "逐行对比",
-      "side_by_side": "并排对比",
-      "assign_reviewer_dialog": {
-        "title": "分配审查者",
-        "pr_id": "PR ID",
-        "project_repo": "项目 / 仓库",
-        "pr_user": "PR用户",
-        "branches": "分支",
-        "pr_status": "PR状态",
-        "reviewers_label": "审查者",
-        "no_reviewers_assigned": "未分配审查者",
-        "reviewer_select": "审查者",
-        "select_reviewer_placeholder": "选择审查者",
-        "no_available_reviewers": "没有可用的审查者可以分配",
-        "cancel": "取消",
-        "assign": "分配"
+      "suggestion": "建议"
+    },
+    "analytics": {
+      "page_title": "任务分配分析",
+      "summary": {
+        "total_reviews": "总审查数",
+        "active_reviews": "活跃审查数",
+        "avg_assignments": "平均分配数",
+        "scoring_rate": "评分率"
+      },
+      "charts": {
+        "reviews_raised_trend": "审查提起趋势",
+        "by_pr_user": "按PR用户统计",
+        "by_project_repo": "按项目/仓库统计",
+        "assignments_per_reviewer": "每个审查者的分配",
+        "scored_per_reviewer": "每个审查者的评分审查",
+        "scoring_trend": "审查评分趋势"
+      },
+      "filters": {
+        "date_range": "日期范围",
+        "start_date": "开始日期",
+        "end_date": "结束日期",
+        "project": "项目",
+        "all_projects": "所有项目",
+        "reviewer": "审查者",
+        "all_reviewers": "所有审查者"
+      },
+      "period": {
+        "daily": "每日",
+        "weekly": "每周",
+        "monthly": "每月"
+      },
+      "messages": {
+        "load_failed": "加载分析数据失败",
+        "no_data": "所选筛选条件下无可用数据"
       }
+    },
+    "code_diff": "代码差异",
+    "line_by_line": "逐行对比",
+    "side_by_side": "并排对比",
+    "assign_reviewer_dialog": {
+      "title": "分配审查者",
+      "pr_id": "PR ID",
+      "project_repo": "项目 / 仓库",
+      "pr_user": "PR用户",
+      "branches": "分支",
+      "pr_status": "PR状态",
+      "reviewers_label": "审查者",
+      "no_reviewers_assigned": "未分配审查者",
+      "reviewer_select": "审查者",
+      "select_reviewer_placeholder": "选择审查者",
+      "no_available_reviewers": "没有可用的审查者可以分配",
+      "cancel": "取消",
+      "assign": "分配"
     }
   },
   "admin": {
