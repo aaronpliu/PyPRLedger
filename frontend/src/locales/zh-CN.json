@@ -295,7 +295,9 @@
       "update_score_failed": "更新评分失败",
       "load_failed": "加载审查详情失败",
       "copied": "已复制！",
-      "na": "无"
+      "na": "无",
+      "no_ai_hint": "此PR提交时未进行AI分析。当AI分析可用时，建议将显示在此处。",
+      "no_ai_results": "暂无AI审查结果"
     }
   },
   "scores": {

@@ -295,7 +295,9 @@
       "update_score_failed": "更新評分失敗",
       "load_failed": "載入審查詳情失敗",
       "copied": "已複製！",
-      "na": "無"
+      "na": "無",
+      "no_ai_hint": "此PR提交時未進行AI分析。當AI分析可用時，建議將顯示在此處。",
+      "no_ai_results": "暫無AI審查結果"
     }
   },
   "scores": {

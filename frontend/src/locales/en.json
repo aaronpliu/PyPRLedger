@@ -295,7 +295,9 @@
       "update_score_failed": "Failed to update score",
       "load_failed": "Failed to load review details",
       "copied": "Copied!",
-      "na": "N/A"
+      "na": "N/A",
+      "no_ai_hint": "This PR was submitted without AI analysis. AI suggestions will appear here when available.",
+      "no_ai_results": "No AI review results available"
     }
   },
   "scores": {
