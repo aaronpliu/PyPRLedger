@@ -45,7 +45,6 @@
 
           <el-form-item :label="t('notifications.filter_status')">
             <el-select v-model="filters.is_read" clearable style="width: 140px">
-              <el-option :label="t('notifications.status_all')" :value="undefined" />
               <el-option :label="t('notifications.status_unread')" :value="false" />
               <el-option :label="t('notifications.status_read')" :value="true" />
             </el-select>
