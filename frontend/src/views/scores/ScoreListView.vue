@@ -58,13 +58,30 @@
             <span class="project-key">{{ row.project_name || row.project_key }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="pull_request_user" :label="t('scores.pr_user')" width="150">
+        <el-table-column prop="pull_request_user" :label="t('scores.pr_user')" width="180">
           <template #default="{ row }">
             <div class="user-cell">
-              <el-avatar :size="24" v-if="row.pull_request_user_info?.avatar_url">
-                <img :src="row.pull_request_user_info.avatar_url" alt="" />
-              </el-avatar>
-              <el-avatar :size="24" v-else>{{ getInitials(row.pull_request_user_info?.display_name || row.pull_request_user) }}</el-avatar>
+              <el-tooltip 
+                :content="row.pull_request_user_info?.display_name || row.pull_request_user" 
+                placement="top"
+                :disabled="!row.pull_request_user_info?.display_name"
+              >
+                <el-avatar 
+                  :size="32" 
+                  v-if="row.pull_request_user_info?.avatar_url"
+                  class="user-avatar"
+                >
+                  <img :src="row.pull_request_user_info.avatar_url" alt="" />
+                </el-avatar>
+                <el-avatar 
+                  :size="32" 
+                  v-else
+                  class="user-avatar user-avatar-fallback"
+                  :style="{ background: getAvatarColor(row.pull_request_user) }"
+                >
+                  {{ getInitials(row.pull_request_user_info?.display_name || row.pull_request_user) }}
+                </el-avatar>
+              </el-tooltip>
               <div class="user-info">
                 <span class="user-display-name">{{ row.pull_request_user_info?.display_name || row.pull_request_user }}</span>
                 <span class="user-username" v-if="row.pull_request_user_info?.display_name">@{{ row.pull_request_user }}</span>
@@ -72,13 +89,30 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="reviewer" :label="t('scores.reviewer')" width="150">
+        <el-table-column prop="reviewer" :label="t('scores.reviewer')" width="180">
           <template #default="{ row }">
             <div class="reviewer-cell">
-              <el-avatar :size="28" v-if="row.reviewer_info?.avatar_url">
-                <img :src="row.reviewer_info.avatar_url" alt="" />
-              </el-avatar>
-              <el-avatar :size="28" v-else>{{ getInitials(row.reviewer_info?.display_name || row.reviewer) }}</el-avatar>
+              <el-tooltip 
+                :content="row.reviewer_info?.display_name || row.reviewer" 
+                placement="top"
+                :disabled="!row.reviewer_info?.display_name"
+              >
+                <el-avatar 
+                  :size="36" 
+                  v-if="row.reviewer_info?.avatar_url"
+                  class="reviewer-avatar"
+                >
+                  <img :src="row.reviewer_info.avatar_url" alt="" />
+                </el-avatar>
+                <el-avatar 
+                  :size="36" 
+                  v-else
+                  class="reviewer-avatar reviewer-avatar-fallback"
+                  :style="{ background: getAvatarColor(row.reviewer) }"
+                >
+                  {{ getInitials(row.reviewer_info?.display_name || row.reviewer) }}
+                </el-avatar>
+              </el-tooltip>
               <div class="reviewer-info">
                 <span class="reviewer-display-name">{{ row.reviewer_info?.display_name || row.reviewer }}</span>
                 <span class="reviewer-username" v-if="row.reviewer_info?.display_name">@{{ row.reviewer }}</span>
@@ -247,6 +281,29 @@ const getInitials = (name: string) => {
   }
   // Single word: take first 2 characters
   return name.substring(0, 2).toUpperCase()
+}
+
+const getAvatarColor = (username: string) => {
+  // Generate a consistent gradient color based on username
+  const colors = [
+    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+    'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+    'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+    'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+    'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
+    'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+    'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
+  ]
+  
+  // Use username to deterministically select a color
+  let hash = 0
+  for (let i = 0; i < username.length; i++) {
+    hash = ((hash << 5) - hash) + username.charCodeAt(i)
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  
+  return colors[Math.abs(hash) % colors.length]
 }
 
 const truncateId = (id: string | undefined | null) => {
@@ -512,50 +569,100 @@ h2 {
 .reviewer-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+.reviewer-avatar {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.reviewer-avatar:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.reviewer-avatar-fallback {
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  border: 2px solid var(--el-border-color-light);
 }
 
 .reviewer-info {
   display: flex;
   flex-direction: column;
-  line-height: 1.2;
+  line-height: 1.3;
+  min-width: 0;
+  flex: 1;
 }
 
 .reviewer-display-name {
   color: var(--el-text-color-primary);
   font-weight: 500;
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reviewer-username {
   color: var(--el-text-color-secondary);
   font-size: 11px;
   margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* PR User cell styling */
 .user-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+
+.user-avatar {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.user-avatar:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.user-avatar-fallback {
+  color: white;
+  font-weight: 600;
+  font-size: 12px;
+  border: 2px solid var(--el-border-color-light);
 }
 
 .user-info {
   display: flex;
   flex-direction: column;
-  line-height: 1.2;
+  line-height: 1.3;
+  min-width: 0;
+  flex: 1;
 }
 
 .user-display-name {
   color: var(--el-text-color-primary);
   font-weight: 500;
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-username {
   color: var(--el-text-color-secondary);
   font-size: 10px;
   margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Project key styling */
