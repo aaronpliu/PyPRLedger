@@ -865,7 +865,16 @@ class ReviewService:
             query = query.where(
                 or_(
                     PullRequestReviewBase.pull_request_id.ilike(search_term),
-                    PullRequestReviewBase.reviewer_comments.ilike(search_term),
+                    # Search reviewer comments in assignments
+                    exists(
+                        select(1).where(
+                            and_(
+                                PullRequestReviewAssignment.review_base_id
+                                == PullRequestReviewBase.id,
+                                PullRequestReviewAssignment.reviewer_comments.ilike(search_term),
+                            )
+                        )
+                    ),
                     # Note: reviewer, project_key, repository_slug are already in base table
                     # but we need to check assignments for reviewer search
                     exists(
