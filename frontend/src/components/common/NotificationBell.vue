@@ -39,9 +39,10 @@
                   v-if="!notif.is_read"
                   size="small"
                   type="danger"
-                  effect="dot"
                   style="margin-right: 8px"
-                />
+                >
+                  ●
+                </el-tag>
                 {{ notif.title }}
               </div>
               <div class="notification-message">{{ notif.message }}</div>
