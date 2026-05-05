@@ -642,7 +642,8 @@ const loadReviews = async () => {
     // Add ALL filter parameters for server-side filtering
     if (appFilter.value && appFilter.value.length > 0) params.app_names = appFilter.value.join(',')
     if (prUserFilter.value) params.pull_request_user = prUserFilter.value
-    if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+    if (reviewerFilter.value) {
+      // Send reviewer parameter including __unassigned__ special value
       params.reviewer = reviewerFilter.value
     }
     if (statusFilter.value) params.pull_request_status = statusFilter.value
@@ -697,7 +698,8 @@ const fetchAllDataForExport = async (): Promise<Review[]> => {
     // Add ALL filter parameters for server-side filtering
     if (appFilter.value && appFilter.value.length > 0) params.app_names = appFilter.value.join(',')
     if (prUserFilter.value) params.pull_request_user = prUserFilter.value
-    if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+    if (reviewerFilter.value) {
+      // Send reviewer parameter including __unassigned__ special value
       params.reviewer = reviewerFilter.value
     }
     if (statusFilter.value) params.pull_request_status = statusFilter.value
@@ -747,7 +749,8 @@ const viewReview = (review: Review) => {
   const filterParams: any = {}
   if (appFilter.value && appFilter.value.length > 0) filterParams.app_names = appFilter.value.join(',')
   if (prUserFilter.value) filterParams.pull_request_user = prUserFilter.value
-  if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+  if (reviewerFilter.value) {
+    // Include __unassigned__ in navigation filters
     filterParams.reviewer = reviewerFilter.value
   }
   if (statusFilter.value) filterParams.pull_request_status = statusFilter.value

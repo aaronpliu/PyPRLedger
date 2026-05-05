@@ -458,7 +458,8 @@ const loadReviews = async () => {
     
     // Add filter parameters supported by task-assignment API
     if (projectFilter.value) params.project_key = projectFilter.value
-    if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+    if (reviewerFilter.value) {
+      // Send reviewer parameter including __unassigned__ special value
       params.reviewer = reviewerFilter.value
     }
     if (statusFilter.value) params.status = statusFilter.value

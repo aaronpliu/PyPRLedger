@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sqlalchemy import and_, case, desc, func, or_, select
+from sqlalchemy import and_, case, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -150,9 +150,21 @@ class MultiReviewerService:
         if pull_request_user:
             stmt = stmt.where(PullRequestReviewBase.pull_request_user == pull_request_user)
         if reviewer:
-            stmt = stmt.join(PullRequestReviewBase.assignments).where(
-                PullRequestReviewAssignment.reviewer == reviewer
-            )
+            # Check if filtering for unassigned (special value)
+            if reviewer == "__unassigned__":
+                # Show reviews with NO assignments at all
+                stmt = stmt.where(
+                    ~exists(
+                        select(1).where(
+                            PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id
+                        )
+                    )
+                )
+            else:
+                # Filter by specific reviewer username
+                stmt = stmt.join(PullRequestReviewBase.assignments).where(
+                    PullRequestReviewAssignment.reviewer == reviewer
+                )
         if visible_to_username:
             stmt = stmt.outerjoin(PullRequestReviewBase.assignments).where(
                 or_(
