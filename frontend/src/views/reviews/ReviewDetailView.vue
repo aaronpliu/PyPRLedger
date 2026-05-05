@@ -140,9 +140,9 @@
         </el-card>
 
         <!-- Dual Column Layout: Code Diff + AI Review -->
-        <el-row :gutter="16" style="margin-top: 16px" v-if="review.git_code_diff || review.ai_suggestions">
+        <el-row :gutter="16" style="margin-top: 16px" v-if="review.git_code_diff">
           <!-- Code Diff Column -->
-          <el-col :xs="24" :sm="24" :md="review.ai_suggestions ? 14 : 24" :lg="review.ai_suggestions ? 14 : 24" :xl="review.ai_suggestions ? 15 : 24">
+          <el-col :xs="24" :sm="24" :md="14" :lg="14" :xl="15">
             <div class="analysis-column">
               <div class="analysis-column-header">
                 <span>{{ t('reviews.detail.code_changes') }}</span>
@@ -161,8 +161,8 @@
             </div>
           </el-col>
 
-          <!-- AI Review Column -->
-          <el-col :xs="24" :sm="24" :md="review.ai_suggestions ? 10 : 0" :lg="review.ai_suggestions ? 10 : 0" :xl="review.ai_suggestions ? 9 : 0" v-if="review.ai_suggestions">
+          <!-- AI Review Column - Always shown with placeholder if no data -->
+          <el-col :xs="24" :sm="24" :md="10" :lg="10" :xl="9">
             <div class="analysis-column">
               <div class="analysis-column-header ai-review-header">
                 <span class="ai-review-title">
@@ -183,7 +183,25 @@
                 </el-button>
               </div>
               <div class="analysis-column-body">
-                <AIReviewResults :suggestions="review.ai_suggestions" />
+                <!-- Show AI results if available -->
+                <AIReviewResults v-if="review.ai_suggestions" :suggestions="review.ai_suggestions" />
+                
+                <!-- Placeholder when no AI suggestions -->
+                <div v-else class="no-ai-results-placeholder">
+                  <el-empty
+                    :image-size="120"
+                    :description="t('reviews.detail.no_ai_results', 'No AI review results available')"
+                  >
+                    <template #image>
+                      <el-icon :size="80" color="var(--el-text-color-secondary)">
+                        <InfoFilled />
+                      </el-icon>
+                    </template>
+                    <p class="placeholder-hint">
+                      {{ t('reviews.detail.no_ai_hint', 'This PR was submitted without AI analysis. AI suggestions will appear here when available.') }}
+                    </p>
+                  </el-empty>
+                </div>
               </div>
             </div>
           </el-col>
@@ -438,7 +456,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link, InfoFilled } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
@@ -538,13 +556,20 @@ const canCreateScore = computed(() => {
   return isCurrentReviewAssignedToUser.value
 })
 
-// Check if current user is assigned as the reviewer for this review
+// Check if current user is assigned as a reviewer for this review
 const isCurrentReviewAssignedToUser = computed(() => {
   if (!review.value || !effectiveReviewerUsername.value) {
     return false
   }
 
-  // Check if user is the assigned reviewer
+  // For multi-reviewer reviews, check if user is in the all_reviewers array
+  if (review.value.all_reviewers && review.value.all_reviewers.length > 0) {
+    return review.value.all_reviewers.some(
+      (r: { username: string; display_name: string }) => r.username === effectiveReviewerUsername.value
+    )
+  }
+
+  // Fallback: check single reviewer field (legacy)
   return review.value.reviewer === effectiveReviewerUsername.value
 })
 
@@ -557,7 +582,9 @@ const scoreActionDisabledReason = computed(() => {
     return 'Link your account to a Bitbucket user before submitting scores.'
   }
 
-  if (!review.value?.reviewer) {
+  // Check if review has any reviewers assigned (single or multi-reviewer)
+  const hasAnyReviewer = review.value?.reviewer || (review.value?.all_reviewers && review.value.all_reviewers.length > 0)
+  if (!hasAnyReviewer) {
     return 'This review is visible because you raised the PR, but scoring is only allowed after review admin assigns it to you.'
   }
 
@@ -988,11 +1015,23 @@ const loadNextPage = async () => {
   try {
     const nextPage = reviewNavigationStore.currentPage + 1
     
-    // Fetch next page from API
-    const response = await reviewsApi.getReviews({
+    // Fetch next page from API WITH FILTERS to maintain consistency
+    const params: any = {
       page: nextPage,
       page_size: reviewNavigationStore.pageSize,
-    })
+    }
+    
+    // Apply stored filters
+    const storedFilters = reviewNavigationStore.filters || {}
+    if (storedFilters.app_names) params.app_names = storedFilters.app_names
+    if (storedFilters.pull_request_user) params.pull_request_user = storedFilters.pull_request_user
+    if (storedFilters.reviewer) params.reviewer = storedFilters.reviewer
+    if (storedFilters.pull_request_status) params.pull_request_status = storedFilters.pull_request_status
+    if (storedFilters.search_query) params.search_query = storedFilters.search_query
+    if (storedFilters.has_scores !== undefined) params.has_scores = storedFilters.has_scores
+    if (storedFilters.severity) params.severity = storedFilters.severity
+    
+    const response = await reviewsApi.getReviews(params)
 
     if (response.items.length === 0) {
       ElMessage.warning('No more reviews available')
@@ -1014,6 +1053,7 @@ const loadNextPage = async () => {
       pageSize: reviewNavigationStore.pageSize,
       totalItems: response.total,
       hasMorePages: nextPage < totalPages,
+      filters: storedFilters, // Preserve filters for subsequent navigation
     })
 
     // Navigate to first review on the new page
@@ -1047,11 +1087,23 @@ const loadPreviousPage = async () => {
   try {
     const prevPage = reviewNavigationStore.currentPage - 1
     
-    // Fetch previous page from API
-    const response = await reviewsApi.getReviews({
+    // Fetch previous page from API WITH FILTERS to maintain consistency
+    const params: any = {
       page: prevPage,
       page_size: reviewNavigationStore.pageSize,
-    })
+    }
+    
+    // Apply stored filters
+    const storedFilters = reviewNavigationStore.filters || {}
+    if (storedFilters.app_names) params.app_names = storedFilters.app_names
+    if (storedFilters.pull_request_user) params.pull_request_user = storedFilters.pull_request_user
+    if (storedFilters.reviewer) params.reviewer = storedFilters.reviewer
+    if (storedFilters.pull_request_status) params.pull_request_status = storedFilters.pull_request_status
+    if (storedFilters.search_query) params.search_query = storedFilters.search_query
+    if (storedFilters.has_scores !== undefined) params.has_scores = storedFilters.has_scores
+    if (storedFilters.severity) params.severity = storedFilters.severity
+    
+    const response = await reviewsApi.getReviews(params)
 
     if (response.items.length === 0) {
       ElMessage.warning('No more reviews available')
@@ -1073,6 +1125,7 @@ const loadPreviousPage = async () => {
       pageSize: reviewNavigationStore.pageSize,
       totalItems: response.total,
       hasMorePages: prevPage < totalPages,
+      filters: storedFilters, // Preserve filters for subsequent navigation
     })
 
     // Navigate to last review on the new page
@@ -2014,5 +2067,27 @@ watch(
   .floating-nav-next {
     right: 8px;
   }
+}
+
+/* No AI Results Placeholder Styling */
+.no-ai-results-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 20px;
+}
+
+.placeholder-hint {
+  margin-top: 16px;
+  color: var(--el-text-color-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  text-align: center;
+  max-width: 280px;
+}
+
+[data-theme='dark'] .placeholder-hint {
+  color: var(--el-text-color-secondary);
 }
 </style>

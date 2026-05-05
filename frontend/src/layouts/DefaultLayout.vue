@@ -24,6 +24,7 @@
                 <el-menu-item index="/scores">{{ t('menu.scoreList') }}</el-menu-item>
                 <el-menu-item index="/scores/analytics">{{ t('menu.analytics') }}</el-menu-item>
               </el-sub-menu>
+              <el-menu-item index="/notifications">{{ t('menu.notifications') }}</el-menu-item>
             </el-menu>
           </nav>
         </div>

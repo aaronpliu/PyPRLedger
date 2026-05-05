@@ -51,7 +51,6 @@
           :reviewers-loading="reviewersLoading"
           @search-pr-users="searchPRUsers"
           @search-reviewers="searchReviewers"
-          @apply="applyFilters"
           @reset="handleResetFilters"
         />
         
@@ -62,7 +61,6 @@
         >
           <el-switch
             v-model="hideArchived"
-            @change="applyFilters"
             inline-prompt
             :active-text="t('reviews.hide_archived', 'Hide Archived')"
             :inactive-text="t('reviews.show_all', 'Show All')"
@@ -96,7 +94,103 @@
         v-loading="loading"
         style="width: 100%"
         @selection-change="handleSelectionChange"
+        @expand-change="handleExpandChange"
+        :expand-row-keys="expandedRows"
+        row-key="id"
       >
+        <!-- Expandable column for scores -->
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="expanded-scores-section">
+              <!-- Loading State -->
+              <div v-if="loadingScores[row.id]" class="scores-loading">
+                <el-icon class="is-loading"><Loading /></el-icon>
+                <span>{{ t('common.loading') }}</span>
+              </div>
+              
+              <!-- No Scores -->
+              <el-empty 
+                v-else-if="!reviewScores[row.id] || reviewScores[row.id].length === 0"
+                :description="t('reviews.detail.no_scores', 'No scores available')"
+                :image-size="80"
+              />
+              
+              <!-- Scores Table - Match ReviewDetailView structure -->
+              <el-card v-else class="nested-scores-card">
+                <template #header>
+                  <div class="card-header">
+                    <span class="card-title">{{ t('reviews.detail.scores', 'Scores') }} ({{ reviewScores[row.id].length }})</span>
+                  </div>
+                </template>
+                
+                <el-table :data="reviewScores[row.id]" stripe size="small">
+                  <!-- Reviewer Column -->
+                  <el-table-column prop="reviewer" :label="t('reviews.detail.reviewer')" width="200">
+                    <template #default="{ row: scoreRow }">
+                      <div class="reviewer-cell">
+                        <span>{{ scoreRow.reviewer_info?.display_name || scoreRow.reviewer }}</span>
+                        <el-tag 
+                          v-if="scoreRow.reviewer === row.reviewer" 
+                          size="small" 
+                          type="primary" 
+                          effect="plain"
+                          class="primary-reviewer-badge"
+                        >
+                          {{ t('reviews.detail.primary_reviewer', 'Primary') }}
+                        </el-tag>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  
+                  <!-- AI Review ID Column -->
+                  <el-table-column :label="t('reviews.detail.ai_review_id')" min-width="200" align="center">
+                    <template #default>
+                      <div v-if="row.ai_review_id" class="ai-review-id-cell">
+                        <el-tag size="small" type="info">
+                          {{ row.ai_review_id }}
+                        </el-tag>
+                        <el-button
+                          size="small"
+                          text
+                          @click="copyToClipboard(row.ai_review_id)"
+                        >
+                          <el-icon><CopyDocument /></el-icon>
+                        </el-button>
+                      </div>
+                      <span v-else class="empty-value">{{ t('reviews.detail.na', 'N/A') }}</span>
+                    </template>
+                  </el-table-column>
+                  
+                  <!-- Score Column -->
+                  <el-table-column prop="score" :label="t('reviews.detail.score')" width="120">
+                    <template #default="{ row: scoreRow }">
+                      <span :class="['score-value', getScoreColorClass(scoreRow.score)]">{{ scoreRow.score }}</span>
+                      <span v-if="scoreRow.max_score" class="score-max"> / {{ scoreRow.max_score }}</span>
+                    </template>
+                  </el-table-column>
+                  
+                  <!-- Comments Column -->
+                  <el-table-column prop="reviewer_comments" :label="t('reviews.detail.comments')" min-width="200" show-overflow-tooltip />
+                  
+                  <!-- Created Date Column -->
+                  <el-table-column prop="created_date" :label="t('reviews.detail.created')" width="160">
+                    <template #default="{ row: scoreRow }">
+                      {{ formatDate(scoreRow.created_date || '') }}
+                    </template>
+                  </el-table-column>
+                  
+                  <!-- Updated Date Column -->
+                  <el-table-column prop="updated_date" :label="t('reviews.detail.updated')" width="160">
+                    <template #default="{ row: scoreRow }">
+                      {{ scoreRow.updated_date ? formatDate(scoreRow.updated_date) : '-' }}
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </el-card>
+            </div>
+          </template>
+        </el-table-column>
+        
         <!-- Selection column only for review admins -->
         <el-table-column v-if="isReviewAdmin" type="selection" width="55" fixed="left" />
         <el-table-column :label="t('reviews.seq_number')" width="80">
@@ -340,8 +434,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
-import { useRouter } from 'vue-router'
-import { Search, CircleCheck, Delete, Close, Document, Refresh, Cpu, Link, QuestionFilled } from '@element-plus/icons-vue'
+import { useRouter, useRoute } from 'vue-router'
+import { Search, CircleCheck, Delete, Close, Document, Refresh, Cpu, Link, QuestionFilled, Loading } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
 import type { Review } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -360,6 +454,7 @@ import { usePrUrl } from '@/composables/usePrUrl'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const { hasPermission } = usePermission()
 const reviewNavigationStore = useReviewNavigationStore()
@@ -412,6 +507,11 @@ const severityFilter = ref('')
 const hideArchived = ref(true) // Default to hiding scored/archived reviews
 const tableRef = ref()
 
+// Expandable scores section state
+const expandedRows = ref<number[]>([])
+const reviewScores = ref<Record<number, any[]>>({})
+const loadingScores = ref<Record<number, boolean>>({})
+
 // Bulk operation state
 const selectedReviews = ref<Review[]>([])
 const showBulkDeleteDialogVisible = ref(false)
@@ -430,6 +530,67 @@ const totalCount = ref(0)
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
+}
+
+// Get score color class for visual indication
+const getScoreColorClass = (score: number) => {
+  if (score >= 8) return 'score-high'
+  if (score >= 6) return 'score-medium'
+  if (score >= 4) return 'score-low'
+  return 'score-critical'
+}
+
+// Copy text to clipboard
+const copyToClipboard = (text: string) => {
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('Copied to clipboard')
+  }).catch(() => {
+    ElMessage.error('Failed to copy to clipboard')
+  })
+}
+
+// Handle row expand/collapse - load scores when expanded
+const handleExpandChange = (row: Review, expandedRows: Review[]) => {
+  // Check if this row is now expanded
+  const isExpanded = expandedRows.some(r => r.id === row.id)
+  if (isExpanded) {
+    loadScoresForReview(row)
+  }
+}
+
+// Load scores for a specific review when expanded
+const loadScoresForReview = async (review: Review) => {
+  console.log('[ReviewListView] Loading scores for review:', review.id, review.pull_request_id)
+  
+  // If already loaded, skip
+  if (reviewScores.value[review.id]) {
+    console.log('[ReviewListView] Scores already cached for review:', review.id)
+    return
+  }
+  
+  loadingScores.value[review.id] = true
+  try {
+    // Match ReviewDetailView behavior: get ALL scores for the PR (no reviewer filter)
+    const params = {
+      project_key: review.project_key,
+      repository_slug: review.repository_slug,
+      pull_request_id: review.pull_request_id,
+      source_filename: review.source_filename || undefined,
+    }
+    console.log('[ReviewListView] API params:', params)
+    
+    const response = await reviewsApi.getReviewScores(params)
+    console.log('[ReviewListView] API response:', response)
+    
+    reviewScores.value[review.id] = response.items || []
+    console.log('[ReviewListView] Loaded', reviewScores.value[review.id].length, 'scores for review:', review.id)
+  } catch (error) {
+    console.error('[ReviewListView] Failed to load scores:', error)
+    ElMessage.error('Failed to load scores')
+    reviewScores.value[review.id] = []
+  } finally {
+    loadingScores.value[review.id] = false
+  }
 }
 
 const truncateUrl = (url: string) => {
@@ -478,22 +639,40 @@ const loadReviews = async () => {
       page_size: pageSize.value,
     }
     
-    // Add filter parameters for server-side filtering (only supported fields)
+    // Add ALL filter parameters for server-side filtering
     if (appFilter.value && appFilter.value.length > 0) params.app_names = appFilter.value.join(',')
     if (prUserFilter.value) params.pull_request_user = prUserFilter.value
     if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
       params.reviewer = reviewerFilter.value
     }
     if (statusFilter.value) params.pull_request_status = statusFilter.value
+    if (searchQuery.value) params.search_query = searchQuery.value
+    
+    // Convert scored filter to has_scores parameter
+    if (scoredFilter.value === 'yes') {
+      params.has_scores = true
+    } else if (scoredFilter.value === 'no') {
+      params.has_scores = false
+    }
+    // If scoredFilter is empty, don't send has_scores (shows all)
+    
+    // Convert hideArchived toggle to has_scores (hideArchived=true means show only unscored)
+    if (hideArchived.value && !scoredFilter.value) {
+      // Only apply if scoredFilter is not already set
+      params.has_scores = false
+    }
+    
+    if (severityFilter.value) params.severity = severityFilter.value
 
     console.log('Loading reviews with params:', params)
     const data = await reviewsApi.getReviews(params)
-    console.log('Reviews loaded:', data.items.length, 'items')
-    allReviews.value = data.items
-    total.value = data.total
+    console.log('Reviews loaded:', data.items.length, 'items, total:', data.total)
     
-    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned reviewer)
-    applyFilters()
+    // All filtering is now done server-side, just display the results
+    allReviews.value = data.items
+    filteredReviews.value = data.items
+    reviews.value = data.items
+    total.value = data.total
   } catch (error: any) {
     console.error('Failed to load reviews:', error)
     console.error('Error details:', error.response?.data || error.message)
@@ -515,87 +694,31 @@ const fetchAllDataForExport = async (): Promise<Review[]> => {
       page_size: 10000, // Large page size to get all data
     }
     
-    // Add filter parameters for server-side filtering (only supported fields)
+    // Add ALL filter parameters for server-side filtering
     if (appFilter.value && appFilter.value.length > 0) params.app_names = appFilter.value.join(',')
     if (prUserFilter.value) params.pull_request_user = prUserFilter.value
     if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
       params.reviewer = reviewerFilter.value
     }
     if (statusFilter.value) params.pull_request_status = statusFilter.value
+    if (searchQuery.value) params.search_query = searchQuery.value
+    
+    // Convert scored filter to has_scores parameter
+    if (scoredFilter.value === 'yes') {
+      params.has_scores = true
+    } else if (scoredFilter.value === 'no') {
+      params.has_scores = false
+    }
+    
+    // Convert hideArchived toggle to has_scores
+    if (hideArchived.value && !scoredFilter.value) {
+      params.has_scores = false
+    }
+    
+    if (severityFilter.value) params.severity = severityFilter.value
 
     const data = await reviewsApi.getReviews(params)
-    let result = data.items
-    
-    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned reviewer)
-    if (searchQuery.value) {
-      const query = searchQuery.value.toLowerCase()
-      result = result.filter(review => {
-        return (
-          review.pull_request_id?.toLowerCase().includes(query) ||
-          review.reviewer?.toLowerCase().includes(query) ||
-          review.project_key?.toLowerCase().includes(query) ||
-          review.repository_slug?.toLowerCase().includes(query) ||
-          review.reviewer_comments?.toLowerCase().includes(query)
-        )
-      })
-    }
-    
-    // Apply PR user filter (client-side refinement if needed, though mostly server-side)
-    if (prUserFilter.value) {
-      const prUser = prUserFilter.value.toLowerCase()
-      result = result.filter(review => 
-        review.pull_request_user?.toLowerCase().includes(prUser) ||
-        review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
-      )
-    }
-    
-    // Apply reviewer filter (client-side refinement for unassigned or text search)
-    if (reviewerFilter.value) {
-      if (reviewerFilter.value === '__unassigned__') {
-        result = result.filter(review => 
-          !review.reviewer && !review.reviewer_info?.display_name
-        )
-      } else {
-        const reviewer = reviewerFilter.value.toLowerCase()
-        result = result.filter(review => 
-          review.reviewer?.toLowerCase().includes(reviewer) ||
-          review.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
-        )
-      }
-    }
-    
-    // Apply scored filter
-    if (scoredFilter.value === 'yes') {
-      result = result.filter(review => 
-        review.score_summary && review.score_summary.total_scores > 0
-      )
-    } else if (scoredFilter.value === 'no') {
-      result = result.filter(review => 
-        !review.score_summary || review.score_summary.total_scores === 0
-      )
-    }
-    
-    // Apply hide archived toggle (hide scored reviews by default)
-    if (hideArchived.value) {
-      result = result.filter(review => 
-        !review.score_summary || review.score_summary.total_scores === 0
-      )
-    }
-    
-    // Apply severity filter (check AI review issues)
-    if (severityFilter.value) {
-      const targetSeverity = severityFilter.value
-      result = result.filter(review => {
-        if (!review.ai_suggestions?.issues || review.ai_suggestions.issues.length === 0) {
-          return false
-        }
-        return review.ai_suggestions.issues.some(
-          issue => issue.severity === targetSeverity
-        )
-      })
-    }
-    
-    return result
+    return data.items
   } catch (error) {
     console.error('Failed to fetch all data for export:', error)
     throw error
@@ -610,110 +733,39 @@ const handleResetFilters = () => {
   scoredFilter.value = ''
   severityFilter.value = ''
   statusFilter.value = ''
-  applyFilters()
-}
-
-const applyFilters = () => {
-  let result = [...allReviews.value]
-  
-  // Apply search filter
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    result = result.filter(review => {
-      return (
-        review.pull_request_id?.toLowerCase().includes(query) ||
-        review.reviewer?.toLowerCase().includes(query) ||
-        review.project_key?.toLowerCase().includes(query) ||
-        review.repository_slug?.toLowerCase().includes(query) ||
-        review.reviewer_comments?.toLowerCase().includes(query)
-      )
-    })
-  }
-  
-  // Apply PR user filter
-  if (prUserFilter.value) {
-    const prUser = prUserFilter.value.toLowerCase()
-    result = result.filter(review => 
-      review.pull_request_user?.toLowerCase().includes(prUser) ||
-      review.pull_request_user_info?.display_name?.toLowerCase().includes(prUser)
-    )
-  }
-  
-  // Apply app name filter (multi-select)
-  if (appFilter.value && appFilter.value.length > 0) {
-    const selectedApps = appFilter.value.map(app => app.toLowerCase())
-    result = result.filter(review => 
-      review.app_name && selectedApps.includes(review.app_name.toLowerCase())
-    )
-  }
-  
-  // Apply reviewer filter
-  if (reviewerFilter.value) {
-    // Special handling for unassigned option
-    if (reviewerFilter.value === '__unassigned__') {
-      result = result.filter(review => 
-        !review.reviewer && !review.reviewer_info?.display_name
-      )
-    } else {
-      // Normal text search for assigned reviewers
-      const reviewer = reviewerFilter.value.toLowerCase()
-      result = result.filter(review => 
-        review.reviewer?.toLowerCase().includes(reviewer) ||
-        review.reviewer_info?.display_name?.toLowerCase().includes(reviewer)
-      )
-    }
-  }
-  
-  // Apply scored filter
-  if (scoredFilter.value === 'yes') {
-    result = result.filter(review => 
-      review.score_summary && review.score_summary.total_scores > 0
-    )
-  } else if (scoredFilter.value === 'no') {
-    result = result.filter(review => 
-      !review.score_summary || review.score_summary.total_scores === 0
-    )
-  }
-  
-  // Apply hide archived toggle (hide scored reviews by default)
-  if (hideArchived.value) {
-    result = result.filter(review => 
-      !review.score_summary || review.score_summary.total_scores === 0
-    )
-  }
-  
-  // Apply severity filter (check AI review issues)
-  if (severityFilter.value) {
-    const targetSeverity = severityFilter.value
-    result = result.filter(review => {
-      // Check if review has AI suggestions with issues
-      if (!review.ai_suggestions?.issues || review.ai_suggestions.issues.length === 0) {
-        return false
-      }
-      // Check if any issue matches the selected severity
-      return review.ai_suggestions.issues.some(
-        issue => issue.severity === targetSeverity
-      )
-    })
-  }
-  
-  // Apply status filter
-  if (statusFilter.value) {
-    result = result.filter(review => review.pull_request_status === statusFilter.value)
-  }
-  
-  filteredReviews.value = result
-  reviews.value = result
-  
-  // Keep backend's total count for pagination.
-  // Client-side filters (search, scored, severity) reduce visible items but don't change total pages.
-  // Only server-side filters (app, pr_user, reviewer, status) affect the total count from backend.
+  hideArchived.value = true // Reset to default (hide scored reviews)
+  currentPage.value = 1 // Reset to first page
+  loadReviews() // Reload from backend with reset filters
 }
 
 const viewReview = (review: Review) => {
   // Calculate if there are more pages
   const totalPages = Math.ceil(total.value / pageSize.value)
   const hasMorePages = currentPage.value < totalPages
+
+  // Build filter parameters to maintain consistency when navigating
+  const filterParams: any = {}
+  if (appFilter.value && appFilter.value.length > 0) filterParams.app_names = appFilter.value.join(',')
+  if (prUserFilter.value) filterParams.pull_request_user = prUserFilter.value
+  if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+    filterParams.reviewer = reviewerFilter.value
+  }
+  if (statusFilter.value) filterParams.pull_request_status = statusFilter.value
+  if (searchQuery.value) filterParams.search_query = searchQuery.value
+  
+  // Convert scored filter to has_scores parameter
+  if (scoredFilter.value === 'yes') {
+    filterParams.has_scores = true
+  } else if (scoredFilter.value === 'no') {
+    filterParams.has_scores = false
+  }
+  
+  // Convert hideArchived toggle to has_scores
+  if (hideArchived.value && !scoredFilter.value) {
+    filterParams.has_scores = false
+  }
+  
+  if (severityFilter.value) filterParams.severity = severityFilter.value
 
   reviewNavigationStore.setContext({
     items: reviews.value.map(item => ({
@@ -728,6 +780,7 @@ const viewReview = (review: Review) => {
     pageSize: pageSize.value,
     totalItems: total.value,
     hasMorePages: hasMorePages,
+    filters: filterParams, // Store filters for pagination consistency
   })
 
   router.push({
@@ -923,13 +976,14 @@ const searchReviewers = (query: string) => {
   )
 }
 
-// Watch for filter changes and reload data
+// Watch for filter changes and reload data from backend
 watch(
-  [searchQuery, appFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter],
+  [searchQuery, appFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter, hideArchived],
   () => {
     // Debounce the reload to avoid multiple rapid requests
     clearTimeout(filterChangeTimeout)
     filterChangeTimeout = setTimeout(() => {
+      currentPage.value = 1 // Reset to first page when filters change
       loadReviews()
     }, 300)
   },
@@ -941,6 +995,21 @@ let filterChangeTimeout: ReturnType<typeof setTimeout>
 // Load reviews when component mounts
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  
+  // Check for query parameters from notification navigation
+  const prId = route.query.pr_id as string | undefined
+  const fromNotification = route.query.from_notification === 'true'
+  
+  // If coming from notification, disable hideArchived filter to show all reviews
+  if (fromNotification) {
+    hideArchived.value = false
+  }
+  
+  // If PR ID is specified in query, set it as search query
+  if (prId) {
+    searchQuery.value = prId
+  }
+  
   loadReviews()
   loadAvailableApps()
   loadPRUsers()
@@ -1360,5 +1429,111 @@ html.dark .el-tag--danger {
   --el-tag-bg-color: rgba(245, 108, 108, 0.1);
   --el-tag-border-color: rgba(245, 108, 108, 0.3);
   --el-tag-text-color: #f87171;
+}
+
+/* Expanded Scores Section */
+.expanded-scores-section {
+  padding: 16px;
+}
+
+.scores-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 0;
+  color: var(--el-text-color-secondary);
+}
+
+.nested-scores-card {
+  margin-top: 0;
+}
+
+.nested-scores-card :deep(.el-card__header) {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--el-text-color-primary);
+}
+
+/* Reviewer Cell */
+.reviewer-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.primary-reviewer-badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* AI Review ID Cell */
+.ai-review-id-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.empty-value {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+/* Score Value Styles - Match ReviewDetailView */
+.score-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.score-high {
+  color: #10b981;
+}
+
+.score-medium {
+  color: #3b82f6;
+}
+
+.score-low {
+  color: #f59e0b;
+}
+
+.score-critical {
+  color: #ef4444;
+}
+
+.score-max {
+  font-size: 0.9rem;
+  color: var(--el-text-color-secondary);
+}
+
+/* Dark mode adjustments */
+[data-theme='dark'] .score-high {
+  color: #10b981;
+}
+
+[data-theme='dark'] .score-medium {
+  color: #3b82f6;
+}
+
+[data-theme='dark'] .score-low {
+  color: #f59e0b;
+}
+
+[data-theme='dark'] .score-critical {
+  color: #ef4444;
 }
 </style>

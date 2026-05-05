@@ -5,6 +5,31 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-05-05
+
+**Backend Version**: 1.10.0
+**Frontend Version**: 1.5.0
+
+### Features
+- **Review Scores** - Added scores for each review
+- **Notifications** - Implemented notifications system
+
+### Bug Fixes
+- **i18n for Score List & Analytics** - Enhanced internationalization
+- **No AI Review Result UI** - Enhanced display when no AI review result
+- **Import Error** - Resolved import error (amy)
+- **Review Navigation** - Fixed navigation in review details
+- **Pagination Optimization** - Optimized pagination in backend
+- **Unassigned Task** - Enhanced "Unassigned" task by review admin
+- **Single/Multiple Reviewer Scoring** - Enhanced scoring for single or multiple reviewers
+
+### Improvements
+- **Unscored Reviews Priority** - Refactored to show unscored reviews in priority
+- **Implementation Docs** - Consolidated phase4 implementation documentation
+
+---
+
+
 ## [1.9.1] - 2026-05-03
 
 **Backend Version**: 1.9.1

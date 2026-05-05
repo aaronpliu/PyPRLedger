@@ -609,6 +609,19 @@ async def list_reviews(
         None,
         description="Filter by application names (comma-separated for multiple apps, e.g., 'member,tv,football')",
     ),
+    search_query: str | None = Query(
+        None,
+        max_length=256,
+        description="Search across PR ID, reviewer, project, repo, and comments",
+    ),
+    has_scores: bool | None = Query(
+        None,
+        description="Filter by scored status: True=scored only, False=unscored only, None=all",
+    ),
+    severity: str | None = Query(
+        None,
+        description="Filter by AI issue severity (critical, high, medium, low)",
+    ),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> ReviewListResponse:
@@ -666,6 +679,9 @@ async def list_reviews(
             pull_request_commit_id=pull_request_commit_id,
             date_from=date_from,
             date_to=date_to,
+            search_query=search_query,
+            has_scores=has_scores,
+            severity=severity,
         )
 
         # Apply role-based filtering
@@ -786,6 +802,7 @@ async def get_review(
     pull_request_id: Annotated[str, Path(description="Pull request ID")],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     reviewer: str | None = Query(None, description="Filter by reviewer username"),
     source_filename: str | None = Query(None, description="Filter by source filename"),
 ) -> ReviewListResponse:
@@ -807,6 +824,23 @@ async def get_review(
         NotFoundException: If no reviews are found
     """
     try:
+        # Check if user has review_admin role (by checking 'assign' permission)
+        rbac_service = RBACService(db)
+        is_review_admin = await rbac_service.check_permission(
+            auth_user_id=current_user.id,
+            action="assign",
+            resource_type="reviews",
+        )
+
+        # Determine visible_to_username based on user role
+        # Admin: sees all reviews (including unassigned)
+        # Regular user: only sees their assigned reviews and self-raised PRs
+        visible_to_username = None if is_review_admin else current_user.username
+
+        logger.info(
+            f"User {current_user.username} (admin={is_review_admin}) viewing PR {pull_request_id}"
+        )
+
         # Get all reviews for this PR (may have multiple reviews from different reviewers)
         reviews = await review_service.get_review(
             project_key=project_key,
@@ -815,6 +849,7 @@ async def get_review(
             reviewer=reviewer,
             source_filename=source_filename,
             db=db,
+            visible_to_username=visible_to_username,
         )
 
         if not reviews:

@@ -3,30 +3,30 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <h2>Score Analytics Dashboard</h2>
+          <h2>{{ t('scores.page_title_analytics') }}</h2>
           <el-button type="primary" @click="refreshData">
             <el-icon><Refresh /></el-icon>
-            Refresh
+            {{ t('common.refresh') }}
           </el-button>
         </div>
       </template>
 
       <!-- Filters -->
       <el-form :inline="true" class="filter-form">
-        <el-form-item label="Date Range">
+        <el-form-item :label="t('scores.analytics.date_range', 'Date Range')">
           <el-date-picker
             v-model="dateRange"
             type="daterange"
             range-separator="to"
-            start-placeholder="Start date"
-            end-placeholder="End date"
+            :start-placeholder="t('scores.analytics.start_date')"
+            :end-placeholder="t('scores.analytics.end_date')"
             style="width: 240px"
             @change="loadAnalytics"
           />
         </el-form-item>
         
-        <el-form-item label="Project">
-          <el-select v-model="projectFilter" placeholder="All Projects" clearable style="width: 200px" @change="loadAnalytics">
+        <el-form-item :label="t('scores.filters.project_filter')">
+          <el-select v-model="projectFilter" :placeholder="t('scores.filters.all_projects')" clearable style="width: 200px" @change="loadAnalytics">
             <el-option
               v-for="option in projectOptions"
               :key="option.value"
@@ -36,8 +36,8 @@
           </el-select>
         </el-form-item>
         
-        <el-form-item label="Reviewer">
-          <el-select v-model="reviewerFilter" placeholder="All Reviewers" clearable style="width: 200px" @change="loadAnalytics">
+        <el-form-item :label="t('scores.filters.reviewer_filter')">
+          <el-select v-model="reviewerFilter" :placeholder="t('scores.filters.all_reviewers')" clearable style="width: 200px" @change="loadAnalytics">
             <el-option
               v-for="option in reviewerOptions"
               :key="option.value"
@@ -48,7 +48,7 @@
         </el-form-item>
         
         <el-form-item>
-          <el-button @click="resetFilters">Reset</el-button>
+          <el-button @click="resetFilters">{{ t('scores.analytics.reset') }}</el-button>
         </el-form-item>
       </el-form>
 
@@ -62,7 +62,7 @@
               </div>
               <div class="summary-info">
                 <div class="summary-value">{{ summary.avgScore.toFixed(1) }}</div>
-                <div class="summary-label">Average Score</div>
+                <div class="summary-label">{{ t('scores.statistics.average_score') }}</div>
               </div>
             </div>
           </el-card>
@@ -76,7 +76,7 @@
               </div>
               <div class="summary-info">
                 <div class="summary-value">{{ summary.totalReviews }}</div>
-                <div class="summary-label">Total Reviews</div>
+                <div class="summary-label">{{ t('scores.statistics.total_reviews') }}</div>
               </div>
             </div>
           </el-card>
@@ -90,7 +90,7 @@
               </div>
               <div class="summary-info">
                 <div class="summary-value">{{ summary.reviewsThisWeek }}</div>
-                <div class="summary-label">Reviews This Week</div>
+                <div class="summary-label">{{ t('scores.analytics.reviews_this_week') }}</div>
               </div>
             </div>
           </el-card>
@@ -104,7 +104,7 @@
               </div>
               <div class="summary-info">
                 <div class="summary-value">{{ summary.reviewsToday }}</div>
-                <div class="summary-label">Reviews Today</div>
+                <div class="summary-label">{{ t('scores.analytics.reviews_today') }}</div>
               </div>
             </div>
           </el-card>
@@ -117,7 +117,7 @@
         <el-col :span="12">
           <el-card shadow="hover">
             <BarChart
-              title="Pull Request Status Distribution"
+              :title="t('scores.analytics.pr_status_distribution')"
               :data="categoryData"
               color="#67c23a"
               height="300px"
@@ -129,7 +129,7 @@
         <el-col :span="12">
           <el-card shadow="hover">
             <PieChart
-              title="Review Status Breakdown"
+              :title="t('scores.analytics.review_status_breakdown')"
               :data="statusData"
               height="300px"
             />
@@ -142,6 +142,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Refresh, TrendCharts, Document, Calendar, Star } from '@element-plus/icons-vue'
 import BarChart from '@/components/charts/BarChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
@@ -151,6 +152,8 @@ import { usersApi } from '@/api/users'
 import { projectsApi } from '@/api/projects'
 import dayjs from 'dayjs'
 import { ElMessage } from 'element-plus'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const dateRange = ref<[Date, Date] | null>(null)

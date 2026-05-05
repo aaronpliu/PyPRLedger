@@ -151,6 +151,24 @@ class Settings(BaseSettings):
     TASK_QUEUE_ENABLED: bool = Field(default=True)
     MAX_RETRIES: int = Field(default=3)
 
+    # Notification configuration
+    NOTIFICATION_RETENTION_DAYS: int = Field(default=30)
+    NOTIFICATION_DIGEST_ENABLED: bool = Field(default=True)
+    NOTIFICATION_DIGEST_FREQUENCY: str = Field(default="daily")
+    NOTIFICATION_MAX_PER_DAY: int = Field(default=100)
+
+    # Email configuration
+    SMTP_HOST: str | None = Field(default=None)
+    SMTP_PORT: int = Field(default=587)
+    SMTP_USERNAME: str | None = Field(default=None)
+    SMTP_PASSWORD: str | None = Field(default=None)
+    EMAIL_FROM: str | None = Field(default=None)
+    EMAIL_FROM_NAME: str = Field(default="PyPRLedger Notifications")
+
+    # Slack integration (optional)
+    SLACK_WEBHOOK_URL: str | None = Field(default=None)
+    SLACK_ENABLED: bool = Field(default=False)
+
 
 @lru_cache
 def get_settings() -> Settings:

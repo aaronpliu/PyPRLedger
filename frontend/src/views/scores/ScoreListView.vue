@@ -2,15 +2,15 @@
   <div class="score-list-container">
     <el-card>
       <template #header>
-        <h2>Scores Management</h2>
+        <h2>{{ t('scores.page_title_list') }}</h2>
       </template>
 
       <!-- Filters -->
       <el-form :inline="true" class="filter-form">
-        <el-form-item label="Project">
+        <el-form-item :label="t('scores.filters.project_filter')">
           <el-select 
             v-model="projectFilter" 
-            placeholder="All Projects" 
+            :placeholder="t('scores.filters.all_projects')" 
             clearable 
             style="width: 200px" 
             @change="loadScores"
@@ -25,16 +25,16 @@
           </el-select>
         </el-form-item>
         
-        <el-form-item label="Score Level">
+        <el-form-item :label="t('scores.filters.score_range')">
           <el-select 
             v-model="levelFilter" 
-            placeholder="All Levels" 
+            :placeholder="t('scores.filters.all_levels')" 
             clearable 
             style="width: 200px" 
             @change="loadScores"
           >
-            <el-option label="PR-Level" value="pr" />
-            <el-option label="File-Level" value="file" />
+            <el-option :label="t('scores.filters.pr_level')" value="pr" />
+            <el-option :label="t('scores.filters.file_level')" value="file" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -48,23 +48,40 @@
             </el-empty>
           </div>
         </template>
-        <el-table-column label="Seq#" width="70">
+        <el-table-column :label="t('scores.seq_number')" width="70">
           <template #default="{ $index }">
             <span class="seq-number">{{ (currentPage - 1) * pageSize + $index + 1 }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="project_key" label="Project" width="120">
+        <el-table-column prop="project_key" :label="t('scores.project_repo')" width="120">
           <template #default="{ row }">
             <span class="project-key">{{ row.project_name || row.project_key }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="pull_request_user" label="PR User" width="150">
+        <el-table-column prop="pull_request_user" :label="t('scores.pr_user')" width="180">
           <template #default="{ row }">
             <div class="user-cell">
-              <el-avatar :size="24" v-if="row.pull_request_user_info?.avatar_url">
-                <img :src="row.pull_request_user_info.avatar_url" alt="" />
-              </el-avatar>
-              <el-avatar :size="24" v-else>{{ getInitials(row.pull_request_user_info?.display_name || row.pull_request_user) }}</el-avatar>
+              <el-tooltip 
+                :content="row.pull_request_user_info?.display_name || row.pull_request_user" 
+                placement="top"
+                :disabled="!row.pull_request_user_info?.display_name"
+              >
+                <el-avatar 
+                  :size="32" 
+                  v-if="row.pull_request_user_info?.avatar_url"
+                  class="user-avatar"
+                >
+                  <img :src="row.pull_request_user_info.avatar_url" alt="" />
+                </el-avatar>
+                <el-avatar 
+                  :size="32" 
+                  v-else
+                  class="user-avatar user-avatar-fallback"
+                  :style="{ background: getAvatarColor(row.pull_request_user) }"
+                >
+                  {{ getInitials(row.pull_request_user_info?.display_name || row.pull_request_user) }}
+                </el-avatar>
+              </el-tooltip>
               <div class="user-info">
                 <span class="user-display-name">{{ row.pull_request_user_info?.display_name || row.pull_request_user }}</span>
                 <span class="user-username" v-if="row.pull_request_user_info?.display_name">@{{ row.pull_request_user }}</span>
@@ -72,13 +89,30 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="reviewer" label="Reviewer" width="150">
+        <el-table-column prop="reviewer" :label="t('scores.reviewer')" width="180">
           <template #default="{ row }">
             <div class="reviewer-cell">
-              <el-avatar :size="28" v-if="row.reviewer_info?.avatar_url">
-                <img :src="row.reviewer_info.avatar_url" alt="" />
-              </el-avatar>
-              <el-avatar :size="28" v-else>{{ getInitials(row.reviewer_info?.display_name || row.reviewer) }}</el-avatar>
+              <el-tooltip 
+                :content="row.reviewer_info?.display_name || row.reviewer" 
+                placement="top"
+                :disabled="!row.reviewer_info?.display_name"
+              >
+                <el-avatar 
+                  :size="36" 
+                  v-if="row.reviewer_info?.avatar_url"
+                  class="reviewer-avatar"
+                >
+                  <img :src="row.reviewer_info.avatar_url" alt="" />
+                </el-avatar>
+                <el-avatar 
+                  :size="36" 
+                  v-else
+                  class="reviewer-avatar reviewer-avatar-fallback"
+                  :style="{ background: getAvatarColor(row.reviewer) }"
+                >
+                  {{ getInitials(row.reviewer_info?.display_name || row.reviewer) }}
+                </el-avatar>
+              </el-tooltip>
               <div class="reviewer-info">
                 <span class="reviewer-display-name">{{ row.reviewer_info?.display_name || row.reviewer }}</span>
                 <span class="reviewer-username" v-if="row.reviewer_info?.display_name">@{{ row.reviewer }}</span>
@@ -86,7 +120,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="pull_request_id" label="PR ID" width="110">
+        <el-table-column prop="pull_request_id" :label="t('reviews.detail.pull_request_id', 'PR ID')" width="110">
           <template #default="{ row }">
             <el-link 
               v-if="getPRUrl(row)"
@@ -101,7 +135,7 @@
             <el-tag v-else size="small">{{ truncateId(row.pull_request_id) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="branch_info" label="Branch" width="180">
+        <el-table-column prop="branch_info" :label="t('scores.filters.branch', 'Branch')" width="180">
           <template #default="{ row }">
             <div class="branch-info" :class="{ 'branch-info-multiline': isLongBranch(row.source_branch, row.target_branch) }">
               <div class="branch-line">
@@ -117,20 +151,20 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="source_filename" label="Scope" width="130">
+        <el-table-column prop="source_filename" :label="t('scores.scope', 'Scope')" width="130">
           <template #default="{ row }">
             <el-tag 
               :type="row.source_filename ? 'info' : 'success'" 
               size="small"
             >
-              {{ row.source_filename ? 'File-Level' : 'PR-Level' }}
+              {{ row.source_filename ? t('scores.filters.file_level') : t('scores.filters.pr_level') }}
             </el-tag>
             <div v-if="row.source_filename" class="filename-text" :title="row.source_filename">
               {{ truncateFilename(row.source_filename) }}
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="score" label="Score" width="160">
+        <el-table-column prop="score" :label="t('scores.score')" width="160">
           <template #default="{ row }">
             <div class="score-cell">
               <el-progress
@@ -142,28 +176,28 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="reviewer_comments" label="Comments" min-width="200" show-overflow-tooltip>
+        <el-table-column prop="reviewer_comments" :label="t('scores.comments')" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <span v-if="row.reviewer_comments" class="comments-text">
               {{ row.reviewer_comments }}
             </span>
-            <span v-else class="no-comments">No comments</span>
+            <span v-else class="no-comments">{{ t('scores.no_comments') }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="created_date" label="Created" width="160">
+        <el-table-column prop="created_date" :label="t('scores.created')" width="160">
           <template #default="{ row }">
             {{ formatDate(row.created_date) }}
           </template>
         </el-table-column>
-        <el-table-column prop="updated_date" label="Updated" width="160">
+        <el-table-column prop="updated_date" :label="t('scores.updated')" width="160">
           <template #default="{ row }">
             {{ formatDate(row.updated_date || row.created_date) }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="90" fixed="right">
+        <el-table-column :label="t('scores.actions')" width="90" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="danger" @click="confirmDelete(row)" :disabled="!canDeleteScore(row)">
-              Delete
+              {{ t('scores.delete') }}
             </el-button>
           </template>
         </el-table-column>
@@ -186,13 +220,13 @@
       <el-divider />
       <el-row :gutter="20" class="stats-row">
         <el-col :span="8">
-          <el-statistic title="Average Score" :value="stats.average_score" :precision="1" class="theme-aware-statistic" />
+          <el-statistic :title="t('scores.statistics.average_score')" :value="stats.average_score" :precision="1" class="theme-aware-statistic" />
         </el-col>
         <el-col :span="8">
-          <el-statistic title="Total Reviews" :value="stats.total_reviews" class="theme-aware-statistic" />
+          <el-statistic :title="t('scores.statistics.total_reviews')" :value="stats.total_reviews" class="theme-aware-statistic" />
         </el-col>
         <el-col :span="8">
-          <el-statistic title="Total Scores" :value="totalScores" class="theme-aware-statistic" />
+          <el-statistic :title="t('scores.statistics.total_scores')" :value="totalScores" class="theme-aware-statistic" />
         </el-col>
       </el-row>
     </el-card>
@@ -202,6 +236,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { scoresApi } from '@/api/scores'
 import { reviewsApi } from '@/api/reviews'
 import { projectsApi } from '@/api/projects'
@@ -210,6 +245,8 @@ import type { ProjectSummary } from '@/api/projects'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { useAuthStore } from '@/stores/auth'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -244,6 +281,29 @@ const getInitials = (name: string) => {
   }
   // Single word: take first 2 characters
   return name.substring(0, 2).toUpperCase()
+}
+
+const getAvatarColor = (username: string) => {
+  // Generate a consistent gradient color based on username
+  const colors = [
+    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+    'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+    'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+    'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+    'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
+    'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+    'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
+  ]
+  
+  // Use username to deterministically select a color
+  let hash = 0
+  for (let i = 0; i < username.length; i++) {
+    hash = ((hash << 5) - hash) + username.charCodeAt(i)
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  
+  return colors[Math.abs(hash) % colors.length]
 }
 
 const truncateId = (id: string | undefined | null) => {
@@ -509,50 +569,100 @@ h2 {
 .reviewer-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+.reviewer-avatar {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.reviewer-avatar:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.reviewer-avatar-fallback {
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  border: 2px solid var(--el-border-color-light);
 }
 
 .reviewer-info {
   display: flex;
   flex-direction: column;
-  line-height: 1.2;
+  line-height: 1.3;
+  min-width: 0;
+  flex: 1;
 }
 
 .reviewer-display-name {
   color: var(--el-text-color-primary);
   font-weight: 500;
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reviewer-username {
   color: var(--el-text-color-secondary);
   font-size: 11px;
   margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* PR User cell styling */
 .user-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+
+.user-avatar {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.user-avatar:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.user-avatar-fallback {
+  color: white;
+  font-weight: 600;
+  font-size: 12px;
+  border: 2px solid var(--el-border-color-light);
 }
 
 .user-info {
   display: flex;
   flex-direction: column;
-  line-height: 1.2;
+  line-height: 1.3;
+  min-width: 0;
+  flex: 1;
 }
 
 .user-display-name {
   color: var(--el-text-color-primary);
   font-weight: 500;
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-username {
   color: var(--el-text-color-secondary);
   font-size: 10px;
   margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Project key styling */

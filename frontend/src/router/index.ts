@@ -72,6 +72,17 @@ const routes: RouteRecordRaw[] = [
         name: 'ScoreAnalytics',
         component: () => import('@/views/scores/ScoreAnalyticsView.vue'),
       },
+      // Notification routes
+      {
+        path: 'notifications',
+        name: 'NotificationList',
+        component: () => import('@/views/notifications/NotificationListView.vue'),
+      },
+      {
+        path: 'notifications/preferences',
+        name: 'NotificationPreferences',
+        component: () => import('@/views/notifications/NotificationPreferenceView.vue'),
+      },
     ],
   },
 

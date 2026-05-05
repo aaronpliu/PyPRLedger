@@ -560,8 +560,6 @@ class ReviewService:
                 # Also clean up any other failed raw records for the same PR commit/file
                 # This handles the case where user retries multiple times or re-posts the same PR
                 # Use JSON_EXTRACT for MySQL compatibility
-                from sqlalchemy import func
-
                 cleanup_query = select(PullRequestReviewRaw).where(
                     and_(
                         PullRequestReviewRaw.status == "failed",
@@ -647,6 +645,7 @@ class ReviewService:
         reviewer: str | None,
         source_filename: str | None,
         db: AsyncSession,
+        visible_to_username: str | None = None,  # Current user for multi-reviewer display
     ) -> list[dict[str, Any]]:
         """
         Get all pull request reviews by composite business key
@@ -689,7 +688,7 @@ class ReviewService:
 
             result = await db.execute(query)
             bases = result.scalars().unique().all()
-            reviews = self._flatten_reviews(list(bases), reviewer)
+            reviews = self._flatten_reviews(list(bases), reviewer, visible_to_username)
 
             if reviews:
                 logger.info(f"Found {len(reviews)} review(s) for PR: {pull_request_id}")
@@ -779,17 +778,29 @@ class ReviewService:
                 PullRequestReviewBase.pull_request_user == filters.pull_request_user
             )
         if filters.reviewer:
-            # Use EXISTS to avoid creating duplicate rows from JOIN
-            query = query.where(
-                exists(
-                    select(1).where(
-                        and_(
-                            PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
-                            PullRequestReviewAssignment.reviewer == filters.reviewer,
+            # Check if filtering for unassigned (special value)
+            if filters.reviewer == "__unassigned__":
+                # Show reviews with NO assignments
+                query = query.where(
+                    ~exists(
+                        select(1).where(
+                            PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id
                         )
                     )
                 )
-            )
+            else:
+                # Use EXISTS to avoid creating duplicate rows from JOIN
+                query = query.where(
+                    exists(
+                        select(1).where(
+                            and_(
+                                PullRequestReviewAssignment.review_base_id
+                                == PullRequestReviewBase.id,
+                                PullRequestReviewAssignment.reviewer == filters.reviewer,
+                            )
+                        )
+                    )
+                )
         if filters.visible_to_username:
             # Don't join - just filter by base table fields
             # The _flatten_reviews method will handle assignment filtering
@@ -848,6 +859,76 @@ class ReviewService:
         if filters.score_max is not None:
             query = query.where(PullRequestScore.score <= filters.score_max)
 
+        # Apply search_query filter (search across multiple fields)
+        if filters.search_query:
+            search_term = f"%{filters.search_query.lower()}%"
+            query = query.where(
+                or_(
+                    PullRequestReviewBase.pull_request_id.ilike(search_term),
+                    # Search reviewer comments in assignments
+                    exists(
+                        select(1).where(
+                            and_(
+                                PullRequestReviewAssignment.review_base_id
+                                == PullRequestReviewBase.id,
+                                PullRequestReviewAssignment.reviewer_comments.ilike(search_term),
+                            )
+                        )
+                    ),
+                    # Note: reviewer, project_key, repository_slug are already in base table
+                    # but we need to check assignments for reviewer search
+                    exists(
+                        select(1).where(
+                            and_(
+                                PullRequestReviewAssignment.review_base_id
+                                == PullRequestReviewBase.id,
+                                PullRequestReviewAssignment.reviewer.ilike(search_term),
+                            )
+                        )
+                    ),
+                )
+            )
+
+        # Apply has_scores filter (scored vs unscored)
+        if filters.has_scores is not None:
+            has_scores_subquery = (
+                select(1)
+                .where(
+                    and_(
+                        PullRequestScore.pull_request_id == PullRequestReviewBase.pull_request_id,
+                        PullRequestScore.project_key == PullRequestReviewBase.project_key,
+                        PullRequestScore.repository_slug == PullRequestReviewBase.repository_slug,
+                        or_(
+                            and_(
+                                PullRequestScore.source_filename.is_(None),
+                                PullRequestReviewBase.source_filename.is_(None),
+                            ),
+                            PullRequestScore.source_filename
+                            == PullRequestReviewBase.source_filename,
+                        ),
+                    )
+                )
+                .correlate(PullRequestReviewBase)
+                .exists()
+            )
+
+            if filters.has_scores:
+                # Show only scored reviews
+                query = query.where(has_scores_subquery)
+            else:
+                # Show only unscored reviews
+                query = query.where(~has_scores_subquery)
+
+        # Apply severity filter (check AI review issues in JSON field)
+        if filters.severity:
+            # Filter by AI suggestions issues with matching severity
+            # ai_suggestions is a JSON column with structure: {"issues": [{"severity": "high", ...}]}
+            query = query.where(
+                PullRequestReviewBase.ai_suggestions["issues"].contains(
+                    [{"severity": filters.severity}]
+                )
+            )
+
         # Try cache first for list results (only if no app_name filter)
         if not app_names and use_cache:
             try:
@@ -862,7 +943,36 @@ class ReviewService:
             except Exception as e:
                 logger.warning(f"Failed to get review list from cache: {str(e)}")
 
-        query = query.order_by(desc(PullRequestReviewBase.created_date)).distinct()
+        # Custom sorting: unscored reviews first, then scored reviews by updated_date desc
+        # Use LEFT JOIN with score table to check if review has scores
+        from sqlalchemy import case
+
+        # Create a subquery to check if review has any scores
+        has_scores_subquery = (
+            select(1)
+            .where(
+                and_(
+                    PullRequestScore.pull_request_id == PullRequestReviewBase.pull_request_id,
+                    PullRequestScore.project_key == PullRequestReviewBase.project_key,
+                    PullRequestScore.repository_slug == PullRequestReviewBase.repository_slug,
+                    or_(
+                        and_(
+                            PullRequestScore.source_filename.is_(None),
+                            PullRequestReviewBase.source_filename.is_(None),
+                        ),
+                        PullRequestScore.source_filename == PullRequestReviewBase.source_filename,
+                    ),
+                )
+            )
+            .correlate(PullRequestReviewBase)
+            .exists()
+        )
+
+        # Order by: unscored first (0), then scored (1), within each group by updated_date desc
+        query = query.order_by(
+            case((has_scores_subquery, 1), else_=0),  # Unscored=0 (first), Scored=1 (second)
+            desc(PullRequestReviewBase.updated_date),  # Within each group, newest first
+        ).distinct()
         result = await db.execute(query)
         bases = result.scalars().unique().all()
 

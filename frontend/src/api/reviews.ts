@@ -162,6 +162,20 @@ export const reviewsApi = {
     page?: number
     page_size?: number
     project_key?: string
+    repository_slug?: string
+    pull_request_id?: string
+    pull_request_user?: string
+    reviewer?: string
+    source_branch?: string
+    target_branch?: string
+    pull_request_status?: string
+    pull_request_commit_id?: string
+    date_from?: string
+    date_to?: string
+    app_names?: string
+    search_query?: string
+    has_scores?: boolean
+    severity?: string
   }): Promise<{ total: number; items: Review[]; page: number; page_size: number }> {
     return request.get('/reviews', { params })
   },
@@ -184,8 +198,14 @@ export const reviewsApi = {
 
   // Get review by ID - fetches from list and finds by ID
   async getReviewById(id: number): Promise<Review> {
-    // First try to get all reviews and find by ID
-    const response = await request.get('/reviews', { params: { page: 1, page_size: 100 } })
+    // Fetch all reviews (including archived/scored) to find by ID
+    // Use large page_size to ensure we get all reviews
+    const response = await request.get('/reviews', { 
+      params: { 
+        page: 1, 
+        page_size: 1000  // Large size to get all reviews
+      } 
+    })
     const data = response.data || response
     const review = data.items?.find((r: Review) => r.id === id)
     if (!review) {
@@ -312,5 +332,21 @@ export const reviewsApi = {
     pull_request_id: string
   }> {
     return request.post(`/reviews/validation/retry/${rawRecordId}`)
+  },
+
+  /**
+   * Get all scores for a specific review (returns array of individual scores)
+   */
+  getReviewScores(params: {
+    project_key: string
+    repository_slug: string
+    pull_request_id: string
+    reviewer?: string
+    source_filename?: string
+  }): Promise<{ items: ReviewScoreResponse[] }> {
+    // Backend returns array directly, request interceptor unwraps response.data
+    return request.get('/reviews/scores', { params }).then((scores) => ({
+      items: Array.isArray(scores) ? scores : []
+    }))
   },
 }

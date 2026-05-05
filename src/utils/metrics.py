@@ -243,6 +243,26 @@ class MetricsCollector:
             registry=self.registry,
         )
 
+        # Notification metrics
+        self.notification_created_total = Counter(
+            "notification_created_total",
+            "Total number of notifications created",
+            ["type", "priority", "channel"],
+            registry=self.registry,
+        )
+
+        self.notification_read_total = Counter(
+            "notification_read_total",
+            "Total number of notifications marked as read",
+            registry=self.registry,
+        )
+
+        self.notification_deleted_total = Counter(
+            "notification_deleted_total",
+            "Total number of notifications deleted",
+            registry=self.registry,
+        )
+
         logger.info("Initialized all Prometheus metrics")
 
     def increment_http_request(self, method: str, endpoint: str, status: int) -> None:
@@ -608,6 +628,25 @@ class MetricsCollector:
             project: Project identifier (or "all" for global)
         """
         self.reviewers_load.labels(project=project).set(load)
+
+    def increment_notification_created(self, type: str, priority: str, channel: str) -> None:
+        """
+        Increment notification created counter
+
+        Args:
+            type: Notification type
+            priority: Notification priority
+            channel: Notification channel
+        """
+        self.notification_created_total.labels(type=type, priority=priority, channel=channel).inc()
+
+    def increment_notification_read(self) -> None:
+        """Increment notification read counter"""
+        self.notification_read_total.inc()
+
+    def increment_notification_deleted(self) -> None:
+        """Increment notification deleted counter"""
+        self.notification_deleted_total.inc()
 
     def get_metrics(self) -> str:
         """
