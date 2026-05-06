@@ -468,7 +468,25 @@
       "copy_id": "複製ID",
       "issues_found": "發現的問題",
       "description": "描述",
-      "suggestion": "建議"
+      "suggestion": "建議",
+      "code_diff": "程式碼差異",
+      "line_by_line": "逐行對比",
+      "side_by_side": "並排對比",
+      "assign_reviewer_dialog": {
+        "title": "分配審查者",
+        "pr_id": "PR ID",
+        "project_repo": "專案 / 儲存庫",
+        "pr_user": "PR使用者",
+        "branches": "分支",
+        "pr_status": "PR狀態",
+        "reviewers_label": "審查者",
+        "no_reviewers_assigned": "未分配審查者",
+        "reviewer_select": "審查者",
+        "select_reviewer_placeholder": "選擇審查者",
+        "no_available_reviewers": "沒有可用的審查者可以分配",
+        "cancel": "取消",
+        "assign": "分配"
+      }
     },
     "analytics": {
       "page_title": "任務分配分析",
@@ -504,24 +522,6 @@
         "load_failed": "載入分析資料失敗",
         "no_data": "所選篩選條件下無可用資料"
       }
-    },
-    "code_diff": "程式碼差異",
-    "line_by_line": "逐行對比",
-    "side_by_side": "並排對比",
-    "assign_reviewer_dialog": {
-      "title": "分配審查者",
-      "pr_id": "PR ID",
-      "project_repo": "專案 / 儲存庫",
-      "pr_user": "PR使用者",
-      "branches": "分支",
-      "pr_status": "PR狀態",
-      "reviewers_label": "審查者",
-      "no_reviewers_assigned": "未分配審查者",
-      "reviewer_select": "審查者",
-      "select_reviewer_placeholder": "選擇審查者",
-      "no_available_reviewers": "沒有可用的審查者可以分配",
-      "cancel": "取消",
-      "assign": "分配"
     }
   },
   "admin": {

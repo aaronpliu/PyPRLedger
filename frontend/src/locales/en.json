@@ -468,7 +468,25 @@
       "copy_id": "Copy ID",
       "issues_found": "Issues Found",
       "description": "Description",
-      "suggestion": "Suggestion"
+      "suggestion": "Suggestion",
+      "code_diff": "Code Diff",
+      "line_by_line": "Line by Line",
+      "side_by_side": "Side by Side",
+      "assign_reviewer_dialog": {
+        "title": "Assign Reviewer",
+        "pr_id": "PR ID",
+        "project_repo": "Project / Repo",
+        "pr_user": "PR User",
+        "branches": "Branches",
+        "pr_status": "PR Status",
+        "reviewers_label": "Reviewers",
+        "no_reviewers_assigned": "No reviewers assigned",
+        "reviewer_select": "Reviewer",
+        "select_reviewer_placeholder": "Select reviewer",
+        "no_available_reviewers": "No available reviewers to assign",
+        "cancel": "Cancel",
+        "assign": "Assign"
+      }
     },
     "analytics": {
       "page_title": "Task Assignment Analytics",
@@ -504,24 +522,6 @@
         "load_failed": "Failed to load analytics data",
         "no_data": "No data available for the selected filters"
       }
-    },
-    "code_diff": "Code Diff",
-    "line_by_line": "Line by Line",
-    "side_by_side": "Side by Side",
-    "assign_reviewer_dialog": {
-      "title": "Assign Reviewer",
-      "pr_id": "PR ID",
-      "project_repo": "Project / Repo",
-      "pr_user": "PR User",
-      "branches": "Branches",
-      "pr_status": "PR Status",
-      "reviewers_label": "Reviewers",
-      "no_reviewers_assigned": "No reviewers assigned",
-      "reviewer_select": "Reviewer",
-      "select_reviewer_placeholder": "Select reviewer",
-      "no_available_reviewers": "No available reviewers to assign",
-      "cancel": "Cancel",
-      "assign": "Assign"
     }
   },
   "admin": {
