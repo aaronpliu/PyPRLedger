@@ -20,7 +20,7 @@ The system automatically detects and loads ALL image files from this directory. 
 
 ### Naming Convention (Optional)
 Use kebab-case filenames for auto-generated titles:
-- `city-hkjc.jpg` → Title: "City Hkjc"
+- `city-walk.jpg` → Title: "City Walk"
 - `tech-network.png` → Title: "Tech Network"
 - `my-background.jpg` → Title: "My Background"
 
@@ -39,7 +39,7 @@ You can use any images you like. Here are some suggestions:
 
 1. **Technology/Network** - Digital themes, circuit boards, network visualizations
 2. **Nature/Landscape** - Mountains, oceans, forests, skies
-3. **City/Cityscape** - Urban skylines, landmarks (e.g., HKJC, Shenzhen)
+3. **City/Cityscape** - Urban skylines, landmarks (e.g., HK, Shenzhen)
 4. **Abstract** - Gradients, patterns, artistic designs
 5. **Company Photos** - Office buildings, team photos (if appropriate)
 
@@ -97,7 +97,7 @@ frontend/
 │       ├── README.md              # This file
 │       ├── tech-network.jpg       # Automatically loaded
 │       ├── nature-mountain.jpg    # Automatically loaded
-│       ├── city-hkjc.jpg          # Automatically loaded
+│       ├── city-walk.jpg          # Automatically loaded
 │       ├── city-shenzhen.jpg      # Automatically loaded
 │       └── your-image.png         # Just add it - auto detected!
 └── src/
@@ -129,7 +129,7 @@ npm run dev
 
 ### 🔄 To Reorder Images:
 Images rotate alphabetically by filename. Rename files to control order:
-- `01-city-hkjc.jpg` (shows first)
+- `01-city-walk.jpg` (shows first)
 - `02-tech-network.jpg` (shows second)
 - `03-nature.jpg` (shows third)
 

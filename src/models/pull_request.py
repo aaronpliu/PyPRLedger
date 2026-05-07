@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-import sqlalchemy as sa
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -18,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     and_,
 )
+from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
@@ -59,7 +59,7 @@ class PullRequestReviewBase(Base):
     target_branch: Mapped[str] = mapped_column(String(64), nullable=False)
     # Use MEDIUMTEXT for large code diffs (up to 16MB vs TEXT's 64KB limit)
     git_code_diff: Mapped[str | None] = mapped_column(
-        Text().with_variant(sa.dialects.mysql.MEDIUMTEXT(), "mysql"),
+        Text().with_variant(mysql.MEDIUMTEXT(), "mysql"),
         nullable=True,
     )
     ai_suggestions: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
