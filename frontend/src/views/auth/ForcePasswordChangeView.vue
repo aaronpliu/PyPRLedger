@@ -1,9 +1,7 @@
 <template>
   <div class="force-password-change-container">
-    <!-- Background Pattern -->
-    <div class="auth-background">
-      <div class="gradient-overlay"></div>
-    </div>
+    <!-- Background Image Slider -->
+    <AuthBackground />
 
     <!-- Main Content -->
     <div class="auth-content">
@@ -101,6 +99,7 @@ import { ElMessage } from 'element-plus'
 import { Lock } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
+import AuthBackground from '@/components/auth/AuthBackground.vue'
 import { authApi } from '@/api/auth'
 
 const router = useRouter()
@@ -230,20 +229,45 @@ const handleChangePassword = async () => {
   font-weight: 700;
   color: white;
   margin: 0 0 8px 0;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  /* Enhanced visibility against rotating backgrounds */
+  text-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(0, 0, 0, 0.2),
+    0 0 40px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.brand-title:hover {
+  text-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(0, 0, 0, 0.3),
+    0 0 60px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
 }
 
 .brand-subtitle {
   font-size: 16px;
   color: rgba(255, 255, 255, 0.9);
   margin: 0;
+  /* Ensure visibility against rotating backgrounds */
+  text-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 0 10px rgba(0, 0, 0, 0.15);
 }
 
 .rainbow-line {
   height: 3px;
-  background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff);
+  background: linear-gradient(90deg, 
+    rgba(255, 107, 107, 0.8), 
+    rgba(254, 202, 87, 0.8), 
+    rgba(72, 219, 251, 0.8), 
+    rgba(255, 159, 243, 0.8), 
+    rgba(84, 160, 255, 0.8));
   border-radius: 2px;
   margin-top: 16px;
+  box-shadow: 
+    0 2px 8px rgba(255, 107, 107, 0.4),
+    0 0 20px rgba(254, 202, 87, 0.2);
 }
 
 .auth-card {

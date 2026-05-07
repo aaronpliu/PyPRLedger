@@ -17,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     and_,
 )
+from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
@@ -56,7 +57,11 @@ class PullRequestReviewBase(Base):
 
     source_branch: Mapped[str] = mapped_column(String(64), nullable=False)
     target_branch: Mapped[str] = mapped_column(String(64), nullable=False)
-    git_code_diff: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Use MEDIUMTEXT for large code diffs (up to 16MB vs TEXT's 64KB limit)
+    git_code_diff: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql.MEDIUMTEXT(), "mysql"),
+        nullable=True,
+    )
     ai_suggestions: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     pull_request_status: Mapped[str] = mapped_column(String(32), nullable=False)
     pull_request_user: Mapped[str] = mapped_column(

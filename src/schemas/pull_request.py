@@ -62,7 +62,12 @@ class ReviewBase(BaseModel):
 class ReviewCreate(ReviewBase):
     """Schema for creating a new pull request review"""
 
-    git_code_diff: str | None = Field(None, max_length=1048576, description="Git code diff content")
+    # MEDIUMTEXT supports up to 16MB (16,777,215 bytes)
+    git_code_diff: str | None = Field(
+        None,
+        max_length=16777215,
+        description="Git code diff content (supports large diffs up to 16MB)",
+    )
     source_filename: str | None = Field(
         None, max_length=255, description="Source file being reviewed (null for overall PR review)"
     )
@@ -94,7 +99,8 @@ class ReviewCreate(ReviewBase):
 class ReviewUpdate(BaseModel):
     """Schema for updating an existing pull request review"""
 
-    git_code_diff: str | None = Field(None, max_length=1048576)
+    # MEDIUMTEXT supports up to 16MB (16,777,215 bytes)
+    git_code_diff: str | None = Field(None, max_length=16777215)
     source_filename: str | None = Field(None, max_length=255)
     ai_suggestions: dict[str, Any] | None = Field(None)
     reviewer_comments: str | None = Field(None, max_length=10000)

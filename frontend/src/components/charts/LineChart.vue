@@ -29,18 +29,27 @@ interface Props {
   data: Array<{ date: string; value: number }>
   color?: string
   height?: string
+  axisLabelColor?: string
+  axisLineColor?: string
+  splitLineColor?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   title: 'Trend',
   color: '#409eff',
   height: '350px',
+  axisLabelColor: '#64748b',
+  axisLineColor: '#e2e8f0',
+  splitLineColor: '#f1f5f9',
 })
 
 const chartOption = computed(() => ({
   title: {
     text: props.title,
     left: 'center',
+    textStyle: {
+      color: props.axisLabelColor,
+    },
   },
   tooltip: {
     trigger: 'axis',
@@ -55,9 +64,30 @@ const chartOption = computed(() => ({
     type: 'category',
     boundaryGap: false,
     data: props.data.map(d => d.date),
+    axisLabel: {
+      color: props.axisLabelColor,
+    },
+    axisLine: {
+      lineStyle: {
+        color: props.axisLineColor,
+      },
+    },
   },
   yAxis: {
     type: 'value',
+    axisLabel: {
+      color: props.axisLabelColor,
+    },
+    axisLine: {
+      lineStyle: {
+        color: props.axisLineColor,
+      },
+    },
+    splitLine: {
+      lineStyle: {
+        color: props.splitLineColor,
+      },
+    },
   },
   series: [
     {

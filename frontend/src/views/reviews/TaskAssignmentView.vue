@@ -128,7 +128,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column :label="t('task_assignment.reviewers')" min-width="260">
+        <el-table-column :label="t('task_assignment.reviewers')" min-width="280">
           <template #default="{ row }">
             <div class="reviewers-list">
               <el-tooltip
@@ -140,9 +140,9 @@
                 <el-tag
                   :type="getReviewerTagType(reviewer.assignment_status)"
                   size="small"
-                  style="margin: 2px; cursor: help"
+                  class="reviewer-tag"
                 >
-                  {{ reviewer.reviewer }}
+                  {{ reviewer.reviewer_info?.display_name || reviewer.reviewer }}
                   <span v-if="reviewer.assignment_status === 'completed'" class="status-icon">✓</span>
                 </el-tag>
               </el-tooltip>
@@ -458,7 +458,8 @@ const loadReviews = async () => {
     
     // Add filter parameters supported by task-assignment API
     if (projectFilter.value) params.project_key = projectFilter.value
-    if (reviewerFilter.value && reviewerFilter.value !== '__unassigned__') {
+    if (reviewerFilter.value) {
+      // Send reviewer parameter including __unassigned__ special value
       params.reviewer = reviewerFilter.value
     }
     if (statusFilter.value) params.status = statusFilter.value
@@ -1107,13 +1108,27 @@ onUnmounted(() => {
 
 .reviewers-list {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 2px;
-  scrollbar-width: thin;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.reviewer-tag {
+  cursor: help;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  white-space: nowrap;
+}
+
+.reviewer-tag:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme='dark'] .reviewer-tag:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .status-icon {

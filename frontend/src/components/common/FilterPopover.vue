@@ -134,6 +134,12 @@
               filterable
               style="width: 100%"
             >
+              <el-option value="__unassigned__">
+                <span class="unassigned-option">
+                  <el-icon class="unassigned-icon"><WarningFilled /></el-icon>
+                  {{ t('reviews.unassigned', 'Unassigned') }}
+                </span>
+              </el-option>
               <el-option
                 v-for="user in reviewerOptions"
                 :key="user.username"
@@ -211,11 +217,15 @@
       <el-tag
         v-for="tag in activeFilterTags"
         :key="tag.key"
+        :type="tag.isUnassigned ? 'warning' : undefined"
         closable
         @close="handleRemoveFilter(tag.key)"
         size="small"
         style="margin-right: 8px; margin-bottom: 8px"
       >
+        <span v-if="tag.isUnassigned" class="tag-unassigned-icon">
+          <el-icon><WarningFilled /></el-icon>
+        </span>
         {{ tag.label }}: {{ tag.value }}
       </el-tag>
       <el-button link type="primary" size="small" @click="handleReset">
@@ -227,9 +237,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { Search, Filter, RefreshLeft, Check } from '@element-plus/icons-vue'
+import { Search, Filter, RefreshLeft, Check, WarningFilled } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import type { AppInfo } from '@/api/projectRegistry'
 import type { ReviewerUser } from '@/api/users'
+
+const { t } = useI18n()
 
 interface Props {
   // Search configuration
@@ -413,8 +426,9 @@ const activeFilterTags = computed(() => {
       label: 'Reviewer',
       value:
         localReviewerFilter.value === '__unassigned__'
-          ? 'Unassigned'
+          ? t('reviews.unassigned', 'Unassigned')
           : localReviewerFilter.value,
+      isUnassigned: localReviewerFilter.value === '__unassigned__',
     })
   }
 
@@ -644,6 +658,39 @@ const handlePopoverHide = () => {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Unassigned Option Styling */
+.unassigned-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #e6a23c;
+  font-weight: 600;
+}
+
+.unassigned-icon {
+  font-size: 16px;
+  color: #e6a23c;
+}
+
+[data-theme='dark'] .unassigned-option {
+  color: #fbbf24;
+}
+
+[data-theme='dark'] .unassigned-icon {
+  color: #fbbf24;
+}
+
+.tag-unassigned-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.tag-unassigned-icon .el-icon {
+  font-size: 14px;
 }
 
 .text-secondary {

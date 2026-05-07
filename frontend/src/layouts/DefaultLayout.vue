@@ -18,7 +18,11 @@
             >
               <el-menu-item index="/">{{ t('menu.dashboard') }}</el-menu-item>
               <el-menu-item index="/reviews">{{ t('menu.reviews') }}</el-menu-item>
-              <el-menu-item v-if="isAdmin" index="/task-assignment">{{ t('menu.taskAssignment') }}</el-menu-item>
+              <el-sub-menu v-if="isAdmin" index="/task-assignment">
+                <template #title>{{ t('menu.taskAssignment') }}</template>
+                <el-menu-item index="/task-assignment">{{ t('menu.taskAssignment') }}</el-menu-item>
+                <el-menu-item index="/task-assignment/analytics">{{ t('menu.analytics') }}</el-menu-item>
+              </el-sub-menu>
               <el-sub-menu index="/scores">
                 <template #title>{{ t('menu.scores') }}</template>
                 <el-menu-item index="/scores">{{ t('menu.scoreList') }}</el-menu-item>

@@ -487,6 +487,41 @@
         "cancel": "取消",
         "assign": "分配"
       }
+    },
+    "analytics": {
+      "page_title": "任務分配分析",
+      "summary": {
+        "total_reviews": "總審查數",
+        "active_reviews": "活躍審查數",
+        "avg_assignments": "平均分配數",
+        "scoring_rate": "評分率"
+      },
+      "charts": {
+        "reviews_raised_trend": "審查提起趨勢",
+        "by_pr_user": "按PR使用者統計",
+        "by_project_repo": "按專案/儲存庫統計",
+        "assignments_per_reviewer": "每個審查者的分配",
+        "scored_per_reviewer": "每個審查者的評分審查",
+        "scoring_trend": "審查評分趨勢"
+      },
+      "filters": {
+        "date_range": "日期範圍",
+        "start_date": "開始日期",
+        "end_date": "結束日期",
+        "project": "專案",
+        "all_projects": "所有專案",
+        "reviewer": "審查者",
+        "all_reviewers": "所有審查者"
+      },
+      "period": {
+        "daily": "每日",
+        "weekly": "每週",
+        "monthly": "每月"
+      },
+      "messages": {
+        "load_failed": "載入分析資料失敗",
+        "no_data": "所選篩選條件下無可用資料"
+      }
     }
   },
   "admin": {

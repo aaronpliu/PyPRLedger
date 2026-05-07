@@ -487,6 +487,41 @@
         "cancel": "Cancel",
         "assign": "Assign"
       }
+    },
+    "analytics": {
+      "page_title": "Task Assignment Analytics",
+      "summary": {
+        "total_reviews": "Total Reviews",
+        "active_reviews": "Active Reviews",
+        "avg_assignments": "Avg Assignments",
+        "scoring_rate": "Scoring Rate"
+      },
+      "charts": {
+        "reviews_raised_trend": "Reviews Raised Trend",
+        "by_pr_user": "Reviews by PR User",
+        "by_project_repo": "Reviews by Project/Repository",
+        "assignments_per_reviewer": "Assignments per Reviewer",
+        "scored_per_reviewer": "Scored Reviews per Reviewer",
+        "scoring_trend": "Reviews Scored Trend"
+      },
+      "filters": {
+        "date_range": "Date Range",
+        "start_date": "Start Date",
+        "end_date": "End Date",
+        "project": "Project",
+        "all_projects": "All Projects",
+        "reviewer": "Reviewer",
+        "all_reviewers": "All Reviewers"
+      },
+      "period": {
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "monthly": "Monthly"
+      },
+      "messages": {
+        "load_failed": "Failed to load analytics data",
+        "no_data": "No data available for the selected filters"
+      }
     }
   },
   "admin": {

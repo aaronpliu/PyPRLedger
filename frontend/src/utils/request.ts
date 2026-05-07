@@ -11,6 +11,7 @@ type RetryableRequestConfig = InternalAxiosRequestConfig & {
 const AUTH_EXCLUDED_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout']
 let refreshPromise: Promise<string> | null = null
 let lastAuthFailureTimestamp = 0
+let isRedirectingToLogin = false
 
 // Create axios instance
 const request: AxiosInstance = axios.create({
@@ -53,19 +54,37 @@ function shouldRefreshAccessToken(token: string): boolean {
 }
 
 async function redirectToLogin() {
+  // Prevent multiple simultaneous redirects
+  if (isRedirectingToLogin) {
+    return
+  }
+
   const authStore = useAuthStore()
   authStore.clearAuth()
 
   const now = Date.now()
+  // Show message only if it's been more than 5 seconds since last auth failure
   if (now - lastAuthFailureTimestamp > 5000) {
     ElMessage.closeAll()
-    ElMessage.error('Your session expired. Please login again.')
+    ElMessage.warning({
+      message: 'Your session has expired. Please log in again.',
+      duration: 3000,
+      showClose: true,
+    })
     lastAuthFailureTimestamp = now
   }
+
+  // Mark as redirecting to prevent duplicate calls
+  isRedirectingToLogin = true
 
   if (router.currentRoute.value.path !== '/login') {
     await router.replace('/login')
   }
+
+  // Reset flag after navigation
+  setTimeout(() => {
+    isRedirectingToLogin = false
+  }, 1000)
 }
 
 async function refreshAccessToken(): Promise<string> {
@@ -121,6 +140,7 @@ request.interceptors.response.use(
     if (response) {
       switch (response.status) {
         case 401:
+          // Don't show additional error message - redirectToLogin handles it
           if (originalRequest && !originalRequest._retry && !isAuthExcluded(originalRequest.url)) {
             originalRequest._retry = true
             try {
@@ -133,7 +153,6 @@ request.interceptors.response.use(
           } else if (!isAuthExcluded(originalRequest?.url)) {
             await redirectToLogin()
           }
-          // Don't show additional error message for 401 on auth endpoints
           break
 
         case 403:
