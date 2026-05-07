@@ -129,8 +129,8 @@ npm run dev
 
 ### 🔄 To Reorder Images:
 Images rotate alphabetically by filename. Rename files to control order:
-- `01-city-walk.jpg` (shows first)
-- `02-tech-network.jpg` (shows second)
+- `01-city.jpg` (shows first)
+- `02-tech.jpg` (shows second)
 - `03-nature.jpg` (shows third)
 
 ## Tips

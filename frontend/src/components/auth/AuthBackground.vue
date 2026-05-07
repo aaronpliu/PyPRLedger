@@ -5,10 +5,18 @@
         v-for="(bg, index) in backgrounds"
         :key="bg.id"
         v-show="currentBgIndex === index"
-        class="background-image"
-        :class="{ 'background-gradient': bg.isGradient }"
-        :style="bg.isGradient ? {} : { backgroundImage: `url(${bg.url})` }"
+        class="background-wrapper"
       >
+        <!-- Use img tag for crisp, high-quality rendering -->
+        <img
+          v-if="!bg.isGradient"
+          :src="bg.url"
+          :alt="bg.title"
+          class="background-image"
+          loading="eager"
+          decoding="async"
+        />
+        <div v-else class="background-gradient"></div>
         <div class="background-overlay"></div>
       </div>
     </transition-group>
@@ -140,22 +148,50 @@ onUnmounted(() => {
   height: 100%;
 }
 
+.background-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 .background-image {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  /* Ensure full resolution - no compression or quality loss */
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
+  /* Use object-fit for better quality than background-size */
+  object-fit: cover;
+  object-position: center;
+  /* CRITICAL: Force highest quality rendering */
+  image-rendering: -webkit-optimize-contrast !important;
+  image-rendering: crisp-edges !important;
+  image-rendering: high-quality !important;
+  image-rendering: pixelated !important; /* Fallback */
+  /* Disable any browser smoothing/compression */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  will-change: transform;
   transition: transform 8s ease-out;
+  /* Ensure the image is rendered at full resolution */
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.background-wrapper[style*="display: block"] .background-image {
+  transform: scale(1.05);
 }
 
 .background-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
   background-size: 400% 400%;
   animation: gradient-shift 15s ease infinite;
@@ -181,22 +217,25 @@ onUnmounted(() => {
   position: absolute;
   width: 100%;
   height: 100%;
+  /* Reduced blur to maintain image sharpness */
   background: linear-gradient(
     135deg,
-    rgba(0, 0, 0, 0.4) 0%,
-    rgba(0, 0, 0, 0.2) 50%,
-    rgba(0, 0, 0, 0.4) 100%
+    rgba(0, 0, 0, 0.3) 0%,
+    rgba(0, 0, 0, 0.15) 50%,
+    rgba(0, 0, 0, 0.3) 100%
   );
-  backdrop-filter: blur(2px);
+  /* Remove backdrop-filter blur - it makes images fuzzy */
+  /* backdrop-filter: blur(2px); */
 }
 
 [data-theme='dark'] .background-overlay {
   background: linear-gradient(
     135deg,
-    rgba(0, 0, 0, 0.6) 0%,
-    rgba(0, 0, 0, 0.4) 50%,
-    rgba(0, 0, 0, 0.6) 100%
+    rgba(0, 0, 0, 0.5) 0%,
+    rgba(0, 0, 0, 0.3) 50%,
+    rgba(0, 0, 0, 0.5) 100%
   );
+  /* No blur in dark mode either */
 }
 
 /* Background Fade Transition */
