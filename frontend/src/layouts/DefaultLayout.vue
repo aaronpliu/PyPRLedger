@@ -65,8 +65,13 @@
           <!-- User Menu -->
           <el-dropdown @command="handleCommand">
             <span class="user-info" role="button" tabindex="0" :aria-label="`User menu for ${authStore.user?.username}`">
-              <el-icon><User /></el-icon>
-              {{ authStore.user?.username }}
+              <UserAvatar 
+                v-if="authStore.user" 
+                :username="authStore.user.username"
+                :avatar-url="authStore.user.avatar_url"
+                :size="32"
+              />
+              <span class="username-text">{{ authStore.user?.username }}</span>
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
@@ -105,7 +110,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { User, ArrowDown, Lock } from '@element-plus/icons-vue'
+import { ArrowDown, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -115,6 +120,7 @@ import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
+import UserAvatar from '@/components/user/UserAvatar.vue'
 import { UI_VERSION, COPYRIGHT, fetchApiVersion, getApiVersion } from '@/config/versions'
 
 const authStore = useAuthStore()
@@ -235,6 +241,10 @@ const handleLanguageChange = (lang: string) => {
   gap: 8px;
   cursor: pointer;
   color: white;
+}
+
+.username-text {
+  margin-left: 4px;
 }
 
 .user-info:hover {

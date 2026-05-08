@@ -635,7 +635,8 @@ class AuthService:
             stmt = select(User).where(User.id == auth_user.user_id)
             result = await self.db.execute(stmt)
             git_user = result.scalar_one_or_none()
-            git_username = git_user.username if git_user else None
+            if git_user:
+                git_username = git_user.username
 
         return UserinfoResponse(
             id=auth_user.id,
@@ -644,6 +645,7 @@ class AuthService:
             is_active=auth_user.is_active,
             git_user_id=auth_user.user_id,
             git_username=git_username,
+            avatar_url=auth_user.avatar_url,
             last_login_at=auth_user.last_login_at,
             created_at=auth_user.created_at,
             must_change_password=auth_user.must_change_password,

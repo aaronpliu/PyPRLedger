@@ -22,6 +22,9 @@
     "success": "Success",
     "error": "Error",
     "confirm": "Confirm",
+    "warning": "Warning",
+    "change": "Change",
+    "remove": "Remove",
     "yes": "Yes",
     "no": "No",
     "noData": "No Data Available",
@@ -639,5 +642,20 @@
     "minutes_ago": "min ago",
     "hours_ago": "hr ago",
     "days_ago": "days ago"
+  },
+  "avatar": {
+    "upload_success": "Avatar uploaded successfully",
+    "delete_success": "Avatar deleted successfully",
+    "upload_failed": "Failed to upload avatar",
+    "delete_failed": "Failed to delete avatar",
+    "crop_failed": "Failed to crop image",
+    "load_failed": "Failed to load existing avatar",
+    "crop_title": "Crop Avatar",
+    "edit_current": "Edit Current",
+    "upload_new": "Upload New",
+    "file_size_exceeded": "File size must be less than {maxSize}",
+    "invalid_file_type": "Invalid file type. Please select an image file (JPEG, PNG, WebP, or GIF)",
+    "confirm_delete": "Are you sure you want to delete your avatar? This action cannot be undone.",
+    "confirm_edit_or_replace": "Would you like to edit the current avatar crop or upload a new image?"
   }
 }

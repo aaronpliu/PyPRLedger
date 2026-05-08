@@ -86,4 +86,22 @@ export const usersApi = {
   searchUsers(query: string, limit: number = 10): Promise<User[]> {
     return request.get('/users', { params: { search: query, limit } })
   },
+
+  /**
+   * Upload user avatar
+   */
+  uploadAvatar(username: string, formData: FormData): Promise<{ avatar_url: string }> {
+    return request.post(`/users/${username}/avatar`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+
+  /**
+   * Delete user avatar
+   */
+  deleteAvatar(username: string): Promise<{ avatar_url: null }> {
+    return request.delete(`/users/${username}/avatar`)
+  },
 }

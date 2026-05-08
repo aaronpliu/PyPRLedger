@@ -3,7 +3,8 @@ import traceback
 from datetime import UTC
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -23,6 +24,7 @@ from src.schemas.user import (
     UserStats,
     UserUpdate,
 )
+from src.services.avatar_service import AvatarService
 from src.services.user_service import UserService
 from src.utils.metrics import metrics
 from src.utils.timezone import get_current_time
@@ -699,4 +701,114 @@ async def delete_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to delete user"},
+        )
+
+
+@router.post("/{username}/avatar", status_code=status.HTTP_200_OK)
+async def upload_avatar(
+    username: str,
+    file: Annotated[UploadFile, File(description="Avatar image file")],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict:
+    """
+    Upload user avatar
+
+    Args:
+        username: The auth username
+        file: Avatar image file (JPEG, PNG, WebP, or GIF, max 5MB)
+        db: Database session
+
+    Returns:
+        dict: {"avatar_url": "..."}
+
+    Raises:
+        HTTPException: If user not found or file validation fails
+    """
+    try:
+        # Get auth user from database
+        result = await db.execute(select(AuthUser).where(AuthUser.username == username))
+        auth_user = result.scalar_one_or_none()
+
+        if not auth_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "NOT_FOUND", "message": f"User '{username}' not found"},
+            )
+
+        # Upload new avatar using auth_user ID
+        avatar_service = AvatarService()
+        avatar_url = await avatar_service.upload_avatar(auth_user.id, file)
+
+        # Delete old avatar if exists
+        if auth_user.avatar_url:
+            avatar_service.delete_avatar(auth_user.avatar_url)
+
+        # Update auth user record
+        auth_user.avatar_url = avatar_url
+        await db.commit()
+        await db.refresh(auth_user)
+
+        return {"avatar_url": avatar_url}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to upload avatar for user {username}: {str(e)}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR", endpoint=f"POST /api/v1/users/{username}/avatar"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to upload avatar"},
+        )
+
+
+@router.delete("/{username}/avatar", status_code=status.HTTP_200_OK)
+async def delete_avatar(
+    username: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict:
+    """
+    Delete user avatar
+
+    Args:
+        username: The auth username
+        db: Database session
+
+    Returns:
+        dict: {"avatar_url": null}
+
+    Raises:
+        HTTPException: If user not found
+    """
+    try:
+        # Get auth user from database
+        result = await db.execute(select(AuthUser).where(AuthUser.username == username))
+        auth_user = result.scalar_one_or_none()
+
+        if not auth_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "NOT_FOUND", "message": f"User '{username}' not found"},
+            )
+
+        # Delete avatar file if exists
+        if auth_user.avatar_url:
+            avatar_service = AvatarService()
+            avatar_service.delete_avatar(auth_user.avatar_url)
+            auth_user.avatar_url = None
+            await db.commit()
+
+        return {"avatar_url": None}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete avatar for user {username}: {str(e)}")
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR", endpoint=f"DELETE /api/v1/users/{username}/avatar"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to delete avatar"},
         )

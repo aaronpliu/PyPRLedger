@@ -11,6 +11,21 @@
         <!-- User Info Tab -->
         <el-tab-pane label="User Info" name="info">
           <div class="tab-content">
+            <!-- Avatar Section -->
+            <div class="avatar-section">
+              <h3 style="margin-top: 0;">Avatar</h3>
+              <AvatarUpload
+                v-if="authStore.user"
+                :username="authStore.user.username"
+                :avatarUrl="authStore.user.avatar_url"
+                :size="120"
+                :showActions="true"
+                @update:avatarUrl="handleAvatarUpdate"
+              />
+              <!-- Debug: {{ authStore.user }} -->
+            </div>
+            
+            <el-divider />
             <!-- Compact user info grid -->
             <el-row :gutter="16" style="margin-bottom: 20px;">
               <el-col :span="12">
@@ -374,6 +389,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { Cellphone, InfoFilled, Monitor, Plus, WarningFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import DelegationForm from '@/components/delegation/DelegationForm.vue'
+import AvatarUpload from '@/components/user/AvatarUpload.vue'
 import type { AuthSession } from '@/types'
 import { getSessionDeviceDetails } from '@/utils/device'
 
@@ -759,6 +775,23 @@ const handleChangePassword = async () => {
   })
 }
 
+// Handle avatar update
+const handleAvatarUpdate = async (avatarUrl: string | null) => {
+  // Update user in auth store
+  if (authStore.user) {
+    authStore.user.avatar_url = avatarUrl
+    // Persist to localStorage to survive page refresh
+    localStorage.setItem('user_profile', JSON.stringify(authStore.user))
+  }
+  
+  // Re-fetch user profile to ensure consistency
+  try {
+    await authStore.fetchUserProfile()
+  } catch (error) {
+    console.error('Failed to refresh user profile after avatar update:', error)
+  }
+}
+
 onMounted(() => {
   loadSessions()
 })
@@ -783,6 +816,18 @@ onMounted(() => {
   align-items: center;
   font-size: 18px;
   font-weight: bold;
+}
+
+/* Avatar section styling */
+.avatar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 0;
+}
+
+.avatar-section h3 {
+  margin-bottom: 16px;
 }
 
 .profile-tabs {

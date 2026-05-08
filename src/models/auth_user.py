@@ -50,6 +50,9 @@ class AuthUser(Base):
         Boolean, nullable=False, default=False, comment="Force password change on next login"
     )
 
+    # Avatar URL (optional)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=get_current_time
@@ -89,6 +92,7 @@ class AuthUser(Base):
             "email": self.email,
             "user_id": self.user_id,
             "is_active": self.is_active,
+            "avatar_url": self.avatar_url,
             "last_login_at": (
                 utc_to_local(self.last_login_at).isoformat() if self.last_login_at else None
             ),
