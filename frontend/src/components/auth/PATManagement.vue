@@ -182,7 +182,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, DocumentCopy } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
 import { patApi, type PersonalAccessToken, type PATCreateRequest } from '@/api/pat'
+
+// Initialize dayjs plugins
+dayjs.extend(utc)
+dayjs.extend(timezone)
 
 const loading = ref(false)
 const creating = ref(false)
@@ -295,9 +301,9 @@ const handleTokenDialogClose = () => {
   createdToken.value = null
 }
 
-// Format date
+// Format date - converts UTC to local timezone
 const formatDate = (dateStr: string) => {
-  return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
+  return dayjs.utc(dateStr).local().format('YYYY-MM-DD HH:mm:ss')
 }
 
 // Get expiry type for tag color

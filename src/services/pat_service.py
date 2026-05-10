@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import logging
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.exceptions import AppException, ErrorCode
 from src.models.personal_access_token import PersonalAccessToken
 from src.utils.redis import get_redis_client
+from src.utils.timezone import get_current_time
 
 
 if TYPE_CHECKING:
@@ -68,7 +69,8 @@ class PATService:
         if expires_in_days is None:
             expires_in_days = DEFAULT_EXPIRY_DAYS
 
-        expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
+        now = get_current_time()
+        expires_at = now + timedelta(days=expires_in_days)
 
         # Create record
         token_record = PersonalAccessToken(
@@ -127,14 +129,8 @@ class PATService:
 
         # Check expiration
         if token_record.expires_at:
-            # Ensure both datetimes are timezone-aware for comparison
-            expires_at = token_record.expires_at
-            if expires_at.tzinfo is None:
-                # Database returns naive datetime, assume UTC
-                expires_at = expires_at.replace(tzinfo=UTC)
-
-            now = datetime.now(UTC)
-            if expires_at < now:
+            now = get_current_time()
+            if token_record.expires_at < now:
                 # Mark as inactive
                 token_record.is_active = False
                 await self.db.commit()
@@ -142,7 +138,7 @@ class PATService:
                 return None
 
         # Update last used
-        token_record.last_used_at = datetime.now(UTC)
+        token_record.last_used_at = get_current_time()
         await self.db.commit()
 
         return token_record
@@ -214,7 +210,8 @@ class PATService:
             query = query.where(PersonalAccessToken.is_active == True)
         else:
             # Include expired tokens from last 3 months
-            three_months_ago = datetime.now(UTC) - timedelta(days=90)
+            now = get_current_time()
+            three_months_ago = now - timedelta(days=90)
             query = query.where(
                 (PersonalAccessToken.is_active == True)
                 | (PersonalAccessToken.expires_at >= three_months_ago)
@@ -256,7 +253,8 @@ class PATService:
         Returns:
             Number of deleted tokens
         """
-        three_months_ago = datetime.now(UTC) - timedelta(days=90)
+        now = get_current_time()
+        three_months_ago = now - timedelta(days=90)
 
         result = await self.db.execute(
             select(PersonalAccessToken)
