@@ -42,7 +42,7 @@
         </el-menu-item>
         <el-menu-item index="/myadmin/review-validation">
           <el-icon><TrendCharts /></el-icon>
-          <span>Review Validation</span>
+          <span>{{ t('menu.reviewValidation') }}</span>
         </el-menu-item>
         <el-menu-item index="/myadmin/settings">
           <el-icon><Setting /></el-icon>

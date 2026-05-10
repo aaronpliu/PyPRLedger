@@ -54,6 +54,7 @@
     "auditLogs": "Audit Logs",
     "sessions": "Sessions",
     "projectRegistry": "Project Registry",
+    "reviewValidation": "Review Validation",
     "systemSettings": "System Settings"
   },
   "auth": {

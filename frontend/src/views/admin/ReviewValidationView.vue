@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Warning, Check, TrendCharts, QuestionFilled } from '@element-plus/icons-vue'
 import { reviewsApi, type ReviewValidationSummary, type ReviewRawRecord } from '@/api/reviews'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const retrying = ref<number | null>(null)
@@ -113,7 +116,7 @@ onMounted(() => {
       <template #header>
         <div class="card-header">
           <div class="title-with-help">
-            <h2>PR Review Validation</h2>
+            <h2>{{ t('menu.reviewValidation') }}</h2>
             <el-tooltip placement="bottom" effect="light">
               <template #content>
                 <div class="validation-help-content">

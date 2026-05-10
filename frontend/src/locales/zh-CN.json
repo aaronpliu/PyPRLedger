@@ -54,6 +54,7 @@
     "auditLogs": "审计日志",
     "sessions": "会话",
     "projectRegistry": "项目注册表",
+    "reviewValidation": "审查验证",
     "systemSettings": "系统设置"
   },
   "auth": {

@@ -54,6 +54,7 @@
     "auditLogs": "稽核日誌",
     "sessions": "工作階段",
     "projectRegistry": "專案註冊表",
+    "reviewValidation": "審查驗證",
     "systemSettings": "系統設定"
   },
   "auth": {
