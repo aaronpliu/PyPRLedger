@@ -6,6 +6,7 @@ export interface User {
   is_active: boolean
   git_user_id: number | null
   git_username: string | null
+  avatar_url: string | null
   last_login_at: string | null
   created_at: string
   must_change_password?: boolean

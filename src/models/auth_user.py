@@ -12,6 +12,7 @@ from src.utils.timezone import get_current_time, utc_to_local
 
 if TYPE_CHECKING:
     from src.models.audit_log import AuditLog
+    from src.models.personal_access_token import PersonalAccessToken
     from src.models.rbac import UserRoleAssignment
     from src.models.user import User
 
@@ -50,6 +51,9 @@ class AuthUser(Base):
         Boolean, nullable=False, default=False, comment="Force password change on next login"
     )
 
+    # Avatar URL (optional)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=get_current_time
@@ -77,6 +81,11 @@ class AuthUser(Base):
         cascade="all, delete-orphan",
         foreign_keys="AuditLog.auth_user_id",
     )
+    personal_access_tokens: Mapped[list[PersonalAccessToken]] = relationship(
+        "PersonalAccessToken",
+        back_populates="auth_user",
+        lazy="selectin",
+    )
 
     def __repr__(self) -> str:
         return f"<AuthUser(id={self.id}, username='{self.username}')>"
@@ -89,6 +98,7 @@ class AuthUser(Base):
             "email": self.email,
             "user_id": self.user_id,
             "is_active": self.is_active,
+            "avatar_url": self.avatar_url,
             "last_login_at": (
                 utc_to_local(self.last_login_at).isoformat() if self.last_login_at else None
             ),

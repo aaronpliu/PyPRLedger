@@ -98,7 +98,11 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function fetchUserProfile() {
     try {
-      user.value = await authApi.getCurrentUser()
+      const profile = await authApi.getCurrentUser()
+      console.log('Fetched user profile:', profile)
+      user.value = profile
+      // Cache in localStorage for faster loads
+      localStorage.setItem('user_profile', JSON.stringify(profile))
     } catch (error) {
       console.error('Failed to fetch user profile:', error)
       clearAuth()
@@ -133,6 +137,16 @@ export const useAuthStore = defineStore('auth', () => {
 
       accessToken.value = token
       refreshTokenValue.value = refresh
+
+      // Try to load cached user profile first for instant display
+      const cachedProfile = localStorage.getItem('user_profile')
+      if (cachedProfile) {
+        try {
+          user.value = JSON.parse(cachedProfile)
+        } catch (e) {
+          console.warn('Failed to parse cached user profile:', e)
+        }
+      }
 
       try {
         await fetchUserProfile()

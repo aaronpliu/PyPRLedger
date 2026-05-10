@@ -68,34 +68,28 @@
       </el-form>
     </el-card>
 
-    <!-- Summary Cards - Hybrid Design -->
+    <!-- Summary Cards - Consistent Design -->
     <el-row :gutter="20" class="summary-cards">
-      <!-- Card 1: Total Reviews - Gradient Border + Animated Counter -->
+      <!-- Card 1: Total Reviews -->
       <el-col :xs="24" :sm="12" :md="6">
-        <div class="stat-card stat-card--gradient-border">
-          <div class="stat-card__border"></div>
+        <div class="stat-card stat-card--primary">
           <div class="stat-card__content">
-            <div class="stat-card__icon">
-              <el-icon :size="28"><Document /></el-icon>
+            <div class="stat-card__icon primary-icon">
+              <el-icon :size="32"><Document /></el-icon>
             </div>
             <div class="stat-card__value animated-counter">{{ animatedTotalReviews.toLocaleString() }}</div>
             <div class="stat-card__label">{{ t('task_assignment.analytics.summary.total_reviews') }}</div>
-            <div class="stat-card__trend">
-              <span class="trend-indicator">📊</span>
-              <span>All Time</span>
-            </div>
           </div>
         </div>
       </el-col>
 
-      <!-- Card 2: Active Reviews - Glassmorphism + Pulse -->
+      <!-- Card 2: Active Reviews -->
       <el-col :xs="24" :sm="12" :md="6">
-        <div class="stat-card stat-card--glassmorphism">
-          <div class="glass-overlay"></div>
+        <div class="stat-card stat-card--success">
           <div class="stat-card__content">
             <div class="stat-card__header">
-              <div class="stat-card__icon">
-                <el-icon :size="28"><TrendCharts /></el-icon>
+              <div class="stat-card__icon success-icon">
+                <el-icon :size="32"><TrendCharts /></el-icon>
               </div>
               <div class="live-indicator">
                 <span class="pulse-dot"></span>
@@ -205,7 +199,7 @@
             <BarChart
               v-if="prUserData.length > 0"
               :title="''"
-              :data="prUserData.slice(0, 10).map(d => ({ name: d.username, value: d.count }))"
+              :data="prUserData.slice(0, 20).map(d => ({ name: d.username, value: d.count }))"
               color="#67c23a"
               height="300px"
             />
@@ -220,12 +214,9 @@
               <span>{{ t('task_assignment.analytics.charts.by_project_repo') }}</span>
             </template>
             <PieChart
-              v-if="projectData.length > 0"
+              v-if="consolidatedProjectData.length > 0"
               :title="''"
-              :data="projectData.slice(0, 8).map(d => ({
-                name: `${d.project_key}/${d.repository_slug}`,
-                value: d.count
-              }))"
+              :data="consolidatedProjectData"
               height="300px"
             />
             <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
@@ -386,6 +377,39 @@ const reviewerProgressData = computed(() => {
     completed: r.completed,
     percentage: r.assigned > 0 ? (r.completed / r.assigned) * 100 : 0,
   }))
+})
+
+// Consolidate project data - show all, but group items <1% as "Others"
+const consolidatedProjectData = computed(() => {
+  if (!projectData.value || projectData.value.length === 0) return []
+  
+  const total = projectData.value.reduce((sum, d) => sum + d.count, 0)
+  if (total === 0) return []
+  
+  const threshold = total * 0.01 // 1% threshold
+  const significant = []
+  let othersCount = 0
+  
+  projectData.value.forEach(d => {
+    if (d.count >= threshold) {
+      significant.push({
+        name: `${d.project_key}/${d.repository_slug}`,
+        value: d.count
+      })
+    } else {
+      othersCount += d.count
+    }
+  })
+  
+  // Add "Others" category if there are items below threshold
+  if (othersCount > 0) {
+    significant.push({
+      name: 'Others',
+      value: othersCount
+    })
+  }
+  
+  return significant
 })
 
 const scoringTrendData = computed(() => {
@@ -666,110 +690,48 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
-/* ===== Card 1: Gradient Border ===== */
-.stat-card--gradient-border {
+/* ===== Card 1: Primary Style (Total Reviews) ===== */
+.stat-card--primary {
   background: var(--el-bg-color);
-  border: 3px solid transparent;
-  background-clip: padding-box;
+  border: 2px solid #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
 }
 
-[data-theme='dark'] .stat-card--gradient-border {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+[data-theme='dark'] .stat-card--primary {
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
 }
 
-.stat-card--gradient-border::before {
-  content: '';
-  position: absolute;
-  top: -3px;
-  left: -3px;
-  right: -3px;
-  bottom: -3px;
-  background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 50%, #8b5cf6 100%);
-  border-radius: 16px;
-  z-index: 0;
-  animation: gradient-rotate 8s linear infinite;
+.stat-card--primary:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.25);
 }
 
-.stat-card--gradient-border .stat-card__border {
-  position: absolute;
-  inset: 0;
-  border-radius: 16px;
-  padding: 3px;
-  background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 50%, #8b5cf6 100%);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-  box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.1);
+.stat-card--primary .primary-icon {
+  color: #3b82f6;
 }
 
-.stat-card--gradient-border:hover {
-  transform: translateY(-4px) scale(1.02);
-  box-shadow: 0 12px 24px rgba(59, 130, 246, 0.3);
+/* ===== Card 2: Success Style (Active Reviews) ===== */
+.stat-card--success {
+  background: var(--el-bg-color);
+  border: 2px solid #67c23a;
+  box-shadow: 0 4px 12px rgba(103, 194, 58, 0.15);
 }
 
-.stat-card--gradient-border .stat-card__trend {
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 12px;
-  background: rgba(59, 130, 246, 0.08);
-  border-radius: 12px;
-  transition: all 0.3s ease;
+[data-theme='dark'] .stat-card--success {
+  box-shadow: 0 4px 12px rgba(103, 194, 58, 0.25);
 }
 
-.stat-card--gradient-border:hover .stat-card__trend {
-  background: rgba(59, 130, 246, 0.15);
+.stat-card--success:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(103, 194, 58, 0.25);
+}
+
+.stat-card--success .success-icon {
+  color: #67c23a;
 }
 
 .animated-counter {
   font-variant-numeric: tabular-nums;
-}
-
-@keyframes gradient-rotate {
-  0% { filter: hue-rotate(0deg); }
-  100% { filter: hue-rotate(360deg); }
-}
-
-/* ===== Card 2: Glassmorphism ===== */
-.stat-card--glassmorphism {
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-}
-
-[data-theme='dark'] .stat-card--glassmorphism {
-  background: rgba(30, 30, 30, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.stat-card--glassmorphism .glass-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
-  pointer-events: none;
-  animation: glass-shimmer 4s ease-in-out infinite;
-}
-
-@keyframes glass-shimmer {
-  0%, 100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-.stat-card--glassmorphism:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(102, 126, 234, 0.2);
 }
 
 .live-indicator {
@@ -782,13 +744,13 @@ onMounted(() => {
   padding: 4px 10px;
   background: rgba(103, 194, 58, 0.1);
   border-radius: 12px;
-  border: 1px solid rgba(103, 194, 58, 0.2);
+  border: 1px solid rgba(103, 194, 58, 0.3);
   transition: all 0.3s ease;
 }
 
-.stat-card--glassmorphism:hover .live-indicator {
+.stat-card--success:hover .live-indicator {
   background: rgba(103, 194, 58, 0.15);
-  border-color: rgba(103, 194, 58, 0.3);
+  border-color: rgba(103, 194, 58, 0.4);
 }
 
 .pulse-dot {

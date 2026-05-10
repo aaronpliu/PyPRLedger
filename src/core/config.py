@@ -169,6 +169,12 @@ class Settings(BaseSettings):
     SLACK_WEBHOOK_URL: str | None = Field(default=None)
     SLACK_ENABLED: bool = Field(default=False)
 
+    # Avatar upload configuration
+    AVATAR_UPLOAD_DIR: str = Field(default="uploads/avatars")
+    MAX_AVATAR_SIZE: int = Field(default=5 * 1024 * 1024)  # 5MB
+    ALLOWED_AVATAR_TYPES: set = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    AVATAR_BASE_URL: str = Field(default="/api/v1/users/avatars")
+
 
 @lru_cache
 def get_settings() -> Settings:

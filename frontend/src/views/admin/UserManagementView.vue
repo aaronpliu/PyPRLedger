@@ -41,6 +41,15 @@
       <!-- Users Table -->
       <el-table :data="users" v-loading="loading" stripe style="width: 100%">
         <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column label="Avatar" width="80">
+          <template #default="{ row }">
+            <UserAvatar 
+              :username="row.username" 
+              :avatar-url="row.avatar_url"
+              :size="40"
+            />
+          </template>
+        </el-table-column>
         <el-table-column prop="username" label="Username" width="150" />
         <el-table-column prop="email" label="Email" min-width="200" />
         <el-table-column label="Roles" min-width="180">
@@ -299,6 +308,7 @@ import { authApi } from '@/api/auth'
 import { rbacApi } from '@/api/rbac'
 import { usersApi } from '@/api/users'
 import type { ResourceType, Role, RoleAssignment } from '@/types'
+import UserAvatar from '@/components/user/UserAvatar.vue'
 
 const { t } = useI18n()
 const loading = ref(false)

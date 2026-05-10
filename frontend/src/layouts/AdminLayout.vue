@@ -42,7 +42,7 @@
         </el-menu-item>
         <el-menu-item index="/myadmin/review-validation">
           <el-icon><TrendCharts /></el-icon>
-          <span>Review Validation</span>
+          <span>{{ t('menu.reviewValidation') }}</span>
         </el-menu-item>
         <el-menu-item index="/myadmin/settings">
           <el-icon><Setting /></el-icon>
@@ -74,8 +74,12 @@
           <div class="header-item user-dropdown-wrapper">
             <el-dropdown @command="handleCommand">
               <span class="user-info">
-                <el-icon><User /></el-icon>
-                {{ authStore.user?.username }}
+                <UserAvatar 
+                  :username="authStore.user?.username || ''" 
+                  :avatar-url="authStore.user?.avatar_url"
+                  :size="32"
+                />
+                <span class="username-text">{{ authStore.user?.username }}</span>
                 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
               </span>
               <template #dropdown>
@@ -117,6 +121,7 @@ import { ElMessage } from 'element-plus'
 import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
+import UserAvatar from '@/components/user/UserAvatar.vue'
 import { UI_VERSION, COPYRIGHT, fetchApiVersion } from '@/config/versions'
 
 const { t } = useI18n()
@@ -194,16 +199,23 @@ const handleCommand = (command: string) => {
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--el-text-color-primary);
-  padding: 8px 12px;
-  border-radius: 4px;
+  padding: 6px 12px;
+  border-radius: 8px;
   transition: background-color 0.2s;
   font-weight: 500;
 }
 
 .user-info:hover {
   background-color: var(--el-fill-color-light);
+}
+
+.username-text {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .admin-main {

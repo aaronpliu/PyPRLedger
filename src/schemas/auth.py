@@ -35,6 +35,7 @@ class UserinfoResponse(BaseModel):
     is_active: bool
     git_user_id: int | None = None
     git_username: str | None = None
+    avatar_url: str | None = Field(None, max_length=500, description="User avatar URL")
     last_login_at: datetime | None = None
     created_at: datetime
     must_change_password: bool = Field(

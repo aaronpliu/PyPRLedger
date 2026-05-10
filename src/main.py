@@ -2,11 +2,13 @@ import asyncio
 import traceback
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi_offline import FastAPIOffline
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -159,6 +161,11 @@ Instrumentator().instrument(app).expose(app, endpoint=settings.PROMETHEUS_METRIC
 
 # Register API routes
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Mount static files for avatar uploads
+avatar_upload_dir = Path(settings.AVATAR_UPLOAD_DIR)
+avatar_upload_dir.mkdir(parents=True, exist_ok=True)
+app.mount(settings.AVATAR_BASE_URL, StaticFiles(directory=str(avatar_upload_dir)), name="avatars")
 
 
 @app.exception_handler(AppException)
