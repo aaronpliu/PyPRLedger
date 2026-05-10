@@ -185,15 +185,15 @@
                 <div v-loading="loadingReceived" class="delegation-table-wrapper">
                   <el-empty v-if="receivedDelegations.length === 0" description="No delegations received" />
                   <el-table v-else :data="receivedDelegations" stripe style="width: 100%">
-                    <el-table-column prop="role_name" label="Role" width="150">
+                    <el-table-column prop="role_name" label="Role" width="130">
                       <template #default="{ row }">
                         <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
                           {{ row.role_name || `Role ${row.role_id}` }}
                         </el-tag>
                       </template>
                     </el-table-column>
-                    <el-table-column prop="resource_type" label="Resource Type" width="120" />
-                    <el-table-column label="Delegator" width="180">
+                    <el-table-column prop="resource_type" label="Resource" width="110" />
+                    <el-table-column label="Delegator" min-width="160">
                       <template #default="{ row }">
                         <div class="user-info-cell">
                           <div v-if="row.delegator_display_name" class="display-name">{{ row.delegator_display_name }}</div>
@@ -201,14 +201,14 @@
                         </div>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Status" width="120">
+                    <el-table-column label="Status" width="100">
                       <template #default="{ row }">
                         <el-tag :type="getStatusType(row.delegation_status)">
                           {{ formatStatus(row.delegation_status) }}
                         </el-tag>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Valid Period" min-width="200">
+                    <el-table-column label="Valid Period" min-width="220">
                       <template #default="{ row }">
                         <div v-if="row.starts_at && row.expires_at">
                           {{ formatDate(row.starts_at) }} → {{ formatDate(row.expires_at) }}
@@ -216,7 +216,7 @@
                         <span v-else>-</span>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Reason" min-width="200">
+                    <el-table-column label="Reason" min-width="180">
                       <template #default="{ row }">
                         {{ row.delegation_reason || '-' }}
                       </template>
@@ -229,15 +229,15 @@
                 <div v-loading="loadingSent" class="delegation-table-wrapper">
                   <el-empty v-if="sentDelegations.length === 0" description="No delegations sent" />
                   <el-table v-else :data="sentDelegations" stripe style="width: 100%">
-                    <el-table-column prop="role_name" label="Role" width="150">
+                    <el-table-column prop="role_name" label="Role" width="130">
                       <template #default="{ row }">
                         <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
                           {{ row.role_name || `Role ${row.role_id}` }}
                         </el-tag>
                       </template>
                     </el-table-column>
-                    <el-table-column prop="resource_type" label="Resource Type" width="120" />
-                    <el-table-column label="Delegatee" width="180">
+                    <el-table-column prop="resource_type" label="Resource" width="110" />
+                    <el-table-column label="Delegatee" min-width="160">
                       <template #default="{ row }">
                         <div class="user-info-cell">
                           <div v-if="row.delegatee_display_name" class="display-name">{{ row.delegatee_display_name }}</div>
@@ -245,14 +245,14 @@
                         </div>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Status" width="120">
+                    <el-table-column label="Status" width="100">
                       <template #default="{ row }">
                         <el-tag :type="getStatusType(row.delegation_status)">
                           {{ formatStatus(row.delegation_status) }}
                         </el-tag>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Valid Period" min-width="200">
+                    <el-table-column label="Valid Period" min-width="220">
                       <template #default="{ row }">
                         <div v-if="row.starts_at && row.expires_at">
                           {{ formatDate(row.starts_at) }} → {{ formatDate(row.expires_at) }}
@@ -260,7 +260,7 @@
                         <span v-else>-</span>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Actions" width="120" fixed="right">
+                    <el-table-column label="Actions" width="100" fixed="right">
                       <template #default="{ row }">
                         <el-button
                           v-if="row.delegation_status === 'active' || row.delegation_status === 'pending'"
@@ -295,7 +295,7 @@
             </div>
 
             <el-table :data="sessions" v-loading="loadingSessions" stripe style="width: 100%">
-              <el-table-column label="Session" min-width="220">
+              <el-table-column label="Session" min-width="200">
                 <template #default="{ row }">
                   <div class="session-id-cell">
                     <span class="session-id">{{ row.session_id }}</span>
@@ -303,22 +303,22 @@
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column label="Created" width="180">
+              <el-table-column label="Created" width="170">
                 <template #default="{ row }">
                   {{ formatDate(row.created_at) }}
                 </template>
               </el-table-column>
-              <el-table-column label="Last Activity" width="180">
+              <el-table-column label="Last Activity" width="170">
                 <template #default="{ row }">
                   {{ formatDate(row.last_activity_at) }}
                 </template>
               </el-table-column>
-              <el-table-column label="IP" width="140">
+              <el-table-column label="IP" width="130">
                 <template #default="{ row }">
                   {{ row.ip_address || '-' }}
                 </template>
               </el-table-column>
-              <el-table-column label="User Agent" min-width="240">
+              <el-table-column label="Device" min-width="220">
                 <template #default="{ row }">
                   <div class="device-cell" :title="getDeviceDetails(row.user_agent).rawUserAgent || ''">
                     <div class="device-label-row">
@@ -332,14 +332,14 @@
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column label="Idle Timeout Remaining" width="180">
+              <el-table-column label="Idle Timeout" width="160">
                 <template #default="{ row }">
                   <el-tag :type="getSessionExpiryType(row.expires_in_seconds)">
                     {{ formatDuration(row.expires_in_seconds) }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="Actions" width="140" fixed="right">
+              <el-table-column label="Actions" width="120" fixed="right">
                 <template #default="{ row }">
                   <el-button
                     size="small"
@@ -807,7 +807,7 @@ onMounted(() => {
 
 <style scoped>
 .profile-container {
-  width: 1100px;
+  width: 1200px;
   max-width: 95vw;
   margin: 20px auto;
 }

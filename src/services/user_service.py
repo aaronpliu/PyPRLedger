@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.core.config import settings
 from src.core.exceptions import (
@@ -422,22 +423,31 @@ class UserService:
         Returns:
             bool: True if deleted, False if not found
         """
-        user = await self.get_user_by_id(user_id, db, use_cache=False)
+        # Get ORM object for deletion
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
         if not user:
             return False
 
+        # Store info before deletion for cache invalidation
+        username = user.username
+        email_address = user.email_address
+        is_reviewer = user.is_reviewer
+
         await db.delete(user)
+        await db.commit()
 
         # Invalidate cache
-        await self._invalidate_user_cache(user_id, user.username, user.email_address)
+        await self._invalidate_user_cache(user_id, username, email_address)
         await self._invalidate_list_cache()
 
         # Update metrics
         self.metrics.decrement_user_count()
-        if user.is_reviewer:
+        if is_reviewer:
             self.metrics.decrement_reviewer_count()
 
-        logger.info(f"Deleted user: {user.username} (ID: {user_id})")
+        logger.info(f"Deleted user: {username} (ID: {user_id})")
         return True
 
     async def validate_credentials(
@@ -596,62 +606,84 @@ class UserService:
 
     async def activate_user(self, user_id: int, db: AsyncSession) -> dict:
         """
-        Activate a user
+        Activate an auth user and associated git user
 
         Args:
-            user_id: The user ID
+            user_id: The AuthUser ID
             db: Database session
 
         Returns:
-            Dict: The updated user as dictionary
+            Dict: The updated auth user as dictionary
 
         Raises:
-            UserNotFoundException: If the user doesn't exist
+            UserNotFoundException: If the auth user doesn't exist
         """
-        # Get ORM object for update
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
+        from src.models.auth_user import AuthUser
 
-        if not user:
+        # Get ORM object for update with eager loading of git_user
+        result = await db.execute(
+            select(AuthUser).options(selectinload(AuthUser.git_user)).where(AuthUser.id == user_id)
+        )
+        auth_user = result.scalar_one_or_none()
+
+        if not auth_user:
             raise UserNotFoundException(user_id=user_id)
 
-        if not user.active:
-            user.active = True
-            # Invalidate cache
-            await self._invalidate_user_cache(user_id, user.username, user.email_address)
-            await self._invalidate_list_cache()
+        if not auth_user.is_active:
+            auth_user.is_active = True
 
-            logger.info(f"Activated user: {user.username} (ID: {user_id})")
+            # Also activate associated git user if exists
+            if auth_user.git_user and not auth_user.git_user.active:
+                auth_user.git_user.active = True
+                logger.info(
+                    f"Also activated git user: {auth_user.git_user.username} (ID: {auth_user.git_user.id})"
+                )
 
-        return user.to_dict()
+            await db.commit()
+            await db.refresh(auth_user)
+
+            logger.info(f"Activated auth user: {auth_user.username} (ID: {user_id})")
+
+        return auth_user.to_dict()
 
     async def deactivate_user(self, user_id: int, db: AsyncSession) -> dict:
         """
-        Deactivate a user
+        Deactivate an auth user and associated git user
 
         Args:
-            user_id: The user ID
+            user_id: The AuthUser ID
             db: Database session
 
         Returns:
-            Dict: The updated user as dictionary
+            Dict: The updated auth user as dictionary
 
         Raises:
-            UserNotFoundException: If the user doesn't exist
+            UserNotFoundException: If the auth user doesn't exist
         """
-        # Get ORM object for update
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
+        from src.models.auth_user import AuthUser
 
-        if not user:
+        # Get ORM object for update with eager loading of git_user
+        result = await db.execute(
+            select(AuthUser).options(selectinload(AuthUser.git_user)).where(AuthUser.id == user_id)
+        )
+        auth_user = result.scalar_one_or_none()
+
+        if not auth_user:
             raise UserNotFoundException(user_id=user_id)
 
-        if user.active:
-            user.active = False
-            # Invalidate cache
-            await self._invalidate_user_cache(user_id, user.username, user.email_address)
-            await self._invalidate_list_cache()
+        if auth_user.is_active:
+            auth_user.is_active = False
 
-            logger.info(f"Deactivated user: {user.username} (ID: {user_id})")
+            # Also deactivate associated git user if exists
+            if auth_user.git_user and auth_user.git_user.active:
+                auth_user.git_user.active = False
+                logger.info(
+                    f"Also deactivated git user: {auth_user.git_user.username} (ID: {auth_user.git_user.id})"
+                )
 
-        return user.to_dict()
+            await db.commit()
+            await db.refresh(auth_user)
+
+            logger.info(f"Deactivated auth user: {auth_user.username} (ID: {user_id})")
+
+        return auth_user.to_dict()

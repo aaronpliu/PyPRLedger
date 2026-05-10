@@ -104,4 +104,18 @@ export const usersApi = {
   deleteAvatar(username: string): Promise<{ avatar_url: null }> {
     return request.delete(`/users/${username}/avatar`)
   },
+
+  /**
+   * Activate a user (requires system_admin role)
+   */
+  activateUser(userId: number): Promise<User> {
+    return request.patch(`/users/${userId}/activate`)
+  },
+
+  /**
+   * Deactivate a user (requires system_admin role)
+   */
+  deactivateUser(userId: number): Promise<User> {
+    return request.patch(`/users/${userId}/deactivate`)
+  },
 }

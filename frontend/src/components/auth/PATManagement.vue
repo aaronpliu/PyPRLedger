@@ -2,10 +2,16 @@
   <div class="pat-management">
     <div class="pat-header">
       <h3>Personal Access Tokens</h3>
-      <el-button type="primary" @click="showCreateDialog = true">
-        <el-icon><Plus /></el-icon>
-        Generate New Token
-      </el-button>
+      <div class="header-actions">
+        <el-button @click="loadTokens" :loading="loading">
+          <el-icon><Refresh /></el-icon>
+          Refresh
+        </el-button>
+        <el-button type="primary" @click="showCreateDialog = true">
+          <el-icon><Plus /></el-icon>
+          Generate New Token
+        </el-button>
+      </div>
     </div>
 
     <p class="pat-description">
@@ -179,10 +185,16 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, DocumentCopy } from '@element-plus/icons-vue'
+import { Plus, DocumentCopy, Refresh } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
 import { patApi, type PersonalAccessToken, type PATCreateRequest } from '@/api/pat'
+
+// Initialize dayjs plugins
+dayjs.extend(utc)
+dayjs.extend(timezone)
 
 const loading = ref(false)
 const creating = ref(false)
@@ -295,9 +307,9 @@ const handleTokenDialogClose = () => {
   createdToken.value = null
 }
 
-// Format date
+// Format date - converts UTC to local timezone
 const formatDate = (dateStr: string) => {
-  return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
+  return dayjs.utc(dateStr).local().format('YYYY-MM-DD HH:mm:ss')
 }
 
 // Get expiry type for tag color
@@ -326,6 +338,11 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
 }
 
 .pat-header h3 {

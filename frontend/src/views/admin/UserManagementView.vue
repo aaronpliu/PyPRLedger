@@ -508,12 +508,19 @@ const toggleUserStatus = async (user: any) => {
       { type: 'warning' }
     )
     
-    // TODO: Implement actual API call
+    // Call the appropriate API endpoint
+    if (user.is_active) {
+      await usersApi.deactivateUser(user.id)
+    } else {
+      await usersApi.activateUser(user.id)
+    }
+    
     ElMessage.success(`User ${action}d successfully`)
     loadUsers()
-  } catch (error) {
+  } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error('Operation failed')
+      console.error('Failed to toggle user status:', error)
+      ElMessage.error(error.response?.data?.detail || 'Operation failed')
     }
   }
 }

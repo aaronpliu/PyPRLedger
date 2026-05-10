@@ -14,6 +14,7 @@ from src.core.exceptions import (
     UserAlreadyExistsException,
     UserNotFoundException,
 )
+from src.core.permissions import get_current_user_with_token, require_permission
 from src.models.auth_user import AuthUser
 from src.models.rbac import UserRoleAssignment
 from src.schemas.user import (
@@ -25,6 +26,7 @@ from src.schemas.user import (
     UserUpdate,
 )
 from src.services.avatar_service import AvatarService
+from src.services.rbac_service import RBACService
 from src.services.user_service import UserService
 from src.utils.metrics import metrics
 from src.utils.timezone import get_current_time
@@ -45,20 +47,23 @@ async def create_user(
     user_data: UserCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
 ) -> UserResponse:
     """
-    Create a new user
+    Create a new user (requires system_admin role)
 
     Args:
         user_data: The user data to create
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user with manage users permission
 
     Returns:
         UserResponse: The created user
 
     Raises:
         UserAlreadyExistsException: If a user with the same username or email already exists
+        ForbiddenException: If user lacks manage users permission
     """
     try:
         user = await user_service.create_user(user_data, db)
@@ -82,6 +87,7 @@ async def create_user(
 async def list_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     active: bool | None = Query(None, description="Filter by active status"),
     is_reviewer: bool | None = Query(None, description="Filter by reviewer status"),
     username: str | None = Query(None, description="Filter by username (partial match)"),
@@ -89,7 +95,9 @@ async def list_users(
     page_size: int = Query(20, ge=1, le=500, description="Number of items per page"),
 ) -> UserListResponse:
     """
-    List users with filtering and pagination
+    List users with filtering and pagination (requires authentication)
+
+    All authenticated users can view the user list.
 
     Args:
         active: Filter by active status
@@ -99,6 +107,7 @@ async def list_users(
         page_size: Number of items per page
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user
 
     Returns:
         UserListResponse: List of users with pagination info
@@ -147,13 +156,17 @@ async def list_users(
 async def get_user_statistics(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> UserStats:
     """
-    Get user statistics
+    Get user statistics (requires authentication)
+
+    All authenticated users can view statistics.
 
     Args:
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user
 
     Returns:
         UserStats: User statistics
@@ -182,15 +195,19 @@ async def get_user_statistics(
 async def get_active_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of users to return"),
 ) -> UserListResponse:
     """
-    Get active users
+    Get active users (requires authentication)
+
+    All authenticated users can view active users list.
 
     Args:
         limit: Maximum number of users to return
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user
 
     Returns:
         UserListResponse: List of active users
@@ -218,15 +235,19 @@ async def get_active_users(
 async def get_reviewers(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of reviewers to return"),
 ) -> UserListResponse:
     """
-    Get active reviewers
+    Get active reviewers (requires authentication)
+
+    All authenticated users can view reviewers list.
 
     Args:
         limit: Maximum number of reviewers to return
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user
 
     Returns:
         UserListResponse: List of active reviewers
@@ -255,21 +276,25 @@ async def get_reviewers(
 @router.get("/auth-users", response_model=dict)
 async def list_auth_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     active: bool | None = Query(None, description="Filter by active status"),
     username: str | None = Query(None, description="Filter by username (partial match)"),
     limit: int = Query(500, ge=1, le=500, description="Maximum number of users to return"),
 ) -> dict:
     """
-    Get authentication users (for delegation and RBAC)
+    Get authentication users for delegation and RBAC (requires authentication)
 
     This endpoint returns AuthUser records (system login users), not Bitbucket users.
     Used for role delegation and other RBAC operations.
+
+    All authenticated users can view auth users for delegation purposes.
 
     Args:
         active: Filter by active status
         username: Filter by username (partial match)
         limit: Maximum number of users to return
         db: Database session
+        current_user: Authenticated user
 
     Returns:
         dict: List of auth users with their role summaries
@@ -406,14 +431,18 @@ async def get_user(
     user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> UserResponse:
     """
-    Get a user by ID
+    Get a user by ID (requires authentication)
+
+    All authenticated users can view user details.
 
     Args:
         user_id: The user ID
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user
 
     Returns:
         UserResponse: The requested user
@@ -447,14 +476,18 @@ async def get_user_by_username(
     username: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> UserResponse:
     """
-    Get a user by username
+    Get a user by username (requires authentication)
+
+    All authenticated users can view user details by username.
 
     Args:
         username: The username
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user
 
     Returns:
         UserResponse: The requested user
@@ -494,21 +527,24 @@ async def update_user(
     user_update: UserUpdate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
 ) -> UserResponse:
     """
-    Update a user
+    Update a user (requires system_admin role)
 
     Args:
         user_id: The user ID
         user_update: The update data
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user with manage users permission
 
     Returns:
         UserResponse: The updated user
 
     Raises:
         UserNotFoundException: If the user doesn't exist
+        ForbiddenException: If user lacks manage users permission
     """
     try:
         user = await user_service.update_user(user_id, user_update, db)
@@ -540,20 +576,23 @@ async def toggle_reviewer_status(
     user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
 ) -> UserResponse:
     """
-    Toggle reviewer status for a user
+    Toggle reviewer status for a user (requires system_admin role)
 
     Args:
         user_id: The user ID
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user with manage users permission
 
     Returns:
         UserResponse: The updated user
 
     Raises:
         UserNotFoundException: If the user doesn't exist
+        ForbiddenException: If user lacks manage users permission
     """
     try:
         user = await user_service.toggle_reviewer_status(user_id, db)
@@ -580,29 +619,32 @@ async def toggle_reviewer_status(
         )
 
 
-@router.patch("/{user_id}/activate", response_model=UserResponse)
+@router.patch("/{user_id}/activate")
 async def activate_user(
     user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
-) -> UserResponse:
+    current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
+) -> dict:
     """
-    Activate a user
+    Activate an auth user (requires system_admin role)
 
     Args:
-        user_id: The user ID
+        user_id: The AuthUser ID (system login user)
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user with manage users permission
 
     Returns:
-        UserResponse: The updated user
+        dict: The updated auth user data
 
     Raises:
-        UserNotFoundException: If the user doesn't exist
+        UserNotFoundException: If the auth user doesn't exist
+        ForbiddenException: If user lacks manage users permission
     """
     try:
         user = await user_service.activate_user(user_id, db)
-        return UserResponse(**user)
+        return user
     except UserNotFoundException as e:
         metrics.increment_error(
             error_type=e.code, endpoint=f"PATCH /api/v1/users/{user_id}/activate"
@@ -611,39 +653,46 @@ async def activate_user(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to activate user {user_id}: {e}", exc_info=True)
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"PATCH /api/v1/users/{user_id}/activate"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to activate user"},
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": f"Failed to activate user: {str(e)}",
+            },
         )
 
 
-@router.patch("/{user_id}/deactivate", response_model=UserResponse)
+@router.patch("/{user_id}/deactivate")
 async def deactivate_user(
     user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
-) -> UserResponse:
+    current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
+) -> dict:
     """
-    Deactivate a user
+    Deactivate an auth user (requires system_admin role)
 
     Args:
-        user_id: The user ID
+        user_id: The AuthUser ID (system login user)
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user with manage users permission
 
     Returns:
-        UserResponse: The updated user
+        dict: The updated auth user data
 
     Raises:
-        UserNotFoundException: If the user doesn't exist
+        UserNotFoundException: If the auth user doesn't exist
+        ForbiddenException: If user lacks manage users permission
     """
     try:
         user = await user_service.deactivate_user(user_id, db)
-        return UserResponse(**user)
+        return user
     except UserNotFoundException as e:
         metrics.increment_error(
             error_type=e.code, endpoint=f"PATCH /api/v1/users/{user_id}/deactivate"
@@ -652,13 +701,17 @@ async def deactivate_user(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to deactivate user {user_id}: {e}", exc_info=True)
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"PATCH /api/v1/users/{user_id}/deactivate"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to deactivate user"},
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": f"Failed to deactivate user: {str(e)}",
+            },
         )
 
 
@@ -667,20 +720,23 @@ async def delete_user(
     user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
 ) -> None:
     """
-    Delete a user
+    Delete a user (requires system_admin role)
 
     Args:
         user_id: The user ID
         db: Database session
         user_service: User service instance
+        current_user: Authenticated user with manage users permission
 
     Returns:
         None: Successful deletion returns 204 No Content
 
     Raises:
         UserNotFoundException: If the user doesn't exist
+        ForbiddenException: If user lacks manage users permission
     """
     try:
         deleted = await user_service.delete_user(user_id, db)
@@ -709,22 +765,43 @@ async def upload_avatar(
     username: str,
     file: Annotated[UploadFile, File(description="Avatar image file")],
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> dict:
     """
     Upload user avatar
+
+    Users can upload their own avatar. System admins can upload avatars for any user.
 
     Args:
         username: The auth username
         file: Avatar image file (JPEG, PNG, WebP, or GIF, max 5MB)
         db: Database session
+        current_user: Authenticated user
 
     Returns:
         dict: {"avatar_url": "..."}
 
     Raises:
-        HTTPException: If user not found or file validation fails
+        HTTPException: If user not found, file validation fails, or insufficient permissions
     """
     try:
+        # Check permissions: users can update their own avatar, admins can update any
+        if current_user.username != username:
+            rbac_service = RBACService(db)
+            has_permission = await rbac_service.check_permission(
+                auth_user_id=current_user.id,
+                action="manage",
+                resource_type="users",
+            )
+            if not has_permission:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You can only update your own avatar. System administrators can update any user's avatar.",
+                    },
+                )
+
         # Get auth user from database
         result = await db.execute(select(AuthUser).where(AuthUser.username == username))
         auth_user = result.scalar_one_or_none()
@@ -767,21 +844,42 @@ async def upload_avatar(
 async def delete_avatar(
     username: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> dict:
     """
     Delete user avatar
 
+    Users can delete their own avatar. System admins can delete any user's avatar.
+
     Args:
         username: The auth username
         db: Database session
+        current_user: Authenticated user
 
     Returns:
         dict: {"avatar_url": null}
 
     Raises:
-        HTTPException: If user not found
+        HTTPException: If user not found or insufficient permissions
     """
     try:
+        # Check permissions: users can delete their own avatar, admins can delete any
+        if current_user.username != username:
+            rbac_service = RBACService(db)
+            has_permission = await rbac_service.check_permission(
+                auth_user_id=current_user.id,
+                action="manage",
+                resource_type="users",
+            )
+            if not has_permission:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "error": "FORBIDDEN",
+                        "message": "You can only delete your own avatar. System administrators can delete any user's avatar.",
+                    },
+                )
+
         # Get auth user from database
         result = await db.execute(select(AuthUser).where(AuthUser.username == username))
         auth_user = result.scalar_one_or_none()
