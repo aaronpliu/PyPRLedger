@@ -2,10 +2,16 @@
   <div class="pat-management">
     <div class="pat-header">
       <h3>Personal Access Tokens</h3>
-      <el-button type="primary" @click="showCreateDialog = true">
-        <el-icon><Plus /></el-icon>
-        Generate New Token
-      </el-button>
+      <div class="header-actions">
+        <el-button @click="loadTokens" :loading="loading">
+          <el-icon><Refresh /></el-icon>
+          Refresh
+        </el-button>
+        <el-button type="primary" @click="showCreateDialog = true">
+          <el-icon><Plus /></el-icon>
+          Generate New Token
+        </el-button>
+      </div>
     </div>
 
     <p class="pat-description">
@@ -179,7 +185,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, DocumentCopy } from '@element-plus/icons-vue'
+import { Plus, DocumentCopy, Refresh } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
@@ -332,6 +338,11 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
 }
 
 .pat-header h3 {
