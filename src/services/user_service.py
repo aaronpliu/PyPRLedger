@@ -596,62 +596,64 @@ class UserService:
 
     async def activate_user(self, user_id: int, db: AsyncSession) -> dict:
         """
-        Activate a user
+        Activate an auth user
 
         Args:
-            user_id: The user ID
+            user_id: The AuthUser ID
             db: Database session
 
         Returns:
-            Dict: The updated user as dictionary
+            Dict: The updated auth user as dictionary
 
         Raises:
-            UserNotFoundException: If the user doesn't exist
+            UserNotFoundException: If the auth user doesn't exist
         """
-        # Get ORM object for update
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
+        from src.models.auth_user import AuthUser
 
-        if not user:
+        # Get ORM object for update
+        result = await db.execute(select(AuthUser).where(AuthUser.id == user_id))
+        auth_user = result.scalar_one_or_none()
+
+        if not auth_user:
             raise UserNotFoundException(user_id=user_id)
 
-        if not user.active:
-            user.active = True
-            # Invalidate cache
-            await self._invalidate_user_cache(user_id, user.username, user.email_address)
-            await self._invalidate_list_cache()
+        if not auth_user.is_active:
+            auth_user.is_active = True
+            await db.commit()
+            await db.refresh(auth_user)
 
-            logger.info(f"Activated user: {user.username} (ID: {user_id})")
+            logger.info(f"Activated auth user: {auth_user.username} (ID: {user_id})")
 
-        return user.to_dict()
+        return auth_user.to_dict()
 
     async def deactivate_user(self, user_id: int, db: AsyncSession) -> dict:
         """
-        Deactivate a user
+        Deactivate an auth user
 
         Args:
-            user_id: The user ID
+            user_id: The AuthUser ID
             db: Database session
 
         Returns:
-            Dict: The updated user as dictionary
+            Dict: The updated auth user as dictionary
 
         Raises:
-            UserNotFoundException: If the user doesn't exist
+            UserNotFoundException: If the auth user doesn't exist
         """
-        # Get ORM object for update
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
+        from src.models.auth_user import AuthUser
 
-        if not user:
+        # Get ORM object for update
+        result = await db.execute(select(AuthUser).where(AuthUser.id == user_id))
+        auth_user = result.scalar_one_or_none()
+
+        if not auth_user:
             raise UserNotFoundException(user_id=user_id)
 
-        if user.active:
-            user.active = False
-            # Invalidate cache
-            await self._invalidate_user_cache(user_id, user.username, user.email_address)
-            await self._invalidate_list_cache()
+        if auth_user.is_active:
+            auth_user.is_active = False
+            await db.commit()
+            await db.refresh(auth_user)
 
-            logger.info(f"Deactivated user: {user.username} (ID: {user_id})")
+            logger.info(f"Deactivated auth user: {auth_user.username} (ID: {user_id})")
 
-        return user.to_dict()
+        return auth_user.to_dict()

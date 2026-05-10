@@ -619,32 +619,32 @@ async def toggle_reviewer_status(
         )
 
 
-@router.patch("/{user_id}/activate", response_model=UserResponse)
+@router.patch("/{user_id}/activate")
 async def activate_user(
     user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
-) -> UserResponse:
+) -> dict:
     """
-    Activate a user (requires system_admin role)
+    Activate an auth user (requires system_admin role)
 
     Args:
-        user_id: The user ID
+        user_id: The AuthUser ID (system login user)
         db: Database session
         user_service: User service instance
         current_user: Authenticated user with manage users permission
 
     Returns:
-        UserResponse: The updated user
+        dict: The updated auth user data
 
     Raises:
-        UserNotFoundException: If the user doesn't exist
+        UserNotFoundException: If the auth user doesn't exist
         ForbiddenException: If user lacks manage users permission
     """
     try:
         user = await user_service.activate_user(user_id, db)
-        return UserResponse(**user)
+        return user
     except UserNotFoundException as e:
         metrics.increment_error(
             error_type=e.code, endpoint=f"PATCH /api/v1/users/{user_id}/activate"
@@ -653,42 +653,46 @@ async def activate_user(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to activate user {user_id}: {e}", exc_info=True)
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"PATCH /api/v1/users/{user_id}/activate"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to activate user"},
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": f"Failed to activate user: {str(e)}",
+            },
         )
 
 
-@router.patch("/{user_id}/deactivate", response_model=UserResponse)
+@router.patch("/{user_id}/deactivate")
 async def deactivate_user(
     user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
-) -> UserResponse:
+) -> dict:
     """
-    Deactivate a user (requires system_admin role)
+    Deactivate an auth user (requires system_admin role)
 
     Args:
-        user_id: The user ID
+        user_id: The AuthUser ID (system login user)
         db: Database session
         user_service: User service instance
         current_user: Authenticated user with manage users permission
 
     Returns:
-        UserResponse: The updated user
+        dict: The updated auth user data
 
     Raises:
-        UserNotFoundException: If the user doesn't exist
+        UserNotFoundException: If the auth user doesn't exist
         ForbiddenException: If user lacks manage users permission
     """
     try:
         user = await user_service.deactivate_user(user_id, db)
-        return UserResponse(**user)
+        return user
     except UserNotFoundException as e:
         metrics.increment_error(
             error_type=e.code, endpoint=f"PATCH /api/v1/users/{user_id}/deactivate"
@@ -697,13 +701,17 @@ async def deactivate_user(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to deactivate user {user_id}: {e}", exc_info=True)
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"PATCH /api/v1/users/{user_id}/deactivate"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to deactivate user"},
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": f"Failed to deactivate user: {str(e)}",
+            },
         )
 
 
