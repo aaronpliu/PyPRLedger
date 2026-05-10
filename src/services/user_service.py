@@ -422,22 +422,31 @@ class UserService:
         Returns:
             bool: True if deleted, False if not found
         """
-        user = await self.get_user_by_id(user_id, db, use_cache=False)
+        # Get ORM object for deletion
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
         if not user:
             return False
 
+        # Store info before deletion for cache invalidation
+        username = user.username
+        email_address = user.email_address
+        is_reviewer = user.is_reviewer
+
         await db.delete(user)
+        await db.commit()
 
         # Invalidate cache
-        await self._invalidate_user_cache(user_id, user.username, user.email_address)
+        await self._invalidate_user_cache(user_id, username, email_address)
         await self._invalidate_list_cache()
 
         # Update metrics
         self.metrics.decrement_user_count()
-        if user.is_reviewer:
+        if is_reviewer:
             self.metrics.decrement_reviewer_count()
 
-        logger.info(f"Deleted user: {user.username} (ID: {user_id})")
+        logger.info(f"Deleted user: {username} (ID: {user_id})")
         return True
 
     async def validate_credentials(
