@@ -20,6 +20,9 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
 
+    /* Suppress baseUrl deprecation warning (TS 6.0+) - will migrate before TS 7.0 */
+    "ignoreDeprecations": "6.0",
+
     /* Path aliases */
     "baseUrl": ".",
     "paths": {
