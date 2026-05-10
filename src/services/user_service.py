@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.core.config import settings
 from src.core.exceptions import (
@@ -605,7 +606,7 @@ class UserService:
 
     async def activate_user(self, user_id: int, db: AsyncSession) -> dict:
         """
-        Activate an auth user
+        Activate an auth user and associated git user
 
         Args:
             user_id: The AuthUser ID
@@ -619,8 +620,10 @@ class UserService:
         """
         from src.models.auth_user import AuthUser
 
-        # Get ORM object for update
-        result = await db.execute(select(AuthUser).where(AuthUser.id == user_id))
+        # Get ORM object for update with eager loading of git_user
+        result = await db.execute(
+            select(AuthUser).options(selectinload(AuthUser.git_user)).where(AuthUser.id == user_id)
+        )
         auth_user = result.scalar_one_or_none()
 
         if not auth_user:
@@ -628,6 +631,14 @@ class UserService:
 
         if not auth_user.is_active:
             auth_user.is_active = True
+
+            # Also activate associated git user if exists
+            if auth_user.git_user and not auth_user.git_user.active:
+                auth_user.git_user.active = True
+                logger.info(
+                    f"Also activated git user: {auth_user.git_user.username} (ID: {auth_user.git_user.id})"
+                )
+
             await db.commit()
             await db.refresh(auth_user)
 
@@ -637,7 +648,7 @@ class UserService:
 
     async def deactivate_user(self, user_id: int, db: AsyncSession) -> dict:
         """
-        Deactivate an auth user
+        Deactivate an auth user and associated git user
 
         Args:
             user_id: The AuthUser ID
@@ -651,8 +662,10 @@ class UserService:
         """
         from src.models.auth_user import AuthUser
 
-        # Get ORM object for update
-        result = await db.execute(select(AuthUser).where(AuthUser.id == user_id))
+        # Get ORM object for update with eager loading of git_user
+        result = await db.execute(
+            select(AuthUser).options(selectinload(AuthUser.git_user)).where(AuthUser.id == user_id)
+        )
         auth_user = result.scalar_one_or_none()
 
         if not auth_user:
@@ -660,6 +673,14 @@ class UserService:
 
         if auth_user.is_active:
             auth_user.is_active = False
+
+            # Also deactivate associated git user if exists
+            if auth_user.git_user and auth_user.git_user.active:
+                auth_user.git_user.active = False
+                logger.info(
+                    f"Also deactivated git user: {auth_user.git_user.username} (ID: {auth_user.git_user.id})"
+                )
+
             await db.commit()
             await db.refresh(auth_user)
 
