@@ -5,6 +5,22 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-05-10
+
+**Backend Version**: 1.13.0
+**Frontend Version**: 1.8.0
+
+### Added
+- add personal access token
+- add avatar in admin page
+
+### Fixed
+- optimize the statistics card in task assignment analytics page
+- add i18n for system settings button
+- add i18n for review validation
+
+---
+
 ## [1.12.0] - 2026-05-08
 
 **Backend Version**: 1.12.0
