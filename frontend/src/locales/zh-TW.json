@@ -550,6 +550,7 @@
       "manageDelegations": "管理委託",
       "viewAuditLogs": "檢視稽核日誌",
       "manageSessions": "管理工作階段",
+      "systemSettings": "系統設定",
       "recentAuditLogs": "最近稽核日誌"
     }
   },
