@@ -14,6 +14,7 @@ from src.core.exceptions import (
     UserAlreadyExistsException,
     UserNotFoundException,
 )
+from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
 from src.models.rbac import UserRoleAssignment
 from src.schemas.user import (
@@ -45,6 +46,7 @@ async def create_user(
     user_data: UserCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> UserResponse:
     """
     Create a new user
@@ -82,6 +84,7 @@ async def create_user(
 async def list_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     active: bool | None = Query(None, description="Filter by active status"),
     is_reviewer: bool | None = Query(None, description="Filter by reviewer status"),
     username: str | None = Query(None, description="Filter by username (partial match)"),
@@ -147,6 +150,7 @@ async def list_users(
 async def get_user_statistics(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> UserStats:
     """
     Get user statistics
@@ -182,6 +186,7 @@ async def get_user_statistics(
 async def get_active_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of users to return"),
 ) -> UserListResponse:
     """
@@ -218,6 +223,7 @@ async def get_active_users(
 async def get_reviewers(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of reviewers to return"),
 ) -> UserListResponse:
     """
@@ -255,6 +261,7 @@ async def get_reviewers(
 @router.get("/auth-users", response_model=dict)
 async def list_auth_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     active: bool | None = Query(None, description="Filter by active status"),
     username: str | None = Query(None, description="Filter by username (partial match)"),
     limit: int = Query(500, ge=1, le=500, description="Maximum number of users to return"),
@@ -406,6 +413,7 @@ async def get_user(
     user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> UserResponse:
     """
     Get a user by ID
@@ -447,6 +455,7 @@ async def get_user_by_username(
     username: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> UserResponse:
     """
     Get a user by username
