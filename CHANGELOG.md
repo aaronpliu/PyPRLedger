@@ -5,6 +5,26 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.1] - 2026-05-10
+
+**Backend Version**: 1.13.1
+**Frontend Version**: 1.8.1
+
+### Added
+- activate or deactive user
+- add a refresh button in PAT page
+
+### Fixed
+- enhance git user
+- continue to enhance permission for users
+- enhance permission for /users endpoint
+- enhance timezone for PAT
+
+### Dependencies
+- enhance profile window size
+
+---
+
 ## [1.13.0] - 2026-05-10
 
 **Backend Version**: 1.13.0
