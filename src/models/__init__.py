@@ -8,6 +8,7 @@ from src.models.audit_log import AuditLog
 from src.models.auth_user import AuthUser
 from src.models.notification import Notification, NotificationPreference
 from src.models.organization import OrganizationGroup
+from src.models.personal_access_token import PersonalAccessToken
 from src.models.project import Project
 from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import (
@@ -36,4 +37,5 @@ __all__ = [
     "SystemSetting",
     "Notification",
     "NotificationPreference",
+    "PersonalAccessToken",
 ]

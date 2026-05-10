@@ -18,9 +18,10 @@ async def get_current_user_with_token(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> AuthUser:
-    """Dependency to get current authenticated user from JWT token
+    """Dependency to get current authenticated user from JWT token or Personal Access Token
 
     Extracts token from Authorization header and validates it.
+    Supports both JWT tokens (Bearer <jwt>) and Personal Access Tokens (Bearer pat_<token>).
 
     Args:
         request: FastAPI request object
@@ -41,27 +42,43 @@ async def get_current_user_with_token(
         )
 
     token = authorization.split(" ")[1]
-    auth_service = AuthService(db)
     forwarded_for = request.headers.get("X-Forwarded-For")
     ip_address = forwarded_for.split(",")[0].strip() if forwarded_for else None
     if not ip_address and request.client:
         ip_address = request.client.host
     user_agent = request.headers.get("User-Agent")
 
-    try:
-        auth_user = await auth_service.get_current_user(token)
-        await auth_service.sync_session_client_context(
-            token,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-        return auth_user
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from e
+    # Check if this is a Personal Access Token (starts with "pat_")
+    if token.startswith("pat_"):
+        from src.services.pat_service import PATService
+
+        pat_service = PATService(db)
+        try:
+            auth_user = await pat_service.authenticate_with_token(token, ip_address, user_agent)
+            return auth_user
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(e),
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from e
+    else:
+        # JWT token authentication
+        auth_service = AuthService(db)
+        try:
+            auth_user = await auth_service.get_current_user(token)
+            await auth_service.sync_session_client_context(
+                token,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+            return auth_user
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(e),
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from e
 
 
 def require_permission(

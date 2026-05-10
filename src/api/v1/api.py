@@ -6,6 +6,7 @@ from src.api.v1.endpoints import (
     auth,
     delegation,
     notifications,  # Notification management endpoints
+    personal_access_tokens,
     project_registry,
     projects,
     rbac,
@@ -39,6 +40,9 @@ api_router.include_router(project_registry.router, tags=["project-registry"])
 
 # Notification management endpoints
 api_router.include_router(notifications.router, tags=["notifications"])
+
+# Personal Access Token management endpoints
+api_router.include_router(personal_access_tokens.router, tags=["personal-access-tokens"])
 
 
 # API information endpoint

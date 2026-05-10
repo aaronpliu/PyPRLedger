@@ -12,6 +12,7 @@ from src.utils.timezone import get_current_time, utc_to_local
 
 if TYPE_CHECKING:
     from src.models.audit_log import AuditLog
+    from src.models.personal_access_token import PersonalAccessToken
     from src.models.rbac import UserRoleAssignment
     from src.models.user import User
 
@@ -79,6 +80,11 @@ class AuthUser(Base):
         back_populates="auth_user",
         cascade="all, delete-orphan",
         foreign_keys="AuditLog.auth_user_id",
+    )
+    personal_access_tokens: Mapped[list[PersonalAccessToken]] = relationship(
+        "PersonalAccessToken",
+        back_populates="auth_user",
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:

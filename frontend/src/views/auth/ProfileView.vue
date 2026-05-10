@@ -356,6 +356,13 @@
             <el-empty v-if="!loadingSessions && sessions.length === 0" description="No active sessions found" />
           </div>
         </el-tab-pane>
+
+        <!-- Personal Access Tokens Tab -->
+        <el-tab-pane label="Personal Access Tokens" name="tokens">
+          <div class="tab-content">
+            <PATManagement />
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
 
@@ -390,6 +397,7 @@ import { Cellphone, InfoFilled, Monitor, Plus, WarningFilled } from '@element-pl
 import dayjs from 'dayjs'
 import DelegationForm from '@/components/delegation/DelegationForm.vue'
 import AvatarUpload from '@/components/user/AvatarUpload.vue'
+import PATManagement from '@/components/auth/PATManagement.vue'
 import type { AuthSession } from '@/types'
 import { getSessionDeviceDetails } from '@/utils/device'
 
