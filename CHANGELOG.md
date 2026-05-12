@@ -5,6 +5,20 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.2] - 2026-05-12
+
+**Backend Version**: 1.13.2
+**Frontend Version**: 1.8.2
+
+### Fixed
+- enhance performance issue to handle timezone
+- fix line color for line chart when theme change
+- enhance exceptions
+- fix frontend build issue
+- enhance auth user and git user status
+
+---
+
 ## [1.13.1] - 2026-05-10
 
 **Backend Version**: 1.13.1
