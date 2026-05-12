@@ -9,13 +9,15 @@ This module provides utilities for:
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 from src.core.config import settings
 
 
+@lru_cache(maxsize=1)
 def get_local_timezone() -> ZoneInfo:
-    """Get the configured local timezone
+    """Get the configured local timezone (cached for performance)
 
     Returns:
         ZoneInfo: The timezone object based on TIMEZONE setting
@@ -46,6 +48,12 @@ def get_current_time() -> datetime:
         return datetime.now(get_local_timezone())
 
 
+@lru_cache(maxsize=1)
+def _get_use_utc_in_db() -> bool:
+    """Get cached USE_UTC_IN_DB setting (cached for performance)"""
+    return settings.USE_UTC_IN_DB
+
+
 def convert_to_timezone(dt: datetime, tz_name: str | None = None) -> datetime:
     """Convert a datetime to specified timezone
 
@@ -63,10 +71,6 @@ def convert_to_timezone(dt: datetime, tz_name: str | None = None) -> datetime:
 
     # If datetime is naive, assume it's UTC
     if dt.tzinfo is None:
-        from src.utils.log import get_logger
-
-        logger = get_logger(__name__)
-        logger.warning(f"Naive datetime detected: {dt}. Assuming UTC.")
         dt = dt.replace(tzinfo=UTC)
 
     return dt.astimezone(target_tz)
@@ -90,30 +94,22 @@ def utc_to_local(dt: datetime) -> datetime:
         - When USE_UTC_IN_DB=False, naive datetimes are assumed to be in local timezone
         - When USE_UTC_IN_DB=True, naive datetimes are assumed to be UTC
     """
-    from src.utils.log import get_logger
-
-    logger = get_logger(__name__)
+    # Use cached values for performance
+    use_utc = _get_use_utc_in_db()
+    local_tz = get_local_timezone()
 
     # If datetime is naive, assign timezone based on DB configuration
     if dt.tzinfo is None:
-        if settings.USE_UTC_IN_DB:
-            logger.warning(f"Naive datetime detected: {dt}. Assuming UTC (USE_UTC_IN_DB=True).")
-            dt = dt.replace(tzinfo=UTC)
-        else:
-            logger.warning(
-                f"Naive datetime detected: {dt}. Assuming {settings.TIMEZONE} (USE_UTC_IN_DB=False)."
-            )
-            dt = dt.replace(tzinfo=get_local_timezone())
+        dt = dt.replace(tzinfo=UTC) if use_utc else dt.replace(tzinfo=local_tz)
 
     # Convert to local timezone if needed
-    if settings.USE_UTC_IN_DB:
+    if use_utc:
         # DB stores UTC, convert to local
-        return dt.astimezone(get_local_timezone())
+        return dt.astimezone(local_tz)
     else:
         # DB already stores local time, just ensure it's in the right timezone
-        target_tz = get_local_timezone()
-        if dt.tzinfo != target_tz:
-            return dt.astimezone(target_tz)
+        if dt.tzinfo != local_tz:
+            return dt.astimezone(local_tz)
         return dt
 
 
