@@ -149,12 +149,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     },
                 )
                 raise RateLimitException(
-                    message=f"Rate limit exceeded. Maximum {self.max_requests} requests per {self.period_seconds} seconds",
-                    detail={
-                        "limit": self.max_requests,
-                        "period": self.period_seconds,
-                        "retry_after": await redis.ttl(rate_limit_key),
-                    },
+                    message=f"Rate limit exceeded. Maximum {self.max_requests} requests per {self.period_seconds} seconds"
                 )
 
             # Add rate limit information to request state
