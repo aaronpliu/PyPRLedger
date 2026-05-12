@@ -180,9 +180,9 @@
             :data="timePeriodData.map(d => ({ date: d.date, value: d.count }))"
             color="#409eff"
             height="350px"
-            :axis-label-color="getAxisColors().axisLabelColor"
-            :axis-line-color="getAxisColors().axisLineColor"
-            :split-line-color="getAxisColors().splitLineColor"
+            :axis-label-color="chartColors.axisLabelColor"
+            :axis-line-color="chartColors.axisLineColor"
+            :split-line-color="chartColors.splitLineColor"
           />
           <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
         </div>
@@ -291,9 +291,9 @@
             :data="scoringTrendData.map(d => ({ date: d.date, value: d.completed || 0 }))"
             color="#67c23a"
             height="350px"
-            :axis-label-color="getAxisColors().axisLabelColor"
-            :axis-line-color="getAxisColors().axisLineColor"
-            :split-line-color="getAxisColors().splitLineColor"
+            :axis-label-color="chartColors.axisLabelColor"
+            :axis-line-color="chartColors.axisLineColor"
+            :split-line-color="chartColors.splitLineColor"
           />
           <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
         </div>
@@ -322,16 +322,18 @@ import dayjs from 'dayjs'
 
 const { t } = useI18n()
 
-// Helper function to get chart axis colors based on theme
-const getAxisColors = () => {
-  const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark'
+// Reactive theme state for chart colors
+const isDarkMode = ref(document.documentElement.getAttribute('data-theme') === 'dark')
+
+// Computed chart colors based on current theme
+const chartColors = computed(() => {
   return {
-    axisLabelColor: isDarkMode ? '#cbd5e1' : '#64748b',
-    axisLineColor: isDarkMode ? '#475569' : '#e2e8f0',
-    splitLineColor: isDarkMode ? '#334155' : '#f1f5f9',
-    nameColor: isDarkMode ? '#94a3b8' : '#64748b',
+    axisLabelColor: isDarkMode.value ? '#cbd5e1' : '#64748b',
+    axisLineColor: isDarkMode.value ? '#475569' : '#e2e8f0',
+    splitLineColor: isDarkMode.value ? '#334155' : '#f1f5f9',
+    nameColor: isDarkMode.value ? '#94a3b8' : '#64748b',
   }
-}
+})
 
 // Composable
 const {
@@ -485,12 +487,11 @@ const toggleFullscreen = (chartName: 'timeTrend' | 'scoringTrend') => {
   }
 }
 
-// Watch for theme changes and update charts
+// Watch for theme changes (for other reactive updates if needed)
 watch(
   () => document.documentElement.getAttribute('data-theme'),
   () => {
-    // Charts will re-render with new theme colors automatically
-    // due to reactive computed properties using getAxisColors()
+    // LineChart component handles its own theme updates via MutationObserver
   }
 )
 
@@ -599,6 +600,16 @@ const refreshData = () => {
 onMounted(() => {
   loadFilterOptions()
   loadAnalytics()
+  
+  // Watch for theme changes via MutationObserver (like Dashboard)
+  const observer = new MutationObserver(() => {
+    isDarkMode.value = document.documentElement.getAttribute('data-theme') === 'dark'
+  })
+  
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme']
+  })
 })
 </script>
 
