@@ -506,7 +506,11 @@
         "by_project_repo": "Reviews by Project/Repository",
         "assignments_per_reviewer": "Assignments per Reviewer",
         "scored_per_reviewer": "Scored Reviews per Reviewer",
-        "scoring_trend": "Reviews Scored Trend"
+        "scoring_trend": "Reviews Scored Trend",
+        "top_n": "Top {n}"
+      },
+      "tips": {
+        "others_category": "'Others' represents projects/repositories that each account for less than 1% of total reviews."
       },
       "filters": {
         "date_range": "Date Range",

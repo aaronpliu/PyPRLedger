@@ -194,7 +194,10 @@
         <el-col :xs="24" :md="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <span>{{ t('task_assignment.analytics.charts.by_pr_user') }}</span>
+              <div class="chart-header-with-badge">
+                <span>{{ t('task_assignment.analytics.charts.by_pr_user') }}</span>
+                <el-tag size="small" type="info">{{ t('task_assignment.analytics.charts.top_n', { n: 20 }) }}</el-tag>
+              </div>
             </template>
             <BarChart
               v-if="prUserData.length > 0"
@@ -211,7 +214,17 @@
         <el-col :xs="24" :md="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <span>{{ t('task_assignment.analytics.charts.by_project_repo') }}</span>
+              <div class="chart-header-with-tip">
+                <span>{{ t('task_assignment.analytics.charts.by_project_repo') }}</span>
+                <el-tooltip placement="top" effect="light">
+                  <template #content>
+                    <div style="max-width: 250px; line-height: 1.5;">
+                      {{ t('task_assignment.analytics.tips.others_category') }}
+                    </div>
+                  </template>
+                  <el-icon style="cursor: help; margin-left: 8px;"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </div>
             </template>
             <PieChart
               v-if="consolidatedProjectData.length > 0"
@@ -230,12 +243,15 @@
         <el-col :xs="24" :md="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <span>{{ t('task_assignment.analytics.charts.assignments_per_reviewer') }}</span>
+              <div class="chart-header-with-badge">
+                <span>{{ t('task_assignment.analytics.charts.assignments_per_reviewer') }}</span>
+                <el-tag size="small" type="info">{{ t('task_assignment.analytics.charts.top_n', { n: 20 }) }}</el-tag>
+              </div>
             </template>
             <BarChart
               v-if="reviewerData.length > 0"
               :title="''"
-              :data="reviewerData.slice(0, 10).map(d => ({
+              :data="reviewerData.slice(0, 20).map(d => ({
                 name: d.display_name || d.reviewer,
                 value: d.assigned
               }))"
@@ -307,7 +323,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Refresh, Document, TrendCharts, User, CircleCheck, FullScreen, Close } from '@element-plus/icons-vue'
+import { Refresh, Document, TrendCharts, User, CircleCheck, FullScreen, Close, QuestionFilled } from '@element-plus/icons-vue'
 import LineChart from '@/components/charts/LineChart.vue'
 import BarChart from '@/components/charts/BarChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
@@ -844,13 +860,27 @@ onMounted(() => {
 }
 
 .chart-row {
-  margin-bottom: 0;
+  margin-bottom: 20px;
 }
 
 .chart-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.chart-header-with-badge {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.chart-header-with-tip {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 4px;
 }
 
 .chart-actions {
