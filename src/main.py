@@ -17,7 +17,12 @@ from src.api import api_router
 from src.core.config import settings
 from src.core.database import close_db, get_db_context, init_db
 from src.core.exceptions import AppException
-from src.core.middleware import DatabaseConnectionMiddleware, LoggingMiddleware, RateLimitMiddleware
+from src.core.middleware import (
+    ApiDocsVisibilityMiddleware,
+    DatabaseConnectionMiddleware,
+    LoggingMiddleware,
+    RateLimitMiddleware,
+)
 from src.services.rbac_service import RBACService
 from src.utils.i18n import i18n
 from src.utils.log import get_logger, setup_logging
@@ -152,6 +157,7 @@ app.add_middleware(
 )
 
 # Add custom middleware
+app.add_middleware(ApiDocsVisibilityMiddleware)
 app.add_middleware(DatabaseConnectionMiddleware)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware, max_requests=settings.RATE_LIMIT_MAX_REQUESTS)
