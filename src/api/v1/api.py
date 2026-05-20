@@ -11,6 +11,7 @@ from src.api.v1.endpoints import (
     projects,
     rbac,
     reviews,
+    sse,  # SSE streaming endpoint for real-time review notifications
     task_assignment,  # Task assignment endpoints for review_admin
     users,
 )
@@ -28,6 +29,9 @@ api_router.include_router(rbac.router, tags=["rbac-management"])
 api_router.include_router(delegation.router, prefix="/rbac/delegations", tags=["role-delegations"])
 
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
+
+# SSE streaming endpoint — mounted at /api/v1/reviews/stream
+api_router.include_router(sse.router, prefix="/reviews", tags=["sse"])
 
 # Task assignment endpoints (for review_admin to manage reviews)
 api_router.include_router(task_assignment.router, tags=["task-assignment"])

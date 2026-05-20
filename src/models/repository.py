@@ -71,7 +71,7 @@ class Repository(Base):
     # Indexes
     __table_args__ = (
         Index("idx_repository_id", "repository_id"),
-        Index("idx_project_id", "project_id"),
+        Index("idx_repository_project_id", "project_id"),
         Index("idx_repository_slug", "repository_slug"),  # Required for FK constraint
     )
 

@@ -451,6 +451,7 @@ import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
 import { usersApi, type ReviewerUser } from '@/api/users'
 import { usePrUrl } from '@/composables/usePrUrl'
+import { sseService, type SSEReviewCreatedEvent } from '@/utils/sse'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -998,31 +999,63 @@ let filterChangeTimeout: ReturnType<typeof setTimeout>
 // Load reviews when component mounts
 onMounted(() => {
   window.addEventListener('resize', handleResize)
-  
+
   // Check for query parameters from notification navigation
   const prId = route.query.pr_id as string | undefined
   const fromNotification = route.query.from_notification === 'true'
-  
+
   // If coming from notification, disable hideArchived filter to show all reviews
   if (fromNotification) {
     hideArchived.value = false
   }
-  
+
   // If PR ID is specified in query, set it as search query
   if (prId) {
     searchQuery.value = prId
   }
-  
+
   loadReviews()
   loadAvailableApps()
   loadPRUsers()
   loadReviewers()
+
+  // Connect to SSE stream for real-time review notifications
+  if (authStore.accessToken) {
+    sseService.connect(
+      authStore.accessToken,
+      handleSSEReviewCreated,
+      handleSSEError,
+      handleSSEOpen,
+    )
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   clearTimeout(filterChangeTimeout)
+  sseService.disconnect()
 })
+
+// SSE event handlers
+function handleSSEReviewCreated(event: SSEReviewCreatedEvent) {
+  loadReviews()
+}
+
+function handleSSEError(_error: Event) {
+  ElMessage({
+    message: 'Real-time connection lost, retrying...',
+    type: 'warning',
+    duration: 3000,
+  })
+}
+
+function handleSSEOpen() {
+  ElMessage({
+    message: 'Real-time updates restored',
+    type: 'success',
+    duration: 2000,
+  })
+}
 </script>
 
 <style scoped>

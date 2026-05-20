@@ -376,8 +376,11 @@ import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
 import FilterPopover from '@/components/common/FilterPopover.vue'
 import { usePrUrl } from '@/composables/usePrUrl'
+import { useAuthStore } from '@/stores/auth'
+import { sseService } from '@/utils/sse'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const { t } = useI18n()
 const { getPrUrl } = usePrUrl()
 
@@ -928,12 +931,44 @@ onMounted(() => {
   loadAvailableApps()
   loadPRUsers()
   loadReviewers()
+
+  // Connect to SSE stream for real-time review notifications
+  if (authStore.accessToken) {
+    sseService.connect(
+      authStore.accessToken,
+      handleSSEReviewCreated,
+      handleSSEError,
+      handleSSEOpen,
+    )
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   clearTimeout(filterChangeTimeout)
+  sseService.disconnect()
 })
+
+// SSE event handlers
+function handleSSEReviewCreated(_event: SSEReviewCreatedEvent) {
+  loadReviews()
+}
+
+function handleSSEError() {
+  ElMessage({
+    message: 'Real-time connection lost, retrying...',
+    type: 'warning',
+    duration: 3000,
+  })
+}
+
+function handleSSEOpen() {
+  ElMessage({
+    message: 'Real-time updates restored',
+    type: 'success',
+    duration: 2000,
+  })
+}
 </script>
 
 <style scoped>
