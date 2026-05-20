@@ -5,6 +5,23 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.5] - 2026-05-20
+
+**Backend Version**: 1.13.5
+**Frontend Version**: 1.8.5
+
+### Added
+- hide swagger in prod
+- update table index for /reviews to identify duplicate rows
+- update PR URL
+- add statement and tips for task assignment analytics charts
+
+### Fixed
+- update source_branch length
+- update GET /users query parameters
+
+---
+
 ## [1.13.2] - 2026-05-12
 
 **Backend Version**: 1.13.2
