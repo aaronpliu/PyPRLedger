@@ -259,7 +259,7 @@ class ReviewService:
         repository_slug: str,
     ) -> list[Any]:
         conditions = [
-            PullRequestReviewBase.pull_request_commit_id == review_data.pull_request_commit_id,
+            PullRequestReviewBase.pull_request_id == review_data.pull_request_id,
             PullRequestReviewBase.project_key == project_key,
             PullRequestReviewBase.repository_slug == repository_slug,
         ]

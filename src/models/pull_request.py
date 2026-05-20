@@ -105,13 +105,13 @@ class PullRequestReviewBase(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "pull_request_commit_id",
+            "pull_request_id",
             "project_key",
             "repository_slug",
             "source_filename",
-            name="uq_pr_commit_file",
+            name="uq_pr_id_file",
         ),
-        Index("idx_base_pr_commit", "pull_request_commit_id", "project_key", "repository_slug"),
+        Index("idx_base_pr_id", "pull_request_id", "project_key", "repository_slug"),
     )
 
     def __repr__(self) -> str:
