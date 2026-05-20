@@ -30,8 +30,8 @@ class ReviewBase(BaseModel):
         ..., min_length=1, max_length=64, description="Pull request user username"
     )
 
-    source_branch: str = Field(..., min_length=1, max_length=64, description="Source branch name")
-    target_branch: str = Field(..., min_length=1, max_length=64, description="Target branch name")
+    source_branch: str = Field(..., min_length=1, max_length=255, description="Source branch name")
+    target_branch: str = Field(..., min_length=1, max_length=255, description="Target branch name")
 
     @field_validator("source_branch", "target_branch")
     def validate_branch_name(cls, v):

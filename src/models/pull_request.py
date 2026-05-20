@@ -55,8 +55,8 @@ class PullRequestReviewBase(Base):
     )
     source_filename: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
 
-    source_branch: Mapped[str] = mapped_column(String(64), nullable=False)
-    target_branch: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_branch: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_branch: Mapped[str] = mapped_column(String(255), nullable=False)
     # Use MEDIUMTEXT for large code diffs (up to 16MB vs TEXT's 64KB limit)
     git_code_diff: Mapped[str | None] = mapped_column(
         Text().with_variant(mysql.MEDIUMTEXT(), "mysql"),
