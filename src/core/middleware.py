@@ -3,7 +3,8 @@ import time
 import uuid
 from collections.abc import Callable
 
-from fastapi import Request, Response
+from fastapi import Request, Response, status
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
@@ -149,12 +150,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     },
                 )
                 raise RateLimitException(
-                    message=f"Rate limit exceeded. Maximum {self.max_requests} requests per {self.period_seconds} seconds",
-                    detail={
-                        "limit": self.max_requests,
-                        "period": self.period_seconds,
-                        "retry_after": await redis.ttl(rate_limit_key),
-                    },
+                    message=f"Rate limit exceeded. Maximum {self.max_requests} requests per {self.period_seconds} seconds"
                 )
 
             # Add rate limit information to request state
@@ -314,3 +310,63 @@ class DatabaseConnectionMiddleware(BaseHTTPMiddleware):
 
             # For non-database errors, re-raise as-is
             raise
+
+
+class ApiDocsVisibilityMiddleware(BaseHTTPMiddleware):
+    """Middleware to hide API documentation endpoints in production
+
+    When ENABLE_API_DOCS is False, blocks access to:
+    - /api/docs (Swagger UI)
+    - /api/redoc (ReDoc)
+    - /api/openapi.json (OpenAPI schema)
+    - /api/static-offline-docs/* (Offline documentation assets)
+    """
+
+    def __init__(self, app: ASGIApp):
+        super().__init__(app)
+        # Paths to block when docs are disabled
+        self.blocked_paths = [
+            "/api/docs",
+            "/api/docs/",
+            "/api/redoc",
+            "/api/redoc/",
+            "/api/openapi.json",
+            "/api/static-offline-docs",
+        ]
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """Process incoming requests"""
+        path = request.url.path
+
+        # Check if API docs should be hidden:
+        # - Production: Always hidden (security by default)
+        # - Development: Hidden only when ENABLE_API_DOCS=False
+        env_lower = settings.ENV.lower() if settings.ENV else ""
+        is_production = env_lower == "production"
+        should_hide_docs = is_production or not settings.ENABLE_API_DOCS
+
+        if should_hide_docs and self._is_blocked_path(path):
+            logger.warning(
+                f"Blocked access to API documentation endpoint: {path} "
+                f"(ENV={settings.ENV}, ENABLE_API_DOCS={settings.ENABLE_API_DOCS})"
+            )
+
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "error": "not_found",
+                    "message": "The requested resource does not exist",
+                },
+            )
+
+        # Process request normally
+        return await call_next(request)
+
+    def _is_blocked_path(self, path: str) -> bool:
+        """Check if the path should be blocked"""
+        # Exact match for main endpoints
+        if path in self.blocked_paths:
+            return True
+
+        # Prefix match for static offline docs
+        return path.startswith("/api/static-offline-docs/")

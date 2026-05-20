@@ -11,13 +11,13 @@ type ReviewWithProject = Review | ReviewV2
  */
 export function usePrUrl() {
   const getPrUrl = (review: ReviewWithProject): string | null => {
-    if (!review.project?.project_url || !review.repository_slug || !review.pull_request_commit_id) {
+    if (!review.project?.project_url || !review.repository_slug || !review.pull_request_id) {
       return null
     }
     
-    // Construct URL: <project_url>/repos/<repository_slug>/commits/<commit_id>
+    // Construct URL: <project_url>/repos/<repository_slug>/pull-requests/<pull_request_id>/diff
     const baseUrl = review.project.project_url.replace(/\/$/, '') // Remove trailing slash
-    return `${baseUrl}/repos/${review.repository_slug}/commits/${review.pull_request_commit_id}`
+    return `${baseUrl}/repos/${review.repository_slug}/pull-requests/${review.pull_request_id}/diff`
   }
 
   return {

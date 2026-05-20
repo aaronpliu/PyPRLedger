@@ -506,7 +506,11 @@
         "by_project_repo": "按项目/仓库统计",
         "assignments_per_reviewer": "每个审查者的分配",
         "scored_per_reviewer": "每个审查者的评分审查",
-        "scoring_trend": "审查评分趋势"
+        "scoring_trend": "审查评分趋势",
+        "top_n": "前 {n} 名"
+      },
+      "tips": {
+        "others_category": "'其他'代表每个项目/仓库占总审查数不到1%的部分。"
       },
       "filters": {
         "date_range": "日期范围",

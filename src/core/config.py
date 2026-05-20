@@ -175,6 +175,12 @@ class Settings(BaseSettings):
     ALLOWED_AVATAR_TYPES: set = {"image/jpeg", "image/png", "image/webp", "image/gif"}
     AVATAR_BASE_URL: str = Field(default="/api/v1/users/avatars")
 
+    # API Documentation visibility configuration
+    ENABLE_API_DOCS: bool = Field(
+        default=True,
+        description="Enable API documentation in development. Always disabled in production for security.",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

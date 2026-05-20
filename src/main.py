@@ -16,8 +16,13 @@ from src import __version__
 from src.api import api_router
 from src.core.config import settings
 from src.core.database import close_db, get_db_context, init_db
-from src.core.exceptions import AppException, ErrorCode
-from src.core.middleware import DatabaseConnectionMiddleware, LoggingMiddleware, RateLimitMiddleware
+from src.core.exceptions import AppException
+from src.core.middleware import (
+    ApiDocsVisibilityMiddleware,
+    DatabaseConnectionMiddleware,
+    LoggingMiddleware,
+    RateLimitMiddleware,
+)
 from src.services.rbac_service import RBACService
 from src.utils.i18n import i18n
 from src.utils.log import get_logger, setup_logging
@@ -152,6 +157,7 @@ app.add_middleware(
 )
 
 # Add custom middleware
+app.add_middleware(ApiDocsVisibilityMiddleware)
 app.add_middleware(DatabaseConnectionMiddleware)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware, max_requests=settings.RATE_LIMIT_MAX_REQUESTS)
@@ -180,6 +186,9 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
     # Log detailed error information
     severity = "🔴 ERROR" if exc.status_code >= 500 else "🟠 CLIENT ERROR"
 
+    detail = exc.detail if isinstance(exc.detail, dict) else {}
+    error_code = detail.get("error", "unknown_error")
+
     log_message = (
         f"\n{'=' * 80}\n"
         f"{severity} - Application Exception\n"
@@ -188,16 +197,14 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
         f"  Client IP:   {request.client.host if request.client else 'unknown'}\n"
         f"  Language:    {lang}\n"
         f"  Status Code: {exc.status_code}\n"
-        f"  Error Code:  {exc.code}\n"
+        f"  Error Code:  {error_code}\n"
         f"  Message:     {message}"
     )
 
-    if exc.detail:
-        if isinstance(exc.detail, dict):
-            detail_items = [f"{k}={v}" for k, v in exc.detail.items()]
+    if detail and len(detail) > 1:
+        detail_items = [f"{k}={v}" for k, v in detail.items() if k != "message"]
+        if detail_items:
             log_message += f"\n  Details:     {', '.join(detail_items)}"
-        else:
-            log_message += f"\n  Detail:      {exc.detail}"
 
     log_message += f"\n  Exception:   {type(exc).__name__}\n{'=' * 80}"
 
@@ -205,7 +212,11 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
 
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": exc.code, "message": message, "detail": exc.detail},
+        content={
+            "error": error_code,
+            "message": message,
+            "detail": detail if detail != {"error": error_code, "message": message} else None,
+        },
     )
 
 
@@ -264,7 +275,7 @@ async def validation_exception_handler(
         f"  Request:     {request.method} {request.url.path}\n"
         f"  Client IP:   {request.client.host if request.client else 'unknown'}\n"
         f"  Status Code: 422\n"
-        f"  Error Code:  VALIDATION_ERROR\n"
+        f"  Error Code:  validation_error\n"
         f"  Message:     Request validation failed\n"
         f"  Validation Errors:\n"
         + "".join([f"    - Field '{err['field']}': {err['message']}\n" for err in error_list])
@@ -276,7 +287,7 @@ async def validation_exception_handler(
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
-            "error": ErrorCode.VALIDATION_ERROR,
+            "error": "validation_error",
             "message": "Request validation failed",
             "detail": {"errors": error_list},
         },
@@ -296,7 +307,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
         f"  Request:     {request.method} {request.url.path}\n"
         f"  Client IP:   {request.client.host if request.client else 'unknown'}\n"
         f"  Status Code: 500\n"
-        f"  Error Code:  INTERNAL_SERVER_ERROR\n"
+        f"  Error Code:  internal_server_error\n"
         f"  Message:     {str(exc)}\n"
         f"  Exception:   {type(exc).__name__}\n"
         f"\n  Stack Trace:\n"
@@ -318,7 +329,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
-            "error": ErrorCode.INTERNAL_SERVER_ERROR,
+            "error": "internal_server_error",
             "message": "An unexpected error occurred",
             "detail": detail,
         },
