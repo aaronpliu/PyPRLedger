@@ -5,6 +5,25 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-05-21
+
+**Backend Version**: 1.14.0
+**Frontend Version**: 1.9.0
+
+### Added
+- add SSE for reviews and task assignment page
+- add agent team for the system
+
+### Other Changes
+- c7536fc Merge pull request #18 from aaronpliu/main
+- c7f089c Merge pull request #17 from aaronpliu/feature/PRLedger_NewUI
+- 5481125 Merge pull request #16 from aaronpliu/feature/PRLedger_NewUI
+- cbc0645 Merge pull request #15 from aaronpliu/feature/PRLedger_NewUI
+- bbb5c6f Merge pull request #14 from aaronpliu/feature/PRLedger_NewUI
+- 7b85f93 Merge pull request #13 from aaronpliu/feature/PRLedger_NewUI
+
+---
+
 ## [1.13.5] - 2026-05-20
 
 **Backend Version**: 1.13.5
