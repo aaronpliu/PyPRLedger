@@ -377,7 +377,7 @@ import type { AppInfo } from '@/api/projectRegistry'
 import FilterPopover from '@/components/common/FilterPopover.vue'
 import { usePrUrl } from '@/composables/usePrUrl'
 import { useAuthStore } from '@/stores/auth'
-import { sseService } from '@/utils/sse'
+import { sseService, type SSEReviewCreatedEvent } from '@/utils/sse'
 
 const router = useRouter()
 const authStore = useAuthStore()
