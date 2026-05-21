@@ -451,8 +451,10 @@ const bulkAssignForm = ref({
 })
 
 // Load reviews
-const loadReviews = async () => {
-  loading.value = true
+const loadReviews = async (showLoading = true) => {
+  if (showLoading) {
+    loading.value = true
+  }
   try {
     const params: any = {
       page: currentPage.value,
@@ -951,8 +953,22 @@ onUnmounted(() => {
 })
 
 // SSE event handlers
+let sseRefreshTimeout: ReturnType<typeof setTimeout> | null = null
+
 function handleSSEReviewCreated(_event: SSEReviewCreatedEvent) {
-  loadReviews()
+  console.log('[TaskAssignmentView] SSE event received')
+  
+  // Debounce SSE events - wait 1 second before refreshing
+  // This prevents constant refreshes when multiple reviews arrive quickly
+  if (sseRefreshTimeout) {
+    clearTimeout(sseRefreshTimeout)
+  }
+  
+  sseRefreshTimeout = setTimeout(() => {
+    console.log('[TaskAssignmentView] Refreshing data after debounce')
+    loadReviews(false) // Don't show loading indicator for SSE updates
+    sseRefreshTimeout = null
+  }, 1000) // 1 second debounce
 }
 
 function handleSSEError() {

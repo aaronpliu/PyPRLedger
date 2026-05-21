@@ -33,7 +33,9 @@ REVIEW_CREATED_CHANNEL = "reviews:created"
 _sse_connections: dict[str, set[str]] = {}
 
 # Maximum connections per user
+# Admin users get higher limit since they may access multiple pages simultaneously
 MAX_CONNECTIONS_PER_USER = 3
+MAX_CONNECTIONS_PER_ADMIN = 10
 
 
 def _is_user_involved_in_review(
@@ -162,7 +164,8 @@ async def stream_reviews(
           even without a linked Bitbucket account
 
     Connection limits:
-        - Maximum 3 concurrent SSE connections per user
+        - Maximum 3 concurrent SSE connections per regular user
+        - Maximum 10 concurrent SSE connections per admin user (review_admin, system_admin)
         - Maximum 500 total SSE connections across all users
 
     Args:
@@ -223,22 +226,25 @@ async def stream_reviews(
             f"admin:{auth_user.id}" if is_admin else auth_user.username
         )
 
-    # Enforce per-user connection limit
+    # Enforce per-user connection limit (admins get higher limit)
     user_connections = _sse_connections.get(tracking_username, set())
-    if len(user_connections) >= MAX_CONNECTIONS_PER_USER:
+    max_connections = MAX_CONNECTIONS_PER_ADMIN if is_admin else MAX_CONNECTIONS_PER_USER
+    if len(user_connections) >= max_connections:
         logger.warning(
             "SSE connection limit exceeded",
             extra={
                 "username": tracking_username,
+                "user_id": auth_user.id,
+                "is_admin": is_admin,
                 "connection_count": len(user_connections),
-                "limit": MAX_CONNECTIONS_PER_USER,
+                "limit": max_connections,
             },
         )
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
                 "error": "CONNECTION_LIMIT_EXCEEDED",
-                "message": f"Maximum {MAX_CONNECTIONS_PER_USER} concurrent SSE connections per user",
+                "message": f"Maximum {max_connections} concurrent SSE connections per user",
             },
         )
 
@@ -259,6 +265,8 @@ async def stream_reviews(
             "username": tracking_username,
             "is_admin": is_admin,
             "connection_id": connection_id,
+            "total_user_connections": len(_sse_connections[tracking_username]),
+            "total_global_connections": total_connections,
         },
     )
 

@@ -632,8 +632,10 @@ const getPrimaryReviewer = (row: any) => {
   return row.all_reviewers[0].display_name
 }
 
-const loadReviews = async () => {
-  loading.value = true
+const loadReviews = async (showLoading = true) => {
+  if (showLoading) {
+    loading.value = true
+  }
   try {
     const params: any = {
       page: currentPage.value,
@@ -1038,8 +1040,22 @@ onUnmounted(() => {
 })
 
 // SSE event handlers
+let sseRefreshTimeout: ReturnType<typeof setTimeout> | null = null
+
 function handleSSEReviewCreated(event: SSEReviewCreatedEvent) {
-  loadReviews()
+  console.log('[ReviewListView] SSE event received:', event)
+  
+  // Debounce SSE events - wait 1 second before refreshing
+  // This prevents constant refreshes when multiple reviews arrive quickly
+  if (sseRefreshTimeout) {
+    clearTimeout(sseRefreshTimeout)
+  }
+  
+  sseRefreshTimeout = setTimeout(() => {
+    console.log('[ReviewListView] Refreshing data after debounce')
+    loadReviews(false) // Don't show loading indicator for SSE updates
+    sseRefreshTimeout = null
+  }, 1000) // 1 second debounce
 }
 
 function handleSSEError(_error: Event) {

@@ -43,6 +43,13 @@ export class SSEService {
   private url: string | null = null
   private token: string | null = null
   private currentConnectionId = 0
+  private disconnectTimeout: ReturnType<typeof setTimeout> | null = null
+  private pendingConnect: (() => void) | null = null
+  
+  // Store current callbacks so they can be updated
+  private currentOnEvent: ((event: SSEReviewCreatedEvent) => void) | null = null
+  private currentOnError: ((error: Event) => void) | null = null
+  private currentOnOpen: (() => void) | null = null
 
   constructor(options: Partial<SSEServiceOptions> = {}) {
     this.options = {
@@ -67,10 +74,41 @@ export class SSEService {
     onError?: (error: Event) => void,
     onOpen?: () => void,
   ): void {
-    if (this.eventSource?.readyState === EventSource.OPEN) {
-      console.warn('[SSE] Already connected — skipping duplicate connect() call')
+    // If there's a pending disconnect, cancel it and reuse the connection
+    if (this.disconnectTimeout !== null) {
+      console.log('[SSE] Cancelling pending disconnect - reusing existing connection')
+      clearTimeout(this.disconnectTimeout)
+      this.disconnectTimeout = null
+      
+      // Update callbacks for the existing connection
+      this.currentOnEvent = onEvent
+      this.currentOnError = onError || null
+      this.currentOnOpen = onOpen || null
+      console.log('[SSE] Callbacks updated for existing connection')
       return
     }
+
+    // Check if already connected with same callbacks
+    if (this.eventSource && this.eventSource.readyState === EventSource.OPEN) {
+      console.warn('[SSE] Already connected — skipping duplicate connect() call')
+      // Still update callbacks in case they changed
+      this.currentOnEvent = onEvent
+      this.currentOnError = onError || null
+      this.currentOnOpen = onOpen || null
+      return
+    }
+
+    // If eventSource exists but is in CONNECTING or CLOSED state, close it first
+    if (this.eventSource) {
+      console.log('[SSE] Closing existing connection in non-OPEN state')
+      this.eventSource.close()
+      this.eventSource = null
+    }
+
+    // Store callbacks
+    this.currentOnEvent = onEvent
+    this.currentOnError = onError || null
+    this.currentOnOpen = onOpen || null
 
     this.token = token
     this.url = `/api/v1/reviews/stream?token=${encodeURIComponent(token)}`
@@ -85,42 +123,55 @@ export class SSEService {
     this.eventSource.addEventListener('open', () => {
       console.log('[SSE] Connection opened')
       this.reconnectAttempts = 0
-      onOpen?.()
+      this.currentOnOpen?.()
     })
 
     this.eventSource.addEventListener('review_created', (rawEvent: Event) => {
-      this.handleReviewCreated(rawEvent as MessageEvent, onEvent)
+      if (this.currentOnEvent) {
+        this.handleReviewCreated(rawEvent as MessageEvent, this.currentOnEvent)
+      }
     })
 
     this.eventSource.addEventListener('error', (event: Event) => {
-      this.handleError(event, onError, onEvent)
+      this.handleError(event, this.currentOnError || undefined, this.currentOnEvent!)
     })
   }
 
   /**
    * Disconnect from the SSE stream
+   * Uses a debounce delay to prevent rapid connect/disconnect cycles during page navigation
    */
   disconnect(): void {
-    this.isManualDisconnect = true
-
-    if (this.reconnectTimeout !== null) {
-      clearTimeout(this.reconnectTimeout)
-      this.reconnectTimeout = null
+    // Clear any existing disconnect timeout
+    if (this.disconnectTimeout !== null) {
+      clearTimeout(this.disconnectTimeout)
     }
 
-    if (this.refetchTimeout !== null) {
-      clearTimeout(this.refetchTimeout)
-      this.refetchTimeout = null
-    }
+    // Debounce disconnect by 5 seconds - if reconnect happens within this window, cancel disconnect
+    this.disconnectTimeout = setTimeout(() => {
+      console.log('[SSE] Performing delayed disconnect')
+      this.isManualDisconnect = true
 
-    if (this.eventSource) {
-      this.eventSource.close()
-      this.eventSource = null
-      console.log('[SSE] Disconnected')
-    }
+      if (this.reconnectTimeout !== null) {
+        clearTimeout(this.reconnectTimeout)
+        this.reconnectTimeout = null
+      }
 
-    this.url = null
-    this.token = null
+      if (this.refetchTimeout !== null) {
+        clearTimeout(this.refetchTimeout)
+        this.refetchTimeout = null
+      }
+
+      if (this.eventSource) {
+        this.eventSource.close()
+        this.eventSource = null
+        console.log('[SSE] Disconnected')
+      }
+
+      this.url = null
+      this.token = null
+      this.disconnectTimeout = null
+    }, 5000) // 5 second debounce
   }
 
   /**
@@ -138,7 +189,9 @@ export class SSEService {
     onEvent: (event: SSEReviewCreatedEvent) => void,
   ): void {
     try {
+      console.log('[SSE] Raw event received:', rawEvent.data)
       const data = JSON.parse(rawEvent.data)
+      console.log('[SSE] Parsed event:', data)
       if (
         !data ||
         typeof data.review_id !== 'number' ||
