@@ -5,6 +5,22 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.1] - 2026-05-22
+
+**Backend Version**: 1.14.1
+**Frontend Version**: 1.9.1
+
+### Fixed
+- **SSE connection tracking**: Fixed admin user connection cleanup — `_sse_event_generator` now receives the correct `tracking_username` from `stream_reviews`, preventing stale connection accumulation and 429 errors for admin users
+- **SSE filter for non-admin users**: Removed 403 block; any authenticated user can now connect. Non-admin users without a linked Bitbucket account receive no events silently instead of being rejected
+- **ECharts initialization**: Fixed `LineChart.vue` to wait for `onMounted` before rendering, eliminating DOM width/height warnings on the Task Assignment Analytics page
+- **ECharts grid API**: Replaced deprecated `grid.containLabel: true` with modern `grid.outerBounds` in `BarChart.vue` and `LineChart.vue` (ECharts v6 compatibility)
+
+### Other Changes
+- 487e657 Import SSEReviewCreatedEvent type in TaskAssignmentView
+
+---
+
 ## [1.14.0] - 2026-05-21
 
 **Backend Version**: 1.14.0
