@@ -1020,6 +1020,7 @@ onMounted(() => {
   loadReviewers()
 
   // Connect to SSE stream for real-time review notifications
+  // Any authenticated user can connect; backend handles authorization
   if (authStore.accessToken) {
     sseService.connect(
       authStore.accessToken,

@@ -17,6 +17,7 @@ from src.core.exceptions import (
 from src.models.auth_user import AuthUser
 from src.models.user import User
 from src.services.auth_service import AuthService
+from src.services.rbac_service import RBACService
 from src.utils.metrics import metrics
 from src.utils.redis import get_redis_client
 
@@ -35,7 +36,11 @@ _sse_connections: dict[str, set[str]] = {}
 MAX_CONNECTIONS_PER_USER = 3
 
 
-def _is_user_involved_in_review(review: dict, username: str) -> bool:
+def _is_user_involved_in_review(
+    review: dict,
+    git_username: str | None,
+    is_admin: bool = False,
+) -> bool:
     """
     Determine if a user is involved in a review event.
 
@@ -44,42 +49,59 @@ def _is_user_involved_in_review(review: dict, username: str) -> bool:
     - The assigned reviewer (reviewer)
     - The user who assigned the review (assigned_by)
 
+    For admin users without a linked Bitbucket account (git_username=None),
+    all reviews are considered relevant.
+
     Args:
         review: Review event payload from Redis
-        username: Bitbucket username of the authenticated user
+        git_username: Bitbucket username of the authenticated user (None if not linked)
+        is_admin: Whether the user has an admin role (review_admin or system_admin)
 
     Returns:
-        True if user is involved, False otherwise
+        True if user is involved (or admin), False otherwise
     """
-    if review.get("pull_request_user") == username:
+    # Admin users without git binding receive all events
+    if is_admin and git_username is None:
         return True
-    if review.get("reviewer") == username:
+
+    if not git_username:
+        return False
+
+    if review.get("pull_request_user") == git_username:
         return True
-    return review.get("assigned_by") == username
+    if review.get("reviewer") == git_username:
+        return True
+    return review.get("assigned_by") == git_username
 
 
 async def _sse_event_generator(
     redis_client,
     pubsub,
-    git_username: str,
+    git_username: str | None,
+    is_admin: bool,
     connection_id: str,
 ) -> AsyncGenerator[str, None]:
     """
     Async generator that yields SSE-formatted review events for a connected user.
 
     Subscribes to the Redis reviews:created channel, filters events by user
-    involvement, and yields SSE-formatted strings. Cleans up the connection
-    tracking set when the generator is closed.
+    involvement (or admin status), and yields SSE-formatted strings. Cleans up
+    the connection tracking set when the generator is closed.
 
     Args:
         redis_client: Redis client for pub/sub
         pubsub: Pre-initialised Redis pub/sub instance (caller handles errors)
-        git_username: Bitbucket username of the connected user (for filtering)
+        git_username: Bitbucket username of the connected user (None if not linked)
+        is_admin: Whether the user has an admin role (receives all events)
         connection_id: Unique ID for this SSE connection (for tracking)
 
     Yields:
         SSE-formatted event strings
     """
+    # Derive tracking username for connection management
+    # Admin without git binding uses a special admin key
+    tracking_username = git_username or (f"admin:{connection_id}" if is_admin else None)
+
     try:
         async for message in pubsub.listen():
             if message["type"] != "message":
@@ -92,7 +114,7 @@ async def _sse_event_generator(
                 metrics.sse_events_filtered_total.labels(filtered="parse_error").inc()
                 continue
 
-            is_involved = _is_user_involved_in_review(review, git_username)
+            is_involved = _is_user_involved_in_review(review, git_username, is_admin)
 
             if is_involved:
                 minimal_payload = {
@@ -112,10 +134,10 @@ async def _sse_event_generator(
         await pubsub.close()
 
         # Clean up connection tracking
-        if git_username in _sse_connections:
-            _sse_connections[git_username].discard(connection_id)
-            if not _sse_connections[git_username]:
-                del _sse_connections[git_username]
+        if tracking_username and tracking_username in _sse_connections:
+            _sse_connections[tracking_username].discard(connection_id)
+            if not _sse_connections[tracking_username]:
+                del _sse_connections[tracking_username]
 
 
 @router.get("/stream")
@@ -127,10 +149,17 @@ async def stream_reviews(
 
     Establishes a persistent connection that streams review creation events
     to the authenticated user. Only events where the user is involved
-    (reviewer, assigner, or PR author) are forwarded.
+    (reviewer, assigner, or PR author) are forwarded, unless the user has
+    an admin role (review_admin or system_admin), who receive all events.
 
     Authentication:
         JWT token passed as query parameter: ?token=<JWT>
+
+    Authorization:
+        - Any authenticated user can connect (no Bitbucket linkage required)
+        - Non-admin users without linked Bitbucket account receive no events
+        - Admin users (review_admin, system_admin) receive all review events,
+          even without a linked Bitbucket account
 
     Connection limits:
         - Maximum 3 concurrent SSE connections per user
@@ -144,7 +173,7 @@ async def stream_reviews(
 
     Raises:
         HTTPException 401: If token is invalid or expired
-        HTTPException 403: If user has no linked Bitbucket account
+        HTTPException 403: If user account is inactive
         HTTPException 429: If connection limit exceeded
     """
     redis_client = get_redis_client()
@@ -173,29 +202,34 @@ async def stream_reviews(
         if not auth_user_record or not auth_user_record.is_active:
             raise UserInactiveException(username=auth_user.username)
 
+        # Check user roles to determine admin status
+        rbac_service = RBACService(db)
+        user_roles = await rbac_service.get_user_roles(auth_user.id)
+        role_names = {role["role_name"] for role in user_roles}
+        is_admin = "review_admin" in role_names or "system_admin" in role_names
+
         # Get Bitbucket username for filtering and connection tracking
         stmt = select(User).where(User.id == auth_user.user_id)
         result = await db.execute(stmt)
         git_user = result.scalar_one_or_none()
 
-        if not git_user:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "error": "NO_BITBUCKET_ACCOUNT",
-                    "message": "No linked Bitbucket account found for this user",
-                },
-            )
+        git_username = None
+        if git_user:
+            git_username = git_user.username
+        # Non-admin without git binding: allow connection but will receive no events
 
-        git_username = git_user.username
+        # Use git_username for tracking if available, otherwise use a fallback for admin without git binding
+        tracking_username = git_username or (
+            f"admin:{auth_user.id}" if is_admin else auth_user.username
+        )
 
     # Enforce per-user connection limit
-    user_connections = _sse_connections.get(git_username, set())
+    user_connections = _sse_connections.get(tracking_username, set())
     if len(user_connections) >= MAX_CONNECTIONS_PER_USER:
         logger.warning(
             "SSE connection limit exceeded",
             extra={
-                "username": git_username,
+                "username": tracking_username,
                 "connection_count": len(user_connections),
                 "limit": MAX_CONNECTIONS_PER_USER,
             },
@@ -209,9 +243,9 @@ async def stream_reviews(
         )
 
     # Track this connection
-    if git_username not in _sse_connections:
-        _sse_connections[git_username] = set()
-    _sse_connections[git_username].add(connection_id)
+    if tracking_username not in _sse_connections:
+        _sse_connections[tracking_username] = set()
+    _sse_connections[tracking_username].add(connection_id)
 
     # Update active connections gauge
     total_connections = sum(len(conns) for conns in _sse_connections.values())
@@ -222,7 +256,8 @@ async def stream_reviews(
         "SSE connection established",
         extra={
             "user_id": auth_user.id,
-            "username": git_username,
+            "username": tracking_username,
+            "is_admin": is_admin,
             "connection_id": connection_id,
         },
     )
@@ -235,7 +270,7 @@ async def stream_reviews(
     except Exception as exc:
         logger.error(
             "Failed to initialise Redis pub/sub for SSE",
-            extra={"error": str(exc), "username": git_username},
+            extra={"error": str(exc), "username": tracking_username},
         )
         metrics.sse_connections_total.labels(status="redis_failed").inc()
         raise HTTPException(
@@ -249,7 +284,7 @@ async def stream_reviews(
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
             async for event in _sse_event_generator(
-                redis_client, pubsub, git_username, connection_id
+                redis_client, pubsub, git_username, is_admin, connection_id
             ):
                 yield event
         except Exception as e:
@@ -257,7 +292,8 @@ async def stream_reviews(
                 "SSE stream error",
                 extra={
                     "user_id": auth_user.id,
-                    "username": git_username,
+                    "username": tracking_username,
+                    "is_admin": is_admin,
                     "connection_id": connection_id,
                     "error": str(e),
                 },
@@ -272,7 +308,8 @@ async def stream_reviews(
                 "SSE connection closed",
                 extra={
                     "user_id": auth_user.id,
-                    "username": git_username,
+                    "username": tracking_username,
+                    "is_admin": is_admin,
                     "connection_id": connection_id,
                 },
             )

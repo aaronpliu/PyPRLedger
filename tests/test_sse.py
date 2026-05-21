@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.auth_user import AuthUser
@@ -252,32 +253,164 @@ async def test_sse_returns_401_on_expired_token(
 
 
 @pytest.mark.asyncio
-async def test_sse_returns_403_on_no_linked_bitbucket_user(
+async def test_sse_allows_non_admin_without_git_binding(
     async_client: AsyncClient, db_session: AsyncSession
 ):
-    """GET /api/v1/reviews/stream with an auth user that has no linked User → 403."""
+    """Non-admin user without git binding can connect (gets 200) but receives no events."""
+    from src.models.rbac import UserRoleAssignment
+    from src.models.role import Role
+
+    # Create a non-admin user with viewer role
     auth_user = AuthUser(
-        username=f"nouser-{uuid.uuid4().hex[:6]}",
-        email=f"nouser-{uuid.uuid4().hex[:6]}@test.com",
+        username=f"viewer-{uuid.uuid4().hex[:6]}",
+        email=f"viewer-{uuid.uuid4().hex[:6]}@test.com",
         password_hash=hash_password("testpassword"),
         user_id=None,  # ← no Bitbucket account linked
         is_active=True,
     )
     db_session.add(auth_user)
     await db_session.flush()
+    await db_session.refresh(auth_user)
+
+    # Assign viewer role (non-admin)
+    stmt = select(Role).where(Role.name == "viewer")
+    result = await db_session.execute(stmt)
+    existing_role = result.scalar_one_or_none()
+    if not existing_role:
+        viewer_role = Role(
+            name="viewer",
+            description="Read-only access",
+            permissions={"reviews": ["read"], "scores": ["read"]},
+        )
+        db_session.add(viewer_role)
+        await db_session.flush()
+        await db_session.refresh(viewer_role)
+    else:
+        viewer_role = existing_role
+
+    assignment = UserRoleAssignment(
+        auth_user_id=auth_user.id,
+        role_id=viewer_role.id,
+        resource_type="global",
+        resource_id=None,
+    )
+    db_session.add(assignment)
+    await db_session.flush()
     await db_session.commit()
 
     token = _make_token(auth_user.id, username=auth_user.username)
 
+    # Should get 200 OK (no 403) - connection succeeds but no events streamed
     response = await async_client.get(
         "/api/v1/reviews/stream",
         params={"token": token},
     )
 
-    assert response.status_code == 403
-    body = response.json()
-    assert body["detail"]["error"] == "NO_BITBUCKET_ACCOUNT"
-    assert "No linked Bitbucket account" in body["detail"]["message"]
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    # Body should be empty (no events) since user has no git binding
+    assert response.text == ""
+
+
+@pytest.mark.asyncio
+async def test_sse_allows_admin_without_git_binding_receives_all_events(
+    async_client: AsyncClient, db_session: AsyncSession
+):
+    """Admin user without git binding gets 200 and receives all review events."""
+    from src.models.rbac import UserRoleAssignment
+    from src.models.role import Role
+
+    # Create admin user without git binding
+    auth_user = AuthUser(
+        username=f"admin-{uuid.uuid4().hex[:6]}",
+        email=f"admin-{uuid.uuid4().hex[:6]}@test.com",
+        password_hash=hash_password("testpassword"),
+        user_id=None,  # ← no Bitbucket account linked
+        is_active=True,
+    )
+    db_session.add(auth_user)
+    await db_session.flush()
+    await db_session.refresh(auth_user)
+
+    # Assign system_admin role
+    stmt = select(Role).where(Role.name == "system_admin")
+    result = await db_session.execute(stmt)
+    admin_role = result.scalar_one_or_none()
+    if not admin_role:
+        admin_role = Role(
+            name="system_admin",
+            description="Full system admin",
+            permissions={"reviews": ["read", "create", "update", "delete"]},
+        )
+        db_session.add(admin_role)
+        await db_session.flush()
+        await db_session.refresh(admin_role)
+
+    assignment = UserRoleAssignment(
+        auth_user_id=auth_user.id,
+        role_id=admin_role.id,
+        resource_type="global",
+        resource_id=None,
+    )
+    db_session.add(assignment)
+    await db_session.flush()
+    await db_session.commit()
+
+    token = _make_token(auth_user.id, username=auth_user.username)
+
+    # Build a review event that admin should receive
+    review_event = {
+        "review_id": 42,
+        "project_key": "PROJ",
+        "repository_slug": "my-repo",
+        "pull_request_id": "PR-123",
+        "created_date": "2025-01-01T00:00:00+00:00",
+        "pull_request_user": "someone",
+        "reviewer": "someone_else",
+        "assigned_by": "assigner",
+    }
+    event_data = json.dumps(
+        {
+            "review_id": review_event["review_id"],
+            "project_key": review_event["project_key"],
+            "repository_slug": review_event["repository_slug"],
+            "pull_request_id": review_event["pull_request_id"],
+            "created_date": review_event["created_date"],
+        }
+    )
+    expected_sse = f"event: review_created\ndata: {event_data}\n\n"
+
+    mock_message = {"type": "message", "data": json.dumps(review_event)}
+
+    async def _mock_listen():
+        yield mock_message
+
+    mock_pubsub = MagicMock()
+    mock_pubsub.subscribe = AsyncMock()
+    mock_pubsub.listen = MagicMock(return_value=_mock_listen())
+    mock_pubsub.unsubscribe = AsyncMock()
+    mock_pubsub.close = AsyncMock()
+
+    with patch("src.api.v1.endpoints.sse.get_redis_client") as mock_get:
+        mock_redis = MagicMock()
+        mock_redis.pubsub = MagicMock(return_value=mock_pubsub)
+        mock_get.return_value = mock_redis
+
+        response = await async_client.get(
+            "/api/v1/reviews/stream",
+            params={"token": token},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    raw_body = response.text
+    assert expected_sse in raw_body, (
+        f"Expected admin to receive all events.\nExpected: {expected_sse!r}\nGot: {raw_body!r}"
+    )
+
+    mock_pubsub.subscribe.assert_awaited_once_with("reviews:created")
+    mock_pubsub.unsubscribe.assert_awaited_once_with("reviews:created")
+    mock_pubsub.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

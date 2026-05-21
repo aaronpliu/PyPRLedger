@@ -933,6 +933,7 @@ onMounted(() => {
   loadReviewers()
 
   // Connect to SSE stream for real-time review notifications
+  // Backend handles authorization and filtering based on user roles
   if (authStore.accessToken) {
     sseService.connect(
       authStore.accessToken,
