@@ -44,15 +44,13 @@ def _is_user_involved_in_review(
     is_admin: bool = False,
 ) -> bool:
     """
-    Determine if a user is involved in a review event.
+    Determine if a user should receive a review event via SSE.
 
-    A user is considered involved if they are:
+    Admin users receive ALL review events (matching API visibility rules).
+    Regular users only receive events for reviews they're involved in:
     - The PR author (pull_request_user)
     - The assigned reviewer (reviewer)
     - The user who assigned the review (assigned_by)
-
-    For admin users without a linked Bitbucket account (git_username=None),
-    all reviews are considered relevant.
 
     Args:
         review: Review event payload from Redis
@@ -60,15 +58,17 @@ def _is_user_involved_in_review(
         is_admin: Whether the user has an admin role (review_admin or system_admin)
 
     Returns:
-        True if user is involved (or admin), False otherwise
+        True if user should receive the event, False otherwise
     """
-    # Admin users without git binding receive all events
-    if is_admin and git_username is None:
+    # Admin users receive ALL events (matches API visibility)
+    if is_admin:
         return True
 
+    # Regular users must have git binding to receive any events
     if not git_username:
         return False
 
+    # Check if user is involved in the review
     if review.get("pull_request_user") == git_username:
         return True
     if review.get("reviewer") == git_username:
@@ -118,6 +118,18 @@ async def _sse_event_generator(
 
             is_involved = _is_user_involved_in_review(review, git_username, is_admin)
 
+            # Log filtering decision for debugging
+            logger.debug(
+                "SSE event filtering",
+                extra={
+                    "review_id": review.get("review_id"),
+                    "pull_request_user": review.get("pull_request_user"),
+                    "git_username": git_username,
+                    "is_admin": is_admin,
+                    "is_involved": is_involved,
+                },
+            )
+
             if is_involved:
                 minimal_payload = {
                     "review_id": review["review_id"],
@@ -127,6 +139,14 @@ async def _sse_event_generator(
                     "created_date": review["created_date"],
                 }
                 event_data = json.dumps(minimal_payload)
+                logger.info(
+                    "SSE event sent to user",
+                    extra={
+                        "review_id": review["review_id"],
+                        "tracking_username": tracking_username,
+                        "is_admin": is_admin,
+                    },
+                )
                 yield f"event: review_created\ndata: {event_data}\n\n"
                 metrics.sse_events_filtered_total.labels(filtered="false").inc()
             else:
