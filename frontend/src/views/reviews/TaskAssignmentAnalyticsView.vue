@@ -152,8 +152,8 @@
       />
       
       <div v-loading="loading" element-loading-text="Loading analytics data...">
-      <!-- Chart Row 1: Time-Based Trends -->
-      <el-card class="chart-card" shadow="hover">
+       <!-- Chart Row 1: Time-Based Trends -->
+       <el-card class="chart-card chart-card--standalone" shadow="hover">
         <template #header>
           <div class="chart-header">
             <span>{{ t('task_assignment.analytics.charts.reviews_raised_trend') }}</span>
@@ -280,7 +280,7 @@
       </el-row>
 
       <!-- Chart Row 4: Scoring Trend -->
-      <el-card class="chart-card" shadow="hover">
+      <el-card class="chart-card chart-card--standalone" shadow="hover">
         <template #header>
           <div class="chart-header">
             <span>{{ t('task_assignment.analytics.charts.scoring_trend') }}</span>
@@ -859,8 +859,21 @@ onMounted(() => {
   margin-bottom: 0;
 }
 
+/* Standalone chart cards (full-width, not inside a .chart-row) */
+.chart-card--standalone {
+  margin-bottom: 20px;
+}
+
+.chart-card--standalone:last-child {
+  margin-bottom: 0;
+}
+
 .chart-row {
   margin-bottom: 20px;
+}
+
+.chart-row:last-child {
+  margin-bottom: 0;
 }
 
 .chart-header {
