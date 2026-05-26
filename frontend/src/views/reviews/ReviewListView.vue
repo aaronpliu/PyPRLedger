@@ -339,7 +339,7 @@
         </el-table-column>
         
         <!-- Updated Date -->
-        <el-table-column prop="updated_date" :label="t('common.update')" width="160">
+        <el-table-column prop="updated_date" label="Updated" width="160">
           <template #default="{ row }">
             {{ formatDate(row.updated_date || '') }}
           </template>

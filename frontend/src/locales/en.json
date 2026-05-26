@@ -256,6 +256,7 @@
       "commit_id": "Commit ID",
       "project": "Project",
       "reviewer": "Reviewer",
+      "pr_user": "PR User",
       "status": "Status",
       "level": "Level",
       "file_level": "📄 File-Level",

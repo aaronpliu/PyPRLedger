@@ -256,6 +256,7 @@
       "commit_id": "Commit ID",
       "project": "项目",
       "reviewer": "审查者",
+      "pr_user": "PR用户",
       "status": "状态",
       "level": "级别",
       "file_level": "📄 文件级",

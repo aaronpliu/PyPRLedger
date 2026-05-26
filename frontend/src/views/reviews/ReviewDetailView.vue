@@ -112,7 +112,7 @@
               <el-descriptions-item :label="t('reviews.detail.project')" label-align="right">
                 <strong>{{ review.project_key }}</strong> / {{ review.repository_slug }}
               </el-descriptions-item>
-              <el-descriptions-item :label="t('reviews.detail.reviewer')" label-align="right">
+              <el-descriptions-item :label="t('reviews.detail.pr_user')" label-align="right">
                 <el-avatar :size="24" class="reviewer-avatar">{{ getInitials(getReviewerDisplayName(review)) }}</el-avatar>
                 {{ getReviewerDisplayName(review) }}
               </el-descriptions-item>
