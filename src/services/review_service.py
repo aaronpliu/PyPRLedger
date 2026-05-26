@@ -974,9 +974,11 @@ class ReviewService:
         if filters.severity:
             # Filter by AI suggestions issues with matching severity
             # ai_suggestions is a JSON column with structure: {"issues": [{"severity": "high", ...}]}
+            # Use explicit func.JSON_CONTAINS for reliable MySQL JSON query
             query = query.where(
-                PullRequestReviewBase.ai_suggestions["issues"].contains(
-                    [{"severity": filters.severity}]
+                func.JSON_CONTAINS(
+                    PullRequestReviewBase.ai_suggestions,
+                    json.dumps({"issues": [{"severity": filters.severity}]}),
                 )
             )
 
