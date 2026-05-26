@@ -65,8 +65,8 @@ export const notificationsApi = {
   /**
    * Get count of unread notifications
    */
-  getUnreadCount(): Promise<{ unread_count: number }> {
-    return request.get('/notifications/unread-count')
+  getUnreadCount(config?: { timeout?: number }): Promise<{ unread_count: number }> {
+    return request.get('/notifications/unread-count', config)
   },
 
   /**
