@@ -21,6 +21,16 @@
             <el-tag type="success" effect="dark" size="small" class="ai-badge">{{ t('reviews.ai_powered') }}</el-tag>
           </div>
           <div class="header-actions">
+            <div class="live-toggle-wrapper">
+              <span class="live-dot" :class="{ active: sseEnabled }" />
+              <span class="live-label">{{ t('common.live_update') }}</span>
+              <el-switch
+                :model-value="sseEnabled"
+                size="small"
+                class="live-switch"
+                @change="toggleSse"
+              />
+            </div>
             <ExportMenu
               :data="reviews"
               :selected-ids="selectedReviews.map(r => r.id)"
@@ -451,7 +461,8 @@ import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
 import { usersApi, type ReviewerUser } from '@/api/users'
 import { usePrUrl } from '@/composables/usePrUrl'
-import { sseService, type SSEReviewCreatedEvent } from '@/utils/sse'
+import { useSse } from '@/composables/useSse'
+import { type SSEReviewCreatedEvent } from '@/utils/sse'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -460,6 +471,7 @@ const authStore = useAuthStore()
 const { hasPermission } = usePermission()
 const reviewNavigationStore = useReviewNavigationStore()
 const { getPrUrl } = usePrUrl()
+const { sseEnabled, toggleSse, connectSse, disconnectSse } = useSse()
 
 // Responsive page size calculation
 const calculatePageSize = () => {
@@ -1023,20 +1035,13 @@ onMounted(() => {
 
   // Connect to SSE stream for real-time review notifications
   // Any authenticated user can connect; backend handles authorization
-  if (authStore.accessToken) {
-    sseService.connect(
-      authStore.accessToken,
-      handleSSEReviewCreated,
-      handleSSEError,
-      handleSSEOpen,
-    )
-  }
+  connectSse(handleSSEReviewCreated, handleSSEError, handleSSEOpen)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   clearTimeout(filterChangeTimeout)
-  sseService.disconnect()
+  disconnectSse()
 })
 
 // SSE event handlers
@@ -1588,5 +1593,50 @@ html.dark .el-tag--danger {
 
 [data-theme='dark'] .score-critical {
   color: #ef4444;
+}
+
+/* Live Update Toggle Control */
+.live-toggle-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c0c4cc;
+  transition: background 0.3s;
+  flex-shrink: 0;
+}
+
+.live-dot.active {
+  background: #67c23a;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+.live-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+.live-switch {
+  --el-switch-on-color: #67c23a;
+}
+
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(103, 194, 58, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(103, 194, 58, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(103, 194, 58, 0);
+  }
 }
 </style>

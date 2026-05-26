@@ -37,7 +37,8 @@
     "exitFullscreen": "Exit Fullscreen",
     "page": "Page",
     "apply": "Apply",
-    "reset": "Reset"
+    "reset": "Reset",
+    "live_update": "Live Update"
   },
   "menu": {
     "dashboard": "Dashboard",
