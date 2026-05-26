@@ -11,6 +11,7 @@ from src.api.v1.endpoints import (
     projects,
     rbac,
     reviews,
+    search,  # Global search endpoint
     sse,  # SSE streaming endpoint for real-time review notifications
     task_assignment,  # Task assignment endpoints for review_admin
     users,
@@ -47,6 +48,9 @@ api_router.include_router(notifications.router, tags=["notifications"])
 
 # Personal Access Token management endpoints
 api_router.include_router(personal_access_tokens.router, tags=["personal-access-tokens"])
+
+# Global search endpoint
+api_router.include_router(search.router, prefix="/search", tags=["search"])
 
 
 # API information endpoint

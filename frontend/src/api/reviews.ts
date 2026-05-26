@@ -203,7 +203,7 @@ export const reviewsApi = {
     const response = await request.get('/reviews', { 
       params: { 
         page: 1, 
-        page_size: 1000  // Large size to get all reviews
+        page_size: 100  // Max page_size backend allows
       } 
     })
     const data = response.data || response

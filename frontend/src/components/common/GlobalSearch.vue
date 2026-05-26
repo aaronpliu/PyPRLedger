@@ -28,7 +28,7 @@
             clearable
             size="large"
             @input="handleSearch"
-            @keyup.enter="selectFirstResult"
+            @keyup.enter="handleEnterKey"
             @keydown.up.prevent="navigateResults(-1)"
             @keydown.down.prevent="navigateResults(1)"
             @keydown.esc="closeSearch"
@@ -64,17 +64,22 @@
           </div>
           <div class="suggestion-list">
             <div class="suggestion-item">
-              <kbd>type:</kbd> Filter by type (review, score, user)
+              <strong>Reviews:</strong> Search by PR ID, project key, or repository
             </div>
             <div class="suggestion-item">
-              <kbd>status:</kbd> Filter by status (completed, pending)
+              <strong>Users:</strong> Search by username or display name
             </div>
             <div class="suggestion-item">
-              <kbd>reviewer:</kbd> Filter by reviewer name
+              <strong>Projects:</strong> Search by project name, key, or app name
             </div>
-            <div class="suggestion-item">
-              <kbd>date:</kbd> Filter by date range
-            </div>
+          </div>
+        </div>
+
+        <!-- Press Enter Hint -->
+        <div v-else-if="searchQuery.length >= 2 && !hasSearched && !loading" class="enter-hint-section">
+          <div class="enter-hint">
+            <kbd>Enter</kbd>
+            <span>to search for &quot;{{ searchQuery }}&quot;</span>
           </div>
         </div>
 
@@ -126,7 +131,7 @@
         <div class="dialog-footer">
           <span class="footer-hints">
             <kbd>↑↓</kbd> Navigate
-            <kbd>↵</kbd> Select
+            <kbd>↵</kbd> Search / Select
             <kbd>Esc</kbd> Close
           </span>
         </div>
@@ -138,22 +143,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Clock, Guide } from '@element-plus/icons-vue'
+import { Search, Clock, Guide, Document, Star, User, Folder } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
+import { globalSearch, type SearchResult } from '@/api/search'
 
 // Extend dayjs with relativeTime plugin
 dayjs.extend(relativeTime)
-
-interface SearchResult {
-  id: string | number
-  type: 'review' | 'score' | 'user'
-  title: string
-  description: string
-  url: string
-  created_at: string
-}
 
 const router = useRouter()
 
@@ -164,6 +161,10 @@ const searchResults = ref<SearchResult[]>([])
 const selectedIndex = ref(0)
 const loading = ref(false)
 const searchInputRef = ref()
+let searchTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Track whether a search has been performed for the current query
+let hasSearched = false
 
 // Recent searches from localStorage
 const recentSearches = ref<string[]>([])
@@ -221,6 +222,7 @@ const openSearch = async () => {
   searchQuery.value = ''
   searchResults.value = []
   selectedIndex.value = 0
+  hasSearched = false
   
   // Focus input after dialog opens
   await nextTick()
@@ -231,47 +233,79 @@ const closeSearch = () => {
   dialogVisible.value = false
   searchQuery.value = ''
   searchResults.value = []
+  hasSearched = false
+
+  // Clear any pending search timeout
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+    searchTimeout = null
+  }
 }
 
-const handleSearch = async () => {
-  if (!searchQuery.value.trim()) {
+const handleSearch = () => {
+  const query = searchQuery.value.trim()
+
+  if (!query) {
+    searchResults.value = []
+    hasSearched = false
+    return
+  }
+
+  // Clear results and reset search flag when query changes
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+    searchTimeout = null
+  }
+  hasSearched = false
+  searchResults.value = []
+}
+
+// Handle Enter key: search if no results, select first result if results exist
+const handleEnterKey = () => {
+  if (searchResults.value.length > 0) {
+    selectFirstResult()
+  } else {
+    triggerSearch()
+  }
+}
+
+// Trigger search explicitly (on Enter key press)
+const triggerSearch = async () => {
+  const query = searchQuery.value.trim()
+
+  if (!query || query.length < 2) {
     searchResults.value = []
     return
   }
 
+  // Prevent duplicate search for the same query
+  if (hasSearched) return
+
+  hasSearched = true
   loading.value = true
-  
+
   try {
-    // TODO: Replace with actual API call
-    // Mock search results
-    await new Promise(resolve => setTimeout(resolve, 300))
-    
-    searchResults.value = generateMockResults(searchQuery.value)
+    const response = await globalSearch(query, undefined, 10)
+
+    // Discard response if query changed while loading
+    if (searchQuery.value.trim() !== query) return
+
+    const allResults: SearchResult[] = [
+      ...response.reviews,
+      ...response.users,
+      ...response.projects,
+    ]
+
+    searchResults.value = allResults
     selectedIndex.value = 0
-    
-    // Save to recent searches
-    saveRecentSearch(searchQuery.value)
-  } catch (error) {
-    ElMessage.error('Search failed')
+
+    saveRecentSearch(query)
+  } catch (error: any) {
+    console.error('Search failed:', error)
+    searchResults.value = []
   } finally {
     loading.value = false
   }
-}
-
-const generateMockResults = (query: string): SearchResult[] => {
-  const types: Array<'review' | 'score' | 'user'> = ['review', 'score', 'user']
-  
-  return Array.from({ length: 5 }, (_, i) => {
-    const type = types[i % 3]
-    return {
-      id: i + 1,
-      type,
-      title: `${type.charAt(0).toUpperCase() + type.slice(1)} - ${query}`,
-      description: `This is a sample ${type} result matching "${query}"`,
-      url: `/${type}s/${i + 1}`,
-      created_at: dayjs().subtract(i, 'day').toISOString(),
-    }
-  })
 }
 
 const navigateResults = (direction: number) => {
@@ -289,10 +323,32 @@ const selectFirstResult = () => {
   }
 }
 
-const handleResultClick = (result: SearchResult) => {
+const handleResultClick = async (result: SearchResult) => {
   closeSearch()
-  router.push(result.url)
-  ElMessage.success(`Navigating to ${result.type}: ${result.title}`)
+  
+  try {
+    // Check if route exists before navigating
+    const resolved = router.resolve(result.url)
+    
+    // If route doesn't exist, show error
+    if (!resolved || !resolved.matched || resolved.matched.length === 0) {
+      ElMessage.warning('This page is not available')
+      return
+    }
+    
+    // Navigate to the result
+    await router.push(result.url)
+  } catch (error: any) {
+    console.error('Navigation failed:', error)
+    
+    // Handle navigation errors gracefully
+    if (error?.message?.includes('Redirected')) {
+      // Redirect is normal, ignore
+      return
+    }
+    
+    ElMessage.error('Failed to navigate to this page')
+  }
 }
 
 const applyRecentSearch = (search: string) => {
@@ -302,18 +358,18 @@ const applyRecentSearch = (search: string) => {
 
 const getResultIcon = (type: string) => {
   const icons: Record<string, any> = {
-    review: 'Document',
-    score: 'Star',
-    user: 'User',
+    review: Document,
+    user: User,
+    project: Folder,
   }
-  return icons[type] || 'Search'
+  return icons[type] || Search
 }
 
 const getResultColor = (type: string) => {
   const colors: Record<string, string> = {
     review: '#409eff',
-    score: '#67c23a',
     user: '#e6a23c',
+    project: '#67c23a',
   }
   return colors[type] || '#909399'
 }
@@ -321,8 +377,8 @@ const getResultColor = (type: string) => {
 const getTypeTagType = (type: string) => {
   const types: Record<string, any> = {
     review: 'primary',
-    score: 'success',
     user: 'warning',
+    project: 'success',
   }
   return types[type] || 'info'
 }
@@ -450,6 +506,42 @@ const formatDate = (dateStr: string) => {
 .results-count {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+.enter-hint-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.enter-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+
+.enter-hint kbd {
+  padding: 4px 10px;
+  background: var(--el-fill-color);
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.enter-hint span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
 }
 
 .result-item {
