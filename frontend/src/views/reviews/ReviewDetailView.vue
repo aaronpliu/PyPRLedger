@@ -169,22 +169,50 @@
                   {{ t('reviews.detail.ai_review_result') }}
                   <el-tag v-if="review.ai_review_id" size="small" type="info" style="margin-left: 8px">
                     {{ review.ai_review_id }}
+                    <el-button
+                      v-if="review.ai_review_id"
+                      size="small"
+                      text
+                      @click.stop="copyToClipboard(review.ai_review_id!)"
+                      style="margin-left: 4px; padding: 0 2px; min-height: auto;"
+                    >
+                      <el-icon :size="14"><CopyDocument /></el-icon>
+                    </el-button>
                   </el-tag>
                 </span>
-                <el-button
-                  v-if="review.ai_review_id"
-                  size="small"
-                  text
-                  @click="copyToClipboard(review.ai_review_id!)"
-                  class="copy-ai-id-btn"
-                >
-                  <el-icon><CopyDocument /></el-icon>
-                  {{ t('reviews.detail.copy_id') }}
-                </el-button>
+                <div class="ai-review-header-actions">
+                  <el-button
+                    v-if="review.ai_suggestions"
+                    size="small"
+                    text
+                    @click="aiReviewRef?.downloadScreenshot?.()"
+                  >
+                    <el-icon><Download /></el-icon>
+                    {{ t('reviews.detail.screenshot_download') }}
+                  </el-button>
+                  <el-button
+                    v-if="review.ai_suggestions"
+                    size="small"
+                    text
+                    @click="aiReviewRef?.copyScreenshot?.()"
+                  >
+                    <el-icon><CopyDocument /></el-icon>
+                    {{ t('reviews.detail.screenshot_copy') }}
+                  </el-button>
+                </div>
               </div>
               <div class="analysis-column-body">
                 <!-- Show AI results if available -->
-                <AIReviewResults v-if="review.ai_suggestions" :suggestions="review.ai_suggestions" />
+                <AIReviewResults
+                  ref="aiReviewRef"
+                  v-if="review.ai_suggestions"
+                  :suggestions="review.ai_suggestions"
+                  :ai-review-id="review.ai_review_id || ''"
+                  :pr-user="(review.pull_request_user_info?.display_name || review.pull_request_user) || ''"
+                  :pr-id="review.pull_request_id || ''"
+                  :commit-id="review.pull_request_commit_id || ''"
+                  :project-info="review.project_key + ' / ' + review.repository_slug"
+                />
                 
                 <!-- Placeholder when no AI suggestions -->
                 <div v-else class="no-ai-results-placeholder">
@@ -456,7 +484,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link, InfoFilled } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link, InfoFilled, Download } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
@@ -495,6 +523,7 @@ const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
 const isInfoExpanded = ref(false)
 const navigatingPage = ref(false)
 const showFloatingNav = ref(false)
+const aiReviewRef = ref<InstanceType<typeof AIReviewResults> | null>(null)
 
 // Track theme changes reactively
 const themeTrigger = ref(0)
@@ -1735,6 +1764,15 @@ watch(
 .copy-ai-id-btn {
   margin-left: 8px;
   flex-shrink: 0;
+}
+
+.ai-review-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .ai-review-id-cell {
