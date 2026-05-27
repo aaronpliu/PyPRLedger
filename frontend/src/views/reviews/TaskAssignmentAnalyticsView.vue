@@ -188,25 +188,75 @@
         </div>
       </el-card>
 
+      <!-- Severity Trends -->
+      <el-card class="chart-card chart-card--standalone" shadow="hover" style="margin-top: 20px">
+        <template #header>
+          <div class="chart-header">
+            <span>{{ t('task_assignment.analytics.charts.issues_by_severity') }}</span>
+            <div class="chart-actions">
+              <el-tag type="warning">{{ selectedPeriod }}</el-tag>
+              <el-tooltip 
+                :content="fullscreenChart === 'severityTrend' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                placement="top"
+              >
+                <el-button 
+                  text 
+                  size="small" 
+                  @click="toggleFullscreen('severityTrend')"
+                  :icon="fullscreenChart === 'severityTrend' ? Close : FullScreen"
+                />
+              </el-tooltip>
+            </div>
+          </div>
+        </template>
+        <div ref="severityTrendChartRef">
+          <MultiLineChart
+            v-if="severityData.length > 0 && severityData.some(s => s.data.some(d => d.value > 0))"
+            :title="''"
+            :series="severityData"
+            height="350px"
+            :axis-label-color="chartColors.axisLabelColor"
+            :axis-line-color="chartColors.axisLineColor"
+            :split-line-color="chartColors.splitLineColor"
+          />
+          <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+        </div>
+      </el-card>
+
       <!-- Chart Row 2: Distribution Charts -->
       <el-row :gutter="20" class="chart-row">
         <!-- By PR User -->
         <el-col :xs="24" :md="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <div class="chart-header-with-badge">
+              <div class="chart-header">
                 <span>{{ t('task_assignment.analytics.charts.by_pr_user') }}</span>
-                <el-tag size="small" type="info">{{ t('task_assignment.analytics.charts.top_n', { n: 20 }) }}</el-tag>
+                <div class="chart-actions">
+                  <el-tag size="small" type="info">{{ t('task_assignment.analytics.charts.top_n', { n: 20 }) }}</el-tag>
+                  <el-tooltip 
+                    :content="fullscreenChart === 'prUser' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                    placement="top"
+                  >
+                    <el-button 
+                      text 
+                      size="small" 
+                      @click="toggleFullscreen('prUser')"
+                      :icon="fullscreenChart === 'prUser' ? Close : FullScreen"
+                    />
+                  </el-tooltip>
+                </div>
               </div>
             </template>
-            <BarChart
-              v-if="prUserData.length > 0"
-              :title="''"
-              :data="prUserData.slice(0, 20).map(d => ({ name: d.username, value: d.count }))"
-              color="#67c23a"
-              height="300px"
-            />
-            <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            <div ref="prUserChartRef">
+              <BarChart
+                v-if="prUserData.length > 0"
+                :title="''"
+                :data="prUserData.slice(0, 20).map(d => ({ name: d.username, value: d.count }))"
+                color="#67c23a"
+                height="300px"
+              />
+              <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            </div>
           </el-card>
         </el-col>
 
@@ -214,25 +264,42 @@
         <el-col :xs="24" :md="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <div class="chart-header-with-tip">
-                <span>{{ t('task_assignment.analytics.charts.by_project_repo') }}</span>
-                <el-tooltip placement="top" effect="light">
-                  <template #content>
-                    <div style="max-width: 250px; line-height: 1.5;">
-                      {{ t('task_assignment.analytics.tips.others_category') }}
-                    </div>
-                  </template>
-                  <el-icon style="cursor: help; margin-left: 8px;"><QuestionFilled /></el-icon>
-                </el-tooltip>
+              <div class="chart-header">
+                <span>
+                  {{ t('task_assignment.analytics.charts.by_project_repo') }}
+                  <el-tooltip placement="top" effect="light">
+                    <template #content>
+                      <div style="max-width: 250px; line-height: 1.5;">
+                        {{ t('task_assignment.analytics.tips.others_category') }}
+                      </div>
+                    </template>
+                    <el-icon style="cursor: help; margin-left: 8px;"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+                <div class="chart-actions">
+                  <el-tooltip 
+                    :content="fullscreenChart === 'project' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                    placement="top"
+                  >
+                    <el-button 
+                      text 
+                      size="small" 
+                      @click="toggleFullscreen('project')"
+                      :icon="fullscreenChart === 'project' ? Close : FullScreen"
+                    />
+                  </el-tooltip>
+                </div>
               </div>
             </template>
-            <PieChart
-              v-if="consolidatedProjectData.length > 0"
-              :title="''"
-              :data="consolidatedProjectData"
-              height="300px"
-            />
-            <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            <div ref="projectChartRef">
+              <PieChart
+                v-if="consolidatedProjectData.length > 0"
+                :title="''"
+                :data="consolidatedProjectData"
+                height="300px"
+              />
+              <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            </div>
           </el-card>
         </el-col>
       </el-row>
@@ -243,22 +310,37 @@
         <el-col :xs="24" :md="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <div class="chart-header-with-badge">
+              <div class="chart-header">
                 <span>{{ t('task_assignment.analytics.charts.assignments_per_reviewer') }}</span>
-                <el-tag size="small" type="info">{{ t('task_assignment.analytics.charts.top_n', { n: 20 }) }}</el-tag>
+                <div class="chart-actions">
+                  <el-tag size="small" type="info">{{ t('task_assignment.analytics.charts.top_n', { n: 20 }) }}</el-tag>
+                  <el-tooltip 
+                    :content="fullscreenChart === 'assignments' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                    placement="top"
+                  >
+                    <el-button 
+                      text 
+                      size="small" 
+                      @click="toggleFullscreen('assignments')"
+                      :icon="fullscreenChart === 'assignments' ? Close : FullScreen"
+                    />
+                  </el-tooltip>
+                </div>
               </div>
             </template>
-            <BarChart
-              v-if="reviewerData.length > 0"
-              :title="''"
-              :data="reviewerData.slice(0, 20).map(d => ({
-                name: d.display_name || d.reviewer,
-                value: d.assigned
-              }))"
-              color="#e6a23c"
-              height="350px"
-            />
-            <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            <div ref="assignmentsChartRef">
+              <BarChart
+                v-if="reviewerData.length > 0"
+                :title="''"
+                :data="reviewerData.slice(0, 20).map(d => ({
+                  name: d.display_name || d.reviewer,
+                  value: d.assigned
+                }))"
+                color="#e6a23c"
+                height="350px"
+              />
+              <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            </div>
           </el-card>
         </el-col>
 
@@ -266,15 +348,32 @@
         <el-col :xs="24" :md="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <span>{{ t('task_assignment.analytics.charts.scored_per_reviewer') }}</span>
+              <div class="chart-header">
+                <span>{{ t('task_assignment.analytics.charts.scored_per_reviewer') }}</span>
+                <div class="chart-actions">
+                  <el-tooltip 
+                    :content="fullscreenChart === 'scored' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                    placement="top"
+                  >
+                    <el-button 
+                      text 
+                      size="small" 
+                      @click="toggleFullscreen('scored')"
+                      :icon="fullscreenChart === 'scored' ? Close : FullScreen"
+                    />
+                  </el-tooltip>
+                </div>
+              </div>
             </template>
-            <ProgressChart
-              v-if="reviewerProgressData.length > 0"
-              :title="''"
-              :data="reviewerProgressData.slice(0, 10)"
-              height="350px"
-            />
-            <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            <div ref="scoredChartRef">
+              <ProgressChart
+                v-if="reviewerProgressData.length > 0"
+                :title="''"
+                :data="reviewerProgressData.slice(0, 10)"
+                height="350px"
+              />
+              <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            </div>
           </el-card>
         </el-col>
       </el-row>
@@ -320,11 +419,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Refresh, Document, TrendCharts, User, CircleCheck, FullScreen, Close, QuestionFilled } from '@element-plus/icons-vue'
 import LineChart from '@/components/charts/LineChart.vue'
+import MultiLineChart from '@/components/charts/MultiLineChart.vue'
 import BarChart from '@/components/charts/BarChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
 import ProgressChart from '@/components/charts/ProgressChart.vue'
@@ -358,6 +458,7 @@ const {
   aggregateByPRUser,
   aggregateByProject,
   aggregateByReviewer,
+  aggregateIssuesBySeverity,
   getSummaryStats,
 } = useTaskAssignmentAnalytics()
 
@@ -374,11 +475,16 @@ const projectOptions = ref<Array<{ label: string; value: string }>>([])
 const reviewerOptions = ref<Array<{ label: string; value: string }>>([])
 
 // Fullscreen state
-const fullscreenChart = ref<'timeTrend' | 'scoringTrend' | null>(null)
+const fullscreenChart = ref<'timeTrend' | 'scoringTrend' | 'severityTrend' | 'prUser' | 'project' | 'assignments' | 'scored' | null>(null)
 
 // Chart refs for fullscreen
 const timeTrendChartRef = ref<HTMLElement>()
 const scoringTrendChartRef = ref<HTMLElement>()
+const severityTrendChartRef = ref<HTMLElement>()
+const prUserChartRef = ref<HTMLElement>()
+const projectChartRef = ref<HTMLElement>()
+const assignmentsChartRef = ref<HTMLElement>()
+const scoredChartRef = ref<HTMLElement>()
 
 // Computed data
 const summaryStats = computed(() => getSummaryStats.value)
@@ -387,6 +493,7 @@ const timePeriodData = computed(() => aggregateByTimePeriod(selectedPeriod.value
 const prUserData = computed(() => aggregateByPRUser())
 const projectData = computed(() => aggregateByProject())
 const reviewerData = computed(() => aggregateByReviewer())
+const severityData = computed(() => aggregateIssuesBySeverity(selectedPeriod.value))
 
 const reviewerProgressData = computed(() => {
   return reviewerData.value.map(r => ({
@@ -482,7 +589,7 @@ const animateCounter = (targetRef: any, targetValue: number, duration: number) =
 }
 
 // Toggle fullscreen for charts
-const toggleFullscreen = (chartName: 'timeTrend' | 'scoringTrend') => {
+const toggleFullscreen = (chartName: 'timeTrend' | 'scoringTrend' | 'severityTrend' | 'prUser' | 'project' | 'assignments' | 'scored') => {
   if (fullscreenChart.value === chartName) {
     // Exit fullscreen
     fullscreenChart.value = null
@@ -492,7 +599,12 @@ const toggleFullscreen = (chartName: 'timeTrend' | 'scoringTrend') => {
     fullscreenChart.value = chartName
     const chartRef = 
       chartName === 'timeTrend' ? timeTrendChartRef.value :
-      scoringTrendChartRef.value
+      chartName === 'scoringTrend' ? scoringTrendChartRef.value :
+      chartName === 'severityTrend' ? severityTrendChartRef.value :
+      chartName === 'prUser' ? prUserChartRef.value :
+      chartName === 'project' ? projectChartRef.value :
+      chartName === 'assignments' ? assignmentsChartRef.value :
+      scoredChartRef.value
     
     if (chartRef) {
       const cardElement = chartRef.closest('.chart-card')
@@ -617,6 +729,14 @@ onMounted(() => {
   loadFilterOptions()
   loadAnalytics()
   
+  // Reset fullscreen state when browser exits fullscreen (e.g., Esc key)
+  const onFullscreenChange = () => {
+    if (!document.fullscreenElement) {
+      fullscreenChart.value = null
+    }
+  }
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  
   // Watch for theme changes via MutationObserver (like Dashboard)
   const observer = new MutationObserver(() => {
     isDarkMode.value = document.documentElement.getAttribute('data-theme') === 'dark'
@@ -626,7 +746,13 @@ onMounted(() => {
     attributes: true,
     attributeFilter: ['data-theme']
   })
+  
+  // Clean up event listener on unmount
+  onUnmounted(() => {
+    document.removeEventListener('fullscreenchange', onFullscreenChange)
+  })
 })
+
 </script>
 
 <style scoped>

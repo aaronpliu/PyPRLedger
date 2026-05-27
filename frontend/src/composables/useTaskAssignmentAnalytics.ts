@@ -40,6 +40,28 @@ export interface ScoringStats {
   completionRate: number
 }
 
+export interface SeveritySeriesPoint {
+  date: string
+  value: number
+}
+
+export interface SeveritySeries {
+  name: string
+  data: SeveritySeriesPoint[]
+  color: string
+}
+
+type IssueSeverity = 'low' | 'medium' | 'high' | 'critical'
+
+const SEVERITY_ORDER: IssueSeverity[] = ['low', 'medium', 'high', 'critical']
+
+const SEVERITY_COLORS: Record<IssueSeverity, string> = {
+  low: '#3b82f6',
+  medium: '#eab308',
+  high: '#f97316',
+  critical: '#ef4444',
+}
+
 /**
  * Composable for task assignment analytics data aggregation
  */
@@ -238,6 +260,60 @@ export function useTaskAssignmentAnalytics() {
   })
 
   /**
+   * Aggregate issue counts by severity over time periods
+   */
+  const aggregateIssuesBySeverity = (
+    period: 'daily' | 'weekly' | 'monthly'
+  ): SeveritySeries[] => {
+    // Initialize counts per severity per period
+    const grouped: Record<string, Record<IssueSeverity, number>> = {}
+
+    reviews.value.forEach((review) => {
+      if (!review.ai_suggestions?.issues) return
+
+      const date = dayjs(review.created_date)
+      let key: string
+
+      switch (period) {
+        case 'daily':
+          key = date.format('YYYY-MM-DD')
+          break
+        case 'weekly':
+          key = `${date.year()}-W${date.week()}`
+          break
+        case 'monthly':
+          key = date.format('YYYY-MM')
+          break
+        default:
+          key = date.format('YYYY-MM-DD')
+      }
+
+      if (!grouped[key]) {
+        grouped[key] = { low: 0, medium: 0, high: 0, critical: 0 }
+      }
+
+      const issues = review.ai_suggestions.issues as Array<{ severity: string }>
+      issues.forEach((issue) => {
+        const sev = issue.severity?.toLowerCase() as IssueSeverity
+        if (grouped[key][sev] !== undefined) {
+          grouped[key][sev]++
+        }
+      })
+    })
+
+    const sortedKeys = Object.keys(grouped).sort()
+
+    return SEVERITY_ORDER.map((severity) => ({
+      name: severity.charAt(0).toUpperCase() + severity.slice(1),
+      color: SEVERITY_COLORS[severity],
+      data: sortedKeys.map((dateKey) => ({
+        date: dateKey,
+        value: grouped[dateKey][severity],
+      })),
+    }))
+  }
+
+  /**
    * Load reviews data
    */
   const loadReviews = async (params?: {
@@ -273,6 +349,7 @@ export function useTaskAssignmentAnalytics() {
     aggregateByPRUser,
     aggregateByProject,
     aggregateByReviewer,
+    aggregateIssuesBySeverity,
     calculateScoringStats,
     getSummaryStats,
     loadReviews,

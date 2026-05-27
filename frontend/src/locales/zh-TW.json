@@ -514,6 +514,7 @@
         "assignments_per_reviewer": "每個審查者的分配",
         "scored_per_reviewer": "每個審查者的評分審查",
         "scoring_trend": "審查評分趨勢",
+        "issues_by_severity": "按嚴重程度的問題分布",
         "top_n": "前 {n} 名"
       },
       "tips": {
