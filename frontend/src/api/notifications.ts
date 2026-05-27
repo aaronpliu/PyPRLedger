@@ -58,15 +58,15 @@ export const notificationsApi = {
     is_read?: boolean
     notification_type?: string
     priority?: string
-  }): Promise<NotificationListResponse> {
-    return request.get('/notifications/', { params })
+  }, config?: Record<string, any>): Promise<NotificationListResponse> {
+    return request.get('/notifications/', { params, ...config, _suppressGlobalError: true } as any)
   },
 
   /**
    * Get count of unread notifications
    */
-  getUnreadCount(config?: { timeout?: number }): Promise<{ unread_count: number }> {
-    return request.get('/notifications/unread-count', config)
+  getUnreadCount(config?: Record<string, any>): Promise<{ unread_count: number }> {
+    return request.get('/notifications/unread-count', { ...config, _suppressGlobalError: true } as any)
   },
 
   /**
