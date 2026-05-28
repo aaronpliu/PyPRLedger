@@ -488,12 +488,15 @@ const loadReviews = async (showLoading = true) => {
     if (prUserFilter.value) {
       params.pull_request_user = prUserFilter.value
     }
+    if (severityFilter.value) {
+      params.severity = severityFilter.value
+    }
 
     const response = await taskAssignmentApi.getReviews(params)
     allReviews.value = response.items
     total.value = response.total
     
-    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned)
+    // Apply client-side filters for unsupported fields (search, scored, unassigned)
     applyFilters()
 
   } catch (error) {
@@ -565,19 +568,6 @@ const applyFilters = () => {
     result = result.filter(review => 
       !review.metadata?.has_scores && review.completed_reviewers === 0
     )
-  }
-  
-  // Apply severity filter (not supported by backend)
-  if (severityFilter.value) {
-    const targetSeverity = severityFilter.value
-    result = result.filter(review => {
-      if (!review.ai_suggestions?.issues || review.ai_suggestions.issues.length === 0) {
-        return false
-      }
-      return review.ai_suggestions.issues.some(
-        (issue: any) => issue.severity === targetSeverity
-      )
-    })
   }
 
   result.sort((left, right) => compareReviews(left, right))

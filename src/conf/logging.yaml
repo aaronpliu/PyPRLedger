@@ -52,12 +52,12 @@ loggers:
     handlers: [console, file]
     propagate: false
   
-  watchfils:
+  watchfiles:
     level: WARNING
     handlers: [console, file, error_file]
     propagate: false
 
-  watchfils.main:
+  watchfiles.main:
     level: WARNING
     handlers: [console, file, error_file]
     propagate: false

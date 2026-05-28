@@ -3,6 +3,7 @@ from __future__ import annotations
 
 """Service for managing multi-reviewer pull request reviews"""
 
+import json
 import logging
 from typing import Any
 
@@ -88,6 +89,7 @@ class MultiReviewerService:
         status: str | None = None,
         app_names: list[str] | None = None,
         pull_request_user: str | None = None,
+        severity: str | None = None,
     ) -> tuple[list[ReviewWithAssignmentsResponse], int]:
         """
         Get list of reviews with their assignments
@@ -102,6 +104,7 @@ class MultiReviewerService:
             status: Filter by PR status
             app_names: List of app names to filter by (resolved via project_registry)
             pull_request_user: Filter by PR author username
+            severity: Filter by AI issue severity (critical, high, medium, low)
 
         Returns:
             Tuple of (reviews, total_count)
@@ -170,6 +173,15 @@ class MultiReviewerService:
                 or_(
                     PullRequestReviewBase.pull_request_user == visible_to_username,
                     PullRequestReviewAssignment.reviewer == visible_to_username,
+                )
+            )
+
+        # Apply severity filter (check AI review issues in JSON field)
+        if severity:
+            stmt = stmt.where(
+                func.JSON_CONTAINS(
+                    PullRequestReviewBase.ai_suggestions,
+                    json.dumps({"issues": [{"severity": severity}]}),
                 )
             )
 
