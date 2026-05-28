@@ -175,6 +175,7 @@
         </template>
         <div ref="timeTrendChartRef">
           <LineChart
+            ref="timeTrendChartComponent"
             v-if="timePeriodData.length > 0"
             :title="''"
             :data="timePeriodData.map(d => ({ date: d.date, value: d.count }))"
@@ -211,6 +212,7 @@
         </template>
         <div ref="severityTrendChartRef">
           <MultiLineChart
+            ref="severityTrendChartComponent"
             v-if="severityData.length > 0 && severityData.some(s => s.data.some(d => d.value > 0))"
             :title="''"
             :series="severityData"
@@ -249,6 +251,7 @@
             </template>
             <div ref="prUserChartRef">
               <BarChart
+                ref="prUserChartComponent"
                 v-if="prUserData.length > 0"
                 :title="''"
                 :data="prUserData.slice(0, 20).map(d => ({ name: d.username, value: d.count }))"
@@ -293,6 +296,7 @@
             </template>
             <div ref="projectChartRef">
               <PieChart
+                ref="projectChartComponent"
                 v-if="consolidatedProjectData.length > 0"
                 :title="''"
                 :data="consolidatedProjectData"
@@ -330,6 +334,7 @@
             </template>
             <div ref="assignmentsChartRef">
               <BarChart
+                ref="assignmentsChartComponent"
                 v-if="reviewerData.length > 0"
                 :title="''"
                 :data="reviewerData.slice(0, 20).map(d => ({
@@ -401,6 +406,7 @@
         </template>
         <div ref="scoringTrendChartRef">
           <LineChart
+            ref="scoringTrendChartComponent"
             v-if="scoringTrendData.length > 0"
             :title="''"
             :data="scoringTrendData.map(d => ({ date: d.date, value: d.completed || 0 }))"
@@ -485,6 +491,14 @@ const prUserChartRef = ref<HTMLElement>()
 const projectChartRef = ref<HTMLElement>()
 const assignmentsChartRef = ref<HTMLElement>()
 const scoredChartRef = ref<HTMLElement>()
+
+// Component refs for direct chart resize
+const timeTrendChartComponent = ref()
+const scoringTrendChartComponent = ref()
+const severityTrendChartComponent = ref()
+const prUserChartComponent = ref()
+const projectChartComponent = ref()
+const assignmentsChartComponent = ref()
 
 // Computed data
 const summaryStats = computed(() => getSummaryStats.value)
@@ -588,12 +602,101 @@ const animateCounter = (targetRef: any, targetValue: number, duration: number) =
   requestAnimationFrame(updateCounter)
 }
 
+// Helper: resize specific chart component (or all) by calling exposed resize()
+// Also applies .is-fullscreen class + explicit height to work around CSS scoping
+const resizeCharts = (chartName?: string) => {
+  const componentMap: Record<string, any> = {
+    timeTrend: timeTrendChartComponent,
+    scoringTrend: scoringTrendChartComponent,
+    severityTrend: severityTrendChartComponent,
+    prUser: prUserChartComponent,
+    project: projectChartComponent,
+    assignments: assignmentsChartComponent,
+  }
+
+  // Helper: set explicit height on chart containers inside fullscreen card
+  // Note: querySelector(':fullscreen') does NOT work (CSS pseudo-classes unsupported)
+  // So we use document.fullscreenElement instead
+  const setFullscreenHeight = () => {
+    const fullscreenEl = document.fullscreenElement as HTMLElement | null
+    if (fullscreenEl && fullscreenEl.classList.contains('chart-card')) {
+      fullscreenEl.classList.add('is-fullscreen')
+
+      // Style ECharts chart containers (.chart-container)
+      fullscreenEl.querySelectorAll('.chart-container').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.setProperty('height', 'calc(100vh - 150px)', 'important')
+        htmlEl.style.setProperty('min-height', '600px', 'important')
+      })
+
+      // Style ProgressChart (.progress-chart) — needs flex layout for scrollable list
+      fullscreenEl.querySelectorAll('.progress-chart').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.setProperty('height', 'calc(100vh - 150px)', 'important')
+        htmlEl.style.setProperty('min-height', '600px', 'important')
+        htmlEl.style.setProperty('display', 'flex', 'important')
+        htmlEl.style.setProperty('flex-direction', 'column', 'important')
+        htmlEl.style.setProperty('overflow', 'hidden', 'important')
+      })
+      fullscreenEl.querySelectorAll('.progress-list').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.setProperty('flex', '1', 'important')
+        htmlEl.style.setProperty('overflow-y', 'auto', 'important')
+      })
+    }
+  }
+
+  // Helper: remove explicit heights on exit
+  const removeFullscreenHeight = () => {
+    document.querySelectorAll('.chart-card.is-fullscreen').forEach((card) => {
+      card.classList.remove('is-fullscreen')
+      card.querySelectorAll('.chart-container').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.removeProperty('height')
+        htmlEl.style.removeProperty('min-height')
+      })
+      card.querySelectorAll('.progress-chart').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.removeProperty('height')
+        htmlEl.style.removeProperty('min-height')
+        htmlEl.style.removeProperty('display')
+        htmlEl.style.removeProperty('flex-direction')
+        htmlEl.style.removeProperty('overflow')
+      })
+      card.querySelectorAll('.progress-list').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.removeProperty('flex')
+        htmlEl.style.removeProperty('overflow-y')
+      })
+    })
+  }
+
+  if (chartName) {
+    // Single chart resize
+    const comp = componentMap[chartName]
+    if (comp?.value?.resize) {
+      comp.value.resize()
+    }
+    setFullscreenHeight()
+  } else {
+    // All charts resize (used on exit via Esc)
+    removeFullscreenHeight()
+    Object.values(componentMap).forEach((comp) => {
+      if (comp?.value?.resize) {
+        comp.value.resize()
+      }
+    })
+  }
+}
+
 // Toggle fullscreen for charts
 const toggleFullscreen = (chartName: 'timeTrend' | 'scoringTrend' | 'severityTrend' | 'prUser' | 'project' | 'assignments' | 'scored') => {
   if (fullscreenChart.value === chartName) {
     // Exit fullscreen
     fullscreenChart.value = null
     document.exitFullscreen().catch(console.error)
+    // Resize charts back to normal size
+    setTimeout(() => resizeCharts(), 100)
   } else {
     // Enter fullscreen
     fullscreenChart.value = chartName
@@ -608,9 +711,13 @@ const toggleFullscreen = (chartName: 'timeTrend' | 'scoringTrend' | 'severityTre
     
     if (chartRef) {
       const cardElement = chartRef.closest('.chart-card') as HTMLElement | null
-      if (cardElement) {
-        cardElement.classList.add('is-fullscreen')
-        cardElement.requestFullscreen().catch(console.error)
+      if (cardElement && cardElement.requestFullscreen) {
+        cardElement.requestFullscreen()
+          .then(() => {
+            // Apply fullscreen sizing after browser enters fullscreen
+            setTimeout(() => resizeCharts(chartName), 50)
+          })
+          .catch(console.error)
       }
     }
   }
@@ -734,10 +841,8 @@ onMounted(() => {
   const onFullscreenChange = () => {
     if (!document.fullscreenElement) {
       fullscreenChart.value = null
-      // Remove .is-fullscreen from all chart cards
-      document.querySelectorAll('.chart-card.is-fullscreen').forEach(el => {
-        el.classList.remove('is-fullscreen')
-      })
+      // Resize charts after exiting fullscreen
+      setTimeout(() => resizeCharts(), 100)
     }
   }
   document.addEventListener('fullscreenchange', onFullscreenChange)
@@ -1068,44 +1173,38 @@ onMounted(() => {
 }
 
 /* ===== Fullscreen Chart Cards ===== */
-.chart-card.is-fullscreen {
-  height: 100vh !important;
-  width: 100vw !important;
-  display: flex !important;
-  flex-direction: column !important;
+/* .is-fullscreen class is added/removed programmatically by resizeCharts() */
+/* CSS selectors with class are more reliable than :fullscreen :deep() for Vue scoped CSS */
+
+/* Base fullscreen style — browser auto-applies :fullscreen to the requestFullscreen() element */
+.chart-card:fullscreen,
+.chart-card:-webkit-full-screen,
+.chart-card:-moz-full-screen {
+  padding: 20px;
   background: var(--el-bg-color);
 }
 
-.chart-card.is-fullscreen > .el-card__header {
-  flex-shrink: 0;
-}
-
-.chart-card.is-fullscreen > .el-card__body {
-  flex: 1 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden;
-}
-
-.chart-card.is-fullscreen > .el-card__body > div {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
+/* Height override via .is-fullscreen class (added by JS after fullscreen enters) */
 .chart-card.is-fullscreen :deep(.chart-container) {
-  flex: 1;
-  min-height: 0;
+  height: calc(100vh - 150px) !important;
+  min-height: 600px;
 }
 
-.chart-card.is-fullscreen :deep(.chart) {
-  width: 100% !important;
-  height: 100% !important;
+/* Also try via :fullscreen pseudo-class as secondary fallback */
+.chart-card:fullscreen :deep(.chart-container) {
+  height: calc(100vh - 150px) !important;
+  min-height: 600px;
 }
 
+/* Header spacing in fullscreen */
+.chart-card.is-fullscreen .chart-header,
+.chart-card:fullscreen .chart-header {
+  margin-bottom: 20px;
+}
+
+/* Fullscreen support for ProgressChart (scored per reviewer) */
 .chart-card.is-fullscreen :deep(.progress-chart) {
-  height: 100%;
+  height: calc(100vh - 150px) !important;
   display: flex;
   flex-direction: column;
   overflow: hidden;

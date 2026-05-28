@@ -1,6 +1,6 @@
 <template>
   <div v-if="isMounted" class="chart-container">
-    <v-chart class="chart" :option="chartOption" autoresize />
+    <v-chart ref="chartRef" class="chart" :option="chartOption" autoresize />
   </div>
 </template>
 
@@ -45,8 +45,19 @@ const props = withDefaults(defineProps<Props>(), {
   splitLineColor: '#f1f5f9',
 })
 
+// Chart instance ref for manual resize (used by parent in fullscreen)
+const chartRef = ref()
+
 const isMounted = ref(false)
 const isDarkTheme = ref(false)
+
+defineExpose({
+  resize: () => {
+    if (chartRef.value) {
+      chartRef.value.resize()
+    }
+  },
+})
 
 onMounted(() => {
   // Ensure DOM is ready before rendering chart
