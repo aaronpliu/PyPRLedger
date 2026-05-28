@@ -272,6 +272,12 @@ async function captureScreenshot(): Promise<string | null> {
     const metaEl = clone.querySelector<HTMLElement>('.screenshot-meta')
     if (metaEl) {
       metaEl.style.display = 'block'
+      // Always use a dark slate background so the light text colors are readable
+      // regardless of the user's theme (light-mode clone has white bg otherwise)
+      metaEl.style.background = '#1e293b'
+      metaEl.style.padding = '12px'
+      metaEl.style.borderRadius = '8px'
+      metaEl.style.marginBottom = '20px'
     }
 
     // Position in-viewport so html2canvas can render it, but behind everything
