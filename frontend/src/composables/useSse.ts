@@ -17,9 +17,9 @@ const SSE_ENABLED_KEY = 'sse_enabled'
 export function useSse() {
   const authStore = useAuthStore()
 
-  // Initialize from localStorage: enabled by default
+  // Initialize from localStorage: disabled by default
   const sseEnabled = ref(
-    localStorage.getItem(SSE_ENABLED_KEY) !== 'false',
+    localStorage.getItem(SSE_ENABLED_KEY) === 'true',
   )
 
   /**

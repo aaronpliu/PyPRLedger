@@ -56,12 +56,7 @@ def create_engine() -> AsyncEngine:
     }
 
     # Add connection arguments based on the driver name
-    if drivername == "pymysql":
-        engine_kwargs["connect_args"]["charset"] = "utf8mb4"
-    elif drivername == "mysql+aiomysql":
-        engine_kwargs["connect_args"]["charset"] = "utf8mb4"
-        engine_kwargs["pool_pre_ping"] = True
-    elif drivername == "mysql+asyncmy":
+    if drivername == "pymysql" or drivername == "mysql+aiomysql" or drivername == "mysql+asyncmy":
         engine_kwargs["connect_args"]["charset"] = "utf8mb4"
     elif drivername == "postgresql+asyncpg":
         engine_kwargs["connect_args"]["options"] = (

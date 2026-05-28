@@ -9,6 +9,9 @@
  * - Per-tab connection isolation (each tab gets its own instance)
  */
 
+import router from '@/router'
+import { useAuthStore } from '@/stores/auth'
+
 export interface SSEReviewCreatedEvent {
   event: 'review_created'
   data: {
@@ -251,6 +254,9 @@ export class SSEService {
 
   /**
    * Handle SSE connection errors with exponential backoff reconnection
+   *
+   * If the error is caused by an expired JWT token, we stop reconnection
+   * immediately and redirect the user to the login page.
    */
   private handleError(
     event: Event,
@@ -261,10 +267,56 @@ export class SSEService {
       return
     }
 
+    // If token is expired, don't bother retrying — redirect to login
+    if (this.token && this.isTokenExpired(this.token)) {
+      this.handleAuthFailure()
+      return
+    }
+
     onError?.(event)
 
     if (this.eventSource?.readyState === EventSource.CLOSED) {
       this.attemptReconnect(onEvent, onError)
+    }
+  }
+
+  /**
+   * Check if a JWT token is expired by decoding its payload
+   */
+  private isTokenExpired(token: string): boolean {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      if (!payload.exp) return false
+      const now = Math.floor(Date.now() / 1000)
+      return payload.exp < now
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Handle authentication failure (expired or invalid token)
+   *
+   * Disconnects SSE, clears auth state, and redirects to the login page.
+   * Also persists the disabled state to localStorage so SSE stays off
+   * after page reload.
+   */
+  private handleAuthFailure(): void {
+    console.error('[SSE] Authentication failed — token expired')
+    this.disconnect()
+    this._enabled = false
+    localStorage.setItem('sse_enabled', 'false')
+
+    try {
+      const authStore = useAuthStore()
+      authStore.clearAuth()
+    } catch (e) {
+      console.warn('[SSE] Failed to clear auth store:', e)
+    }
+
+    // Navigate to login page (avoid loops by checking current path)
+    if (window.location.pathname !== '/login') {
+      router.replace('/login')
     }
   }
 
