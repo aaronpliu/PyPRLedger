@@ -5,6 +5,30 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-05-28
+
+**Backend Version**: 1.15.0
+**Frontend Version**: 1.9.5
+
+### Added
+- fine-tune chart in full screen
+- add chart to show issues as per severity and enhance charts with full screen
+- enhance to take screenshot for AI review result
+- enhanced global search
+
+### Fixed
+- fix style issue of PR meta info in screenshot
+- optimize error handling for sse connection
+- fix filter of severity issue in task assignment page
+- enhance API request
+- fix filter of severity issue in reviews
+- enhance notification polling
+- enhanced sse connection and exception handling
+- update field name
+- enhance database connection and logging
+
+---
+
 ## [1.14.1] - 2026-05-22
 
 **Backend Version**: 1.14.1
