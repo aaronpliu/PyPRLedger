@@ -607,8 +607,9 @@ const toggleFullscreen = (chartName: 'timeTrend' | 'scoringTrend' | 'severityTre
       scoredChartRef.value
     
     if (chartRef) {
-      const cardElement = chartRef.closest('.chart-card')
+      const cardElement = chartRef.closest('.chart-card') as HTMLElement | null
       if (cardElement) {
+        cardElement.classList.add('is-fullscreen')
         cardElement.requestFullscreen().catch(console.error)
       }
     }
@@ -733,6 +734,10 @@ onMounted(() => {
   const onFullscreenChange = () => {
     if (!document.fullscreenElement) {
       fullscreenChart.value = null
+      // Remove .is-fullscreen from all chart cards
+      document.querySelectorAll('.chart-card.is-fullscreen').forEach(el => {
+        el.classList.remove('is-fullscreen')
+      })
     }
   }
   document.addEventListener('fullscreenchange', onFullscreenChange)
@@ -1060,5 +1065,54 @@ onMounted(() => {
 /* Dark theme adjustments */
 [data-theme='dark'] .summary-icon {
   opacity: 0.9;
+}
+
+/* ===== Fullscreen Chart Cards ===== */
+.chart-card.is-fullscreen {
+  height: 100vh !important;
+  width: 100vw !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: var(--el-bg-color);
+}
+
+.chart-card.is-fullscreen > .el-card__header {
+  flex-shrink: 0;
+}
+
+.chart-card.is-fullscreen > .el-card__body {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden;
+}
+
+.chart-card.is-fullscreen > .el-card__body > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chart-card.is-fullscreen :deep(.chart-container) {
+  flex: 1;
+  min-height: 0;
+}
+
+.chart-card.is-fullscreen :deep(.chart) {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.chart-card.is-fullscreen :deep(.progress-chart) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chart-card.is-fullscreen :deep(.progress-list) {
+  flex: 1;
+  overflow-y: auto;
 }
 </style>
