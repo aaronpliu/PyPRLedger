@@ -55,14 +55,15 @@
         </div>
 
         <div class="filter-grid">
-          <!-- App Name (Multi-select) -->
+          <!-- App Name (Multi-select with search) -->
           <div v-if="showAppFilter" class="filter-item">
             <label class="filter-label">App Name</label>
             <el-select
               v-model="localAppFilter"
-              placeholder="Select apps"
+              placeholder="Select or type name"
               clearable
               multiple
+              filterable
               collapse-tags
               collapse-tags-tooltip
               style="width: 100%"
@@ -81,7 +82,7 @@
             <label class="filter-label">Project</label>
             <el-select
               v-model="localProjectFilter"
-              placeholder="Select project"
+              placeholder="Select or type name"
               clearable
               filterable
               style="width: 100%"
