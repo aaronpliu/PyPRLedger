@@ -36,6 +36,8 @@
         v-model:scored-filter="scoredFilter"
         v-model:severity-filter="severityFilter"
         v-model:status-filter="statusFilter"
+        v-model:date-from="dateFrom"
+        v-model:date-to="dateTo"
         :app-options="availableApps"
         :project-options="projects"
         :pr-user-options="availablePRUsers"
@@ -436,6 +438,8 @@ const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
 const statusFilter = ref('')
+const dateFrom = ref('')
+const dateTo = ref('')
 const projects = ref<ProjectSummary[]>([])
 const sortState = ref<{
   prop: 'created_date' | 'updated_date'
@@ -491,6 +495,12 @@ const loadReviews = async (showLoading = true) => {
     if (severityFilter.value) {
       params.severity = severityFilter.value
     }
+    if (dateFrom.value) {
+      params.date_from = dateFrom.value
+    }
+    if (dateTo.value) {
+      params.date_to = dateTo.value
+    }
 
     const response = await taskAssignmentApi.getReviews(params)
     allReviews.value = response.items
@@ -531,6 +541,8 @@ const handleResetFilters = () => {
   severityFilter.value = ''
   statusFilter.value = ''
   projectFilter.value = ''
+  dateFrom.value = ''
+  dateTo.value = ''
   loadReviews()
 }
 
@@ -915,7 +927,7 @@ const searchReviewers = (query: string) => {
 
 // Watch for filter changes and reload data
 watch(
-  [searchQuery, appFilter, projectFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter],
+  [searchQuery, appFilter, projectFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter, dateFrom, dateTo],
   () => {
     // Debounce the reload to avoid multiple rapid requests
     clearTimeout(filterChangeTimeout)

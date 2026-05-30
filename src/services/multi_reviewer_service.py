@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, case, desc, exists, func, or_, select
@@ -90,6 +91,8 @@ class MultiReviewerService:
         app_names: list[str] | None = None,
         pull_request_user: str | None = None,
         severity: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
     ) -> tuple[list[ReviewWithAssignmentsResponse], int]:
         """
         Get list of reviews with their assignments
@@ -105,6 +108,8 @@ class MultiReviewerService:
             app_names: List of app names to filter by (resolved via project_registry)
             pull_request_user: Filter by PR author username
             severity: Filter by AI issue severity (critical, high, medium, low)
+            date_from: Filter reviews created after this date
+            date_to: Filter reviews created before this date (inclusive)
 
         Returns:
             Tuple of (reviews, total_count)
@@ -184,6 +189,14 @@ class MultiReviewerService:
                     json.dumps({"issues": [{"severity": severity}]}),
                 )
             )
+
+        # Apply date range filters
+        if date_from:
+            stmt = stmt.where(PullRequestReviewBase.created_date >= date_from)
+        if date_to:
+            # Add 1 day for inclusive end-of-day filtering
+            adjusted_date_to = date_to + timedelta(days=1)
+            stmt = stmt.where(PullRequestReviewBase.created_date < adjusted_date_to)
 
         # Get total count
         count_stmt = select(func.count()).select_from(stmt.subquery())

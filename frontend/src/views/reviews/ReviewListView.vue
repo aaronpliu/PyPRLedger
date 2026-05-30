@@ -54,6 +54,8 @@
           v-model:scored-filter="scoredFilter"
           v-model:severity-filter="severityFilter"
           v-model:status-filter="statusFilter"
+          v-model:date-from="dateFrom"
+          v-model:date-to="dateTo"
           :app-options="availableApps"
           :pr-user-options="availablePRUsers"
           :reviewer-options="availableReviewers"
@@ -517,6 +519,8 @@ const allReviewers = ref<ReviewerUser[]>([]) // Cache for client-side filtering
 const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
+const dateFrom = ref('')
+const dateTo = ref('')
 const hideArchived = ref(true) // Default to hiding scored/archived reviews
 const tableRef = ref()
 
@@ -679,6 +683,8 @@ const loadReviews = async (showLoading = true) => {
     }
     
     if (severityFilter.value) params.severity = severityFilter.value
+    if (dateFrom.value) params.date_from = dateFrom.value
+    if (dateTo.value) params.date_to = dateTo.value
 
     console.log('Loading reviews with params:', params)
     const data = await reviewsApi.getReviews(params)
@@ -733,6 +739,8 @@ const fetchAllDataForExport = async (): Promise<Review[]> => {
     }
     
     if (severityFilter.value) params.severity = severityFilter.value
+    if (dateFrom.value) params.date_from = dateFrom.value
+    if (dateTo.value) params.date_to = dateTo.value
 
     const data = await reviewsApi.getReviews(params)
     return data.items
@@ -750,6 +758,8 @@ const handleResetFilters = () => {
   scoredFilter.value = ''
   severityFilter.value = ''
   statusFilter.value = ''
+  dateFrom.value = ''
+  dateTo.value = ''
   hideArchived.value = true // Reset to default (hide scored reviews)
   currentPage.value = 1 // Reset to first page
   loadReviews() // Reload from backend with reset filters
@@ -784,6 +794,8 @@ const viewReview = (review: Review) => {
   }
   
   if (severityFilter.value) filterParams.severity = severityFilter.value
+  if (dateFrom.value) filterParams.date_from = dateFrom.value
+  if (dateTo.value) filterParams.date_to = dateTo.value
 
   reviewNavigationStore.setContext({
     items: reviews.value.map(item => ({
@@ -996,7 +1008,7 @@ const searchReviewers = (query: string) => {
 
 // Watch for filter changes and reload data from backend
 watch(
-  [searchQuery, appFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter, hideArchived],
+  [searchQuery, appFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter, dateFrom, dateTo, hideArchived],
   () => {
     // Debounce the reload to avoid multiple rapid requests
     clearTimeout(filterChangeTimeout)
