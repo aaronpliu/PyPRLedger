@@ -522,6 +522,7 @@
       },
       "filters": {
         "date_range": "日期范围",
+        "time_period": "时间周期",
         "start_date": "开始日期",
         "end_date": "结束日期",
         "project": "项目",

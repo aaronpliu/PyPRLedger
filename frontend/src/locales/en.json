@@ -522,6 +522,7 @@
       },
       "filters": {
         "date_range": "Date Range",
+        "time_period": "Time Period",
         "start_date": "Start Date",
         "end_date": "End Date",
         "project": "Project",
