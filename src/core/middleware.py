@@ -175,7 +175,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         except RateLimitException:
             raise
         except Exception as exc:
-            logger.error(f"Rate limiting error: {str(exc)}", exc_info=True)
+            logger.warning(f"Rate limiting error (Redis): {str(exc)}")
             # Don't block request when error occurs
             return await call_next(request)
 

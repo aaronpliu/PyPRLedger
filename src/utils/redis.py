@@ -21,12 +21,13 @@ async def init_redis() -> None:
     try:
         logger.info("Initializing Redis connection...")
 
-        # Create connection pool
+        # Create connection pool with health checks to detect stale connections
         _connection_pool = ConnectionPool.from_url(
             settings.redis_url,
             max_connections=settings.REDIS_MAX_CONNECTIONS,
             decode_responses=True,
             encoding="utf-8",
+            health_check_interval=30,
         )
 
         # Create Redis client
