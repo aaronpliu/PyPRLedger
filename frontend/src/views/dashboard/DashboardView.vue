@@ -598,7 +598,11 @@ const renderScoreChart = () => {
         areaStyle: { opacity: 0.3 },
         itemStyle: { color: '#67c23a' },
         markLine: {
+          silent: true,
           data: [{ type: 'average', name: t('dashboard.average') }],
+          label: {
+            backgroundColor: 'transparent',
+          },
         },
       },
       {
@@ -839,7 +843,12 @@ const renderSuggestionsChart = () => {
         itemStyle: { color: '#f56c6c' },
         lineStyle: { width: 2 },
         markLine: {
+          silent: true,
           data: [{ type: 'average', name: t('dashboard.average') }],
+          label: {
+            backgroundColor: 'transparent',
+            position: 'start',
+          },
         },
       },
     ],
