@@ -64,6 +64,12 @@ export class SSEService {
   /** Bound beforeunload handler reference for cleanup */
   private boundBeforeUnload: (() => void) | null = null
 
+  /** Pending debounced disconnect timeout (set during page navigation) */
+  private pendingDisconnectTimeout: ReturnType<typeof setTimeout> | null = null
+
+  /** Debounce delay before actual disconnect on page navigation (ms) */
+  private static readonly DISCONNECT_DEBOUNCE_MS = 2000
+
   constructor(options: Partial<SSEServiceOptions> = {}) {
     this.options = {
       maxReconnectAttempts: 5,
@@ -88,6 +94,35 @@ export class SSEService {
     onError?: (error: Event) => void,
     onOpen?: () => void,
   ): void {
+    // If a pending disconnect exists, cancel it and reuse the current connection
+    if (this.pendingDisconnectTimeout !== null) {
+      console.log('[SSE] Cancelling pending disconnect — reusing existing connection')
+      clearTimeout(this.pendingDisconnectTimeout)
+      this.pendingDisconnectTimeout = null
+
+      // Update callbacks for the current component
+      this.currentOnEvent = onEvent
+      this.currentOnError = onError || null
+      this.currentOnOpen = onOpen || null
+
+      // Restore reconnect capability
+      this.isManualDisconnect = false
+      this.reconnectAttempts = 0
+      this._enabled = true
+
+      // Update stored params for future setEnabled(true)
+      this.token = token
+      this.lastToken = token
+      this.lastOnEvent = onEvent
+      this.lastOnError = onError || null
+      this.lastOnOpen = onOpen || null
+
+      // DO NOT increment connectionGeneration — existing event listeners
+      // still reference currentOnEvent/OnError/OnOpen, which we just updated
+
+      return
+    }
+
     // Close existing connection immediately (if any)
     if (this.eventSource) {
       console.log('[SSE] Closing existing connection for new connect()')
@@ -160,12 +195,25 @@ export class SSEService {
    * Also removes the beforeunload listener.
    */
   disconnect(): void {
-    // Remove beforeunload listener
+    // Remove beforeunload listener (will be re-added on next connect)
     if (this.boundBeforeUnload) {
       window.removeEventListener('beforeunload', this.boundBeforeUnload)
       this.boundBeforeUnload = null
     }
-    this.disconnectImmediate()
+
+    // Prevent reconnection attempts and stale callbacks during debounce window
+    this.isManualDisconnect = true
+    this.currentOnEvent = null
+    this.currentOnError = null
+    this.currentOnOpen = null
+
+    // Schedule delayed disconnection so rapid navigation reuses connection
+    if (this.pendingDisconnectTimeout === null) {
+      console.log(`[SSE] Scheduling disconnect in ${SSEService.DISCONNECT_DEBOUNCE_MS}ms`)
+      this.pendingDisconnectTimeout = setTimeout(() => {
+        this.disconnectImmediate()
+      }, SSEService.DISCONNECT_DEBOUNCE_MS)
+    }
   }
 
   /**
@@ -206,7 +254,12 @@ export class SSEService {
       }
     } else {
       console.log('[SSE] Disabling connection')
-      this.disconnect()
+      // Cancel any pending debounced disconnect and close immediately
+      if (this.pendingDisconnectTimeout !== null) {
+        clearTimeout(this.pendingDisconnectTimeout)
+        this.pendingDisconnectTimeout = null
+      }
+      this.disconnectImmediate()
     }
   }
 
@@ -303,7 +356,7 @@ export class SSEService {
    */
   private handleAuthFailure(): void {
     console.error('[SSE] Authentication failed — token expired')
-    this.disconnect()
+    this.disconnectImmediate()
     this._enabled = false
     localStorage.setItem('sse_enabled', 'false')
 
