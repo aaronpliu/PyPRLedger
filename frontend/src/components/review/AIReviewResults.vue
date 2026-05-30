@@ -6,24 +6,26 @@
       <div class="screenshot-meta">
         <div class="screenshot-meta-title">AI Review Report</div>
         <table class="screenshot-meta-table">
-          <tr>
-            <td class="meta-label">AI Review ID</td>
-            <td class="meta-value">{{ aiReviewId || 'N/A' }}</td>
-            <td class="meta-label">PR ID</td>
-            <td class="meta-value">#{{ prId || 'N/A' }}</td>
-          </tr>
-          <tr>
-            <td class="meta-label">PR User</td>
-            <td class="meta-value">{{ prUser || 'N/A' }}</td>
-            <td class="meta-label">Commit</td>
-            <td class="meta-value">{{ commitId ? commitId.substring(0, 8) : 'N/A' }}</td>
-          </tr>
-          <tr>
-            <td class="meta-label">Project</td>
-            <td class="meta-value">{{ projectInfo || 'N/A' }}</td>
-            <td class="meta-label">Captured</td>
-            <td class="meta-value">{{ capturedTime }}</td>
-          </tr>
+          <tbody>
+            <tr>
+              <td class="meta-label">AI Review ID</td>
+              <td class="meta-value">{{ aiReviewId || 'N/A' }}</td>
+              <td class="meta-label">PR ID</td>
+              <td class="meta-value">#{{ prId || 'N/A' }}</td>
+            </tr>
+            <tr>
+              <td class="meta-label">PR User</td>
+              <td class="meta-value">{{ prUser || 'N/A' }}</td>
+              <td class="meta-label">Commit</td>
+              <td class="meta-value">{{ commitId ? commitId.substring(0, 8) : 'N/A' }}</td>
+            </tr>
+            <tr>
+              <td class="meta-label">Project</td>
+              <td class="meta-value">{{ projectInfo || 'N/A' }}</td>
+              <td class="meta-label">Captured</td>
+              <td class="meta-value">{{ capturedTime }}</td>
+            </tr>
+          </tbody>
         </table>
       </div>
 
