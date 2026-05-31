@@ -11,6 +11,8 @@ from src.api.v1.endpoints import (
     projects,
     rbac,
     reviews,
+    search,  # Global search endpoint
+    sse,  # SSE streaming endpoint for real-time review notifications
     task_assignment,  # Task assignment endpoints for review_admin
     users,
 )
@@ -29,6 +31,9 @@ api_router.include_router(delegation.router, prefix="/rbac/delegations", tags=["
 
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 
+# SSE streaming endpoint — mounted at /api/v1/reviews/stream
+api_router.include_router(sse.router, prefix="/reviews", tags=["sse"])
+
 # Task assignment endpoints (for review_admin to manage reviews)
 api_router.include_router(task_assignment.router, tags=["task-assignment"])
 
@@ -43,6 +48,9 @@ api_router.include_router(notifications.router, tags=["notifications"])
 
 # Personal Access Token management endpoints
 api_router.include_router(personal_access_tokens.router, tags=["personal-access-tokens"])
+
+# Global search endpoint
+api_router.include_router(search.router, prefix="/search", tags=["search"])
 
 
 # API information endpoint

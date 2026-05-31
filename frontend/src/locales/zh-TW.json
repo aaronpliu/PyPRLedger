@@ -37,7 +37,8 @@
     "exitFullscreen": "退出全螢幕",
     "page": "頁",
     "apply": "套用",
-    "reset": "重設"
+    "reset": "重設",
+    "live_update": "即時更新"
   },
   "menu": {
     "dashboard": "儀表板",
@@ -256,6 +257,7 @@
       "commit_id": "Commit ID",
       "project": "專案",
       "reviewer": "審查者",
+      "pr_user": "PR用戶",
       "status": "狀態",
       "level": "級別",
       "file_level": "📄 檔案級",
@@ -269,6 +271,11 @@
       "side_by_side": "並排對比",
       "ai_review_result": "🤖 AI審查結果",
       "copy_id": "複製ID",
+      "screenshot_download": "下載",
+      "screenshot_copy": "複製到剪貼簿",
+      "screenshot_downloaded": "截圖已下載",
+      "screenshot_copied": "截圖已複製到剪貼簿",
+      "screenshot_copy_failed": "複製圖片失敗，請嘗試下載。",
       "scores": "📊 評分",
       "add_score": "新增評分",
       "update_score": "更新評分",
@@ -507,6 +514,7 @@
         "assignments_per_reviewer": "每個審查者的分配",
         "scored_per_reviewer": "每個審查者的評分審查",
         "scoring_trend": "審查評分趨勢",
+        "issues_by_severity": "按嚴重程度的問題分布",
         "top_n": "前 {n} 名"
       },
       "tips": {
@@ -514,6 +522,7 @@
       },
       "filters": {
         "date_range": "日期範圍",
+        "time_period": "時間週期",
         "start_date": "開始日期",
         "end_date": "結束日期",
         "project": "專案",

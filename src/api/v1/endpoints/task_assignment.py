@@ -1,5 +1,6 @@
 """API endpoints for task assignment management (review_admin only)"""
 
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -46,6 +47,18 @@ async def list_reviews(
     pull_request_user: str | None = Query(
         None, min_length=1, max_length=64, description="Filter by pull request user username"
     ),
+    severity: str | None = Query(
+        None,
+        description="Filter by AI issue severity (critical, high, medium, low)",
+    ),
+    date_from: datetime | None = Query(
+        None,
+        description="Filter reviews created after this date",
+    ),
+    date_to: datetime | None = Query(
+        None,
+        description="Filter reviews created before this date (inclusive)",
+    ),
 ) -> ReviewListResponse:
     """
     Get list of reviews with their assignments (requires review_admin role)
@@ -58,6 +71,9 @@ async def list_reviews(
     - status: Filter by PR status (open, merged, closed, draft)
     - app_names: Filter by registered app names (comma-separated)
     - pull_request_user: Filter by PR author username
+    - severity: Filter by AI issue severity (critical, high, medium, low)
+    - date_from: Filter reviews created after this date
+    - date_to: Filter reviews created before this date (inclusive)
     """
     # TODO: Add permission check - must be review_admin or system_admin
 
@@ -76,6 +92,9 @@ async def list_reviews(
             status=pr_status,
             app_names=app_names_list,
             pull_request_user=pull_request_user,
+            severity=severity,
+            date_from=date_from,
+            date_to=date_to,
         )
 
         return ReviewListResponse(

@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -41,10 +42,11 @@ def get_engine() -> AsyncEngine:
 
 def create_engine() -> AsyncEngine:
     """Create database engine"""
+
+    drivername = make_url(settings.database_url).drivername
     # Prepare connection pool related parameters (only needed when not using NullPool)
     engine_kwargs = {
         "echo": settings.DEBUG,
-        "pool_pre_ping": True,
         "pool_use_lifo": True,
         "connect_args": {
             "charset": "utf8mb4",
@@ -52,6 +54,14 @@ def create_engine() -> AsyncEngine:
         },
         "future": True,
     }
+
+    # Add connection arguments based on the driver name
+    if drivername == "pymysql" or drivername == "mysql+aiomysql" or drivername == "mysql+asyncmy":
+        engine_kwargs["connect_args"]["charset"] = "utf8mb4"
+    elif drivername == "postgresql+asyncpg":
+        engine_kwargs["connect_args"]["options"] = (
+            f"-c statement_timeout={settings.DATABASE_POOL_TIMEOUT * 1000}"
+        )
 
     # Decide whether to add connection pool parameters based on whether NullPool is used
     # NullPool does not support pool_size, max_overflow, pool_timeout and other parameters

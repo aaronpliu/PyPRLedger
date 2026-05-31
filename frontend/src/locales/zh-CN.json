@@ -37,7 +37,8 @@
     "exitFullscreen": "退出全屏",
     "page": "页",
     "apply": "应用",
-    "reset": "重置"
+    "reset": "重置",
+    "live_update": "实时更新"
   },
   "menu": {
     "dashboard": "仪表板",
@@ -256,6 +257,7 @@
       "commit_id": "Commit ID",
       "project": "项目",
       "reviewer": "审查者",
+      "pr_user": "PR用户",
       "status": "状态",
       "level": "级别",
       "file_level": "📄 文件级",
@@ -269,6 +271,11 @@
       "side_by_side": "并排对比",
       "ai_review_result": "🤖 AI审查结果",
       "copy_id": "复制ID",
+      "screenshot_download": "下载",
+      "screenshot_copy": "复制到剪贴板",
+      "screenshot_downloaded": "截图已下载",
+      "screenshot_copied": "截图已复制到剪贴板",
+      "screenshot_copy_failed": "复制图片失败，请尝试下载。",
       "scores": "📊 评分",
       "add_score": "添加评分",
       "update_score": "更新评分",
@@ -507,6 +514,7 @@
         "assignments_per_reviewer": "每个审查者的分配",
         "scored_per_reviewer": "每个审查者的评分审查",
         "scoring_trend": "审查评分趋势",
+        "issues_by_severity": "按严重程度的问题分布",
         "top_n": "前 {n} 名"
       },
       "tips": {
@@ -514,6 +522,7 @@
       },
       "filters": {
         "date_range": "日期范围",
+        "time_period": "时间周期",
         "start_date": "开始日期",
         "end_date": "结束日期",
         "project": "项目",

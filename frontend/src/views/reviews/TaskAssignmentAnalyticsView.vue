@@ -12,7 +12,7 @@
     <!-- Filters -->
     <el-card class="filters-card">
       <el-form :inline="true" class="filter-form">
-        <el-form-item :label="t('task_assignment.analytics.period.daily')">
+        <el-form-item :label="t('task_assignment.analytics.filters.time_period')">
           <el-radio-group v-model="selectedPeriod" @change="loadAnalytics">
             <el-radio-button value="daily">{{ t('task_assignment.analytics.period.daily') }}</el-radio-button>
             <el-radio-button value="weekly">{{ t('task_assignment.analytics.period.weekly') }}</el-radio-button>
@@ -152,8 +152,8 @@
       />
       
       <div v-loading="loading" element-loading-text="Loading analytics data...">
-      <!-- Chart Row 1: Time-Based Trends -->
-      <el-card class="chart-card" shadow="hover">
+       <!-- Chart Row 1: Time-Based Trends -->
+       <el-card class="chart-card chart-card--standalone" shadow="hover">
         <template #header>
           <div class="chart-header">
             <span>{{ t('task_assignment.analytics.charts.reviews_raised_trend') }}</span>
@@ -175,10 +175,47 @@
         </template>
         <div ref="timeTrendChartRef">
           <LineChart
+            ref="timeTrendChartComponent"
             v-if="timePeriodData.length > 0"
             :title="''"
             :data="timePeriodData.map(d => ({ date: d.date, value: d.count }))"
             color="#409eff"
+            height="350px"
+            :axis-label-color="chartColors.axisLabelColor"
+            :axis-line-color="chartColors.axisLineColor"
+            :split-line-color="chartColors.splitLineColor"
+          />
+          <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+        </div>
+      </el-card>
+
+      <!-- Severity Trends -->
+      <el-card class="chart-card chart-card--standalone" shadow="hover" style="margin-top: 20px">
+        <template #header>
+          <div class="chart-header">
+            <span>{{ t('task_assignment.analytics.charts.issues_by_severity') }}</span>
+            <div class="chart-actions">
+              <el-tag type="warning">{{ selectedPeriod }}</el-tag>
+              <el-tooltip 
+                :content="fullscreenChart === 'severityTrend' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                placement="top"
+              >
+                <el-button 
+                  text 
+                  size="small" 
+                  @click="toggleFullscreen('severityTrend')"
+                  :icon="fullscreenChart === 'severityTrend' ? Close : FullScreen"
+                />
+              </el-tooltip>
+            </div>
+          </div>
+        </template>
+        <div ref="severityTrendChartRef">
+          <MultiLineChart
+            ref="severityTrendChartComponent"
+            v-if="severityData.length > 0 && severityData.some(s => s.data.some(d => d.value > 0))"
+            :title="''"
+            :series="severityData"
             height="350px"
             :axis-label-color="chartColors.axisLabelColor"
             :axis-line-color="chartColors.axisLineColor"
@@ -194,19 +231,35 @@
         <el-col :xs="24" :md="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <div class="chart-header-with-badge">
+              <div class="chart-header">
                 <span>{{ t('task_assignment.analytics.charts.by_pr_user') }}</span>
-                <el-tag size="small" type="info">{{ t('task_assignment.analytics.charts.top_n', { n: 20 }) }}</el-tag>
+                <div class="chart-actions">
+                  <el-tag size="small" type="info">{{ t('task_assignment.analytics.charts.top_n', { n: 20 }) }}</el-tag>
+                  <el-tooltip 
+                    :content="fullscreenChart === 'prUser' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                    placement="top"
+                  >
+                    <el-button 
+                      text 
+                      size="small" 
+                      @click="toggleFullscreen('prUser')"
+                      :icon="fullscreenChart === 'prUser' ? Close : FullScreen"
+                    />
+                  </el-tooltip>
+                </div>
               </div>
             </template>
-            <BarChart
-              v-if="prUserData.length > 0"
-              :title="''"
-              :data="prUserData.slice(0, 20).map(d => ({ name: d.username, value: d.count }))"
-              color="#67c23a"
-              height="300px"
-            />
-            <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            <div ref="prUserChartRef">
+              <BarChart
+                ref="prUserChartComponent"
+                v-if="prUserData.length > 0"
+                :title="''"
+                :data="prUserData.slice(0, 20).map(d => ({ name: d.username, value: d.count }))"
+                color="#67c23a"
+                height="300px"
+              />
+              <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            </div>
           </el-card>
         </el-col>
 
@@ -214,25 +267,43 @@
         <el-col :xs="24" :md="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <div class="chart-header-with-tip">
-                <span>{{ t('task_assignment.analytics.charts.by_project_repo') }}</span>
-                <el-tooltip placement="top" effect="light">
-                  <template #content>
-                    <div style="max-width: 250px; line-height: 1.5;">
-                      {{ t('task_assignment.analytics.tips.others_category') }}
-                    </div>
-                  </template>
-                  <el-icon style="cursor: help; margin-left: 8px;"><QuestionFilled /></el-icon>
-                </el-tooltip>
+              <div class="chart-header">
+                <span>
+                  {{ t('task_assignment.analytics.charts.by_project_repo') }}
+                  <el-tooltip placement="top" effect="light">
+                    <template #content>
+                      <div style="max-width: 250px; line-height: 1.5;">
+                        {{ t('task_assignment.analytics.tips.others_category') }}
+                      </div>
+                    </template>
+                    <el-icon style="cursor: help; margin-left: 8px;"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+                <div class="chart-actions">
+                  <el-tooltip 
+                    :content="fullscreenChart === 'project' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                    placement="top"
+                  >
+                    <el-button 
+                      text 
+                      size="small" 
+                      @click="toggleFullscreen('project')"
+                      :icon="fullscreenChart === 'project' ? Close : FullScreen"
+                    />
+                  </el-tooltip>
+                </div>
               </div>
             </template>
-            <PieChart
-              v-if="consolidatedProjectData.length > 0"
-              :title="''"
-              :data="consolidatedProjectData"
-              height="300px"
-            />
-            <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            <div ref="projectChartRef">
+              <PieChart
+                ref="projectChartComponent"
+                v-if="consolidatedProjectData.length > 0"
+                :title="''"
+                :data="consolidatedProjectData"
+                height="300px"
+              />
+              <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            </div>
           </el-card>
         </el-col>
       </el-row>
@@ -243,22 +314,38 @@
         <el-col :xs="24" :md="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <div class="chart-header-with-badge">
+              <div class="chart-header">
                 <span>{{ t('task_assignment.analytics.charts.assignments_per_reviewer') }}</span>
-                <el-tag size="small" type="info">{{ t('task_assignment.analytics.charts.top_n', { n: 20 }) }}</el-tag>
+                <div class="chart-actions">
+                  <el-tag size="small" type="info">{{ t('task_assignment.analytics.charts.top_n', { n: 20 }) }}</el-tag>
+                  <el-tooltip 
+                    :content="fullscreenChart === 'assignments' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                    placement="top"
+                  >
+                    <el-button 
+                      text 
+                      size="small" 
+                      @click="toggleFullscreen('assignments')"
+                      :icon="fullscreenChart === 'assignments' ? Close : FullScreen"
+                    />
+                  </el-tooltip>
+                </div>
               </div>
             </template>
-            <BarChart
-              v-if="reviewerData.length > 0"
-              :title="''"
-              :data="reviewerData.slice(0, 20).map(d => ({
-                name: d.display_name || d.reviewer,
-                value: d.assigned
-              }))"
-              color="#e6a23c"
-              height="350px"
-            />
-            <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            <div ref="assignmentsChartRef">
+              <BarChart
+                ref="assignmentsChartComponent"
+                v-if="reviewerData.length > 0"
+                :title="''"
+                :data="reviewerData.slice(0, 20).map(d => ({
+                  name: d.display_name || d.reviewer,
+                  value: d.assigned
+                }))"
+                color="#e6a23c"
+                height="350px"
+              />
+              <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            </div>
           </el-card>
         </el-col>
 
@@ -266,21 +353,38 @@
         <el-col :xs="24" :md="12">
           <el-card class="chart-card" shadow="hover">
             <template #header>
-              <span>{{ t('task_assignment.analytics.charts.scored_per_reviewer') }}</span>
+              <div class="chart-header">
+                <span>{{ t('task_assignment.analytics.charts.scored_per_reviewer') }}</span>
+                <div class="chart-actions">
+                  <el-tooltip 
+                    :content="fullscreenChart === 'scored' ? t('common.exitFullscreen') : t('common.fullscreen')"
+                    placement="top"
+                  >
+                    <el-button 
+                      text 
+                      size="small" 
+                      @click="toggleFullscreen('scored')"
+                      :icon="fullscreenChart === 'scored' ? Close : FullScreen"
+                    />
+                  </el-tooltip>
+                </div>
+              </div>
             </template>
-            <ProgressChart
-              v-if="reviewerProgressData.length > 0"
-              :title="''"
-              :data="reviewerProgressData.slice(0, 10)"
-              height="350px"
-            />
-            <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            <div ref="scoredChartRef">
+              <ProgressChart
+                v-if="reviewerProgressData.length > 0"
+                :title="''"
+                :data="reviewerProgressData.slice(0, 10)"
+                height="350px"
+              />
+              <el-empty v-else :description="t('task_assignment.analytics.messages.no_data')" />
+            </div>
           </el-card>
         </el-col>
       </el-row>
 
       <!-- Chart Row 4: Scoring Trend -->
-      <el-card class="chart-card" shadow="hover">
+      <el-card class="chart-card chart-card--standalone" shadow="hover">
         <template #header>
           <div class="chart-header">
             <span>{{ t('task_assignment.analytics.charts.scoring_trend') }}</span>
@@ -302,6 +406,7 @@
         </template>
         <div ref="scoringTrendChartRef">
           <LineChart
+            ref="scoringTrendChartComponent"
             v-if="scoringTrendData.length > 0"
             :title="''"
             :data="scoringTrendData.map(d => ({ date: d.date, value: d.completed || 0 }))"
@@ -320,11 +425,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Refresh, Document, TrendCharts, User, CircleCheck, FullScreen, Close, QuestionFilled } from '@element-plus/icons-vue'
 import LineChart from '@/components/charts/LineChart.vue'
+import MultiLineChart from '@/components/charts/MultiLineChart.vue'
 import BarChart from '@/components/charts/BarChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
 import ProgressChart from '@/components/charts/ProgressChart.vue'
@@ -358,6 +464,7 @@ const {
   aggregateByPRUser,
   aggregateByProject,
   aggregateByReviewer,
+  aggregateIssuesBySeverity,
   getSummaryStats,
 } = useTaskAssignmentAnalytics()
 
@@ -374,11 +481,24 @@ const projectOptions = ref<Array<{ label: string; value: string }>>([])
 const reviewerOptions = ref<Array<{ label: string; value: string }>>([])
 
 // Fullscreen state
-const fullscreenChart = ref<'timeTrend' | 'scoringTrend' | null>(null)
+const fullscreenChart = ref<'timeTrend' | 'scoringTrend' | 'severityTrend' | 'prUser' | 'project' | 'assignments' | 'scored' | null>(null)
 
 // Chart refs for fullscreen
 const timeTrendChartRef = ref<HTMLElement>()
 const scoringTrendChartRef = ref<HTMLElement>()
+const severityTrendChartRef = ref<HTMLElement>()
+const prUserChartRef = ref<HTMLElement>()
+const projectChartRef = ref<HTMLElement>()
+const assignmentsChartRef = ref<HTMLElement>()
+const scoredChartRef = ref<HTMLElement>()
+
+// Component refs for direct chart resize
+const timeTrendChartComponent = ref()
+const scoringTrendChartComponent = ref()
+const severityTrendChartComponent = ref()
+const prUserChartComponent = ref()
+const projectChartComponent = ref()
+const assignmentsChartComponent = ref()
 
 // Computed data
 const summaryStats = computed(() => getSummaryStats.value)
@@ -387,6 +507,7 @@ const timePeriodData = computed(() => aggregateByTimePeriod(selectedPeriod.value
 const prUserData = computed(() => aggregateByPRUser())
 const projectData = computed(() => aggregateByProject())
 const reviewerData = computed(() => aggregateByReviewer())
+const severityData = computed(() => aggregateIssuesBySeverity(selectedPeriod.value))
 
 const reviewerProgressData = computed(() => {
   return reviewerData.value.map(r => ({
@@ -481,23 +602,122 @@ const animateCounter = (targetRef: any, targetValue: number, duration: number) =
   requestAnimationFrame(updateCounter)
 }
 
+// Helper: resize specific chart component (or all) by calling exposed resize()
+// Also applies .is-fullscreen class + explicit height to work around CSS scoping
+const resizeCharts = (chartName?: string) => {
+  const componentMap: Record<string, any> = {
+    timeTrend: timeTrendChartComponent,
+    scoringTrend: scoringTrendChartComponent,
+    severityTrend: severityTrendChartComponent,
+    prUser: prUserChartComponent,
+    project: projectChartComponent,
+    assignments: assignmentsChartComponent,
+  }
+
+  // Helper: set explicit height on chart containers inside fullscreen card
+  // Note: querySelector(':fullscreen') does NOT work (CSS pseudo-classes unsupported)
+  // So we use document.fullscreenElement instead
+  const setFullscreenHeight = () => {
+    const fullscreenEl = document.fullscreenElement as HTMLElement | null
+    if (fullscreenEl && fullscreenEl.classList.contains('chart-card')) {
+      fullscreenEl.classList.add('is-fullscreen')
+
+      // Style ECharts chart containers (.chart-container)
+      fullscreenEl.querySelectorAll('.chart-container').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.setProperty('height', 'calc(100vh - 150px)', 'important')
+        htmlEl.style.setProperty('min-height', '600px', 'important')
+      })
+
+      // Style ProgressChart (.progress-chart) — needs flex layout for scrollable list
+      fullscreenEl.querySelectorAll('.progress-chart').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.setProperty('height', 'calc(100vh - 150px)', 'important')
+        htmlEl.style.setProperty('min-height', '600px', 'important')
+        htmlEl.style.setProperty('display', 'flex', 'important')
+        htmlEl.style.setProperty('flex-direction', 'column', 'important')
+        htmlEl.style.setProperty('overflow', 'hidden', 'important')
+      })
+      fullscreenEl.querySelectorAll('.progress-list').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.setProperty('flex', '1', 'important')
+        htmlEl.style.setProperty('overflow-y', 'auto', 'important')
+      })
+    }
+  }
+
+  // Helper: remove explicit heights on exit
+  const removeFullscreenHeight = () => {
+    document.querySelectorAll('.chart-card.is-fullscreen').forEach((card) => {
+      card.classList.remove('is-fullscreen')
+      card.querySelectorAll('.chart-container').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.removeProperty('height')
+        htmlEl.style.removeProperty('min-height')
+      })
+      card.querySelectorAll('.progress-chart').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.removeProperty('height')
+        htmlEl.style.removeProperty('min-height')
+        htmlEl.style.removeProperty('display')
+        htmlEl.style.removeProperty('flex-direction')
+        htmlEl.style.removeProperty('overflow')
+      })
+      card.querySelectorAll('.progress-list').forEach((el) => {
+        const htmlEl = el as HTMLElement
+        htmlEl.style.removeProperty('flex')
+        htmlEl.style.removeProperty('overflow-y')
+      })
+    })
+  }
+
+  if (chartName) {
+    // Single chart resize
+    const comp = componentMap[chartName]
+    if (comp?.value?.resize) {
+      comp.value.resize()
+    }
+    setFullscreenHeight()
+  } else {
+    // All charts resize (used on exit via Esc)
+    removeFullscreenHeight()
+    Object.values(componentMap).forEach((comp) => {
+      if (comp?.value?.resize) {
+        comp.value.resize()
+      }
+    })
+  }
+}
+
 // Toggle fullscreen for charts
-const toggleFullscreen = (chartName: 'timeTrend' | 'scoringTrend') => {
+const toggleFullscreen = (chartName: 'timeTrend' | 'scoringTrend' | 'severityTrend' | 'prUser' | 'project' | 'assignments' | 'scored') => {
   if (fullscreenChart.value === chartName) {
     // Exit fullscreen
     fullscreenChart.value = null
     document.exitFullscreen().catch(console.error)
+    // Resize charts back to normal size
+    setTimeout(() => resizeCharts(), 100)
   } else {
     // Enter fullscreen
     fullscreenChart.value = chartName
     const chartRef = 
       chartName === 'timeTrend' ? timeTrendChartRef.value :
-      scoringTrendChartRef.value
+      chartName === 'scoringTrend' ? scoringTrendChartRef.value :
+      chartName === 'severityTrend' ? severityTrendChartRef.value :
+      chartName === 'prUser' ? prUserChartRef.value :
+      chartName === 'project' ? projectChartRef.value :
+      chartName === 'assignments' ? assignmentsChartRef.value :
+      scoredChartRef.value
     
     if (chartRef) {
-      const cardElement = chartRef.closest('.chart-card')
-      if (cardElement) {
-        cardElement.requestFullscreen().catch(console.error)
+      const cardElement = chartRef.closest('.chart-card') as HTMLElement | null
+      if (cardElement && cardElement.requestFullscreen) {
+        cardElement.requestFullscreen()
+          .then(() => {
+            // Apply fullscreen sizing after browser enters fullscreen
+            setTimeout(() => resizeCharts(chartName), 50)
+          })
+          .catch(console.error)
       }
     }
   }
@@ -617,6 +837,16 @@ onMounted(() => {
   loadFilterOptions()
   loadAnalytics()
   
+  // Reset fullscreen state when browser exits fullscreen (e.g., Esc key)
+  const onFullscreenChange = () => {
+    if (!document.fullscreenElement) {
+      fullscreenChart.value = null
+      // Resize charts after exiting fullscreen
+      setTimeout(() => resizeCharts(), 100)
+    }
+  }
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  
   // Watch for theme changes via MutationObserver (like Dashboard)
   const observer = new MutationObserver(() => {
     isDarkMode.value = document.documentElement.getAttribute('data-theme') === 'dark'
@@ -626,7 +856,13 @@ onMounted(() => {
     attributes: true,
     attributeFilter: ['data-theme']
   })
+  
+  // Clean up event listener on unmount
+  onUnmounted(() => {
+    document.removeEventListener('fullscreenchange', onFullscreenChange)
+  })
 })
+
 </script>
 
 <style scoped>
@@ -859,8 +1095,21 @@ onMounted(() => {
   margin-bottom: 0;
 }
 
+/* Standalone chart cards (full-width, not inside a .chart-row) */
+.chart-card--standalone {
+  margin-bottom: 20px;
+}
+
+.chart-card--standalone:last-child {
+  margin-bottom: 0;
+}
+
 .chart-row {
   margin-bottom: 20px;
+}
+
+.chart-row:last-child {
+  margin-bottom: 0;
 }
 
 .chart-header {
@@ -921,5 +1170,48 @@ onMounted(() => {
 /* Dark theme adjustments */
 [data-theme='dark'] .summary-icon {
   opacity: 0.9;
+}
+
+/* ===== Fullscreen Chart Cards ===== */
+/* .is-fullscreen class is added/removed programmatically by resizeCharts() */
+/* CSS selectors with class are more reliable than :fullscreen :deep() for Vue scoped CSS */
+
+/* Base fullscreen style — browser auto-applies :fullscreen to the requestFullscreen() element */
+.chart-card:fullscreen,
+.chart-card:-webkit-full-screen,
+.chart-card:-moz-full-screen {
+  padding: 20px;
+  background: var(--el-bg-color);
+}
+
+/* Height override via .is-fullscreen class (added by JS after fullscreen enters) */
+.chart-card.is-fullscreen :deep(.chart-container) {
+  height: calc(100vh - 150px) !important;
+  min-height: 600px;
+}
+
+/* Also try via :fullscreen pseudo-class as secondary fallback */
+.chart-card:fullscreen :deep(.chart-container) {
+  height: calc(100vh - 150px) !important;
+  min-height: 600px;
+}
+
+/* Header spacing in fullscreen */
+.chart-card.is-fullscreen .chart-header,
+.chart-card:fullscreen .chart-header {
+  margin-bottom: 20px;
+}
+
+/* Fullscreen support for ProgressChart (scored per reviewer) */
+.chart-card.is-fullscreen :deep(.progress-chart) {
+  height: calc(100vh - 150px) !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chart-card.is-fullscreen :deep(.progress-list) {
+  flex: 1;
+  overflow-y: auto;
 }
 </style>

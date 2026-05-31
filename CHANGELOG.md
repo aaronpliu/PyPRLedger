@@ -5,6 +5,89 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.1] - 2026-05-31
+
+**Backend Version**: 1.15.1
+**Frontend Version**: 1.10.0
+
+### Added
+- support date range filter in reviews and task assignement page
+- enhance sse event handling
+
+### Fixed
+- enhance the lable of time period in task assignment analytics
+- enhance the chart lable display in dashboard
+- enhance redis connection
+- enhance the filter
+- applied fix for CVE-2026-48710
+- update html  issue
+- enhance the chart display in full screen
+
+### Changed
+- [Refactor] enhance score table to display
+- [Refactor] enhance review information table to show PR meta info
+
+---
+
+## [1.15.0] - 2026-05-28
+
+**Backend Version**: 1.15.0
+**Frontend Version**: 1.9.5
+
+### Added
+- fine-tune chart in full screen
+- add chart to show issues as per severity and enhance charts with full screen
+- enhance to take screenshot for AI review result
+- enhanced global search
+
+### Fixed
+- fix style issue of PR meta info in screenshot
+- optimize error handling for sse connection
+- fix filter of severity issue in task assignment page
+- enhance API request
+- fix filter of severity issue in reviews
+- enhance notification polling
+- enhanced sse connection and exception handling
+- update field name
+- enhance database connection and logging
+
+---
+
+## [1.14.1] - 2026-05-22
+
+**Backend Version**: 1.14.1
+**Frontend Version**: 1.9.1
+
+### Fixed
+- **SSE connection tracking**: Fixed admin user connection cleanup — `_sse_event_generator` now receives the correct `tracking_username` from `stream_reviews`, preventing stale connection accumulation and 429 errors for admin users
+- **SSE filter for non-admin users**: Removed 403 block; any authenticated user can now connect. Non-admin users without a linked Bitbucket account receive no events silently instead of being rejected
+- **ECharts initialization**: Fixed `LineChart.vue` to wait for `onMounted` before rendering, eliminating DOM width/height warnings on the Task Assignment Analytics page
+- **ECharts grid API**: Replaced deprecated `grid.containLabel: true` with modern `grid.outerBounds` in `BarChart.vue` and `LineChart.vue` (ECharts v6 compatibility)
+
+### Other Changes
+- 487e657 Import SSEReviewCreatedEvent type in TaskAssignmentView
+
+---
+
+## [1.14.0] - 2026-05-21
+
+**Backend Version**: 1.14.0
+**Frontend Version**: 1.9.0
+
+### Added
+- add SSE for reviews and task assignment page
+- add agent team for the system
+
+### Other Changes
+- c7536fc Merge pull request #18 from aaronpliu/main
+- c7f089c Merge pull request #17 from aaronpliu/feature/PRLedger_NewUI
+- 5481125 Merge pull request #16 from aaronpliu/feature/PRLedger_NewUI
+- cbc0645 Merge pull request #15 from aaronpliu/feature/PRLedger_NewUI
+- bbb5c6f Merge pull request #14 from aaronpliu/feature/PRLedger_NewUI
+- 7b85f93 Merge pull request #13 from aaronpliu/feature/PRLedger_NewUI
+
+---
+
 ## [1.13.5] - 2026-05-20
 
 **Backend Version**: 1.13.5

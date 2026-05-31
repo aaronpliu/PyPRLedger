@@ -8,6 +8,16 @@
             <el-tag type="info">{{ t('task_assignment.review_admin_only') }}</el-tag>
           </div>
           <div class="header-actions">
+            <div class="live-toggle-wrapper">
+              <span class="live-dot" :class="{ active: sseEnabled }" />
+              <span class="live-label">{{ t('common.live_update') }}</span>
+              <el-switch
+                :model-value="sseEnabled"
+                size="small"
+                class="live-switch"
+                @change="toggleSse"
+              />
+            </div>
             <el-button @click="loadReviews">
               <el-icon><Refresh /></el-icon>
               {{ t('task_assignment.refresh') }}
@@ -26,6 +36,8 @@
         v-model:scored-filter="scoredFilter"
         v-model:severity-filter="severityFilter"
         v-model:status-filter="statusFilter"
+        v-model:date-from="dateFrom"
+        v-model:date-to="dateTo"
         :app-options="availableApps"
         :project-options="projects"
         :pr-user-options="availablePRUsers"
@@ -376,10 +388,15 @@ import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
 import FilterPopover from '@/components/common/FilterPopover.vue'
 import { usePrUrl } from '@/composables/usePrUrl'
+import { useAuthStore } from '@/stores/auth'
+import { useSse } from '@/composables/useSse'
+import { type SSEReviewCreatedEvent } from '@/utils/sse'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const { t } = useI18n()
 const { getPrUrl } = usePrUrl()
+const { sseEnabled, toggleSse, connectSse, disconnectSse } = useSse()
 
 // Responsive page size calculation
 const calculatePageSize = () => {
@@ -421,6 +438,8 @@ const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
 const statusFilter = ref('')
+const dateFrom = ref('')
+const dateTo = ref('')
 const projects = ref<ProjectSummary[]>([])
 const sortState = ref<{
   prop: 'created_date' | 'updated_date'
@@ -448,8 +467,10 @@ const bulkAssignForm = ref({
 })
 
 // Load reviews
-const loadReviews = async () => {
-  loading.value = true
+const loadReviews = async (showLoading = true) => {
+  if (showLoading) {
+    loading.value = true
+  }
   try {
     const params: any = {
       page: currentPage.value,
@@ -471,12 +492,21 @@ const loadReviews = async () => {
     if (prUserFilter.value) {
       params.pull_request_user = prUserFilter.value
     }
+    if (severityFilter.value) {
+      params.severity = severityFilter.value
+    }
+    if (dateFrom.value) {
+      params.date_from = dateFrom.value
+    }
+    if (dateTo.value) {
+      params.date_to = dateTo.value
+    }
 
     const response = await taskAssignmentApi.getReviews(params)
     allReviews.value = response.items
     total.value = response.total
     
-    // Apply client-side filters for unsupported fields (search, scored, severity, unassigned)
+    // Apply client-side filters for unsupported fields (search, scored, unassigned)
     applyFilters()
 
   } catch (error) {
@@ -511,6 +541,8 @@ const handleResetFilters = () => {
   severityFilter.value = ''
   statusFilter.value = ''
   projectFilter.value = ''
+  dateFrom.value = ''
+  dateTo.value = ''
   loadReviews()
 }
 
@@ -548,19 +580,6 @@ const applyFilters = () => {
     result = result.filter(review => 
       !review.metadata?.has_scores && review.completed_reviewers === 0
     )
-  }
-  
-  // Apply severity filter (not supported by backend)
-  if (severityFilter.value) {
-    const targetSeverity = severityFilter.value
-    result = result.filter(review => {
-      if (!review.ai_suggestions?.issues || review.ai_suggestions.issues.length === 0) {
-        return false
-      }
-      return review.ai_suggestions.issues.some(
-        (issue: any) => issue.severity === targetSeverity
-      )
-    })
   }
 
   result.sort((left, right) => compareReviews(left, right))
@@ -908,7 +927,7 @@ const searchReviewers = (query: string) => {
 
 // Watch for filter changes and reload data
 watch(
-  [searchQuery, appFilter, projectFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter],
+  [searchQuery, appFilter, projectFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter, dateFrom, dateTo],
   () => {
     // Debounce the reload to avoid multiple rapid requests
     clearTimeout(filterChangeTimeout)
@@ -928,12 +947,52 @@ onMounted(() => {
   loadAvailableApps()
   loadPRUsers()
   loadReviewers()
+
+  // Connect to SSE stream for real-time review notifications
+  // Backend handles authorization and filtering based on user roles
+  connectSse(handleSSEReviewCreated, handleSSEError, handleSSEOpen)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   clearTimeout(filterChangeTimeout)
+  disconnectSse()
 })
+
+// SSE event handlers
+let sseRefreshTimeout: ReturnType<typeof setTimeout> | null = null
+
+function handleSSEReviewCreated(_event: SSEReviewCreatedEvent) {
+  console.log('[TaskAssignmentView] SSE event received')
+  
+  // Debounce SSE events - wait 1 second before refreshing
+  // This prevents constant refreshes when multiple reviews arrive quickly
+  if (sseRefreshTimeout) {
+    clearTimeout(sseRefreshTimeout)
+  }
+  
+  sseRefreshTimeout = setTimeout(() => {
+    console.log('[TaskAssignmentView] Refreshing data after debounce')
+    loadReviews(false) // Don't show loading indicator for SSE updates
+    sseRefreshTimeout = null
+  }, 1000) // 1 second debounce
+}
+
+function handleSSEError() {
+  ElMessage({
+    message: 'Real-time connection lost, retrying...',
+    type: 'warning',
+    duration: 3000,
+  })
+}
+
+function handleSSEOpen() {
+  ElMessage({
+    message: 'Real-time updates restored',
+    type: 'success',
+    duration: 2000,
+  })
+}
 </script>
 
 <style scoped>
@@ -1216,5 +1275,50 @@ onUnmounted(() => {
 .bulk-actions {
   display: flex;
   gap: 8px;
+}
+
+/* Live Update Toggle Control */
+.live-toggle-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c0c4cc;
+  transition: background 0.3s;
+  flex-shrink: 0;
+}
+
+.live-dot.active {
+  background: #67c23a;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+.live-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+.live-switch {
+  --el-switch-on-color: #67c23a;
+}
+
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(103, 194, 58, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(103, 194, 58, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(103, 194, 58, 0);
+  }
 }
 </style>

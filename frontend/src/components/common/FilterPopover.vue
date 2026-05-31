@@ -3,7 +3,7 @@
     <!-- Search Input with Filter Badge -->
     <el-popover
       v-model:visible="popoverVisible"
-      :width="650"
+      :width="750"
       placement="bottom-start"
       trigger="click"
       :hide-after="0"
@@ -55,14 +55,15 @@
         </div>
 
         <div class="filter-grid">
-          <!-- App Name (Multi-select) -->
+          <!-- App Name (Multi-select with search) -->
           <div v-if="showAppFilter" class="filter-item">
             <label class="filter-label">App Name</label>
             <el-select
               v-model="localAppFilter"
-              placeholder="Select apps"
+              placeholder="Select or type name"
               clearable
               multiple
+              filterable
               collapse-tags
               collapse-tags-tooltip
               style="width: 100%"
@@ -81,7 +82,7 @@
             <label class="filter-label">Project</label>
             <el-select
               v-model="localProjectFilter"
-              placeholder="Select project"
+              placeholder="Select or type name"
               clearable
               filterable
               style="width: 100%"
@@ -201,6 +202,34 @@
           </div>
         </div>
 
+        <!-- Date Range Filter (full-width below grid) -->
+        <div class="date-range-section">
+          <label class="filter-label">Date Range</label>
+          <div class="date-range-pickers">
+            <el-date-picker
+              v-model="localDateFrom"
+              type="date"
+              placeholder="Start date"
+              format="YYYY-MM-DD"
+              value-format="YYYY-MM-DD"
+              clearable
+              :teleported="false"
+              style="width: 100%"
+            />
+            <span class="date-separator">~</span>
+            <el-date-picker
+              v-model="localDateTo"
+              type="date"
+              placeholder="End date"
+              format="YYYY-MM-DD"
+              value-format="YYYY-MM-DD"
+              clearable
+              :teleported="false"
+              style="width: 100%"
+            />
+          </div>
+        </div>
+
         <!-- Action Buttons -->
         <div class="filter-actions">
           <el-button @click="handleCancel">Cancel</el-button>
@@ -258,6 +287,8 @@ interface Props {
   scoredFilter?: string
   severityFilter?: string
   statusFilter?: string
+  dateFrom?: string
+  dateTo?: string
 
   // Filter visibility flags
   showAppFilter?: boolean
@@ -293,6 +324,8 @@ const props = withDefaults(defineProps<Props>(), {
   scoredFilter: '',
   severityFilter: '',
   statusFilter: '',
+  dateFrom: '',
+  dateTo: '',
   showAppFilter: true,
   showProjectFilter: false,
   showPRUserFilter: true,
@@ -318,6 +351,8 @@ const emit = defineEmits<{
   'update:scoredFilter': [value: string]
   'update:severityFilter': [value: string]
   'update:statusFilter': [value: string]
+  'update:dateFrom': [value: string]
+  'update:dateTo': [value: string]
   apply: []
   reset: []
 }>()
@@ -335,6 +370,8 @@ const localReviewerFilter = ref(props.reviewerFilter || '')
 const localScoredFilter = ref(props.scoredFilter || '')
 const localSeverityFilter = ref(props.severityFilter || '')
 const localStatusFilter = ref(props.statusFilter || '')
+const localDateFrom = ref(props.dateFrom || '')
+const localDateTo = ref(props.dateTo || '')
 
 // Sync local values with props
 watch(
@@ -376,6 +413,14 @@ watch(() => props.statusFilter, (val) => {
   localStatusFilter.value = val || ''
 })
 
+watch(() => props.dateFrom, (val) => {
+  localDateFrom.value = val || ''
+})
+
+watch(() => props.dateTo, (val) => {
+  localDateTo.value = val || ''
+})
+
 // Computed: Active filter count
 const activeFilterCount = computed(() => {
   let count = 0
@@ -387,6 +432,7 @@ const activeFilterCount = computed(() => {
   if (localScoredFilter.value) count++
   if (localSeverityFilter.value) count++
   if (localStatusFilter.value) count++
+  if (localDateFrom.value || localDateTo.value) count++
   return count
 })
 
@@ -456,6 +502,19 @@ const activeFilterTags = computed(() => {
     })
   }
 
+  if (localDateFrom.value || localDateTo.value) {
+    const dateLabel = localDateFrom.value && localDateTo.value
+      ? `${localDateFrom.value} ~ ${localDateTo.value}`
+      : localDateFrom.value
+        ? `From ${localDateFrom.value}`
+        : `To ${localDateTo.value}`
+    tags.push({
+      key: 'date',
+      label: 'Date',
+      value: dateLabel,
+    })
+  }
+
   return tags
 })
 
@@ -470,6 +529,8 @@ const handleConfirm = () => {
   emit('update:scoredFilter', localScoredFilter.value)
   emit('update:severityFilter', localSeverityFilter.value)
   emit('update:statusFilter', localStatusFilter.value)
+  emit('update:dateFrom', localDateFrom.value)
+  emit('update:dateTo', localDateTo.value)
   
   // Close popover and trigger data reload
   popoverVisible.value = false
@@ -486,6 +547,8 @@ const handleCancel = () => {
   localScoredFilter.value = props.scoredFilter || ''
   localSeverityFilter.value = props.severityFilter || ''
   localStatusFilter.value = props.statusFilter || ''
+  localDateFrom.value = props.dateFrom || ''
+  localDateTo.value = props.dateTo || ''
   
   popoverVisible.value = false
 }
@@ -500,6 +563,8 @@ const handleReset = () => {
   localScoredFilter.value = ''
   localSeverityFilter.value = ''
   localStatusFilter.value = ''
+  localDateFrom.value = ''
+  localDateTo.value = ''
   
   emit('reset')
   popoverVisible.value = false
@@ -528,6 +593,10 @@ const handleRemoveFilter = (key: string) => {
     case 'status':
       localStatusFilter.value = ''
       break
+    case 'date':
+      localDateFrom.value = ''
+      localDateTo.value = ''
+      break
   }
   // Updates will be synced when popover closes or confirm is clicked
   // But we trigger apply to refresh data immediately if needed, 
@@ -551,6 +620,8 @@ const handleRemoveFilter = (key: string) => {
   emit('update:scoredFilter', localScoredFilter.value)
   emit('update:severityFilter', localSeverityFilter.value)
   emit('update:statusFilter', localStatusFilter.value)
+  emit('update:dateFrom', localDateFrom.value)
+  emit('update:dateTo', localDateTo.value)
   
   emit('apply')
 }
@@ -566,6 +637,8 @@ const handlePopoverHide = () => {
   emit('update:scoredFilter', localScoredFilter.value)
   emit('update:severityFilter', localSeverityFilter.value)
   emit('update:statusFilter', localStatusFilter.value)
+  emit('update:dateFrom', localDateFrom.value)
+  emit('update:dateTo', localDateTo.value)
 }
 
 </script>
@@ -637,6 +710,30 @@ const handlePopoverHide = () => {
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid var(--el-border-color-lighter);
+}
+
+/* Date Range Filter Section */
+.date-range-section {
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.date-range-pickers {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: visible;
+}
+
+.date-separator {
+  flex-shrink: 0;
+  color: var(--el-text-color-secondary);
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .active-filters-bar {

@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean
+  _suppressGlobalError?: boolean
 }
 
 const AUTH_EXCLUDED_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout']
@@ -195,8 +196,10 @@ request.interceptors.response.use(
           }
       }
     } else {
-      // Network errors - always show
-      ElMessage.error('Network error. Please check your connection.')
+      // Network errors - only show if request didn't opt out
+      if (!originalRequest?._suppressGlobalError) {
+        ElMessage.error('Network error. Please check your connection.')
+      }
     }
 
     return Promise.reject(error)

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "coordinator",
+
+  "agent": {
+    "coordinator": {
+      "description": "Team orchestrator. Analyzes requirements, assigns subtasks to specialists, and synthesizes their output into a cohesive solution.",
+      "mode": "primary"
+    },
+
+    "product-owner": {
+      "description": "Defines scope, breaks features into user stories with acceptance criteria, and prioritizes the backlog.",
+      "mode": "subagent"
+    },
+
+    "business-analyst": {
+      "description": "Deep-dives into requirements, maps data flows, identifies edge cases, and produces structured analysis artifacts.",
+      "mode": "subagent"
+    },
+
+    "sde": {
+      "description": "Senior SDE. Implements features and bug fixes as clean, tested async Python code following AGENTS.md conventions.",
+      "mode": "subagent"
+    },
+
+    "qa": {
+      "description": "QA engineer. Owns test strategy, writes and runs pytest async tests, and gates quality before merge.",
+      "mode": "subagent"
+    },
+
+    "devops": {
+      "description": "Senior DevOps/SRE. Manages infrastructure, Docker, CI/CD, monitoring, database migrations, and production deployments.",
+      "mode": "subagent"
+    },
+
+    "build": {
+      "disable": true
+    },
+
+    "plan": {
+      "disable": true
+    }
+  }
+}

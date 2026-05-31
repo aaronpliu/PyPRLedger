@@ -37,7 +37,8 @@
     "exitFullscreen": "Exit Fullscreen",
     "page": "Page",
     "apply": "Apply",
-    "reset": "Reset"
+    "reset": "Reset",
+    "live_update": "Live Update"
   },
   "menu": {
     "dashboard": "Dashboard",
@@ -256,6 +257,7 @@
       "commit_id": "Commit ID",
       "project": "Project",
       "reviewer": "Reviewer",
+      "pr_user": "PR User",
       "status": "Status",
       "level": "Level",
       "file_level": "📄 File-Level",
@@ -269,6 +271,11 @@
       "side_by_side": "Side by Side",
       "ai_review_result": "🤖 AI Review Result",
       "copy_id": "Copy ID",
+      "screenshot_download": "Download",
+      "screenshot_copy": "Copy to Clipboard",
+      "screenshot_downloaded": "Screenshot downloaded",
+      "screenshot_copied": "Screenshot copied to clipboard",
+      "screenshot_copy_failed": "Failed to copy image. Try downloading instead.",
       "scores": "📊 Scores",
       "add_score": "Add Score",
       "update_score": "Update Score",
@@ -507,6 +514,7 @@
         "assignments_per_reviewer": "Assignments per Reviewer",
         "scored_per_reviewer": "Scored Reviews per Reviewer",
         "scoring_trend": "Reviews Scored Trend",
+        "issues_by_severity": "Issues by Severity",
         "top_n": "Top {n}"
       },
       "tips": {
@@ -514,6 +522,7 @@
       },
       "filters": {
         "date_range": "Date Range",
+        "time_period": "Time Period",
         "start_date": "Start Date",
         "end_date": "End Date",
         "project": "Project",

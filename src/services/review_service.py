@@ -141,6 +141,47 @@ class ReviewService:
         except Exception as e:
             logger.warning(f"Failed to invalidate review cache: {str(e)}")
 
+    async def _publish_sse_event(self, review_dict: dict[str, Any]) -> None:
+        """
+        Publish a review creation event to Redis pub/sub for SSE subscribers.
+
+        Args:
+            review_dict: Serialized review dictionary with all fields including
+                         reviewer, assigned_by, pull_request_user, etc.
+        """
+        try:
+            event_payload = {
+                "event": "review_created",
+                "review_id": review_dict["id"],
+                "project_key": review_dict["project_key"],
+                "repository_slug": review_dict["repository_slug"],
+                "pull_request_id": review_dict["pull_request_id"],
+                "created_date": review_dict["created_date"],
+                "pull_request_user": review_dict.get("pull_request_user"),
+                "pull_request_status": review_dict.get("pull_request_status"),
+                "reviewer": review_dict.get("reviewer"),
+                "assigned_by": review_dict.get("assigned_by"),
+            }
+            await self.redis_client.publish("reviews:created", json.dumps(event_payload))
+            self.metrics.sse_events_published_total.labels(status="success").inc()
+            logger.info(
+                "SSE event published",
+                extra={
+                    "review_id": review_dict["id"],
+                    "project_key": review_dict["project_key"],
+                    "channel": "reviews:created",
+                },
+            )
+        except Exception as e:
+            self.metrics.sse_events_published_total.labels(status="failed").inc()
+            logger.warning(
+                "SSE event publish failed",
+                extra={
+                    "review_id": review_dict.get("id"),
+                    "error": str(e),
+                },
+            )
+
     async def _invalidate_list_cache(self) -> None:
         """Invalidate all review list cache entries"""
         try:
@@ -553,6 +594,11 @@ class ReviewService:
 
                 logger.info(f"Updated review: {existing_base.pull_request_id}")
 
+                # Publish SSE event if a new assignment was created
+                if created:
+                    await self._publish_sse_event(review_dict)
+                    await self._invalidate_list_cache()
+
                 # Step 3: Mark raw record as success and delete it to keep validation table clean
                 # The successful review is now in pull_request_review_base
                 await db.delete(raw_record)
@@ -584,6 +630,11 @@ class ReviewService:
             else:
                 new_review_response = await self.create_review(review_data, db, include_details)
                 logger.info(f"Created new review: {new_review_response.pull_request_id}")
+
+                # Publish SSE event for newly created review
+                new_review_dict = new_review_response.model_dump(mode="json")
+                await self._publish_sse_event(new_review_dict)
+                await self._invalidate_list_cache()
 
                 # Step 3: Delete raw record and clean up old failed records for this PR
                 # The successful review is now in pull_request_review_base
@@ -923,9 +974,11 @@ class ReviewService:
         if filters.severity:
             # Filter by AI suggestions issues with matching severity
             # ai_suggestions is a JSON column with structure: {"issues": [{"severity": "high", ...}]}
+            # Use explicit func.JSON_CONTAINS for reliable MySQL JSON query
             query = query.where(
-                PullRequestReviewBase.ai_suggestions["issues"].contains(
-                    [{"severity": filters.severity}]
+                func.JSON_CONTAINS(
+                    PullRequestReviewBase.ai_suggestions,
+                    json.dumps({"issues": [{"severity": filters.severity}]}),
                 )
             )
 

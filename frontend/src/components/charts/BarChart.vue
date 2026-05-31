@@ -1,6 +1,6 @@
 <template>
   <div v-if="isMounted" class="chart-container">
-    <v-chart class="chart" :option="chartOption" autoresize />
+    <v-chart ref="chartRef" class="chart" :option="chartOption" autoresize />
   </div>
 </template>
 
@@ -39,8 +39,19 @@ const props = withDefaults(defineProps<Props>(), {
   height: '350px',
 })
 
+// Chart instance ref for manual resize (used by parent in fullscreen)
+const chartRef = ref()
+
 const isMounted = ref(false)
 const isDarkTheme = ref(false)
+
+defineExpose({
+  resize: () => {
+    if (chartRef.value) {
+      chartRef.value.resize()
+    }
+  },
+})
 
 onMounted(() => {
   // Ensure DOM is ready before rendering chart
@@ -89,7 +100,12 @@ const chartOption = computed(() => {
       right: '4%',
       bottom: '15%',
       top: '15%',
-      containLabel: true,
+      outerBounds: {
+        top: '15%',
+        right: '4%',
+        bottom: '15%',
+        left: '3%',
+      },
     },
     xAxis: {
       type: 'category',

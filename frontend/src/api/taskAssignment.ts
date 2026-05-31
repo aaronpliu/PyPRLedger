@@ -90,6 +90,9 @@ export const taskAssignmentApi = {
     status?: string
     app_names?: string  // Comma-separated app names
     pull_request_user?: string
+    severity?: string
+    date_from?: string
+    date_to?: string
   }): Promise<ReviewListResponse> {
     return request.get('/task-assignment/', { params })
   },

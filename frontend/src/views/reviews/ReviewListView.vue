@@ -21,6 +21,16 @@
             <el-tag type="success" effect="dark" size="small" class="ai-badge">{{ t('reviews.ai_powered') }}</el-tag>
           </div>
           <div class="header-actions">
+            <div class="live-toggle-wrapper">
+              <span class="live-dot" :class="{ active: sseEnabled }" />
+              <span class="live-label">{{ t('common.live_update') }}</span>
+              <el-switch
+                :model-value="sseEnabled"
+                size="small"
+                class="live-switch"
+                @change="toggleSse"
+              />
+            </div>
             <ExportMenu
               :data="reviews"
               :selected-ids="selectedReviews.map(r => r.id)"
@@ -44,6 +54,8 @@
           v-model:scored-filter="scoredFilter"
           v-model:severity-filter="severityFilter"
           v-model:status-filter="statusFilter"
+          v-model:date-from="dateFrom"
+          v-model:date-to="dateTo"
           :app-options="availableApps"
           :pr-user-options="availablePRUsers"
           :reviewer-options="availableReviewers"
@@ -339,7 +351,7 @@
         </el-table-column>
         
         <!-- Updated Date -->
-        <el-table-column prop="updated_date" :label="t('common.update')" width="160">
+        <el-table-column prop="updated_date" label="Updated" width="160">
           <template #default="{ row }">
             {{ formatDate(row.updated_date || '') }}
           </template>
@@ -451,6 +463,8 @@ import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
 import { usersApi, type ReviewerUser } from '@/api/users'
 import { usePrUrl } from '@/composables/usePrUrl'
+import { useSse } from '@/composables/useSse'
+import { type SSEReviewCreatedEvent } from '@/utils/sse'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -459,6 +473,7 @@ const authStore = useAuthStore()
 const { hasPermission } = usePermission()
 const reviewNavigationStore = useReviewNavigationStore()
 const { getPrUrl } = usePrUrl()
+const { sseEnabled, toggleSse, connectSse, disconnectSse } = useSse()
 
 // Responsive page size calculation
 const calculatePageSize = () => {
@@ -504,6 +519,8 @@ const allReviewers = ref<ReviewerUser[]>([]) // Cache for client-side filtering
 const reviewersLoading = ref(false)
 const scoredFilter = ref('')
 const severityFilter = ref('')
+const dateFrom = ref('')
+const dateTo = ref('')
 const hideArchived = ref(true) // Default to hiding scored/archived reviews
 const tableRef = ref()
 
@@ -631,8 +648,10 @@ const getPrimaryReviewer = (row: any) => {
   return row.all_reviewers[0].display_name
 }
 
-const loadReviews = async () => {
-  loading.value = true
+const loadReviews = async (showLoading = true) => {
+  if (showLoading) {
+    loading.value = true
+  }
   try {
     const params: any = {
       page: currentPage.value,
@@ -664,6 +683,8 @@ const loadReviews = async () => {
     }
     
     if (severityFilter.value) params.severity = severityFilter.value
+    if (dateFrom.value) params.date_from = dateFrom.value
+    if (dateTo.value) params.date_to = dateTo.value
 
     console.log('Loading reviews with params:', params)
     const data = await reviewsApi.getReviews(params)
@@ -692,7 +713,7 @@ const fetchAllDataForExport = async (): Promise<Review[]> => {
   try {
     const params: any = {
       page: 1,
-      page_size: 10000, // Large page size to get all data
+      page_size: 100, // Max page_size backend allows
     }
     
     // Add ALL filter parameters for server-side filtering
@@ -718,6 +739,8 @@ const fetchAllDataForExport = async (): Promise<Review[]> => {
     }
     
     if (severityFilter.value) params.severity = severityFilter.value
+    if (dateFrom.value) params.date_from = dateFrom.value
+    if (dateTo.value) params.date_to = dateTo.value
 
     const data = await reviewsApi.getReviews(params)
     return data.items
@@ -735,6 +758,8 @@ const handleResetFilters = () => {
   scoredFilter.value = ''
   severityFilter.value = ''
   statusFilter.value = ''
+  dateFrom.value = ''
+  dateTo.value = ''
   hideArchived.value = true // Reset to default (hide scored reviews)
   currentPage.value = 1 // Reset to first page
   loadReviews() // Reload from backend with reset filters
@@ -769,6 +794,8 @@ const viewReview = (review: Review) => {
   }
   
   if (severityFilter.value) filterParams.severity = severityFilter.value
+  if (dateFrom.value) filterParams.date_from = dateFrom.value
+  if (dateTo.value) filterParams.date_to = dateTo.value
 
   reviewNavigationStore.setContext({
     items: reviews.value.map(item => ({
@@ -981,7 +1008,7 @@ const searchReviewers = (query: string) => {
 
 // Watch for filter changes and reload data from backend
 watch(
-  [searchQuery, appFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter, hideArchived],
+  [searchQuery, appFilter, prUserFilter, reviewerFilter, scoredFilter, severityFilter, statusFilter, dateFrom, dateTo, hideArchived],
   () => {
     // Debounce the reload to avoid multiple rapid requests
     clearTimeout(filterChangeTimeout)
@@ -998,31 +1025,71 @@ let filterChangeTimeout: ReturnType<typeof setTimeout>
 // Load reviews when component mounts
 onMounted(() => {
   window.addEventListener('resize', handleResize)
-  
+
   // Check for query parameters from notification navigation
   const prId = route.query.pr_id as string | undefined
   const fromNotification = route.query.from_notification === 'true'
-  
+
   // If coming from notification, disable hideArchived filter to show all reviews
   if (fromNotification) {
     hideArchived.value = false
   }
-  
+
   // If PR ID is specified in query, set it as search query
   if (prId) {
     searchQuery.value = prId
   }
-  
+
   loadReviews()
   loadAvailableApps()
   loadPRUsers()
   loadReviewers()
+
+  // Connect to SSE stream for real-time review notifications
+  // Any authenticated user can connect; backend handles authorization
+  connectSse(handleSSEReviewCreated, handleSSEError, handleSSEOpen)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   clearTimeout(filterChangeTimeout)
+  disconnectSse()
 })
+
+// SSE event handlers
+let sseRefreshTimeout: ReturnType<typeof setTimeout> | null = null
+
+function handleSSEReviewCreated(event: SSEReviewCreatedEvent) {
+  console.log('[ReviewListView] SSE event received:', event)
+  
+  // Debounce SSE events - wait 1 second before refreshing
+  // This prevents constant refreshes when multiple reviews arrive quickly
+  if (sseRefreshTimeout) {
+    clearTimeout(sseRefreshTimeout)
+  }
+  
+  sseRefreshTimeout = setTimeout(() => {
+    console.log('[ReviewListView] Refreshing data after debounce')
+    loadReviews(false) // Don't show loading indicator for SSE updates
+    sseRefreshTimeout = null
+  }, 1000) // 1 second debounce
+}
+
+function handleSSEError(_error: Event) {
+  ElMessage({
+    message: 'Real-time connection lost, retrying...',
+    type: 'warning',
+    duration: 3000,
+  })
+}
+
+function handleSSEOpen() {
+  ElMessage({
+    message: 'Real-time updates restored',
+    type: 'success',
+    duration: 2000,
+  })
+}
 </script>
 
 <style scoped>
@@ -1538,5 +1605,50 @@ html.dark .el-tag--danger {
 
 [data-theme='dark'] .score-critical {
   color: #ef4444;
+}
+
+/* Live Update Toggle Control */
+.live-toggle-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c0c4cc;
+  transition: background 0.3s;
+  flex-shrink: 0;
+}
+
+.live-dot.active {
+  background: #67c23a;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+.live-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+.live-switch {
+  --el-switch-on-color: #67c23a;
+}
+
+@keyframes live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(103, 194, 58, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(103, 194, 58, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(103, 194, 58, 0);
+  }
 }
 </style>

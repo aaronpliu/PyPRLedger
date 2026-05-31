@@ -263,6 +263,34 @@ class MetricsCollector:
             registry=self.registry,
         )
 
+        # SSE metrics
+        self.sse_connections_total = Counter(
+            "sse_connections_total",
+            "Total SSE connection attempts",
+            ["status"],
+            registry=self.registry,
+        )
+
+        self.sse_events_published_total = Counter(
+            "sse_events_published_total",
+            "Total SSE events published to Redis",
+            ["status"],
+            registry=self.registry,
+        )
+
+        self.sse_events_filtered_total = Counter(
+            "sse_events_filtered_total",
+            "Total SSE events filtered by user involvement",
+            ["filtered"],
+            registry=self.registry,
+        )
+
+        self.sse_connections_active = Gauge(
+            "sse_connections_active",
+            "Number of active SSE connections",
+            registry=self.registry,
+        )
+
         logger.info("Initialized all Prometheus metrics")
 
     def increment_http_request(self, method: str, endpoint: str, status: int) -> None:

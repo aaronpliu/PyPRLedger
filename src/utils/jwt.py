@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from jose import JWTError, jwt
+from jose import ExpiredSignatureError, JWTError, jwt
 
 from src.core.config import settings
 
@@ -54,15 +54,17 @@ def decode_access_token(token: str) -> dict[str, Any]:
         Decoded token payload
 
     Raises:
-        JWTError: If token is invalid or expired
+        TokenExpiredException: If the token has expired
+        JWTError: If the token is otherwise invalid
     """
     try:
-        payload = jwt.decode(
+        return jwt.decode(
             token,
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
         )
-        return payload
+    except ExpiredSignatureError:
+        raise
     except JWTError as e:
         raise JWTError(f"Invalid or expired token: {e}") from e
 

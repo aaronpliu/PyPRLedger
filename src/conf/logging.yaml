@@ -52,6 +52,16 @@ loggers:
     handlers: [console, file]
     propagate: false
   
+  watchfiles:
+    level: WARNING
+    handlers: [console, file, error_file]
+    propagate: false
+
+  watchfiles.main:
+    level: WARNING
+    handlers: [console, file, error_file]
+    propagate: false
+  
   sqlalchemy:
     level: WARNING
     handlers: [console, file, error_file]

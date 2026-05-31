@@ -83,17 +83,20 @@ const { t } = useI18n()
 const notifications = ref<Notification[]>([])
 const unreadCount = ref(0)
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let isPolling = false  // Guard against overlapping poll requests
 
 // Computed
 const recentNotifications = computed(() => notifications.value.slice(0, 5))
 
 // Methods
-const loadUnreadCount = async () => {
+const loadUnreadCount = async (timeout?: number): Promise<number | null> => {
   try {
-    const response = await notificationsApi.getUnreadCount()
+    const response = await notificationsApi.getUnreadCount(timeout ? { timeout } : undefined)
     unreadCount.value = response.unread_count
+    return response.unread_count
   } catch (error) {
     console.error('Failed to load unread count:', error)
+    return null
   }
 }
 
@@ -186,18 +189,34 @@ const formatTime = (dateString: string) => {
   return date.toLocaleDateString()
 }
 
-const refreshData = async () => {
-  await Promise.all([loadUnreadCount(), loadRecentNotifications()])
+const refreshData = () => {
+  // Fire both requests independently — never use Promise.all so one timeout
+  // doesn't block the other from completing
+  loadUnreadCount(8000)
+  loadRecentNotifications()
 }
 
-// Smart polling for real-time updates
+// Smart non-blocking polling for real-time updates
 const startPolling = () => {
-  pollTimer = setInterval(async () => {
-    await loadUnreadCount()
-    // Only reload list if there are new unread notifications
-    if (unreadCount.value > notifications.value.filter((n) => !n.is_read).length) {
-      await loadRecentNotifications()
+  pollTimer = setInterval(() => {
+    // Skip if previous request is still pending (server slow/reloading)
+    if (isPolling) {
+      return
     }
+    isPolling = true
+    loadUnreadCount(10000)
+      .then((count) => {
+        // Only reload list if there are new unread notifications
+        if (count !== null && notifications.value.length > 0 && count > notifications.value.filter((n) => !n.is_read).length) {
+          return loadRecentNotifications()
+        }
+      })
+      .catch((error) => {
+        console.error('Notification poll failed:', error)
+      })
+      .finally(() => {
+        isPolling = false
+      })
   }, 30000) // Poll every 30 seconds
 }
 
