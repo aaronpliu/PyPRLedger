@@ -5,6 +5,30 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.1] - 2026-05-31
+
+**Backend Version**: 1.15.1
+**Frontend Version**: 1.10.0
+
+### Added
+- support date range filter in reviews and task assignement page
+- enhance sse event handling
+
+### Fixed
+- enhance the lable of time period in task assignment analytics
+- enhance the chart lable display in dashboard
+- enhance redis connection
+- enhance the filter
+- applied fix for CVE-2026-48710
+- update html  issue
+- enhance the chart display in full screen
+
+### Changed
+- [Refactor] enhance score table to display
+- [Refactor] enhance review information table to show PR meta info
+
+---
+
 ## [1.15.0] - 2026-05-28
 
 **Backend Version**: 1.15.0
