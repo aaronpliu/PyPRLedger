@@ -519,6 +519,8 @@ const loadReviews = async (showLoading = true) => {
       params.date_to = dateTo.value
     }
 
+    params.hide_archived = hideDone.value
+
     const response = await taskAssignmentApi.getReviews(params)
     allReviews.value = response.items
     total.value = response.total
@@ -586,14 +588,6 @@ const applyFilters = () => {
       !review.reviewers || review.reviewers.length === 0 ||
       review.reviewers.every(r => !r.reviewer && !r.reviewer_info?.display_name)
     )
-  }
-  
-  // Apply hideDone filter — hide reviews where ALL reviewers are done (fully scored)
-  if (hideDone.value) {
-    result = result.filter(review => {
-      if (review.total_reviewers === 0) return true
-      return review.completed_reviewers < review.total_reviewers
-    })
   }
 
   // Apply scored filter (not supported by backend)
@@ -963,9 +957,9 @@ watch(
   { deep: true }
 )
 
-// Watch hideDone separately — client-side only, no API call needed
+// Watch hideDone — reload data from server with archive filter
 watch(hideDone, () => {
-  applyFilters()
+  loadReviews()
 })
 
 let filterChangeTimeout: ReturnType<typeof setTimeout>

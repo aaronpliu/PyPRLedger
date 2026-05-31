@@ -59,6 +59,9 @@ async def list_reviews(
         None,
         description="Filter reviews created before this date (inclusive)",
     ),
+    hide_archived: bool = Query(
+        False, description="Hide reviews where all assignees have completed scoring"
+    ),
 ) -> ReviewListResponse:
     """
     Get list of reviews with their assignments (requires review_admin role)
@@ -95,6 +98,7 @@ async def list_reviews(
             severity=severity,
             date_from=date_from,
             date_to=date_to,
+            hide_archived=hide_archived,
         )
 
         return ReviewListResponse(

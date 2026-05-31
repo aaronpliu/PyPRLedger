@@ -93,6 +93,7 @@ class MultiReviewerService:
         severity: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        hide_archived: bool = False,
     ) -> tuple[list[ReviewWithAssignmentsResponse], int]:
         """
         Get list of reviews with their assignments
@@ -197,6 +198,28 @@ class MultiReviewerService:
             # Add 1 day for inclusive end-of-day filtering
             adjusted_date_to = date_to + timedelta(days=1)
             stmt = stmt.where(PullRequestReviewBase.created_date < adjusted_date_to)
+
+        # Apply hide_archived filter — hide reviews where ALL assignees have completed
+        if hide_archived:
+            has_incomplete = (
+                select(1)
+                .where(
+                    and_(
+                        PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
+                        PullRequestReviewAssignment.assignment_status != "completed",
+                    )
+                )
+                .correlate(PullRequestReviewBase)
+                .exists()
+            )
+            has_any_assignment = (
+                select(1)
+                .where(PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id)
+                .correlate(PullRequestReviewBase)
+                .exists()
+            )
+            # Keep reviews with incomplete assignments OR with no assignments at all
+            stmt = stmt.where(or_(has_incomplete, ~has_any_assignment))
 
         # Get total count
         count_stmt = select(func.count()).select_from(stmt.subquery())

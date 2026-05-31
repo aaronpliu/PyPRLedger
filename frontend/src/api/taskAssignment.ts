@@ -93,6 +93,7 @@ export const taskAssignmentApi = {
     severity?: string
     date_from?: string
     date_to?: string
+    hide_archived?: boolean
   }): Promise<ReviewListResponse> {
     return request.get('/task-assignment/', { params })
   },
