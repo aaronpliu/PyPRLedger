@@ -37,8 +37,8 @@
         <!-- Review Info Card (Collapsible) -->
         <el-card class="info-card" shadow="hover">
           <template #header>
-            <div class="card-header">
-              <div class="card-title-wrapper" @click="toggleInfoCollapse">
+            <div class="card-header" @click="toggleInfoCollapse">
+              <div class="card-title-wrapper">
                 <el-icon 
                   :class="['collapse-icon', { 'is-collapsed': !isInfoExpanded }]" 
                 >
@@ -46,7 +46,19 @@
                 </el-icon>
                 <span class="card-title">{{ t('reviews.detail.review_information') }} (#{{ review.pull_request_id }})</span>
               </div>
-              <el-space>
+              <div class="card-meta-info">
+                <div class="meta-item">
+                  <el-icon><UserFilled /></el-icon>
+                  <span>{{ review.pull_request_user_info?.display_name || review.pull_request_user }}</span>
+                </div>
+                <el-divider direction="vertical" />
+                <div class="meta-item">
+                  <el-icon><FolderOpened /></el-icon>
+                  <span><strong>{{ review.project_key }}</strong> / {{ review.repository_slug }}</span>
+                </div>
+              </div>
+              <div class="card-actions" @click.stop>
+                <el-space>
                 <!-- Add Score Button - Only show if user has permission -->
                 <template v-if="hasScorePermissionRole">
                   <el-tooltip
@@ -86,6 +98,7 @@
                   {{ t('reviews.detail.delete') }}
                 </el-button>
               </el-space>
+              </div>
             </div>
           </template>
 
@@ -484,7 +497,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Plus, Delete, User, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link, InfoFilled, Download } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User, UserFilled, FolderOpened, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link, InfoFilled, Download } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
@@ -1358,8 +1371,6 @@ watch(
 }
 
 .card-title-wrapper {
-  cursor: pointer;
-  flex: 1;
   display: flex;
   align-items: center;
 }
@@ -1425,8 +1436,48 @@ watch(
 
 .card-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.card-title-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.card-clickable-area {
+  display: none;
+}
+
+.card-actions {
+  margin-left: auto;
+  cursor: default;
+}
+
+.card-meta-info {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.meta-item .el-icon {
+  font-size: 14px;
 }
 
 /* PR Link Styles */
