@@ -251,120 +251,133 @@
         <!-- Scores Section -->
         <el-card class="scores-card" style="margin-top: 20px; margin-bottom: 40px">
           <template #header>
-            <div class="card-header">
-              <span class="card-title">{{ t('reviews.detail.scores') }} ({{ scores.length }})</span>
-              <!-- Add Score Button - Only show if user has permission -->
-              <template v-if="hasScorePermissionRole">
-                <el-tooltip
-                  v-if="currentUserHasScore"
-                  :content="t('reviews.detail.already_has_score_short')"
-                  placement="top"
+            <div class="card-header" @click="toggleScoresCollapse">
+              <span class="card-title">
+                <el-icon 
+                  :class="['collapse-icon', { 'is-collapsed': !isScoresExpanded }]" 
                 >
-                  <span>
-                    <el-button type="primary" size="small" disabled>
-                      <el-icon><Plus /></el-icon>
-                      {{ t('reviews.detail.add_score') }}
-                    </el-button>
-                  </span>
-                </el-tooltip>
-                <el-tooltip v-else-if="!canCreateScore" :content="scoreActionDisabledReason" placement="top">
-                  <span>
-                    <el-button type="primary" size="small" disabled>
-                      <el-icon><Plus /></el-icon>
-                      {{ t('reviews.detail.add_score') }}
-                    </el-button>
-                  </span>
-                </el-tooltip>
-                <el-button v-else type="primary" size="small" @click="showScoreDialog = true">
-                  <el-icon><Plus /></el-icon>
-                  {{ t('reviews.detail.add_score') }}
-                </el-button>
-              </template>
+                  <ArrowDown />
+                </el-icon>
+                {{ t('reviews.detail.scores') }} ({{ scores.length }})
+              </span>
+              <div class="card-actions" @click.stop>
+                <!-- Add Score Button - Only show if user has permission -->
+                <template v-if="hasScorePermissionRole">
+                  <el-tooltip
+                    v-if="currentUserHasScore"
+                    :content="t('reviews.detail.already_has_score_short')"
+                    placement="top"
+                  >
+                    <span>
+                      <el-button type="primary" size="small" disabled>
+                        <el-icon><Plus /></el-icon>
+                        {{ t('reviews.detail.add_score') }}
+                      </el-button>
+                    </span>
+                  </el-tooltip>
+                  <el-tooltip v-else-if="!canCreateScore" :content="scoreActionDisabledReason" placement="top">
+                    <span>
+                      <el-button type="primary" size="small" disabled>
+                        <el-icon><Plus /></el-icon>
+                        {{ t('reviews.detail.add_score') }}
+                      </el-button>
+                    </span>
+                  </el-tooltip>
+                  <el-button v-else type="primary" size="small" @click="showScoreDialog = true">
+                    <el-icon><Plus /></el-icon>
+                    {{ t('reviews.detail.add_score') }}
+                  </el-button>
+                </template>
+              </div>
             </div>
           </template>
 
-          <el-table :data="scores" stripe>
-            <el-table-column prop="reviewer" :label="t('reviews.detail.reviewer')" width="200">
-              <template #default="{ row }">
-                <div class="reviewer-cell">
-                  <span>{{ row.reviewer_info?.display_name || row.reviewer }}</span>
-                  <el-tag 
-                    v-if="row.reviewer === review?.reviewer" 
-                    size="small" 
-                    type="primary" 
-                    effect="plain"
-                    class="primary-reviewer-badge"
-                  >
-                    {{ t('reviews.detail.primary_reviewer') }}
-                  </el-tag>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column :label="t('reviews.detail.ai_review_id')" min-width="200" align="center">
-              <template #default>
-                <div v-if="review?.ai_review_id" class="ai-review-id-cell">
-                  <el-tag size="small" type="info">
-                    {{ review.ai_review_id }}
-                  </el-tag>
-                  <el-button
-                    size="small"
-                    text
-                    @click="copyToClipboard(review.ai_review_id!)"
-                  >
-                    <el-icon><CopyDocument /></el-icon>
-                  </el-button>
-                </div>
-                <span v-else class="empty-value">{{ t('reviews.detail.na') }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="score" :label="t('reviews.detail.score')" width="120">
-              <template #default="{ row }">
-                <span :class="['score-value', getScoreColorClass(row.score)]">{{ row.score }}</span>
-                <span v-if="row.max_score" class="score-max"> / {{ row.max_score }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="reviewer_comments" :label="t('reviews.detail.comments')" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="created_date" :label="t('reviews.detail.created')" width="160">
-              <template #default="{ row }">
-                {{ formatDate(row.created_date || '') }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="updated_date" :label="t('reviews.detail.updated')" width="160">
-              <template #default="{ row }">
-                {{ row.updated_date ? formatDate(row.updated_date) : '-' }}
-              </template>
-            </el-table-column>
-            <el-table-column :label="t('reviews.detail.actions')" width="180">
-              <template #default="{ row }">
-                <!-- Update button: 
-                     - reviewer: can only update their own score
-                     - review_admin: CANNOT update others' scores (only delete)
-                -->
-                <el-button 
-                  v-if="hasScorePermissionRole && canEditScore(row)"
-                  size="small" 
-                  type="primary" 
-                  @click="editScore(row)"
-                >
-                  {{ t('reviews.detail.update') }}
-                </el-button>
-                <!-- Delete button: 
-                     - review_admin+: can delete any score
-                     - reviewer: can only delete their own score
-                -->
-                <el-button 
-                  v-if="canDeleteAnyScore || (hasScorePermissionRole && canEditScore(row))"
-                  size="small" 
-                  type="danger" 
-                  @click="deleteScore(row)"
-                >
-                  {{ t('reviews.detail.delete') }}
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+          <el-collapse-transition>
+            <div v-if="isScoresExpanded">
+              <el-table :data="scores" stripe>
+                <el-table-column prop="reviewer" :label="t('reviews.detail.reviewer')" width="200">
+                  <template #default="{ row }">
+                    <div class="reviewer-cell">
+                      <span>{{ row.reviewer_info?.display_name || row.reviewer }}</span>
+                      <el-tag 
+                        v-if="row.reviewer === review?.reviewer" 
+                        size="small" 
+                        type="primary" 
+                        effect="plain"
+                        class="primary-reviewer-badge"
+                      >
+                        {{ t('reviews.detail.primary_reviewer') }}
+                      </el-tag>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('reviews.detail.ai_review_id')" min-width="200" align="center">
+                  <template #default>
+                    <div v-if="review?.ai_review_id" class="ai-review-id-cell">
+                      <el-tag size="small" type="info">
+                        {{ review.ai_review_id }}
+                      </el-tag>
+                      <el-button
+                        size="small"
+                        text
+                        @click="copyToClipboard(review.ai_review_id!)"
+                      >
+                        <el-icon><CopyDocument /></el-icon>
+                      </el-button>
+                    </div>
+                    <span v-else class="empty-value">{{ t('reviews.detail.na') }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="score" :label="t('reviews.detail.score')" width="120">
+                  <template #default="{ row }">
+                    <span :class="['score-value', getScoreColorClass(row.score)]">{{ row.score }}</span>
+                    <span v-if="row.max_score" class="score-max"> / {{ row.max_score }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="reviewer_comments" :label="t('reviews.detail.comments')" min-width="200" show-overflow-tooltip />
+                <el-table-column prop="created_date" :label="t('reviews.detail.created')" width="160">
+                  <template #default="{ row }">
+                    {{ formatDate(row.created_date || '') }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="updated_date" :label="t('reviews.detail.updated')" width="160">
+                  <template #default="{ row }">
+                    {{ row.updated_date ? formatDate(row.updated_date) : '-' }}
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('reviews.detail.actions')" width="180">
+                  <template #default="{ row }">
+                    <!-- Update button: 
+                         - reviewer: can only update their own score
+                         - review_admin: CANNOT update others' scores (only delete)
+                    -->
+                    <el-button 
+                      v-if="hasScorePermissionRole && canEditScore(row)"
+                      size="small" 
+                      type="primary" 
+                      @click="editScore(row)"
+                    >
+                      {{ t('reviews.detail.update') }}
+                    </el-button>
+                    <!-- Delete button: 
+                         - review_admin+: can delete any score
+                         - reviewer: can only delete their own score
+                    -->
+                    <el-button 
+                      v-if="canDeleteAnyScore || (hasScorePermissionRole && canEditScore(row))"
+                      size="small" 
+                      type="danger" 
+                      @click="deleteScore(row)"
+                    >
+                      {{ t('reviews.detail.delete') }}
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
 
-          <el-empty v-if="scores.length === 0" :description="t('reviews.detail.no_scores')" />
+              <el-empty v-if="scores.length === 0" :description="t('reviews.detail.no_scores')" />
+            </div>
+          </el-collapse-transition>
         </el-card>
       </el-col>
     </el-row>
@@ -534,6 +547,7 @@ const editingScore = ref<Score | null>(null)
 const scoreFormRef = ref<FormInstance>()
 const diffFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
 const isInfoExpanded = ref(false)
+const isScoresExpanded = ref(true)
 const navigatingPage = ref(false)
 const showFloatingNav = ref(false)
 const aiReviewRef = ref<InstanceType<typeof AIReviewResults> | null>(null)
@@ -1288,6 +1302,10 @@ const handleQuickScoreSelect = (value: number) => {
 
 const toggleInfoCollapse = () => {
   isInfoExpanded.value = !isInfoExpanded.value
+}
+
+const toggleScoresCollapse = () => {
+  isScoresExpanded.value = !isScoresExpanded.value
 }
 
 const handleCloseDialog = () => {
