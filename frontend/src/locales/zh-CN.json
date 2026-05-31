@@ -418,6 +418,10 @@
     "view_details": "查看详情",
     "progress": "进度",
     "assign_reviewer": "分配审查者",
+    "hide_archived": "隐藏已完成",
+    "show_all": "显示全部",
+    "archived_hint_hide": "仅显示待处理的审查",
+    "archived_hint_show": "显示所有审查（包括已完成）",
     "filters": {
       "search_placeholder": "搜索PR ID或被分配人...",
       "status_filter": "状态",

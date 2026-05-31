@@ -418,6 +418,10 @@
     "view_details": "View Details",
     "progress": "Progress",
     "assign_reviewer": "Assign Reviewer",
+    "hide_archived": "Hide Archived",
+    "show_all": "Show All",
+    "archived_hint_hide": "Showing only pending reviews",
+    "archived_hint_show": "Showing all reviews including completed",
     "filters": {
       "search_placeholder": "Search by PR ID or assignee...",
       "status_filter": "Status",
