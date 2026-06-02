@@ -169,7 +169,21 @@ const isDarkTheme = computed(() => {
   return currentTheme.value === 'dark'
 })
 
-const issues = computed(() => props.suggestions.issues || [])
+const severityOrder: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+}
+
+const issues = computed(() => {
+  const items = props.suggestions.issues || []
+  return [...items].sort((a, b) => {
+    const aOrder = severityOrder[a.severity?.toLowerCase()] ?? 99
+    const bOrder = severityOrder[b.severity?.toLowerCase()] ?? 99
+    return aOrder - bOrder
+  })
+})
 
 function getSeverityColor(severity: string) {
   const colors: Record<string, any> = {
