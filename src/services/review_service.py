@@ -22,6 +22,7 @@ from src.models.pull_request import (
     PullRequestReviewBase,
     PullRequestReviewRaw,
     PullRequestScore,
+    UserPinnedReview,
 )
 from src.schemas.pull_request import (
     ReviewCreate,
@@ -696,7 +697,8 @@ class ReviewService:
         reviewer: str | None,
         source_filename: str | None,
         db: AsyncSession,
-        visible_to_username: str | None = None,  # Current user for multi-reviewer display
+        visible_to_username: str | None = None,
+        current_user_id: int | None = None,
     ) -> list[dict[str, Any]]:
         """
         Get all pull request reviews by composite business key
@@ -741,9 +743,22 @@ class ReviewService:
             bases = result.scalars().unique().all()
             reviews = self._flatten_reviews(list(bases), reviewer, visible_to_username)
 
+            # If current_user_id provided, fetch pinned review IDs for this user
+            pinned_ids: set[int] = set()
+            if current_user_id is not None:
+                try:
+                    pin_stmt = select(UserPinnedReview.review_id).where(
+                        UserPinnedReview.user_id == current_user_id
+                    )
+                    pin_result = await db.execute(pin_stmt)
+                    pinned_ids = {row[0] for row in pin_result.all()}
+                except Exception as e:
+                    logger.warning(f"Failed to fetch pinned reviews: {str(e)}")
+
             if reviews:
                 logger.info(f"Found {len(reviews)} review(s) for PR: {pull_request_id}")
                 for review in reviews:
+                    review["is_pinned_by_me"] = review["id"] in pinned_ids
                     await self._set_review_in_cache(
                         str(review["project_key"]),
                         str(review["repository_slug"]),
@@ -774,6 +789,7 @@ class ReviewService:
         page_size: int = 20,
         use_cache: bool = True,
         app_names: list[str] | None = None,
+        current_user_id: int | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """
         List pull request reviews with filtering and pagination
@@ -785,6 +801,7 @@ class ReviewService:
             db: Database session
             use_cache: Whether to use cache
             app_names: Optional list of app names to filter by (supports multiple apps)
+            current_user_id: Current user ID for pinned_only filter
 
         Returns:
             Tuple[List[dict[str, Any]], int]: List of reviews and total count
@@ -981,6 +998,15 @@ class ReviewService:
                     json.dumps({"issues": [{"severity": filters.severity}]}),
                 )
             )
+
+        # Apply pinned_only filter — only show reviews pinned by current user
+        if filters.pinned_only and current_user_id is not None:
+            pinned_subquery = (
+                select(UserPinnedReview.review_id)
+                .where(UserPinnedReview.user_id == current_user_id)
+                .scalar_subquery()
+            )
+            query = query.where(PullRequestReviewBase.id.in_(pinned_subquery))
 
         # Try cache first for list results (only if no app_name filter)
         if not app_names and use_cache:
@@ -2030,6 +2056,10 @@ class ReviewService:
         if total_reviewers is not None:
             enriched["total_reviewers"] = total_reviewers
 
+        # Preserve is_pinned_by_me if present
+        if "is_pinned_by_me" in review_dict:
+            enriched["is_pinned_by_me"] = review_dict["is_pinned_by_me"]
+
         return enriched
 
     async def list_reviews_with_entities(
@@ -2040,6 +2070,7 @@ class ReviewService:
         page_size: int = 20,
         use_cache: bool = False,
         app_names: list[str] | None = None,
+        current_user_id: int | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """
         List pull request reviews with full entity information
@@ -2051,13 +2082,20 @@ class ReviewService:
             db: Database session
             use_cache: Whether to use cache (disabled for enriched queries)
             app_names: Optional list of app names to filter by
+            current_user_id: Current user ID for checking pin status
 
         Returns:
             Tuple[List[Dict], int]: List of enriched reviews and total count
         """
         # Get basic reviews from database with app_name filtering
         reviews, total = await self.list_reviews(
-            filters, db, page, page_size, use_cache=False, app_names=app_names
+            filters,
+            db,
+            page,
+            page_size,
+            use_cache=False,
+            app_names=app_names,
+            current_user_id=current_user_id,
         )
 
         # Collect unique project-repo pairs for batch app_name resolution
@@ -2077,6 +2115,18 @@ class ReviewService:
         registry_service = ProjectRegistryService()
         app_name_mapping = await registry_service.get_app_names_batch(project_repo_pairs, db)
 
+        # If current_user_id provided, fetch pinned review IDs for this user
+        pinned_ids: set[int] = set()
+        if current_user_id is not None:
+            try:
+                pin_stmt = select(UserPinnedReview.review_id).where(
+                    UserPinnedReview.user_id == current_user_id
+                )
+                pin_result = await db.execute(pin_stmt)
+                pinned_ids = {row[0] for row in pin_result.all()}
+            except Exception as e:
+                logger.warning(f"Failed to fetch pinned reviews: {str(e)}")
+
         # Enrich each review with entity information AND app_name
         enriched_reviews = []
         for review in reviews:
@@ -2090,6 +2140,9 @@ class ReviewService:
                 ),
             )
             enriched["app_name"] = app_name_mapping.get(pair_key, "Unknown")
+            # Add is_pinned_by_me flag
+            review_id = review["id"] if isinstance(review, dict) else review.id
+            enriched["is_pinned_by_me"] = review_id in pinned_ids
             enriched_reviews.append(enriched)
 
         return enriched_reviews, total

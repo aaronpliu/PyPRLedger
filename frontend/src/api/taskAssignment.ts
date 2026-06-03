@@ -58,6 +58,9 @@ export interface ReviewV2 {
   total_reviewers: number
   completed_reviewers: number
   pending_reviewers: number
+  
+  // Pin/Flag feature
+  is_pinned_by_me?: boolean
 }
 
 export interface ReviewListResponse {
@@ -94,6 +97,7 @@ export const taskAssignmentApi = {
     date_from?: string
     date_to?: string
     hide_archived?: boolean
+    pinned_only?: boolean
   }): Promise<ReviewListResponse> {
     return request.get('/task-assignment/', { params })
   },
@@ -162,5 +166,19 @@ export const taskAssignmentApi = {
     date_to?: string
   }): Promise<ReviewListResponse> {
     return request.get('/task-assignment/', { params })
+  },
+
+  /**
+   * Pin a review (mark as noteworthy for the current user)
+   */
+  pinReview(reviewId: number): Promise<{ message: string; is_pinned: boolean }> {
+    return request.post(`/reviews/${reviewId}/pin`)
+  },
+
+  /**
+   * Unpin a review (remove personal pin)
+   */
+  unpinReview(reviewId: number): Promise<{ message: string; is_pinned: boolean }> {
+    return request.delete(`/reviews/${reviewId}/pin`)
   },
 }

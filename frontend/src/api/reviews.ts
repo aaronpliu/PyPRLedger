@@ -52,6 +52,9 @@ export interface Review {
   // Score summary
   score_summary?: ReviewScoreSummary | null
   
+  // Pin/Flag feature
+  is_pinned_by_me?: boolean
+  
   // Legacy fields (for backward compatibility)
   pr_url?: string  // May not be present in new API
   reviewer_username?: string  // Alias for 'reviewer'
@@ -176,6 +179,7 @@ export const reviewsApi = {
     search_query?: string
     has_scores?: boolean
     severity?: string
+    pinned_only?: boolean
   }): Promise<{ total: number; items: Review[]; page: number; page_size: number }> {
     return request.get('/reviews', { params })
   },
@@ -348,5 +352,19 @@ export const reviewsApi = {
     return request.get('/reviews/scores', { params }).then((scores) => ({
       items: Array.isArray(scores) ? scores : []
     }))
+  },
+
+  /**
+   * Pin a review (mark as noteworthy for the current user)
+   */
+  pinReview(reviewId: number): Promise<{ message: string; is_pinned: boolean }> {
+    return request.post(`/reviews/${reviewId}/pin`)
+  },
+
+  /**
+   * Unpin a review (remove personal pin)
+   */
+  unpinReview(reviewId: number): Promise<{ message: string; is_pinned: boolean }> {
+    return request.delete(`/reviews/${reviewId}/pin`)
   },
 }

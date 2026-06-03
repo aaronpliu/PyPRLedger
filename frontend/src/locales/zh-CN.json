@@ -189,6 +189,15 @@
     "show_all": "显示全部",
     "archived_hint_hide": "仅显示未评分的审查",
     "archived_hint_show": "显示所有审查（包括已评分）",
+    "pin_added": "审查已标记",
+    "pin_removed": "已取消标记",
+    "pin_column": "标记",
+    "pin_column_tip": "点击标记/取消标记审查以便快速访问",
+    "pin_tip": "标记此审查",
+    "unpin_tip": "取消标记此审查",
+    "pinned_filter": "标",
+    "pinned_active": "已标",
+    "pinned_hint_filter": "按已标记筛选",
     "filters": {
       "search_placeholder": "搜索PR ID或摘要...",
       "app_filter": "应用",
@@ -309,7 +318,9 @@
       "copied": "已复制！",
       "na": "无",
       "no_ai_hint": "此PR提交时未进行AI分析。当AI分析可用时，建议将显示在此处。",
-      "no_ai_results": "暂无AI审查结果"
+      "no_ai_results": "暂无AI审查结果",
+      "pin": "标记",
+      "pinned": "已标记"
     }
   },
   "scores": {

@@ -189,6 +189,15 @@
     "show_all": "Show All",
     "archived_hint_hide": "Showing only unscored reviews",
     "archived_hint_show": "Showing all reviews including scored",
+    "pin_added": "Review pinned",
+    "pin_removed": "Pin removed",
+    "pin_column": "Pin",
+    "pin_column_tip": "Click to pin/unpin a review for quick access",
+    "pin_tip": "Pin this review",
+    "unpin_tip": "Unpin this review",
+    "pinned_filter": "Pin",
+    "pinned_active": "Pinned",
+    "pinned_hint_filter": "Filter by pinned reviews",
     "filters": {
       "search_placeholder": "Search by PR ID or summary...",
       "app_filter": "App",
@@ -309,7 +318,9 @@
       "copied": "Copied!",
       "na": "N/A",
       "no_ai_hint": "This PR was submitted without AI analysis. AI suggestions will appear here when available.",
-      "no_ai_results": "No AI review results available"
+      "no_ai_results": "No AI review results available",
+      "pin": "Pin",
+      "pinned": "Pinned"
     }
   },
   "scores": {

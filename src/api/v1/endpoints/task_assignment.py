@@ -62,6 +62,7 @@ async def list_reviews(
     hide_archived: bool = Query(
         False, description="Hide reviews where all assignees have completed scoring"
     ),
+    pinned_only: bool = Query(False, description="Filter to reviews pinned by the current user"),
 ) -> ReviewListResponse:
     """
     Get list of reviews with their assignments (requires review_admin role)
@@ -99,6 +100,8 @@ async def list_reviews(
             date_from=date_from,
             date_to=date_to,
             hide_archived=hide_archived,
+            pinned_only=pinned_only,
+            current_user_id=current_user.id,
         )
 
         return ReviewListResponse(

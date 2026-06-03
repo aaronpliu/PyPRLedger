@@ -314,6 +314,11 @@ class ReviewResponse(BaseModel):
         None, description="Aggregated score statistics including all reviewer scores"
     )
 
+    # Per-user pin/flag
+    is_pinned_by_me: bool = Field(
+        default=False, description="Whether the current user has pinned this review"
+    )
+
     model_config = {
         "from_attributes": True,
         "json_schema_extra": {
@@ -556,6 +561,10 @@ class ReviewFilter(BaseModel):
     severity: str | None = Field(
         None,
         description="Filter by AI issue severity (critical, high, medium, low)",
+    )
+    pinned_only: bool | None = Field(
+        None,
+        description="Filter to reviews pinned by the current user",
     )
 
     @field_validator("pull_request_status")

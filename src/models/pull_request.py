@@ -344,6 +344,29 @@ class PullRequestReviewAssignment(Base):
         return {**base_dict, **self.to_dict()}
 
 
+class UserPinnedReview(Base):
+    """Per-user private pin/flag for marking noteworthy reviews"""
+
+    __tablename__ = "user_pinned_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("auth_user.id", ondelete="CASCADE"), nullable=False
+    )
+    username: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("pull_request_review_base.id", ondelete="CASCADE"), nullable=False
+    )
+    created_date: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (UniqueConstraint("user_id", "review_id", name="uq_user_review"),)
+
+    def __repr__(self) -> str:
+        return (
+            f"<UserPinnedReview(id={self.id}, user_id={self.user_id}, review_id={self.review_id})>"
+        )
+
+
 class PullRequestScore(Base):
     """Pull request score model representing the pull_request_score table in the database
 

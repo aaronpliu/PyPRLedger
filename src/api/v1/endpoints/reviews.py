@@ -17,7 +17,11 @@ from src.core.exceptions import (
 )
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
-from src.models.pull_request import PullRequestReviewAssignment, PullRequestReviewBase
+from src.models.pull_request import (
+    PullRequestReviewAssignment,
+    PullRequestReviewBase,
+    UserPinnedReview,
+)
 from src.models.user import User
 from src.schemas.pull_request import (
     ReviewAssignmentRequest,
@@ -622,6 +626,10 @@ async def list_reviews(
         None,
         description="Filter by AI issue severity (critical, high, medium, low)",
     ),
+    pinned_only: bool | None = Query(
+        None,
+        description="Filter to reviews pinned by the current user",
+    ),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> ReviewListResponse:
@@ -648,6 +656,9 @@ async def list_reviews(
         date_from: Filter reviews created after this date
         date_to: Filter reviews created before this date
         app_names: Filter by application names (comma-separated for multiple apps)
+        has_scores: Filter by scored status
+        severity: Filter by AI issue severity
+        pinned_only: Filter to reviews pinned by current user
         page: Page number (1-indexed)
         page_size: Number of items per page
         db: Database session
@@ -682,6 +693,7 @@ async def list_reviews(
             search_query=search_query,
             has_scores=has_scores,
             severity=severity,
+            pinned_only=pinned_only,
         )
 
         # Apply role-based filtering
@@ -709,7 +721,7 @@ async def list_reviews(
 
         # Get enriched reviews with full entity information and app_name resolution
         enriched_reviews, total = await review_service.list_reviews_with_entities(
-            filters, db, page, page_size, app_names=app_names_list
+            filters, db, page, page_size, app_names=app_names_list, current_user_id=current_user.id
         )
 
         # Convert dict reviews to ReviewResponse objects
@@ -850,6 +862,7 @@ async def get_review(
             source_filename=source_filename,
             db=db,
             visible_to_username=visible_to_username,
+            current_user_id=current_user.id,
         )
 
         if not reviews:
@@ -1962,6 +1975,100 @@ async def delete_score(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to delete score"},
+        )
+
+
+@router.get("/{review_id}/pin", status_code=status.HTTP_200_OK)
+@router.post("/{review_id}/pin", status_code=status.HTTP_201_CREATED)
+async def pin_review(
+    review_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+) -> dict:
+    """
+    Pin/bookmark a review for the current user.
+
+    Creates a private pin so the user can quickly find this review later.
+    If already pinned, returns success without creating a duplicate.
+    """
+    try:
+        # Check if already pinned
+        stmt = select(UserPinnedReview).where(
+            UserPinnedReview.user_id == current_user.id,
+            UserPinnedReview.review_id == review_id,
+        )
+        result = await db.execute(stmt)
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            return {"message": "Review already pinned", "is_pinned": True}
+
+        # Get git username for storage
+        git_username = await _get_git_username(current_user.id, db)
+
+        # Create new pin
+        pin = UserPinnedReview(
+            user_id=current_user.id,
+            username=git_username or current_user.username,
+            review_id=review_id,
+        )
+        db.add(pin)
+        await db.flush()
+        await db.commit()
+
+        logger.info(
+            "Review pinned",
+            extra={"review_id": review_id, "user_id": current_user.id},
+        )
+        return {"message": "Review pinned successfully", "is_pinned": True}
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to pin review {review_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to pin review"},
+        )
+
+
+@router.delete("/{review_id}/pin", status_code=status.HTTP_200_OK)
+async def unpin_review(
+    review_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+) -> dict:
+    """
+    Unpin/remove bookmark from a review for the current user.
+    """
+    try:
+        stmt = select(UserPinnedReview).where(
+            UserPinnedReview.user_id == current_user.id,
+            UserPinnedReview.review_id == review_id,
+        )
+        result = await db.execute(stmt)
+        pin = result.scalar_one_or_none()
+
+        if not pin:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "NOT_FOUND", "message": "Pin not found"},
+            )
+
+        await db.delete(pin)
+        await db.commit()
+
+        logger.info(
+            "Review unpinned",
+            extra={"review_id": review_id, "user_id": current_user.id},
+        )
+        return {"message": "Review unpinned successfully", "is_pinned": False}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to unpin review {review_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to unpin review"},
         )
 
 
