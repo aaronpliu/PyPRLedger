@@ -55,6 +55,9 @@ export interface Review {
   // Pin/Flag feature
   is_pinned_by_me?: boolean
   
+  // Associated reviews (related/follow-up PRs)
+  associated_review_ids?: number[]
+  
   // Legacy fields (for backward compatibility)
   pr_url?: string  // May not be present in new API
   reviewer_username?: string  // Alias for 'reviewer'
@@ -200,22 +203,10 @@ export const reviewsApi = {
     )
   },
 
-  // Get review by ID - fetches from list and finds by ID
+  // Get review by ID - uses dedicated endpoint
   async getReviewById(id: number): Promise<Review> {
-    // Fetch all reviews (including archived/scored) to find by ID
-    // Use large page_size to ensure we get all reviews
-    const response = await request.get('/reviews', { 
-      params: { 
-        page: 1, 
-        page_size: 100  // Max page_size backend allows
-      } 
-    })
-    const data = response.data || response
-    const review = data.items?.find((r: Review) => r.id === id)
-    if (!review) {
-      throw new Error(`Review with ID ${id} not found`)
-    }
-    return review
+    const response = await request.get(`/reviews/${id}`)
+    return response.data || response
   },
 
   // Update review (status only - reviews are read-only except for status)
@@ -366,5 +357,19 @@ export const reviewsApi = {
    */
   unpinReview(reviewId: number): Promise<{ message: string; is_pinned: boolean }> {
     return request.delete(`/reviews/${reviewId}/pin`)
+  },
+
+  /**
+   * Associate two reviews together (bidirectional)
+   */
+  associateReviews(reviewId: number, targetReviewId: number): Promise<{ message: string; associated: boolean }> {
+    return request.post(`/reviews/${reviewId}/associate/${targetReviewId}`)
+  },
+
+  /**
+   * Remove association between two reviews
+   */
+  disassociateReviews(reviewId: number, targetReviewId: number): Promise<{ message: string; associated: boolean }> {
+    return request.delete(`/reviews/${reviewId}/associate/${targetReviewId}`)
   },
 }

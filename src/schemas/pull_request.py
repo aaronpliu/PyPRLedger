@@ -319,6 +319,12 @@ class ReviewResponse(BaseModel):
         default=False, description="Whether the current user has pinned this review"
     )
 
+    # Associated reviews (related/follow-up PRs)
+    associated_review_ids: list[int] = Field(
+        default_factory=list,
+        description="IDs of reviews associated with this review",
+    )
+
     model_config = {
         "from_attributes": True,
         "json_schema_extra": {

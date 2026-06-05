@@ -218,6 +218,102 @@
                 </el-table>
               </el-card>
             </div>
+            
+            <!-- Associated Reviews Section -->
+            <div class="expanded-assoc-section">
+              <!-- Loading State -->
+              <div v-if="loadingAssociated[row.id]" class="scores-loading">
+                <el-icon class="is-loading"><Loading /></el-icon>
+                <span>{{ t('common.loading') }}</span>
+              </div>
+              
+              <!-- Associated reviews content -->
+              <div v-else-if="associatedReviews[row.id] && associatedReviews[row.id].length > 0">
+                <el-card class="nested-assoc-card">
+                  <template #header>
+                    <div class="card-header">
+                      <span class="card-title">{{ t('reviews.associated_reviews', 'Associated Reviews') }} ({{ associatedReviews[row.id].length }})</span>
+                    </div>
+                  </template>
+                  
+                  <el-table :data="associatedReviews[row.id]" stripe size="small" style="width: 100%">
+                    <!-- ID -->
+                    <el-table-column prop="id" :label="t('reviews.detail.id', 'ID')" min-width="60" />
+
+                    <!-- App Name -->
+                    <el-table-column :label="t('reviews.app_name')" min-width="110">
+                      <template #default="{ row: assoc }">
+                        <el-tag v-if="assoc.app_name && assoc.app_name !== 'Unknown'" type="primary" size="small">
+                          {{ assoc.app_name }}
+                        </el-tag>
+                        <span v-else class="text-secondary">{{ assoc.project_key }}</span>
+                      </template>
+                    </el-table-column>
+
+                    <!-- PR Info (ID + branches) -->
+                    <el-table-column :label="t('reviews.pr_info', 'PR Info')" min-width="170">
+                      <template #default="{ row: assoc }">
+                        <div class="pr-info-cell">
+                          <div class="pr-id">
+                            <el-tag size="small" type="info" effect="plain">
+                              {{ assoc.pull_request_id }}
+                            </el-tag>
+                            <span v-if="assoc.pull_request_commit_id" class="commit-id">
+                              🔖 {{ assoc.pull_request_commit_id.substring(0, 7) }}
+                            </span>
+                          </div>
+                          <div class="pr-branches">
+                            <span class="branch">{{ assoc.source_branch }}</span>
+                            <span class="arrow">→</span>
+                            <span class="branch">{{ assoc.target_branch }}</span>
+                          </div>
+                        </div>
+                      </template>
+                    </el-table-column>
+
+                    <!-- PR User -->
+                    <el-table-column :label="t('reviews.pr_user')" min-width="100">
+                      <template #default="{ row: assoc }">
+                        <div>{{ assoc.pull_request_user_info?.display_name || assoc.pull_request_user }}</div>
+                      </template>
+                    </el-table-column>
+
+                    <!-- Reviewer -->
+                    <el-table-column :label="t('reviews.reviewer')" min-width="120">
+                      <template #default="{ row: assoc }">
+                        {{ assoc.reviewer_info?.display_name || assoc.reviewer || t('reviews.unassigned', 'Unassigned') }}
+                      </template>
+                    </el-table-column>
+
+                    <!-- Status -->
+                    <el-table-column :label="t('reviews.detail.status')" min-width="90">
+                      <template #default="{ row: assoc }">
+                        <el-tag :type="assoc.pull_request_status === 'open' ? 'success' : 'info'" size="small">
+                          {{ assoc.pull_request_status }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+
+                    <!-- Actions -->
+                    <el-table-column :label="t('reviews.actions')" min-width="85">
+                      <template #default="{ row: assoc }">
+                        <el-button size="small" type="primary" @click.stop="viewReview(assoc)">
+                          {{ t('reviews.view') }}
+                        </el-button>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </el-card>
+              </div>
+              
+              <!-- No associated reviews (empty state) -->
+              <div v-else class="assoc-empty">
+                <el-empty
+                  :description="t('reviews.no_associations', 'No associated reviews')"
+                  :image-size="60"
+                />
+              </div>
+            </div>
           </template>
         </el-table-column>
         
@@ -404,11 +500,16 @@
         </el-table-column>
         
         <!-- Actions -->
-        <el-table-column :label="t('reviews.actions')" width="120" fixed="right">
+        <el-table-column :label="t('reviews.actions')" width="175" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click.stop="viewReview(row)">
-              {{ t('reviews.view') }}
-            </el-button>
+            <el-space>
+              <el-button size="small" type="primary" @click.stop="viewReview(row)">
+                {{ t('reviews.view') }}
+              </el-button>
+              <el-button size="small" @click.stop="showAssociateDialog(row)">
+                {{ t('reviews.associate', 'Link') }}
+              </el-button>
+            </el-space>
           </template>
         </el-table-column>
       </el-table>
@@ -486,6 +587,48 @@
       <template #footer v-if="!bulkOperationLoading">
         <el-button type="primary" @click="closeProgressDialog">Close</el-button>
       </template>
+    </el-dialog>
+    
+    <!-- Associate Reviews Dialog -->
+    <el-dialog
+      v-model="showAssociateDialogVisible"
+      :title="t('reviews.associate_review', 'Link Reviews')"
+      width="500px"
+    >
+      <div v-if="associateTargetReview" class="associate-dialog-content">
+        <p class="associate-hint">
+                    {{ t('reviews.associate_hint', 'Link review with another review') }} (#{{ associateTargetReview.id }})
+        </p>
+        
+        <div class="associate-input-row">
+          <el-input
+            v-model="associateTargetId"
+            type="number"
+            :placeholder="t('reviews.associate_placeholder', 'Enter review ID to link')"
+            :min="1"
+          />
+          <el-button type="primary" :disabled="!associateTargetId" :loading="associating" @click="handleAssociate">
+            {{ t('reviews.associate', 'Link') }}
+          </el-button>
+        </div>
+        
+        <!-- Current associations -->
+        <div v-if="currentAssociations.length > 0" class="current-associations">
+          <h4>{{ t('reviews.current_associations', 'Linked Reviews') }}</h4>
+          <div v-for="assoc in currentAssociations" :key="assoc.id" class="assoc-item">
+            <span class="assoc-info">#{{ assoc.id }} - {{ assoc.pull_request_id }} ({{ assoc.project_key }}/{{ assoc.repository_slug }})</span>
+            <el-button
+              size="small"
+              text
+              type="danger"
+              :loading="disassociatingId === assoc.id"
+              @click="handleDisassociate(assoc.id)"
+            >
+              {{ t('reviews.disassociate', 'Remove') }}
+            </el-button>
+          </div>
+        </div>
+      </div>
     </el-dialog>
   </div>
 </template>
@@ -576,6 +719,10 @@ const expandedRows = ref<number[]>([])
 const reviewScores = ref<Record<number, any[]>>({})
 const loadingScores = ref<Record<number, boolean>>({})
 
+// Expandable associated reviews state
+const associatedReviews = ref<Record<number, Review[]>>({})
+const loadingAssociated = ref<Record<number, boolean>>({})
+
 // Bulk operation state
 const selectedReviews = ref<Review[]>([])
 const showBulkDeleteDialogVisible = ref(false)
@@ -583,6 +730,14 @@ const bulkDeleting = ref(false)
 const showProgressDialog = ref(false)
 const bulkOperationLoading = ref(false)
 const progressPercentage = ref(0)
+
+// Associate dialog state
+const showAssociateDialogVisible = ref(false)
+const associateTargetReview = ref<Review | null>(null)
+const associateTargetId = ref<number | null>(null)
+const associating = ref(false)
+const currentAssociations = ref<Review[]>([])
+const disassociatingId = ref<number | null>(null)
 const progressStatus = ref<'success' | 'exception' | 'warning'>()
 const progressMessage = ref('')
 const processedCount = ref(0)
@@ -619,6 +774,7 @@ const handleExpandChange = (row: Review, expandedRows: Review[]) => {
   const isExpanded = expandedRows.some(r => r.id === row.id)
   if (isExpanded) {
     loadScoresForReview(row)
+    loadAssociatedReviews(row)
   }
 }
 
@@ -654,6 +810,103 @@ const loadScoresForReview = async (review: Review) => {
     reviewScores.value[review.id] = []
   } finally {
     loadingScores.value[review.id] = false
+  }
+}
+
+// Load associated reviews for a specific review when expanded
+const loadAssociatedReviews = async (review: Review) => {
+  const assocIds = review.associated_review_ids
+  if (!assocIds || assocIds.length === 0) {
+    associatedReviews.value[review.id] = []
+    return
+  }
+  
+  // If already loaded, skip (use !== undefined since empty array [] is truthy)
+  if (associatedReviews.value[review.id] !== undefined) {
+    return
+  }
+  
+  loadingAssociated.value[review.id] = true
+  try {
+    // Find matching reviews already in the current list
+    const found: Review[] = []
+    const missingIds: number[] = []
+    for (const id of assocIds) {
+      const match = reviews.value.find(r => r.id === id)
+      if (match) {
+        found.push(match)
+      } else {
+        missingIds.push(id)
+      }
+    }
+    
+    // Fetch missing reviews individually
+    for (const id of missingIds) {
+      try {
+        const item = await reviewsApi.getReviewById(id)
+        found.push(item)
+      } catch {
+        console.warn(`[ReviewListView] Failed to load associated review ${id}`)
+      }
+    }
+    
+    associatedReviews.value[review.id] = found
+  } catch (error) {
+    console.error('[ReviewListView] Failed to load associated reviews:', error)
+    associatedReviews.value[review.id] = []
+  } finally {
+    loadingAssociated.value[review.id] = false
+  }
+}
+
+// Show associate dialog for a review
+const showAssociateDialog = (review: Review) => {
+  associateTargetReview.value = review
+  associateTargetId.value = null
+  
+  // Load current associations from the review's associated_review_ids
+  const ids = review.associated_review_ids || []
+  currentAssociations.value = ids.map(id => {
+    const match = reviews.value.find(r => r.id === id)
+    return match || { id } as Review
+  }).filter(r => r.pull_request_id) // only show those we have data for
+  
+  showAssociateDialogVisible.value = true
+}
+
+// Handle associate action
+const handleAssociate = async () => {
+  if (!associateTargetReview.value || !associateTargetId.value) return
+  
+  associating.value = true
+  try {
+    await reviewsApi.associateReviews(associateTargetReview.value.id, associateTargetId.value)
+    ElMessage.success(t('reviews.association_added', 'Review linked'))
+    showAssociateDialogVisible.value = false
+    // Refresh the current review data
+    loadReviews()
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail?.message || 'Failed to link reviews')
+  } finally {
+    associating.value = false
+  }
+}
+
+// Handle disassociate action
+const handleDisassociate = async (targetId: number) => {
+  if (!associateTargetReview.value) return
+  
+  disassociatingId.value = targetId
+  try {
+    await reviewsApi.disassociateReviews(associateTargetReview.value.id, targetId)
+    ElMessage.success(t('reviews.association_removed', 'Link removed'))
+    showAssociateDialogVisible.value = false
+    // Refresh the current review data
+    loadReviews()
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail?.message || 'Failed to remove link')
+  } finally {
+    disassociatingId.value = null
   }
 }
 
@@ -745,6 +998,9 @@ const loadReviews = async (showLoading = true) => {
     filteredReviews.value = data.items
     reviews.value = data.items
     total.value = data.total
+    // Clear cached association data so it gets re-fetched on next expand
+    associatedReviews.value = {}
+    loadingAssociated.value = {}
   } catch (error: any) {
     console.error('Failed to load reviews:', error)
     console.error('Error details:', error.response?.data || error.message)
@@ -1741,6 +1997,15 @@ html.dark .el-tag--danger {
 
 [data-theme='dark'] .score-critical {
   color: #ef4444;
+}
+
+/* Associated reviews section */
+.expanded-assoc-section {
+  margin-top: 16px;
+}
+
+.assoc-empty {
+  margin-top: 8px;
 }
 
 /* Live Update Toggle Control */

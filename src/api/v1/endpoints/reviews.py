@@ -1978,6 +1978,48 @@ async def delete_score(
         )
 
 
+@router.get("/{review_id}", response_model=ReviewResponse)
+async def get_review_by_id(
+    review_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+) -> ReviewResponse:
+    """
+    Retrieve a single review by its primary key ID.
+
+    Returns the review with full entity information (project, repo, users),
+    scores, pin status, and associated review IDs.
+    """
+    try:
+        review = await review_service.get_review_by_id(
+            review_id=review_id,
+            db=db,
+            current_user_id=current_user.id,
+        )
+        if not review:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": f"Review with ID {review_id} not found",
+                },
+            )
+        return ReviewResponse(**review)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get review by id {review_id}: {str(e)}", exc_info=True)
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint="GET /api/v1/reviews/{review_id}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get review"},
+        )
+
+
 @router.get("/{review_id}/pin", status_code=status.HTTP_200_OK)
 @router.post("/{review_id}/pin", status_code=status.HTTP_201_CREATED)
 async def pin_review(
@@ -2069,6 +2111,103 @@ async def unpin_review(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to unpin review"},
+        )
+
+
+@router.post("/{review_id}/associate/{target_review_id}", status_code=status.HTTP_201_CREATED)
+async def associate_reviews(
+    review_id: int,
+    target_review_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+) -> dict:
+    """
+    Associate two reviews together (bidirectional).
+
+    Links related reviews so they can be viewed together (e.g., original PR review
+    and follow-up PR review after code updates).
+    """
+    try:
+        created = await review_service.associate_reviews(
+            review_id=review_id,
+            target_review_id=target_review_id,
+            created_by=current_user.id,
+            db=db,
+        )
+
+        if not created:
+            return {"message": "Reviews already associated", "associated": True}
+
+        await db.commit()
+
+        logger.info(
+            "Reviews associated",
+            extra={
+                "review_id": review_id,
+                "target_review_id": target_review_id,
+                "user_id": current_user.id,
+            },
+        )
+        return {"message": "Reviews associated successfully", "associated": True}
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to associate reviews: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to associate reviews"},
+        )
+
+
+@router.delete("/{review_id}/associate/{target_review_id}", status_code=status.HTTP_200_OK)
+async def disassociate_reviews(
+    review_id: int,
+    target_review_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+) -> dict:
+    """
+    Remove the association between two reviews.
+    """
+    try:
+        removed = await review_service.disassociate_reviews(
+            review_id=review_id,
+            target_review_id=target_review_id,
+            db=db,
+        )
+
+        if not removed:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": "Association not found",
+                },
+            )
+
+        await db.commit()
+
+        logger.info(
+            "Reviews disassociated",
+            extra={
+                "review_id": review_id,
+                "target_review_id": target_review_id,
+                "user_id": current_user.id,
+            },
+        )
+        return {"message": "Association removed successfully", "associated": False}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to disassociate reviews: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": "Failed to disassociate reviews",
+            },
         )
 
 
