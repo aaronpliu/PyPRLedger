@@ -5,6 +5,21 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-06-06
+
+**Backend Version**: 1.16.0
+**Frontend Version**: 1.11.0
+
+### Added
+- Show review ID in reviews page
+- Support to deassociate reviews
+- Support to associate any 2 of reviews for comparison
+
+### Fixed
+- Align card size for scores and associated reviews consistently
+
+---
+
 ## [1.15.2] - 2026-06-03
 
 **Backend Version**: 1.15.2
