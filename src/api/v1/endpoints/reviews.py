@@ -1106,6 +1106,58 @@ async def get_review_statistics(
         )
 
 
+@router.delete("/{review_id}/associate/{target_review_id}", status_code=status.HTTP_200_OK)
+async def disassociate_reviews(
+    review_id: int,
+    target_review_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+) -> dict:
+    """
+    Remove the association between two reviews.
+    """
+    try:
+        removed = await review_service.disassociate_reviews(
+            review_id=review_id,
+            target_review_id=target_review_id,
+            db=db,
+        )
+
+        if not removed:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": "Association not found",
+                },
+            )
+
+        await db.commit()
+
+        logger.info(
+            "Reviews disassociated",
+            extra={
+                "review_id": review_id,
+                "target_review_id": target_review_id,
+                "user_id": current_user.id,
+            },
+        )
+        return {"message": "Association removed successfully", "associated": False}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to disassociate reviews: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": "Failed to disassociate reviews",
+            },
+        )
+
+
 @router.delete(
     "/{project_key}/{repository_slug}/{pull_request_id}", status_code=status.HTTP_204_NO_CONTENT
 )
@@ -2156,58 +2208,6 @@ async def associate_reviews(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to associate reviews"},
-        )
-
-
-@router.delete("/{review_id}/associate/{target_review_id}", status_code=status.HTTP_200_OK)
-async def disassociate_reviews(
-    review_id: int,
-    target_review_id: int,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
-    review_service: Annotated[ReviewService, Depends(get_review_service)],
-) -> dict:
-    """
-    Remove the association between two reviews.
-    """
-    try:
-        removed = await review_service.disassociate_reviews(
-            review_id=review_id,
-            target_review_id=target_review_id,
-            db=db,
-        )
-
-        if not removed:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={
-                    "error": "NOT_FOUND",
-                    "message": "Association not found",
-                },
-            )
-
-        await db.commit()
-
-        logger.info(
-            "Reviews disassociated",
-            extra={
-                "review_id": review_id,
-                "target_review_id": target_review_id,
-                "user_id": current_user.id,
-            },
-        )
-        return {"message": "Association removed successfully", "associated": False}
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"Failed to disassociate reviews: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": "INTERNAL_SERVER_ERROR",
-                "message": "Failed to disassociate reviews",
-            },
         )
 
 

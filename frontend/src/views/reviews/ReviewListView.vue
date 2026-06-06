@@ -295,11 +295,22 @@
                     </el-table-column>
 
                     <!-- Actions -->
-                    <el-table-column :label="t('reviews.actions')" min-width="85">
+                    <el-table-column :label="t('reviews.actions')" min-width="150">
                       <template #default="{ row: assoc }">
-                        <el-button size="small" type="primary" @click.stop="viewReview(assoc)">
-                          {{ t('reviews.view') }}
-                        </el-button>
+                        <div class="action-btns">
+                          <el-button size="small" type="primary" @click.stop="viewReview(assoc)">
+                            {{ t('reviews.view') }}
+                          </el-button>
+                          <el-button
+                            size="small"
+                            type="danger"
+                            text
+                            :loading="unlinkingId === `${row.id}-${assoc.id}`"
+                            @click.stop="handleUnlinkAssociation(row, assoc.id)"
+                          >
+                            {{ t('reviews.disassociate', 'Remove') }}
+                          </el-button>
+                        </div>
                       </template>
                     </el-table-column>
                   </el-table>
@@ -738,6 +749,7 @@ const associateTargetId = ref<number | null>(null)
 const associating = ref(false)
 const currentAssociations = ref<Review[]>([])
 const disassociatingId = ref<number | null>(null)
+const unlinkingId = ref<string | null>(null)
 const progressStatus = ref<'success' | 'exception' | 'warning'>()
 const progressMessage = ref('')
 const processedCount = ref(0)
@@ -907,6 +919,31 @@ const handleDisassociate = async (targetId: number) => {
     ElMessage.error(error.response?.data?.detail?.message || 'Failed to remove link')
   } finally {
     disassociatingId.value = null
+  }
+}
+
+// Handle unlink association from the associated reviews table
+const handleUnlinkAssociation = async (parentReview: Review, assocId: number) => {
+  const key = `${parentReview.id}-${assocId}`
+  unlinkingId.value = key
+  try {
+    await reviewsApi.disassociateReviews(parentReview.id, assocId)
+    ElMessage.success(t('reviews.association_removed', 'Link removed'))
+
+    // Remove from local associated reviews array
+    const list = associatedReviews.value[parentReview.id]
+    if (list) {
+      associatedReviews.value[parentReview.id] = list.filter(a => a.id !== assocId)
+    }
+
+    // Update associated_review_ids on the parent review
+    if (parentReview.associated_review_ids) {
+      parentReview.associated_review_ids = parentReview.associated_review_ids.filter(id => id !== assocId)
+    }
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.detail?.message || 'Failed to remove link')
+  } finally {
+    unlinkingId.value = null
   }
 }
 
@@ -2006,6 +2043,13 @@ html.dark .el-tag--danger {
 
 .assoc-empty {
   margin-top: 8px;
+}
+
+.action-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 /* Live Update Toggle Control */
