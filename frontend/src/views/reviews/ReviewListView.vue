@@ -1939,7 +1939,7 @@ html.dark .el-tag--danger {
 
 /* Expanded Scores Section */
 .expanded-scores-section {
-  padding: 16px;
+  padding: 0;
 }
 
 .scores-loading {
@@ -2045,7 +2045,7 @@ html.dark .el-tag--danger {
 
 /* Associated reviews section */
 .expanded-assoc-section {
-  margin-top: 16px;
+  margin-top: 4px;
 }
 
 .assoc-empty {
