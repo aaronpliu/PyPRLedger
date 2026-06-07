@@ -159,8 +159,9 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception as exc:
             await session.rollback()
             if _is_disconnected_error(exc):
-                logger.warning("Database connection is disconnected. Reconnecting...")
-                await get_engine().dispose()
+                logger.warning(
+                    "Database connection is disconnected. The pool will replace it on next checkout."
+                )
             raise
         finally:
             await session.close()
@@ -180,8 +181,9 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
         except Exception as exc:
             await session.rollback()
             if _is_disconnected_error(exc):
-                logger.warning("Database connection is disconnected. Reconnecting...")
-                await get_engine().dispose()
+                logger.warning(
+                    "Database connection is disconnected. The pool will replace it on next checkout."
+                )
             raise
         finally:
             await session.close()

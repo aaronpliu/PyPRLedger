@@ -647,21 +647,21 @@ const isCurrentReviewAssignedToUser = computed(() => {
 
 const scoreActionDisabledReason = computed(() => {
   if (!hasScorePermissionRole.value) {
-    return 'You do not have permission to submit scores.'
+    return t('reviews.detail.no_score_permission')
   }
 
   if (!effectiveReviewerUsername.value) {
-    return 'Link your account to a Bitbucket user before submitting scores.'
+    return t('reviews.detail.link_account_required')
   }
 
   // Check if review has any reviewers assigned (single or multi-reviewer)
   const hasAnyReviewer = review.value?.reviewer || (review.value?.all_reviewers && review.value.all_reviewers.length > 0)
   if (!hasAnyReviewer) {
-    return 'This review is visible because you raised the PR, but scoring is only allowed after review admin assigns it to you.'
+    return t('reviews.detail.no_reviewer_assigned')
   }
 
   if (!isCurrentReviewAssignedToUser.value && !currentUserHasScore.value) {
-    return 'You can only score reviews that are assigned to your linked Bitbucket user.'
+    return t('reviews.detail.not_assigned_reviewer')
   }
 
   return ''

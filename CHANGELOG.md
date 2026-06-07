@@ -5,6 +5,25 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.1] - 2026-06-07
+
+**Backend Version**: 1.16.1
+**Frontend Version**: 1.11.1
+
+### Added
+- enhanced associated reviews dialog to quickly look up from candidate reviews
+
+### Changed
+- [Refactor] enhance database connection and update default value
+- [Refactor] optimize sse connection and enhance exception handling
+
+### Other Changes
+- 6ec1cb8 Merge pull request #21 from aaronpliu/main
+- 596d5de Merge pull request #20 from aaronpliu/feature/PRLedger_NewUI
+- 70fbda2 Merge pull request #19 from aaronpliu/feature/PRLedger_NewUI
+
+---
+
 ## [1.16.0] - 2026-06-06
 
 **Backend Version**: 1.16.0

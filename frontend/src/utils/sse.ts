@@ -110,12 +110,15 @@ export class SSEService {
       this.reconnectAttempts = 0
       this._enabled = true
 
-      // Update stored params for future setEnabled(true)
+      // Update stored params — token may have been refreshed
       this.token = token
       this.lastToken = token
       this.lastOnEvent = onEvent
       this.lastOnError = onError || null
       this.lastOnOpen = onOpen || null
+
+      // Also update the URL if token changed (for reconnection attempts)
+      this.url = `/api/v1/sse/stream?token=${encodeURIComponent(token)}`
 
       // DO NOT increment connectionGeneration — existing event listeners
       // still reference currentOnEvent/OnError/OnOpen, which we just updated
@@ -136,7 +139,7 @@ export class SSEService {
     this.currentOnOpen = onOpen || null
 
     this.token = token
-    this.url = `/api/v1/reviews/stream?token=${encodeURIComponent(token)}`
+    this.url = `/api/v1/sse/stream?token=${encodeURIComponent(token)}`
     this.isManualDisconnect = false
     this.reconnectAttempts = 0
     this._enabled = true
@@ -191,8 +194,12 @@ export class SSEService {
   }
 
   /**
-   * Disconnect from the SSE stream immediately.
-   * Also removes the beforeunload listener.
+   * Disconnect from the SSE stream with a debounce for page navigation.
+   * Keeps the EventSource alive for DISCONNECT_DEBOUNCE_MS so that
+   * rapid navigation between pages can reuse the same connection.
+   *
+   * Callbacks are preserved during the debounce window so that events
+   * arriving before the actual close are still processed.
    */
   disconnect(): void {
     // Remove beforeunload listener (will be re-added on next connect)
@@ -201,11 +208,9 @@ export class SSEService {
       this.boundBeforeUnload = null
     }
 
-    // Prevent reconnection attempts and stale callbacks during debounce window
+    // Mark as manual disconnect to prevent reconnect logic from firing
+    // but DO NOT null callbacks — EventSource is still alive during debounce
     this.isManualDisconnect = true
-    this.currentOnEvent = null
-    this.currentOnError = null
-    this.currentOnOpen = null
 
     // Schedule delayed disconnection so rapid navigation reuses connection
     if (this.pendingDisconnectTimeout === null) {
@@ -217,11 +222,25 @@ export class SSEService {
   }
 
   /**
-   * Immediate disconnect — closes EventSource and clears state.
+   * Cancel a pending debounced disconnect without closing the connection.
+   * Used when the user returns to a page before the debounce timer fires.
+   */
+  cancelPendingDisconnect(): void {
+    if (this.pendingDisconnectTimeout !== null) {
+      clearTimeout(this.pendingDisconnectTimeout)
+      this.pendingDisconnectTimeout = null
+      console.log('[SSE] Cancelled pending disconnect — connection preserved')
+    }
+    this.isManualDisconnect = false
+  }
+
+  /**
+   * Immediate disconnect — closes EventSource and clears all state.
    */
   private disconnectImmediate(): void {
     console.log('[SSE] Immediate disconnect')
     this.isManualDisconnect = true
+    this.pendingDisconnectTimeout = null
 
     if (this.reconnectTimeout !== null) {
       clearTimeout(this.reconnectTimeout)
@@ -231,9 +250,13 @@ export class SSEService {
     if (this.eventSource) {
       this.eventSource.close()
       this.eventSource = null
-      console.log('[SSE] Disconnected')
+      console.log('[SSE] EventSource closed')
     }
 
+    // Only null callbacks when the connection is actually closed
+    this.currentOnEvent = null
+    this.currentOnError = null
+    this.currentOnOpen = null
     this.url = null
     this.token = null
   }
@@ -260,6 +283,54 @@ export class SSEService {
         this.pendingDisconnectTimeout = null
       }
       this.disconnectImmediate()
+    }
+  }
+
+  /**
+   * Reconnect with a new token (after token refresh).
+   * Updates the stored token and reconnects if currently connected.
+   */
+  reconnectWithToken(newToken: string): void {
+    const wasConnected = this.isConnected()
+    // Update stored token so reconnection attempts use the new token
+    this.token = newToken
+    this.lastToken = newToken
+
+    // Also update the URL for reconnection
+    this.url = `/api/v1/sse/stream?token=${encodeURIComponent(newToken)}`
+
+    if (wasConnected) {
+      console.log('[SSE] Reconnecting with refreshed token')
+      if (this.eventSource) {
+        this.eventSource.close()
+        this.eventSource = null
+      }
+      this.reconnectAttempts = 0
+      this._enabled = true
+
+      this.connectionGeneration++
+      const myGeneration = this.connectionGeneration
+
+      this.eventSource = new EventSource(this.url!, { withCredentials: false })
+
+      this.eventSource.addEventListener('open', () => {
+        if (myGeneration !== this.connectionGeneration) return
+        console.log('[SSE] Connection opened (reconnect)')
+        this.reconnectAttempts = 0
+        this.currentOnOpen?.()
+      })
+
+      this.eventSource.addEventListener('review_created', (rawEvent: Event) => {
+        if (myGeneration !== this.connectionGeneration) return
+        if (this.currentOnEvent) {
+          this.handleReviewCreated(rawEvent as MessageEvent, this.currentOnEvent)
+        }
+      })
+
+      this.eventSource.addEventListener('error', (event: Event) => {
+        if (myGeneration !== this.connectionGeneration) return
+        this.handleError(event, this.currentOnError || undefined, this.currentOnEvent!)
+      })
     }
   }
 
@@ -306,29 +377,25 @@ export class SSEService {
   }
 
   /**
-   * Handle SSE connection errors with exponential backoff reconnection
+   * Handle SSE connection errors with exponential backoff reconnection.
    *
-   * If the error is caused by an expired JWT token, we stop reconnection
-   * immediately and redirect the user to the login page.
+   * Does NOT redirect to login on token expiry — the token was valid at
+   * connection time. The request interceptor handles token refresh for
+   * API calls. If reconnection consistently fails, the user can manually
+   * toggle SSE or refresh the page.
    */
   private handleError(
     event: Event,
     onError?: (error: Event) => void,
     onEvent?: (event: SSEReviewCreatedEvent) => void,
   ): void {
-    if (this.isManualDisconnect) {
+    if (this.isManualDisconnect || !this._enabled) {
       return
     }
 
-    // If token is expired, don't bother retrying — redirect to login
-    if (this.token && this.isTokenExpired(this.token)) {
-      this.handleAuthFailure()
-      return
-    }
-
-    onError?.(event)
-
-    if (this.eventSource?.readyState === EventSource.CLOSED) {
+    // If the EventSource is already closed by the browser, attempt reconnection
+    if (this.eventSource?.readyState === EventSource.CLOSED || !this.eventSource) {
+      onError?.(event)
       this.attemptReconnect(onEvent, onError)
     }
   }
@@ -374,7 +441,8 @@ export class SSEService {
   }
 
   /**
-   * Attempt to reconnect with exponential backoff and ±20% jitter
+   * Attempt to reconnect with exponential backoff and ±20% jitter.
+   * Uses the current stored token and callbacks for reconnection.
    */
   private attemptReconnect(
     onEvent?: (event: SSEReviewCreatedEvent) => void,
@@ -398,7 +466,9 @@ export class SSEService {
     console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.options.maxReconnectAttempts})`)
 
     this.reconnectTimeout = setTimeout(() => {
-      if (this.token) {
+      if (this.lastToken) {
+        this.connect(this.lastToken, this.lastOnEvent || onEvent!, this.lastOnError || onError)
+      } else if (this.token) {
         this.connect(this.token, onEvent!, onError)
       }
     }, delay)

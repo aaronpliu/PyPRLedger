@@ -253,6 +253,11 @@
     "associate": "關聯",
     "disassociate": "解除關聯",
     "associate_review": "關聯審查",
+    "current_review": "當前審查",
+    "associate_search_title": "搜索要關聯的審查",
+    "associate_search_placeholder": "輸入審查ID進行搜索...",
+    "associate_search_no_results": "未找到匹配的審查",
+    "associate_direct_title": "或直接輸入ID關聯",
     "associate_hint": "將審查與其他審查關聯",
     "associate_placeholder": "輸入要關聯的審查ID",
     "current_associations": "已關聯的審查",
@@ -331,7 +336,11 @@
       "no_ai_hint": "此PR提交時未進行AI分析。當AI分析可用時，建議將顯示在此處。",
       "no_ai_results": "暫無AI審查結果",
       "pin": "標記",
-      "pinned": "已標記"
+      "pinned": "已標記",
+      "no_score_permission": "您沒有提交評分的權限。",
+      "link_account_required": "請先將您的帳戶關聯到Bitbucket使用者後再提交評分。",
+      "no_reviewer_assigned": "此審查尚未分配審查者，分配後方可進行評分。",
+      "not_assigned_reviewer": "您只能對分配給您的關聯Bitbucket使用者的審查進行評分。"
     }
   },
   "scores": {

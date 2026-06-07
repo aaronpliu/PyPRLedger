@@ -205,7 +205,9 @@ export const reviewsApi = {
 
   // Get review by ID - uses dedicated endpoint
   async getReviewById(id: number): Promise<Review> {
-    const response = await request.get(`/reviews/${id}`)
+    const response = await request.get(`/reviews/${id}`, {
+      _suppressGlobalError: true,
+    } as any)
     return response.data || response
   },
 

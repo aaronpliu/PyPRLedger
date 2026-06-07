@@ -253,6 +253,11 @@
     "associate": "Link",
     "disassociate": "Remove",
     "associate_review": "Link Reviews",
+    "current_review": "Current Review",
+    "associate_search_title": "Search Review to Link",
+    "associate_search_placeholder": "Type review ID to search...",
+    "associate_search_no_results": "No matching reviews found",
+    "associate_direct_title": "Or Link by Exact ID",
     "associate_hint": "Link review with another review",
     "associate_placeholder": "Enter review ID to link",
     "current_associations": "Linked Reviews",
@@ -331,7 +336,11 @@
       "no_ai_hint": "This PR was submitted without AI analysis. AI suggestions will appear here when available.",
       "no_ai_results": "No AI review results available",
       "pin": "Pin",
-      "pinned": "Pinned"
+      "pinned": "Pinned",
+      "no_score_permission": "You do not have permission to submit scores.",
+      "link_account_required": "Link your account to a Bitbucket user before submitting scores.",
+      "no_reviewer_assigned": "This review has no assigned reviewer yet. Scoring is only available after a reviewer is assigned.",
+      "not_assigned_reviewer": "You can only score reviews that are assigned to your linked Bitbucket user."
     }
   },
   "scores": {

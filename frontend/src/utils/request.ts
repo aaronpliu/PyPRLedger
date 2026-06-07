@@ -165,7 +165,7 @@ request.interceptors.response.use(
 
         case 404:
           // Only show error if not handled by the calling component
-          if (!originalRequest?.url?.includes('/auth/')) {
+          if (!originalRequest?._suppressGlobalError && !originalRequest?.url?.includes('/auth/')) {
             ElMessage.error('Resource not found.')
           }
           break
@@ -175,7 +175,7 @@ request.interceptors.response.use(
         case 422:
           // For validation errors on auth endpoints, let the view handle it
           // Don't show duplicate messages
-          if (!originalRequest?.url?.includes('/auth/')) {
+          if (!originalRequest?._suppressGlobalError && !originalRequest?.url?.includes('/auth/')) {
             const errorMessage = responseData?.detail || responseData?.message || 'Validation error.'
             ElMessage.error(errorMessage)
           }
@@ -183,14 +183,14 @@ request.interceptors.response.use(
 
         case 500:
           // Only show generic server error for non-auth endpoints
-          if (!originalRequest?.url?.includes('/auth/')) {
+          if (!originalRequest?._suppressGlobalError && !originalRequest?.url?.includes('/auth/')) {
             ElMessage.error('Server error. Please try again later.')
           }
           break
 
         default:
           // For other errors, only show if not an auth endpoint
-          if (!originalRequest?.url?.includes('/auth/')) {
+          if (!originalRequest?._suppressGlobalError && !originalRequest?.url?.includes('/auth/')) {
             const errorMessage = responseData?.detail || responseData?.message || 'An error occurred.'
             ElMessage.error(errorMessage)
           }

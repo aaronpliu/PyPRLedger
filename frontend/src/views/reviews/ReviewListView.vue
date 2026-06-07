@@ -611,41 +611,76 @@
     <el-dialog
       v-model="showAssociateDialogVisible"
       :title="t('reviews.associate_review', 'Link Reviews')"
-      width="500px"
+      width="540px"
+      class="associate-dialog"
     >
       <div v-if="associateTargetReview" class="associate-dialog-content">
-        <p class="associate-hint">
-                    {{ t('reviews.associate_hint', 'Link review with another review') }} (#{{ associateTargetReview.id }})
-        </p>
-        
-        <div class="associate-input-row">
-          <el-input
-            v-model="associateTargetId"
-            type="number"
-            :placeholder="t('reviews.associate_placeholder', 'Enter review ID to link')"
-            :min="1"
-          />
-          <el-button type="primary" :disabled="!associateTargetId" :loading="associating" @click="handleAssociate">
-            {{ t('reviews.associate', 'Link') }}
-          </el-button>
+        <!-- Current review header -->
+        <div class="associate-current-review">
+          <span class="associate-label">{{ t('reviews.current_review', 'Current Review') }}</span>
+          <el-tag type="primary" size="large">#{{ associateTargetReview.id }}</el-tag>
+          <span class="associate-current-detail">
+            {{ associateTargetReview.app_name || associateTargetReview.project_key }} — {{ associateTargetReview.pull_request_id }}
+          </span>
         </div>
         
-        <!-- Current associations -->
-        <div v-if="currentAssociations.length > 0" class="current-associations">
-          <h4>{{ t('reviews.current_associations', 'Linked Reviews') }}</h4>
-          <div v-for="assoc in currentAssociations" :key="assoc.id" class="assoc-item">
-            <span class="assoc-info">#{{ assoc.id }} - {{ assoc.pull_request_id }} ({{ assoc.project_key }}/{{ assoc.repository_slug }})</span>
-            <el-button
-              size="small"
-              text
-              type="danger"
-              :loading="disassociatingId === assoc.id"
-              @click="handleDisassociate(assoc.id)"
+        <el-divider />
+        
+        <!-- Searchable dropdown + Link button -->
+        <div class="associate-select-section">
+          <label class="associate-section-title">
+            {{ t('reviews.associate_search_title', 'Search Review to Link') }}
+          </label>
+          <div class="associate-select-row">
+            <el-select
+              v-model="associateTargetId"
+              filterable
+              :remote="true"
+              :remote-method="filterAssociateOptions"
+              :placeholder="t('reviews.associate_search_placeholder', 'Type review ID to search...')"
+              class="associate-select"
+              clearable
+              style="flex: 1"
             >
-              {{ t('reviews.disassociate', 'Remove') }}
+              <el-option
+                v-for="item in associateOptions"
+                :key="item.id"
+                :label="`#${item.id} - ${item.app_name || item.project_key} - ${item.pull_request_user_info?.display_name || item.pull_request_user} - ${item.source_branch} \u2192 ${item.target_branch}`"
+                :value="item.id"
+              />
+            </el-select>
+            <el-button type="primary" :disabled="!associateTargetId" :loading="associating" @click="handleAssociate">
+              {{ t('reviews.associate', 'Link') }}
             </el-button>
           </div>
         </div>
+        
+        <!-- Current associations -->
+        <template v-if="currentAssociations.length > 0">
+          <el-divider />
+          <div class="associate-current-list">
+            <label class="associate-section-title">
+              {{ t('reviews.current_associations', 'Linked Reviews') }} ({{ currentAssociations.length }})
+            </label>
+            <div v-for="assoc in currentAssociations" :key="assoc.id" class="assoc-item-card">
+              <div class="assoc-item-left">
+                <el-tag type="info" size="small">#{{ assoc.id }}</el-tag>
+                <span class="assoc-item-info">
+                  {{ assoc.app_name || assoc.project_key }} — {{ assoc.pull_request_id }}
+                </span>
+              </div>
+              <el-button
+                size="small"
+                text
+                type="danger"
+                :loading="disassociatingId === assoc.id"
+                @click="handleDisassociate(assoc.id)"
+              >
+                {{ t('reviews.disassociate', 'Remove') }}
+              </el-button>
+            </div>
+          </div>
+        </template>
       </div>
     </el-dialog>
   </div>
@@ -757,6 +792,51 @@ const associating = ref(false)
 const currentAssociations = ref<Review[]>([])
 const disassociatingId = ref<number | null>(null)
 const unlinkingId = ref<string | null>(null)
+
+// Associate dialog — filtered options for el-select remote search
+const associateOptions = ref<Review[]>([])
+
+const filterAssociateOptions = async (query: string) => {
+  if (!query) {
+    associateOptions.value = []
+    return
+  }
+  // Only match by numeric review database ID
+  const numericId = Number(query)
+  if (isNaN(numericId)) {
+    associateOptions.value = []
+    return
+  }
+  
+  // First check if the review is already loaded in the current page
+  let match = reviews.value.find(r => r.id === numericId)
+  
+  // If not in current page, fetch via API
+  if (!match) {
+    try {
+      match = await reviewsApi.getReviewById(numericId)
+    } catch {
+      // Review not found or no permission — ignore
+    }
+  }
+  
+  if (!match) {
+    associateOptions.value = []
+    return
+  }
+  
+  // Exclude current review and already-associated reviews
+  if (
+    match.id === associateTargetReview.value?.id ||
+    associateTargetReview.value?.associated_review_ids?.includes(match.id)
+  ) {
+    associateOptions.value = []
+    return
+  }
+  
+  associateOptions.value = [match]
+}
+
 const progressStatus = ref<'success' | 'exception' | 'warning'>()
 const progressMessage = ref('')
 const processedCount = ref(0)
@@ -882,6 +962,7 @@ const loadAssociatedReviews = async (review: Review) => {
 const showAssociateDialog = (review: Review) => {
   associateTargetReview.value = review
   associateTargetId.value = null
+  associateOptions.value = []
   
   // Load current associations from the review's associated_review_ids
   const ids = review.associated_review_ids || []
@@ -2041,6 +2122,85 @@ html.dark .el-tag--danger {
 
 [data-theme='dark'] .score-critical {
   color: #ef4444;
+}
+
+/* Associate Dialog Styles */
+.associate-dialog .el-dialog__body {
+  padding-top: 8px;
+}
+
+.associate-dialog-content {
+  padding: 0 4px;
+}
+
+.associate-current-review {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.associate-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+.associate-current-detail {
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+}
+
+.associate-section-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 8px;
+}
+
+.associate-select-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.associate-select {
+  flex: 1;
+}
+
+.associate-current-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.assoc-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.assoc-item-card:hover {
+  background: var(--el-fill-color-lighter);
+}
+
+.assoc-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.assoc-item-info {
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Associated reviews section */
