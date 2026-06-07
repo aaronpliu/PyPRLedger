@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     DATABASE_POOL_SIZE: int = Field(default=20)
     DATABASE_MAX_OVERFLOW: int = Field(default=10)
     DATABASE_POOL_TIMEOUT: int = Field(default=30)
-    DATABASE_POOL_RECYCLE: int = Field(default=3600)
+    DATABASE_POOL_RECYCLE: int = Field(default=300)
 
     @property
     def database_url(self) -> str:

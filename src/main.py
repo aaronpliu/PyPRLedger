@@ -74,20 +74,9 @@ async def delegation_status_cleanup_task():
 
             if isinstance(e, DBAPIError) and getattr(e, "connection_invalidated", False):
                 logger.warning(
-                    "Database connection invalidated in delegation cleanup task, disposing engine...",
+                    "Database connection invalidated in delegation cleanup task. Pool will replace it.",
                     exc_info=False,
                 )
-                # Dispose the old engine to force recreation of connections on next use
-                try:
-                    from src.core.database import get_engine
-
-                    engine = get_engine()
-                    await engine.dispose()
-                    logger.info("Database engine disposed successfully after disconnection")
-                except Exception as dispose_error:
-                    logger.error(
-                        f"Failed to dispose database engine: {dispose_error}", exc_info=True
-                    )
             else:
                 # Log other exceptions with full traceback
                 logger.error(f"Error in delegation status cleanup task: {e}", exc_info=True)
