@@ -189,6 +189,15 @@
     "show_all": "顯示全部",
     "archived_hint_hide": "僅顯示未評分的審查",
     "archived_hint_show": "顯示所有審查（包括已評分）",
+    "pin_added": "審查已標記",
+    "pin_removed": "已取消標記",
+    "pin_column": "標記",
+    "pin_column_tip": "點擊標記/取消標記審查以便快速存取",
+    "pin_tip": "標記此審查",
+    "unpin_tip": "取消標記此審查",
+    "pinned_filter": "標",
+    "pinned_active": "已標",
+    "pinned_hint_filter": "按已標記篩選",
     "filters": {
       "search_placeholder": "搜尋PR ID或摘要...",
       "app_filter": "應用",
@@ -240,6 +249,16 @@
     "draft": "草稿",
     "unassigned": "未分配",
     "more": "更多",
+    "associated_reviews": "關聯的審查",
+    "associate": "關聯",
+    "disassociate": "解除關聯",
+    "associate_review": "關聯審查",
+    "associate_hint": "將審查與其他審查關聯",
+    "associate_placeholder": "輸入要關聯的審查ID",
+    "current_associations": "已關聯的審查",
+    "association_added": "審查已關聯",
+    "association_removed": "已解除關聯",
+    "no_associations": "暫無關聯的審查",
     "assignment_status_descriptions": {
       "pending": "審查任務尚未分配給任何審查者",
       "assigned": "任務已由審查管理員分配給審查者",
@@ -252,6 +271,7 @@
       "previous": "上一頁",
       "next": "下一頁",
       "pull_request_id": "PR ID",
+      "id": "ID",
       "review_information": "📋 審查資訊",
       "pr_id": "PR ID",
       "commit_id": "Commit ID",
@@ -309,7 +329,9 @@
       "copied": "已複製！",
       "na": "無",
       "no_ai_hint": "此PR提交時未進行AI分析。當AI分析可用時，建議將顯示在此處。",
-      "no_ai_results": "暫無AI審查結果"
+      "no_ai_results": "暫無AI審查結果",
+      "pin": "標記",
+      "pinned": "已標記"
     }
   },
   "scores": {
@@ -418,6 +440,10 @@
     "view_details": "查看詳情",
     "progress": "進度",
     "assign_reviewer": "分配審查者",
+    "hide_archived": "隱藏已完成",
+    "show_all": "顯示全部",
+    "archived_hint_hide": "僅顯示待處理的審查",
+    "archived_hint_show": "顯示所有審查（包括已完成）",
     "filters": {
       "search_placeholder": "搜尋PR ID或被指派人...",
       "status_filter": "狀態",

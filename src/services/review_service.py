@@ -22,6 +22,8 @@ from src.models.pull_request import (
     PullRequestReviewBase,
     PullRequestReviewRaw,
     PullRequestScore,
+    ReviewAssociation,
+    UserPinnedReview,
 )
 from src.schemas.pull_request import (
     ReviewCreate,
@@ -696,7 +698,8 @@ class ReviewService:
         reviewer: str | None,
         source_filename: str | None,
         db: AsyncSession,
-        visible_to_username: str | None = None,  # Current user for multi-reviewer display
+        visible_to_username: str | None = None,
+        current_user_id: int | None = None,
     ) -> list[dict[str, Any]]:
         """
         Get all pull request reviews by composite business key
@@ -741,9 +744,28 @@ class ReviewService:
             bases = result.scalars().unique().all()
             reviews = self._flatten_reviews(list(bases), reviewer, visible_to_username)
 
+            # If current_user_id provided, fetch pinned review IDs for this user
+            pinned_ids: set[int] = set()
+            if current_user_id is not None:
+                try:
+                    pin_stmt = select(UserPinnedReview.review_id).where(
+                        UserPinnedReview.user_id == current_user_id
+                    )
+                    pin_result = await db.execute(pin_stmt)
+                    pinned_ids = {row[0] for row in pin_result.all()}
+                except Exception as e:
+                    logger.warning(f"Failed to fetch pinned reviews: {str(e)}")
+
             if reviews:
                 logger.info(f"Found {len(reviews)} review(s) for PR: {pull_request_id}")
+
+                # Batch fetch associated review IDs
+                all_review_ids = [review["id"] for review in reviews]
+                assoc_id_map = await self.batch_get_association_ids(all_review_ids, db)
+
                 for review in reviews:
+                    review["is_pinned_by_me"] = review["id"] in pinned_ids
+                    review["associated_review_ids"] = assoc_id_map.get(review["id"], [])
                     await self._set_review_in_cache(
                         str(review["project_key"]),
                         str(review["repository_slug"]),
@@ -774,6 +796,7 @@ class ReviewService:
         page_size: int = 20,
         use_cache: bool = True,
         app_names: list[str] | None = None,
+        current_user_id: int | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """
         List pull request reviews with filtering and pagination
@@ -785,6 +808,7 @@ class ReviewService:
             db: Database session
             use_cache: Whether to use cache
             app_names: Optional list of app names to filter by (supports multiple apps)
+            current_user_id: Current user ID for pinned_only filter
 
         Returns:
             Tuple[List[dict[str, Any]], int]: List of reviews and total count
@@ -981,6 +1005,15 @@ class ReviewService:
                     json.dumps({"issues": [{"severity": filters.severity}]}),
                 )
             )
+
+        # Apply pinned_only filter — only show reviews pinned by current user
+        if filters.pinned_only and current_user_id is not None:
+            pinned_subquery = (
+                select(UserPinnedReview.review_id)
+                .where(UserPinnedReview.user_id == current_user_id)
+                .scalar_subquery()
+            )
+            query = query.where(PullRequestReviewBase.id.in_(pinned_subquery))
 
         # Try cache first for list results (only if no app_name filter)
         if not app_names and use_cache:
@@ -2030,7 +2063,77 @@ class ReviewService:
         if total_reviewers is not None:
             enriched["total_reviewers"] = total_reviewers
 
+        # Preserve is_pinned_by_me if present
+        if "is_pinned_by_me" in review_dict:
+            enriched["is_pinned_by_me"] = review_dict["is_pinned_by_me"]
+
         return enriched
+
+    async def get_review_by_id(
+        self,
+        review_id: int,
+        db: AsyncSession,
+        current_user_id: int | None = None,
+    ) -> dict[str, Any] | None:
+        """
+        Get a single review by its primary key ID with full entity enrichment.
+
+        Args:
+            review_id: The review ID (primary key)
+            db: Database session
+            current_user_id: Current user ID for checking pin status
+
+        Returns:
+            Enriched review dict or None if not found
+        """
+        try:
+            query = (
+                select(PullRequestReviewBase)
+                .options(
+                    selectinload(PullRequestReviewBase.project),
+                    selectinload(PullRequestReviewBase.repository),
+                    selectinload(PullRequestReviewBase.pull_request_user_rel),
+                    selectinload(PullRequestReviewBase.assignments).selectinload(
+                        PullRequestReviewAssignment.reviewer_rel
+                    ),
+                )
+                .where(PullRequestReviewBase.id == review_id)
+            )
+            result = await db.execute(query)
+            base = result.scalars().first()
+            if not base:
+                return None
+
+            reviews = self._flatten_reviews([base], reviewer=None, visible_to_username=None)
+            if not reviews:
+                return None
+
+            review = reviews[0]
+
+            # Check pinned status
+            review["is_pinned_by_me"] = False
+            if current_user_id is not None:
+                try:
+                    pin_stmt = select(UserPinnedReview.review_id).where(
+                        UserPinnedReview.user_id == current_user_id,
+                        UserPinnedReview.review_id == review_id,
+                    )
+                    pin_result = await db.execute(pin_stmt)
+                    review["is_pinned_by_me"] = pin_result.first() is not None
+                except Exception as e:
+                    logger.warning(f"Failed to fetch pinned status: {str(e)}")
+
+            # Enrich with entities
+            enriched = await self.enrich_review_with_entities(review, db)
+
+            # Get associated review IDs
+            assoc_ids = await self.get_associated_review_ids(review_id, db)
+            enriched["associated_review_ids"] = assoc_ids
+
+            return enriched
+        except Exception as e:
+            logger.error(f"Failed to get review by id {review_id}: {str(e)}")
+            return None
 
     async def list_reviews_with_entities(
         self,
@@ -2040,6 +2143,7 @@ class ReviewService:
         page_size: int = 20,
         use_cache: bool = False,
         app_names: list[str] | None = None,
+        current_user_id: int | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """
         List pull request reviews with full entity information
@@ -2051,13 +2155,20 @@ class ReviewService:
             db: Database session
             use_cache: Whether to use cache (disabled for enriched queries)
             app_names: Optional list of app names to filter by
+            current_user_id: Current user ID for checking pin status
 
         Returns:
             Tuple[List[Dict], int]: List of enriched reviews and total count
         """
         # Get basic reviews from database with app_name filtering
         reviews, total = await self.list_reviews(
-            filters, db, page, page_size, use_cache=False, app_names=app_names
+            filters,
+            db,
+            page,
+            page_size,
+            use_cache=False,
+            app_names=app_names,
+            current_user_id=current_user_id,
         )
 
         # Collect unique project-repo pairs for batch app_name resolution
@@ -2077,6 +2188,18 @@ class ReviewService:
         registry_service = ProjectRegistryService()
         app_name_mapping = await registry_service.get_app_names_batch(project_repo_pairs, db)
 
+        # If current_user_id provided, fetch pinned review IDs for this user
+        pinned_ids: set[int] = set()
+        if current_user_id is not None:
+            try:
+                pin_stmt = select(UserPinnedReview.review_id).where(
+                    UserPinnedReview.user_id == current_user_id
+                )
+                pin_result = await db.execute(pin_stmt)
+                pinned_ids = {row[0] for row in pin_result.all()}
+            except Exception as e:
+                logger.warning(f"Failed to fetch pinned reviews: {str(e)}")
+
         # Enrich each review with entity information AND app_name
         enriched_reviews = []
         for review in reviews:
@@ -2090,6 +2213,177 @@ class ReviewService:
                 ),
             )
             enriched["app_name"] = app_name_mapping.get(pair_key, "Unknown")
+            # Add is_pinned_by_me flag
+            review_id = review["id"] if isinstance(review, dict) else review.id
+            enriched["is_pinned_by_me"] = review_id in pinned_ids
             enriched_reviews.append(enriched)
 
+        # Batch fetch associated review IDs
+        all_review_ids = [
+            review["id"] if isinstance(review, dict) else review.id for review in reviews
+        ]
+        assoc_id_map = await self.batch_get_association_ids(all_review_ids, db)
+        for enriched in enriched_reviews:
+            rid = enriched["id"]
+            enriched["associated_review_ids"] = assoc_id_map.get(rid, [])
+
         return enriched_reviews, total
+
+    async def get_associated_review_ids(self, review_id: int, db: AsyncSession) -> list[int]:
+        """
+        Get IDs of all reviews associated with the given review (bidirectional).
+
+        Args:
+            review_id: The review ID to find associations for
+            db: Database session
+
+        Returns:
+            list[int]: List of associated review IDs
+        """
+        try:
+            stmt = select(ReviewAssociation.associated_review_id).where(
+                ReviewAssociation.review_id == review_id
+            )
+            result = await db.execute(stmt)
+            forward_ids = {row[0] for row in result.all()}
+
+            stmt_rev = select(ReviewAssociation.review_id).where(
+                ReviewAssociation.associated_review_id == review_id
+            )
+            result_rev = await db.execute(stmt_rev)
+            reverse_ids = {row[0] for row in result_rev.all()}
+
+            return list(forward_ids | reverse_ids)
+        except Exception as e:
+            logger.warning(f"Failed to fetch associated reviews for {review_id}: {str(e)}")
+            return []
+
+    async def batch_get_association_ids(
+        self, review_ids: list[int], db: AsyncSession
+    ) -> dict[int, list[int]]:
+        """
+        Batch fetch associated review IDs for multiple reviews.
+
+        Args:
+            review_ids: List of review IDs to find associations for
+            db: Database session
+
+        Returns:
+            dict[int, list[int]]: Mapping of review ID to its associated review IDs
+        """
+        if not review_ids:
+            return {}
+
+        result_map: dict[int, set[int]] = {rid: set() for rid in review_ids}
+        try:
+            # Forward direction: review_id -> associated_review_id
+            stmt = select(
+                ReviewAssociation.review_id, ReviewAssociation.associated_review_id
+            ).where(ReviewAssociation.review_id.in_(review_ids))
+            rows = await db.execute(stmt)
+            for row in rows.all():
+                if row[0] in result_map:
+                    result_map[row[0]].add(row[1])
+
+            # Reverse direction: associated_review_id -> review_id
+            stmt_rev = select(
+                ReviewAssociation.associated_review_id, ReviewAssociation.review_id
+            ).where(ReviewAssociation.associated_review_id.in_(review_ids))
+            rows_rev = await db.execute(stmt_rev)
+            for row in rows_rev.all():
+                if row[0] in result_map:
+                    result_map[row[0]].add(row[1])
+
+        except Exception as e:
+            logger.warning(f"Failed to batch fetch associated review IDs: {str(e)}")
+
+        return {rid: sorted(ids) for rid, ids in result_map.items()}
+
+    async def associate_reviews(
+        self,
+        review_id: int,
+        target_review_id: int,
+        created_by: int,
+        db: AsyncSession,
+    ) -> bool:
+        """
+        Associate two reviews together (bidirectional).
+        Skips if already associated (idempotent).
+
+        Args:
+            review_id: The source review ID
+            target_review_id: The target review ID to associate with
+            created_by: The user ID creating the association
+            db: Database session
+
+        Returns:
+            bool: True if new association created, False if already existed
+        """
+        if review_id == target_review_id:
+            return False
+
+        # Ensure consistent ordering to avoid (A,B) vs (B,A) duplicates
+        first_id = min(review_id, target_review_id)
+        second_id = max(review_id, target_review_id)
+
+        try:
+            stmt = select(ReviewAssociation).where(
+                ReviewAssociation.review_id == first_id,
+                ReviewAssociation.associated_review_id == second_id,
+            )
+            result = await db.execute(stmt)
+            if result.scalar_one_or_none():
+                return False
+
+            assoc = ReviewAssociation(
+                review_id=first_id,
+                associated_review_id=second_id,
+                created_by=created_by,
+            )
+            db.add(assoc)
+            await db.flush()
+            return True
+        except Exception as e:
+            logger.warning(
+                f"Failed to associate reviews {review_id} <-> {target_review_id}: {str(e)}"
+            )
+            return False
+
+    async def disassociate_reviews(
+        self,
+        review_id: int,
+        target_review_id: int,
+        db: AsyncSession,
+    ) -> bool:
+        """
+        Remove association between two reviews.
+
+        Args:
+            review_id: One review ID
+            target_review_id: The other review ID
+            db: Database session
+
+        Returns:
+            bool: True if association was removed, False if not found
+        """
+        first_id = min(review_id, target_review_id)
+        second_id = max(review_id, target_review_id)
+
+        try:
+            stmt = select(ReviewAssociation).where(
+                ReviewAssociation.review_id == first_id,
+                ReviewAssociation.associated_review_id == second_id,
+            )
+            result = await db.execute(stmt)
+            assoc = result.scalar_one_or_none()
+            if not assoc:
+                return False
+
+            await db.delete(assoc)
+            await db.flush()
+            return True
+        except Exception as e:
+            logger.warning(
+                f"Failed to disassociate reviews {review_id} <-> {target_review_id}: {str(e)}"
+            )
+            return False

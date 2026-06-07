@@ -57,6 +57,7 @@ class ReviewWithAssignmentsResponse(ReviewBaseResponse):
     total_reviewers: int = 0
     completed_reviewers: int = 0
     pending_reviewers: int = 0
+    is_pinned_by_me: bool = False
 
     model_config = {"from_attributes": True}
 

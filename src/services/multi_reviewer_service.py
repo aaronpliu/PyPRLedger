@@ -14,7 +14,11 @@ from sqlalchemy.orm import selectinload
 
 from src.core.exceptions import ReviewNotFoundException
 from src.models.project_registry import ProjectRegistry
-from src.models.pull_request import PullRequestReviewAssignment, PullRequestReviewBase
+from src.models.pull_request import (
+    PullRequestReviewAssignment,
+    PullRequestReviewBase,
+    UserPinnedReview,
+)
 from src.schemas.notification import NotificationCreate
 from src.schemas.review import (
     AssignReviewerRequest,
@@ -93,6 +97,9 @@ class MultiReviewerService:
         severity: str | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        hide_archived: bool = False,
+        pinned_only: bool = False,
+        current_user_id: int | None = None,
     ) -> tuple[list[ReviewWithAssignmentsResponse], int]:
         """
         Get list of reviews with their assignments
@@ -198,6 +205,37 @@ class MultiReviewerService:
             adjusted_date_to = date_to + timedelta(days=1)
             stmt = stmt.where(PullRequestReviewBase.created_date < adjusted_date_to)
 
+        # Apply pinned_only filter — only show reviews pinned by current user
+        if pinned_only and current_user_id is not None:
+            pinned_subquery = (
+                select(UserPinnedReview.review_id)
+                .where(UserPinnedReview.user_id == current_user_id)
+                .subquery()
+            )
+            stmt = stmt.where(PullRequestReviewBase.id.in_(pinned_subquery))
+
+        # Apply hide_archived filter — hide reviews where ALL assignees have completed
+        if hide_archived:
+            has_incomplete = (
+                select(1)
+                .where(
+                    and_(
+                        PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
+                        PullRequestReviewAssignment.assignment_status != "completed",
+                    )
+                )
+                .correlate(PullRequestReviewBase)
+                .exists()
+            )
+            has_any_assignment = (
+                select(1)
+                .where(PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id)
+                .correlate(PullRequestReviewBase)
+                .exists()
+            )
+            # Keep reviews with incomplete assignments OR with no assignments at all
+            stmt = stmt.where(or_(has_incomplete, ~has_any_assignment))
+
         # Get total count
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total_result = await db.execute(count_stmt)
@@ -239,6 +277,18 @@ class MultiReviewerService:
         # Batch resolve app_names
         registry_service = ProjectRegistryService()
         app_name_mapping = await registry_service.get_app_names_batch(project_repo_pairs, db)
+
+        # If current_user_id provided, fetch pinned review IDs for this user
+        pinned_ids: set[int] = set()
+        if current_user_id is not None:
+            try:
+                pin_stmt = select(UserPinnedReview.review_id).where(
+                    UserPinnedReview.user_id == current_user_id
+                )
+                pin_result = await db.execute(pin_stmt)
+                pinned_ids = {row[0] for row in pin_result.all()}
+            except Exception as e:
+                logger.warning(f"Failed to fetch pinned reviews: {str(e)}")
 
         # Convert to response models with app_name
         reviews = []
@@ -289,6 +339,9 @@ class MultiReviewerService:
             # Add app_name from project registry
             pair_key = (base.project_key, base.repository_slug)
             base_dict["app_name"] = app_name_mapping.get(pair_key, "Unknown")
+
+            # Add is_pinned_by_me flag
+            base_dict["is_pinned_by_me"] = base.id in pinned_ids
 
             # Create response object
             review_response = ReviewWithAssignmentsResponse(

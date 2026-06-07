@@ -344,6 +344,59 @@ class PullRequestReviewAssignment(Base):
         return {**base_dict, **self.to_dict()}
 
 
+class UserPinnedReview(Base):
+    """Per-user private pin/flag for marking noteworthy reviews"""
+
+    __tablename__ = "user_pinned_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("auth_user.id", ondelete="CASCADE"), nullable=False
+    )
+    username: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("pull_request_review_base.id", ondelete="CASCADE"), nullable=False
+    )
+    created_date: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (UniqueConstraint("user_id", "review_id", name="uq_user_review"),)
+
+    def __repr__(self) -> str:
+        return (
+            f"<UserPinnedReview(id={self.id}, user_id={self.user_id}, review_id={self.review_id})>"
+        )
+
+
+class ReviewAssociation(Base):
+    """Many-to-many association between reviews for tracking related PRs"""
+
+    __tablename__ = "pull_request_review_association"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    review_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("pull_request_review_base.id", ondelete="CASCADE"), nullable=False
+    )
+    associated_review_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("pull_request_review_base.id", ondelete="CASCADE"), nullable=False
+    )
+    created_date: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_by: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("auth_user.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("review_id", "associated_review_id", name="uq_review_association"),
+        Index("idx_assoc_review", "review_id"),
+        Index("idx_assoc_associated", "associated_review_id"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ReviewAssociation(id={self.id}, review_id={self.review_id}, "
+            f"associated_review_id={self.associated_review_id})>"
+        )
+
+
 class PullRequestScore(Base):
     """Pull request score model representing the pull_request_score table in the database
 

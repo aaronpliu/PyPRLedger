@@ -59,6 +59,22 @@
               </div>
               <div class="card-actions" @click.stop>
                 <el-space>
+                <!-- Pin/Flag Toggle Button -->
+                <el-tooltip
+                  :content="review.is_pinned_by_me ? t('reviews.unpin_tip', 'Unpin this review') : t('reviews.pin_tip', 'Pin this review')"
+                  placement="top"
+                >
+                  <span
+                    class="pin-cell-btn"
+                    :class="{ 'pinned-active': review.is_pinned_by_me }"
+                    @click="handleTogglePin"
+                  >
+                    <el-icon :size="15">
+                      <StarFilled v-if="review.is_pinned_by_me" />
+                      <Star v-else />
+                    </el-icon>
+                  </span>
+                </el-tooltip>
                 <!-- Add Score Button - Only show if user has permission -->
                 <template v-if="hasScorePermissionRole">
                   <el-tooltip
@@ -510,7 +526,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Clock, Plus, Delete, User, UserFilled, FolderOpened, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link, InfoFilled, Download } from '@element-plus/icons-vue'
+import { Clock, Plus, Delete, User, UserFilled, FolderOpened, ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link, InfoFilled, Download, Star, StarFilled } from '@element-plus/icons-vue'
 import { MdEditor, type ToolbarNames, config } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
@@ -1293,6 +1309,25 @@ const confirmDelete = async () => {
     if (error !== 'cancel') {
       ElMessage.error('Failed to delete review')
     }
+  }
+}
+
+// Toggle pin status for the current review
+const handleTogglePin = async () => {
+  if (!review.value) return
+  try {
+    if (review.value.is_pinned_by_me) {
+      await reviewsApi.unpinReview(review.value.id)
+      review.value.is_pinned_by_me = false
+      ElMessage.success(t('reviews.pin_removed', 'Pin removed'))
+    } else {
+      await reviewsApi.pinReview(review.value.id)
+      review.value.is_pinned_by_me = true
+      ElMessage.success(t('reviews.pin_added', 'Review pinned'))
+    }
+  } catch (error: any) {
+    console.error('Failed to toggle pin:', error)
+    ElMessage.error(error.response?.data?.detail?.message || error.message || 'Failed to toggle pin')
   }
 }
 
@@ -2196,5 +2231,29 @@ watch(
 
 [data-theme='dark'] .placeholder-hint {
   color: var(--el-text-color-secondary);
+}
+
+/* Pin cell clickable area */
+.pin-cell-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.pin-cell-btn:hover {
+  background-color: var(--el-fill-color-light);
+}
+
+.pinned-active {
+  color: #e6a23c !important;
+}
+
+.pinned-active:hover {
+  color: #d48806 !important;
 }
 </style>

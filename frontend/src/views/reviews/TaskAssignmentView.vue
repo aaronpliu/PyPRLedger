@@ -27,27 +27,43 @@
       </template>
 
       <!-- Filters -->
-      <FilterPopover
-        v-model:search-query="searchQuery"
-        v-model:app-filter="appFilter"
-        v-model:project-filter="projectFilter"
-        v-model:pr-user-filter="prUserFilter"
-        v-model:reviewer-filter="reviewerFilter"
-        v-model:scored-filter="scoredFilter"
-        v-model:severity-filter="severityFilter"
-        v-model:status-filter="statusFilter"
-        v-model:date-from="dateFrom"
-        v-model:date-to="dateTo"
-        :app-options="availableApps"
-        :project-options="projects"
-        :pr-user-options="availablePRUsers"
-        :reviewer-options="availableReviewers"
-        :pr-users-loading="prUsersLoading"
-        :reviewers-loading="reviewersLoading"
-        show-project-filter
-        @apply="loadReviews"
-        @reset="handleResetFilters"
-      />
+      <div class="filters-with-toggle">
+        <FilterPopover
+          v-model:search-query="searchQuery"
+          v-model:app-filter="appFilter"
+          v-model:project-filter="projectFilter"
+          v-model:pr-user-filter="prUserFilter"
+          v-model:reviewer-filter="reviewerFilter"
+          v-model:scored-filter="scoredFilter"
+          v-model:severity-filter="severityFilter"
+          v-model:status-filter="statusFilter"
+          v-model:date-from="dateFrom"
+          v-model:date-to="dateTo"
+          :app-options="availableApps"
+          :project-options="projects"
+          :pr-user-options="availablePRUsers"
+          :reviewer-options="availableReviewers"
+          :pr-users-loading="prUsersLoading"
+          :reviewers-loading="reviewersLoading"
+          show-project-filter
+          @apply="loadReviews"
+          @reset="handleResetFilters"
+        />
+        
+        <!-- Archived Toggle -->
+        <el-tooltip
+          :content="hideDone ? t('task_assignment.archived_hint_hide') : t('task_assignment.archived_hint_show')"
+          placement="bottom"
+        >
+          <el-switch
+            v-model="hideDone"
+            inline-prompt
+            :active-text="t('task_assignment.hide_archived')"
+            :inactive-text="t('task_assignment.show_all')"
+            class="archived-toggle-switch"
+          />
+        </el-tooltip>
+      </div>
         
       <!-- Bulk Actions Toolbar -->
       <div v-if="selectedReviews.length > 0" class="bulk-actions-toolbar">
@@ -440,6 +456,7 @@ const severityFilter = ref('')
 const statusFilter = ref('')
 const dateFrom = ref('')
 const dateTo = ref('')
+const hideDone = ref(true)
 const projects = ref<ProjectSummary[]>([])
 const sortState = ref<{
   prop: 'created_date' | 'updated_date'
@@ -501,6 +518,8 @@ const loadReviews = async (showLoading = true) => {
     if (dateTo.value) {
       params.date_to = dateTo.value
     }
+
+    params.hide_archived = hideDone.value
 
     const response = await taskAssignmentApi.getReviews(params)
     allReviews.value = response.items
@@ -570,7 +589,7 @@ const applyFilters = () => {
       review.reviewers.every(r => !r.reviewer && !r.reviewer_info?.display_name)
     )
   }
-  
+
   // Apply scored filter (not supported by backend)
   if (scoredFilter.value === 'yes') {
     result = result.filter(review => 
@@ -937,6 +956,11 @@ watch(
   },
   { deep: true }
 )
+
+// Watch hideDone — reload data from server with archive filter
+watch(hideDone, () => {
+  loadReviews()
+})
 
 let filterChangeTimeout: ReturnType<typeof setTimeout>
 
@@ -1320,5 +1344,23 @@ function handleSSEOpen() {
   100% {
     box-shadow: 0 0 0 0 rgba(103, 194, 58, 0);
   }
+}
+
+.filters-with-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.archived-toggle-switch {
+  --el-switch-on-color: #409eff;
+  --el-switch-off-color: #dcdfe6;
+}
+
+[data-theme='dark'] .archived-toggle-switch {
+  --el-switch-on-color: #409eff;
+  --el-switch-off-color: #4c4d4f;
 }
 </style>
