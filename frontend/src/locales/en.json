@@ -336,7 +336,11 @@
       "no_ai_hint": "This PR was submitted without AI analysis. AI suggestions will appear here when available.",
       "no_ai_results": "No AI review results available",
       "pin": "Pin",
-      "pinned": "Pinned"
+      "pinned": "Pinned",
+      "no_score_permission": "You do not have permission to submit scores.",
+      "link_account_required": "Link your account to a Bitbucket user before submitting scores.",
+      "no_reviewer_assigned": "This review has no assigned reviewer yet. Scoring is only available after a reviewer is assigned.",
+      "not_assigned_reviewer": "You can only score reviews that are assigned to your linked Bitbucket user."
     }
   },
   "scores": {
