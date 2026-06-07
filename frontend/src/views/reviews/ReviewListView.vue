@@ -367,7 +367,7 @@
         <!-- ID -->
         <el-table-column :label="t('reviews.detail.id', 'ID')" width="70">
           <template #default="{ row }">
-            <span class="text-secondary">{{ row.id }}</span>
+            <span class="text-secondary">#{{ row.id }}</span>
           </template>
         </el-table-column>
         
@@ -797,16 +797,13 @@ const unlinkingId = ref<string | null>(null)
 const associateOptions = ref<Review[]>([])
 
 const filterAssociateOptions = async (query: string) => {
-  if (!query) {
+  // Strip '#' prefix (users may paste '#123' from ID column) and non-numeric chars
+  const sanitized = query.replace(/^#/, '').replace(/\D/g, '')
+  if (!sanitized) {
     associateOptions.value = []
     return
   }
-  // Only match by numeric review database ID
-  const numericId = Number(query)
-  if (isNaN(numericId)) {
-    associateOptions.value = []
-    return
-  }
+  const numericId = Number(sanitized)
   
   // First check if the review is already loaded in the current page
   let match = reviews.value.find(r => r.id === numericId)
