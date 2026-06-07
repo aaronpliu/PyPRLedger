@@ -31,8 +31,9 @@ api_router.include_router(delegation.router, prefix="/rbac/delegations", tags=["
 
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
 
-# SSE streaming endpoint — mounted at /api/v1/reviews/stream
-api_router.include_router(sse.router, prefix="/reviews", tags=["sse"])
+# SSE streaming endpoint — mounted at /api/v1/sse/stream
+# Uses separate prefix to avoid route conflicts with reviews router
+api_router.include_router(sse.router, prefix="/sse", tags=["sse"])
 
 # Task assignment endpoints (for review_admin to manage reviews)
 api_router.include_router(task_assignment.router, tags=["task-assignment"])

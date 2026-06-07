@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { sseService, type SSEReviewCreatedEvent } from '@/utils/sse'
 import { useAuthStore } from '@/stores/auth'
 
@@ -18,6 +18,10 @@ let _onOpen: (() => void) | null = null
  *
  * Designed to be called from component setup() — uses the singleton
  * sseService so only one actual EventSource exists at a time.
+ *
+ * Watches auth store for:
+ * - Initialization: connects SSE once auth is ready (async init)
+ * - Token refresh: reconnects with the new token
  */
 export function useSse() {
   const authStore = useAuthStore()
@@ -25,6 +29,29 @@ export function useSse() {
   // Initialize from localStorage: disabled by default
   const sseEnabled = ref(
     localStorage.getItem(SSE_ENABLED_KEY) === 'true',
+  )
+
+  // Watch for auth initialization to establish SSE connection
+  // This handles the case where auth store initializes asynchronously
+  // and accessToken may not be available when onMounted fires
+  watch(
+    () => authStore.isInitialized,
+    (initialized) => {
+      if (initialized && sseEnabled.value && authStore.accessToken && _onEvent) {
+        sseService.connect(authStore.accessToken, _onEvent, _onError || undefined, _onOpen || undefined)
+      }
+    },
+    { once: true },
+  )
+
+  // Watch for token changes (refresh) and reconnect with new token
+  watch(
+    () => authStore.accessToken,
+    (newToken, oldToken) => {
+      if (newToken && oldToken && newToken !== oldToken && sseEnabled.value) {
+        sseService.reconnectWithToken(newToken)
+      }
+    },
   )
 
   /**
