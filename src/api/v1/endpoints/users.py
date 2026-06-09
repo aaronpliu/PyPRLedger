@@ -25,6 +25,7 @@ from src.schemas.user import (
     UserStats,
     UserUpdate,
 )
+from src.services.auth_service import AuthService
 from src.services.avatar_service import AvatarService
 from src.services.rbac_service import RBACService
 from src.services.user_service import UserService
@@ -33,7 +34,12 @@ from src.utils.timezone import get_current_time
 
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+
+# Git User (Bitbucket identity) endpoints — mounted at /users/git
+git_router = APIRouter()
+
+# Auth User (system login) endpoints — mounted at /users/auth
+auth_router = APIRouter()
 
 
 # Get a user service instance with metrics
@@ -42,7 +48,7 @@ def get_user_service() -> UserService:
     return UserService(metrics_collector=metrics)
 
 
-@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@git_router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
     user_data: UserCreate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -83,7 +89,7 @@ async def create_user(
         )
 
 
-@router.get("", response_model=UserListResponse)
+@git_router.get("", response_model=UserListResponse)
 async def list_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
@@ -151,7 +157,7 @@ async def list_users(
         )
 
 
-@router.get("/statistics", response_model=UserStats)
+@git_router.get("/statistics", response_model=UserStats)
 async def get_user_statistics(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
@@ -190,7 +196,7 @@ async def get_user_statistics(
         )
 
 
-@router.get("/active", response_model=UserListResponse)
+@git_router.get("/active", response_model=UserListResponse)
 async def get_active_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
@@ -230,7 +236,7 @@ async def get_active_users(
         )
 
 
-@router.get("/reviewers", response_model=UserListResponse)
+@git_router.get("/reviewers", response_model=UserListResponse)
 async def get_reviewers(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
@@ -272,7 +278,8 @@ async def get_reviewers(
         )
 
 
-@router.get("/auth-users", response_model=dict)
+@auth_router.get("", response_model=dict)
+@auth_router.get("/", response_model=dict)
 async def list_auth_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
@@ -378,7 +385,7 @@ async def list_auth_users(
         )
 
 
-@router.post("/login", response_model=dict)
+@git_router.post("/login", response_model=dict)
 async def login(
     credentials: UserLogin,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -425,20 +432,20 @@ async def login(
         )
 
 
-@router.get("/{user_id}", response_model=UserResponse)
+@git_router.get("/{git_user_id}", response_model=UserResponse)
 async def get_user(
-    user_id: int,
+    git_user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ) -> UserResponse:
     """
-    Get a user by ID (requires authentication)
+    Get a git user by ID (requires authentication)
 
-    All authenticated users can view user details.
+    All authenticated users can view git user details.
 
     Args:
-        user_id: The user ID
+        git_user_id: The git user ID
         db: Database session
         user_service: User service instance
         current_user: Authenticated user
@@ -450,19 +457,19 @@ async def get_user(
         UserNotFoundException: If the user doesn't exist
     """
     try:
-        user = await user_service.get_user_by_id(user_id, db)
+        user = await user_service.get_user_by_id(git_user_id, db)
         if not user:
-            metrics.increment_error(error_type="NOT_FOUND", endpoint=f"GET /api/v1/users/{user_id}")
+            metrics.increment_error(
+                error_type="NOT_FOUND", endpoint=f"GET /api/v1/users/git/{git_user_id}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail={"error": "NOT_FOUND", "message": f"User with ID {user_id} not found"},
+                detail={"error": "NOT_FOUND", "message": f"User with ID {git_user_id} not found"},
             )
         return UserResponse(**user)
-    except HTTPException:
-        raise
     except Exception:
         metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/users/{user_id}"
+            error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/users/git/{git_user_id}"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -470,7 +477,7 @@ async def get_user(
         )
 
 
-@router.get("/username/{username}", response_model=UserResponse)
+@git_router.get("/username/{username}", response_model=UserResponse)
 async def get_user_by_username(
     username: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -508,8 +515,6 @@ async def get_user_by_username(
                 },
             )
         return UserResponse(**user)
-    except HTTPException:
-        raise
     except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR", endpoint=f"GET /api/v1/users/username/{username}"
@@ -520,19 +525,19 @@ async def get_user_by_username(
         )
 
 
-@router.put("/{user_id}", response_model=UserResponse)
+@git_router.put("/{git_user_id}", response_model=UserResponse)
 async def update_user(
-    user_id: int,
+    git_user_id: int,
     user_update: UserUpdate,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
 ) -> UserResponse:
     """
-    Update a user (requires system_admin role)
+    Update a git user (requires system_admin role)
 
     Args:
-        user_id: The user ID
+        git_user_id: The git user ID
         user_update: The update data
         db: Database session
         user_service: User service instance
@@ -546,23 +551,23 @@ async def update_user(
         ForbiddenException: If user lacks manage users permission
     """
     try:
-        user = await user_service.update_user(user_id, user_update, db)
+        user = await user_service.update_user(git_user_id, user_update, db)
         return UserResponse(**user)
     except UserNotFoundException as e:
-        metrics.increment_error(error_type=e.code, endpoint=f"PUT /api/v1/users/{user_id}")
+        metrics.increment_error(error_type=e.code, endpoint=f"PUT /api/v1/users/git/{git_user_id}")
         raise HTTPException(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
     except UserAlreadyExistsException as e:
-        metrics.increment_error(error_type=e.code, endpoint=f"PUT /api/v1/users/{user_id}")
+        metrics.increment_error(error_type=e.code, endpoint=f"PUT /api/v1/users/git/{git_user_id}")
         raise HTTPException(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
     except Exception:
         metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint=f"PUT /api/v1/users/{user_id}"
+            error_type="INTERNAL_SERVER_ERROR", endpoint=f"PUT /api/v1/users/git/{git_user_id}"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -570,18 +575,18 @@ async def update_user(
         )
 
 
-@router.patch("/{user_id}/toggle-reviewer", response_model=UserResponse)
+@git_router.patch("/{git_user_id}/toggle-reviewer", response_model=UserResponse)
 async def toggle_reviewer_status(
-    user_id: int,
+    git_user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
 ) -> UserResponse:
     """
-    Toggle reviewer status for a user (requires system_admin role)
+    Toggle reviewer status for a git user (requires system_admin role)
 
     Args:
-        user_id: The user ID
+        git_user_id: The git user ID
         db: Database session
         user_service: User service instance
         current_user: Authenticated user with manage users permission
@@ -594,11 +599,11 @@ async def toggle_reviewer_status(
         ForbiddenException: If user lacks manage users permission
     """
     try:
-        user = await user_service.toggle_reviewer_status(user_id, db)
+        user = await user_service.toggle_reviewer_status(git_user_id, db)
         return UserResponse(**user)
     except UserNotFoundException as e:
         metrics.increment_error(
-            error_type=e.code, endpoint=f"PATCH /api/v1/users/{user_id}/toggle-reviewer"
+            error_type=e.code, endpoint=f"PATCH /api/v1/users/git/{git_user_id}/toggle-reviewer"
         )
         raise HTTPException(
             status_code=e.status_code,
@@ -607,7 +612,7 @@ async def toggle_reviewer_status(
     except Exception:
         metrics.increment_error(
             error_type="INTERNAL_SERVER_ERROR",
-            endpoint=f"PATCH /api/v1/users/{user_id}/toggle-reviewer",
+            endpoint=f"PATCH /api/v1/users/git/{git_user_id}/toggle-reviewer",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -618,9 +623,9 @@ async def toggle_reviewer_status(
         )
 
 
-@router.patch("/{user_id}/activate")
+@auth_router.patch("/{auth_user_id}/activate")
 async def activate_user(
-    user_id: int,
+    auth_user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
@@ -629,7 +634,7 @@ async def activate_user(
     Activate an auth user (requires system_admin role)
 
     Args:
-        user_id: The AuthUser ID (system login user)
+        auth_user_id: The AuthUser ID (system login user)
         db: Database session
         user_service: User service instance
         current_user: Authenticated user with manage users permission
@@ -642,33 +647,34 @@ async def activate_user(
         ForbiddenException: If user lacks manage users permission
     """
     try:
-        user = await user_service.activate_user(user_id, db)
+        user = await user_service.activate_user(auth_user_id, db)
         return user
     except UserNotFoundException as e:
         metrics.increment_error(
-            error_type=e.code, endpoint=f"PATCH /api/v1/users/{user_id}/activate"
+            error_type=e.code, endpoint=f"PATCH /api/v1/users/auth/{auth_user_id}/activate"
         )
         raise HTTPException(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
     except Exception as e:
-        logger.error(f"Failed to activate user {user_id}: {e}", exc_info=True)
+        logger.error(f"Failed to activate auth user {auth_user_id}: {e}", exc_info=True)
         metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint=f"PATCH /api/v1/users/{user_id}/activate"
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint=f"PATCH /api/v1/users/auth/{auth_user_id}/activate",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": "INTERNAL_SERVER_ERROR",
-                "message": f"Failed to activate user: {str(e)}",
+                "message": f"Failed to activate auth user: {str(e)}",
             },
         )
 
 
-@router.patch("/{user_id}/deactivate")
+@auth_router.patch("/{auth_user_id}/deactivate")
 async def deactivate_user(
-    user_id: int,
+    auth_user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
@@ -677,7 +683,7 @@ async def deactivate_user(
     Deactivate an auth user (requires system_admin role)
 
     Args:
-        user_id: The AuthUser ID (system login user)
+        auth_user_id: The AuthUser ID (system login user)
         db: Database session
         user_service: User service instance
         current_user: Authenticated user with manage users permission
@@ -690,42 +696,105 @@ async def deactivate_user(
         ForbiddenException: If user lacks manage users permission
     """
     try:
-        user = await user_service.deactivate_user(user_id, db)
+        user = await user_service.deactivate_user(auth_user_id, db)
         return user
     except UserNotFoundException as e:
         metrics.increment_error(
-            error_type=e.code, endpoint=f"PATCH /api/v1/users/{user_id}/deactivate"
+            error_type=e.code, endpoint=f"PATCH /api/v1/users/auth/{auth_user_id}/deactivate"
         )
         raise HTTPException(
             status_code=e.status_code,
             detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
     except Exception as e:
-        logger.error(f"Failed to deactivate user {user_id}: {e}", exc_info=True)
+        logger.error(f"Failed to deactivate auth user {auth_user_id}: {e}", exc_info=True)
         metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint=f"PATCH /api/v1/users/{user_id}/deactivate"
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint=f"PATCH /api/v1/users/auth/{auth_user_id}/deactivate",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": "INTERNAL_SERVER_ERROR",
-                "message": f"Failed to deactivate user: {str(e)}",
+                "message": f"Failed to deactivate auth user: {str(e)}",
             },
         )
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(
-    user_id: int,
+@auth_router.delete("/{auth_user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_auth_user(
+    auth_user_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user_service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
 ) -> None:
     """
-    Delete a user (requires system_admin role)
+    Delete an auth user (requires system_admin role)
+
+    Cascades to role assignments, audit logs, personal access tokens.
+    Revokes all active refresh sessions.
+    Does NOT delete the linked git user.
 
     Args:
-        user_id: The user ID
+        auth_user_id: The AuthUser ID (system login user)
+        db: Database session
+        user_service: User service instance
+        current_user: Authenticated user with manage users permission
+
+    Returns:
+        None: Successful deletion returns 204 No Content
+
+    Raises:
+        UserNotFoundException: If the auth user doesn't exist
+        ForbiddenException: If user lacks manage users permission
+    """
+    try:
+        # Revoke all active sessions for this user before deletion
+        auth_service = AuthService(db)
+        sessions = await auth_service.list_sessions(auth_user_id=auth_user_id)
+        for session in sessions:
+            try:
+                await auth_service.revoke_session(session.session_id)
+            except Exception:
+                logger.warning(
+                    f"Failed to revoke session {session.session_id} for auth user {auth_user_id}"
+                )
+                continue
+
+        deleted = await user_service.delete_auth_user(auth_user_id, db)
+        if not deleted:
+            metrics.increment_error(
+                error_type="NOT_FOUND", endpoint=f"DELETE /api/v1/users/auth/{auth_user_id}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": f"Auth user with ID {auth_user_id} not found",
+                },
+            )
+    except Exception:
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR", endpoint=f"DELETE /api/v1/users/auth/{auth_user_id}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to delete auth user"},
+        )
+
+
+@git_router.delete("/{git_user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_git_user(
+    git_user_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    user_service: Annotated[UserService, Depends(get_user_service)],
+    current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
+) -> None:
+    """
+    Delete a git user (requires system_admin role)
+
+    Args:
+        git_user_id: The git user ID
         db: Database session
         user_service: User service instance
         current_user: Authenticated user with manage users permission
@@ -738,28 +807,29 @@ async def delete_user(
         ForbiddenException: If user lacks manage users permission
     """
     try:
-        deleted = await user_service.delete_user(user_id, db)
+        deleted = await user_service.delete_user(git_user_id, db)
         if not deleted:
             metrics.increment_error(
-                error_type="NOT_FOUND", endpoint=f"DELETE /api/v1/users/{user_id}"
+                error_type="NOT_FOUND", endpoint=f"DELETE /api/v1/users/git/{git_user_id}"
             )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail={"error": "NOT_FOUND", "message": f"User with ID {user_id} not found"},
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": f"Git user with ID {git_user_id} not found",
+                },
             )
-    except HTTPException:
-        raise
     except Exception:
         metrics.increment_error(
-            error_type="INTERNAL_SERVER_ERROR", endpoint=f"DELETE /api/v1/users/{user_id}"
+            error_type="INTERNAL_SERVER_ERROR", endpoint=f"DELETE /api/v1/users/git/{git_user_id}"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to delete user"},
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to delete git user"},
         )
 
 
-@router.post("/{username}/avatar", status_code=status.HTTP_200_OK)
+@auth_router.post("/{username}/avatar", status_code=status.HTTP_200_OK)
 async def upload_avatar(
     username: str,
     file: Annotated[UploadFile, File(description="Avatar image file")],
@@ -826,8 +896,6 @@ async def upload_avatar(
 
         return {"avatar_url": avatar_url}
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Failed to upload avatar for user {username}: {str(e)}")
         metrics.increment_error(
@@ -839,7 +907,7 @@ async def upload_avatar(
         )
 
 
-@router.delete("/{username}/avatar", status_code=status.HTTP_200_OK)
+@auth_router.delete("/{username}/avatar", status_code=status.HTTP_200_OK)
 async def delete_avatar(
     username: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
@@ -898,8 +966,6 @@ async def delete_avatar(
 
         return {"avatar_url": None}
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Failed to delete avatar for user {username}: {str(e)}")
         metrics.increment_error(

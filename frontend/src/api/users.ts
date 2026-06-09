@@ -30,7 +30,7 @@ export const usersApi = {
       params.username = username
     }
     
-    const response: any = await request.get('/users', { params })
+    const response: any = await request.get('/users/git', { params })
     return response.items || []
   },
 
@@ -38,28 +38,28 @@ export const usersApi = {
    * Get active reviewers
    */
   getReviewers(limit: number = 100): Promise<ReviewerListResponse> {
-    return request.get('/users/reviewers', { params: { limit } })
+    return request.get('/users/git/reviewers', { params: { limit } })
   },
 
   /**
    * Get user by ID
    */
   getUserById(userId: number): Promise<User> {
-    return request.get(`/users/${userId}`)
+    return request.get(`/users/git/${userId}`)
   },
 
   /**
    * Get user by username
    */
   getUserByUsername(username: string): Promise<User> {
-    return request.get(`/users/username/${username}`)
+    return request.get(`/users/git/username/${username}`)
   },
 
   /**
    * Update user
    */
   updateUser(userId: number, data: Partial<User>): Promise<User> {
-    return request.put(`/users/${userId}`, data)
+    return request.put(`/users/git/${userId}`, data)
   },
 
   /**
@@ -75,7 +75,7 @@ export const usersApi = {
       params.username = username
     }
     
-    const response: any = await request.get('/users/auth-users', { params })
+    const response: any = await request.get('/users/auth', { params })
     // Handle response format
     return response.items || []
   },
@@ -84,14 +84,14 @@ export const usersApi = {
    * Search users by username (for delegation - fallback)
    */
   searchUsers(query: string, limit: number = 10): Promise<User[]> {
-    return request.get('/users', { params: { search: query, limit } })
+    return request.get('/users/git', { params: { search: query, limit } })
   },
 
   /**
    * Upload user avatar
    */
   uploadAvatar(username: string, formData: FormData): Promise<{ avatar_url: string }> {
-    return request.post(`/users/${username}/avatar`, formData, {
+    return request.post(`/users/auth/${username}/avatar`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -102,20 +102,29 @@ export const usersApi = {
    * Delete user avatar
    */
   deleteAvatar(username: string): Promise<{ avatar_url: null }> {
-    return request.delete(`/users/${username}/avatar`)
+    return request.delete(`/users/auth/${username}/avatar`)
+  },
+
+  /**
+   * Delete an auth user (requires system_admin role)
+   * Permanently deletes the auth user, cascades roles/audit/PATs.
+   * Does NOT delete the linked git user.
+   */
+  deleteAuthUser(authUserId: number): Promise<void> {
+    return request.delete(`/users/auth/${authUserId}`)
   },
 
   /**
    * Activate a user (requires system_admin role)
    */
   activateUser(userId: number): Promise<User> {
-    return request.patch(`/users/${userId}/activate`)
+    return request.patch(`/users/auth/${userId}/activate`)
   },
 
   /**
    * Deactivate a user (requires system_admin role)
    */
   deactivateUser(userId: number): Promise<User> {
-    return request.patch(`/users/${userId}/deactivate`)
+    return request.patch(`/users/auth/${userId}/deactivate`)
   },
 }

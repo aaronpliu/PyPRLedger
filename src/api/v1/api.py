@@ -38,7 +38,8 @@ api_router.include_router(sse.router, prefix="/sse", tags=["sse"])
 # Task assignment endpoints (for review_admin to manage reviews)
 api_router.include_router(task_assignment.router, tags=["task-assignment"])
 
-api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(users.git_router, prefix="/users/git", tags=["git-users"])
+api_router.include_router(users.auth_router, prefix="/users/auth", tags=["auth-users"])
 
 api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 

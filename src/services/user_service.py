@@ -450,6 +450,40 @@ class UserService:
         logger.info(f"Deleted user: {username} (ID: {user_id})")
         return True
 
+    async def delete_auth_user(self, auth_user_id: int, db: AsyncSession) -> bool:
+        """
+        Delete an auth user (system login user)
+
+        Cascades to role_assignments, audit_logs, personal_access_tokens via ORM.
+        Does NOT delete the linked git user (SET NULL is handled by FK constraint).
+
+        Args:
+            auth_user_id: The AuthUser ID
+            db: Database session
+
+        Returns:
+            bool: True if deleted, False if not found
+        """
+        from src.models.auth_user import AuthUser
+
+        # Get ORM object for deletion
+        result = await db.execute(select(AuthUser).where(AuthUser.id == auth_user_id))
+        auth_user = result.scalar_one_or_none()
+
+        if not auth_user:
+            return False
+
+        username = auth_user.username
+
+        await db.delete(auth_user)
+        await db.commit()
+
+        # Update metrics
+        self.metrics.decrement_user_count()
+
+        logger.info(f"Deleted auth user: {username} (ID: {auth_user_id})")
+        return True
+
     async def validate_credentials(
         self, username: str, password: str, db: AsyncSession
     ) -> User | None:
