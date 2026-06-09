@@ -64,8 +64,8 @@ class PullRequestReviewBase(Base):
     )
     ai_suggestions: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     pull_request_status: Mapped[str] = mapped_column(String(32), nullable=False)
-    pull_request_user: Mapped[str] = mapped_column(
-        String(64), ForeignKey("user.username", ondelete="CASCADE"), nullable=False, index=True
+    pull_request_user: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("user.username", ondelete="SET NULL"), nullable=True, index=True
     )
     review_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         JSON,
@@ -226,10 +226,10 @@ class PullRequestReviewAssignment(Base):
         nullable=False,
         index=True,
     )
-    reviewer: Mapped[str] = mapped_column(
+    reviewer: Mapped[str | None] = mapped_column(
         String(64),
-        ForeignKey("user.username", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("user.username", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     assigned_by: Mapped[str | None] = mapped_column(
@@ -423,7 +423,7 @@ class PullRequestScore(Base):
         String(255), nullable=True
     )  # Reduced from 500, NULL for PR-level scores
     reviewer = Column(
-        String(64), ForeignKey("user.username"), nullable=False, index=True
+        String(64), ForeignKey("user.username", ondelete="SET NULL"), nullable=True, index=True
     )  # Match user model
 
     # Score information
