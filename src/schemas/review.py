@@ -15,7 +15,7 @@ class ReviewBaseResponse(BaseModel):
     project_key: str
     repository_slug: str
     app_name: str | None = None  # Virtual column resolved from project registry
-    pull_request_user: str
+    pull_request_user: str | None = None
     pull_request_user_info: dict[str, Any] | None = None
     source_filename: str | None = None
     source_branch: str
@@ -37,7 +37,7 @@ class ReviewerAssignmentResponse(BaseModel):
     """Reviewer assignment information from PullRequestReviewAssignment"""
 
     id: int
-    reviewer: str
+    reviewer: str | None = None
     reviewer_info: dict[str, Any] | None = None  # Enriched user details
     assigned_by: str | None = None
     assigned_by_info: dict[str, Any] | None = None  # Enriched assigner details

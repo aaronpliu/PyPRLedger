@@ -26,8 +26,8 @@ class ReviewBase(BaseModel):
         max_length=64,
         description="Reviewer username (NULL for pending assignment)",
     )
-    pull_request_user: str = Field(
-        ..., min_length=1, max_length=64, description="Pull request user username"
+    pull_request_user: str | None = Field(
+        None, min_length=1, max_length=64, description="Pull request user username"
     )
 
     source_branch: str = Field(..., min_length=1, max_length=255, description="Source branch name")
@@ -173,7 +173,7 @@ class ReviewScoreCreate(ReviewScoreBase):
     source_filename: str | None = Field(
         None, description="Optional filename (None for PR-level score)"
     )
-    reviewer: str
+    reviewer: str | None = None
 
     @field_validator("score_description")
     @classmethod
@@ -195,7 +195,7 @@ class ReviewScoreResponse(ReviewScoreBase):
     """Simplified score information - excludes fields already in parent ReviewResponse"""
 
     id: int
-    reviewer: str
+    reviewer: str | None = None
     reviewer_info: dict[str, Any] | None = None  # Enriched user details
     source_filename: str | None = None  # null means PR-level score, string means file-level score
     score: float
@@ -257,8 +257,8 @@ class ReviewResponse(BaseModel):
         max_length=64,
         description="Reviewer username (NULL for pending assignment)",
     )
-    pull_request_user: str = Field(
-        ..., min_length=1, max_length=64, description="Pull request user username"
+    pull_request_user: str | None = Field(
+        None, min_length=1, max_length=64, description="Pull request user username"
     )
 
     source_branch: str = Field(..., description="Source branch name")

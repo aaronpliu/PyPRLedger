@@ -32,6 +32,7 @@ from src.schemas.pull_request import (
     ReviewStats,
     ReviewUpdate,
 )
+from src.services.auto_assign_service import AutoTaskAssignmentService
 from src.services.entity_sync_service import EntitySyncService
 from src.services.project_registry_service import ProjectRegistryService
 from src.services.review_score_service import ReviewScoreService
@@ -453,6 +454,21 @@ class ReviewService:
             self._populate_assignment(new_assignment, reviewer.username, review_data)
             db.add(new_assignment)
             await db.flush()
+        else:
+            # No explicit reviewer — run auto-assignment rules
+            try:
+                auto_service = AutoTaskAssignmentService(metrics_collector=self.metrics)
+                await auto_service.auto_assign(
+                    db=db,
+                    review_base=new_base,
+                    review_data=review_data,
+                )
+            except Exception as e:
+                # Non-fatal: review is created successfully even if auto-assign fails
+                logger.error(
+                    f"Auto-assignment failed for PR {review_data.pull_request_id}: {e}",
+                    exc_info=True,
+                )
 
         await db.commit()  # Commit the transaction to make data visible to other connections
 

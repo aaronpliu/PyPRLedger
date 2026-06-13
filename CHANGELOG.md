@@ -5,6 +5,44 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-06-13
+
+**Backend Version**: 1.17.0
+**Frontend Version**: 1.12.0
+
+### Added
+- optimize "create rule" dialog
+- add auto assignment rule UI with openspec
+- add auto assignmen rule
+- add codegraph and openspec support
+
+### Fixed
+- enhance auto_assign
+
+---
+
+## [1.16.2] - 2026-06-10
+
+**Backend Version**: 1.16.2
+**Frontend Version**: 1.11.2
+
+### Added
+- openspec archive
+- enhance review association
+- add openspec
+
+### Fixed
+- add i18n for prompt of add score button
+
+### Changed
+- [Refactor] update git user and auth user endpoints
+- [Refactor] enhance system function on user cascaded deletion
+
+### Documentation
+- archived /users endpoint refactor
+
+---
+
 ## [1.16.1] - 2026-06-07
 
 **Backend Version**: 1.16.1

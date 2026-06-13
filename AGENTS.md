@@ -2,6 +2,83 @@
 
 This document provides essential guidelines for AI agents contributing to PyPRLedger. For full documentation, see README.md.
 
+---
+
+## AI Toolchain Overview
+
+This project uses **Codegraph** + **OpenSpec** + **OpenCode** as its AI development toolchain. They work together to provide codebase awareness, structured change management, and agent orchestration.
+
+### Codegraph (`.codegraph/`)
+
+Codegraph is a **codebase graph engine** that indexes the entire project into a semantic graph database (`codegraph.db`). It enables AI agents to:
+
+- **Understand code structure** — symbols, imports, dependencies, type hierarchies
+- **Navigate intelligently** — find function definitions, callers, and references by meaning, not just text
+- **Auto-context from memory** — when you reference a feature or module, Codegraph surfaces the relevant files automatically
+
+Codegraph runs continuously in the background and stays up-to-date as you edit files. No manual sync needed.
+
+### OpenSpec (`openspec/`)
+
+OpenSpec is a **spec-driven development system** that manages changes through structured artifacts:
+
+- `specs/` — Living specification documents organized by capability (e.g., auth, reviews, scores)
+- `changes/<name>/` — Active change proposals with artifact files:
+  - `proposal.md` — What and why (scope, acceptance criteria)
+  - `design.md` — How (architecture, data flow, UI mockups)
+  - `tasks.md` — Implementation steps (checklist tracked during apply)
+
+OpenSpec workflows are invoked via OpenCode slash commands:
+
+| Command | Purpose |
+|---|---|
+| `/opsx-explore` | Investigate problems, think through ideas, clarify requirements |
+| `/opsx-propose` | Create a new change with all artifacts (proposal, design, tasks) |
+| `/opsx-apply` | Implement tasks from a change proposal step by step |
+| `/opsx-sync` | Sync specs with actual code to keep docs up-to-date |
+| `/opsx-archive` | Archive a completed change when work is done |
+
+### OpenCode (`.opencode/`)
+
+OpenCode is the **agent orchestration platform** that ties everything together:
+
+- **Agents** (`.opencode/agent/`) — Specialized roles (coordinator, sde, qa, etc.) that collaborate on tasks
+- **Commands** (`.opencode/commands/`) — Slash commands for OpenSpec workflows (`opsx-*`)
+- **Skills** (`.opencode/skills/`) — Reusable skill definitions for specific tasks
+
+The default agent is `coordinator`, which analyzes requirements and delegates to specialists (`@sde`, `@qa`, `@devops`, etc.).
+
+### How They Work Together
+
+```
+User Request
+    |
+    v
+[Codegraph] -- Provides codebase context (structure, symbols, dependencies)
+    |
+    v
+[OpenCode Agents] -- Coordinator orchestrates the work
+    |
+    v
+[OpenSpec] -- Structured change management
+    |-- /opsx-explore  (investigate, clarify)
+    |-- /opsx-propose  (create proposal, design, tasks)
+    |-- /opsx-apply    (implement tasks, update code)
+    |-- /opsx-archive  (close out completed change)
+    |
+    v
+[Codegraph] -- Re-indexes updated code for future context
+```
+
+The typical flow:
+1. **Codegraph** provides the agent with accurate codebase context from its graph index
+2. **OpenCode** agents use that context to understand the existing system
+3. **OpenSpec** captures structured plans (proposal → design → tasks) before implementation
+4. **OpenCode agents** implement the tasks, guided by the design and Codegraph's context
+5. After changes, **Codegraph** automatically re-indexes so future queries see updated code
+
+---
+
 ## Tech Stack
 
 - Python 3.12+, FastAPI, async/await throughout

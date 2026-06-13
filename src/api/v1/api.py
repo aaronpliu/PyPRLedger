@@ -4,6 +4,7 @@ from src import __version__
 from src.api.v1.endpoints import (
     audit,
     auth,
+    auto_task_assignment,  # Auto-assignment rule management
     delegation,
     notifications,  # Notification management endpoints
     personal_access_tokens,
@@ -38,7 +39,11 @@ api_router.include_router(sse.router, prefix="/sse", tags=["sse"])
 # Task assignment endpoints (for review_admin to manage reviews)
 api_router.include_router(task_assignment.router, tags=["task-assignment"])
 
-api_router.include_router(users.router, prefix="/users", tags=["users"])
+# Auto-assignment rule management (for review_admin)
+api_router.include_router(auto_task_assignment.router, tags=["auto-task-assignment"])
+
+api_router.include_router(users.git_router, prefix="/users/git", tags=["git-users"])
+api_router.include_router(users.auth_router, prefix="/users/auth", tags=["auth-users"])
 
 api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 

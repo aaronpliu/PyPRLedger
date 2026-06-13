@@ -121,6 +121,9 @@
                   <el-dropdown-item :command="'reset'" divided>
                     Reset Password
                   </el-dropdown-item>
+                  <el-dropdown-item :command="'delete'" divided style="color: #f56c6c;">
+                    <el-icon><Delete /></el-icon> Delete
+                  </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -299,7 +302,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
-import { Plus, Search, Share, ArrowDown } from '@element-plus/icons-vue'
+import { Plus, Search, Share, ArrowDown, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -496,6 +499,8 @@ const handleAction = async (command: string, user: any) => {
     await toggleUserStatus(user)
   } else if (command === 'reset') {
     showResetPasswordDialogHandler(user)
+  } else if (command === 'delete') {
+    await handleDeleteUser(user)
   }
 }
 
@@ -656,6 +661,39 @@ const handleResetPassword = async () => {
       }
     }
   })
+}
+
+const handleDeleteUser = async (user: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `Are you sure you want to permanently delete user "${user.username}"?\n\n` +
+      `This will:\n` +
+      `• Revoke all active sessions\n` +
+      `• Remove all role assignments\n` +
+      `• Delete personal access tokens\n` +
+      `• Delete audit logs\n\n` +
+      `The linked Bitbucket user (if any) will NOT be deleted.\n` +
+      `Reviews and scores will NOT be affected.\n\n` +
+      `This action CANNOT be undone.`,
+      'Permanently Delete User',
+      {
+        type: 'warning',
+        confirmButtonText: 'Yes, delete permanently',
+        confirmButtonClass: 'el-button--danger',
+        cancelButtonText: 'Cancel',
+        dangerouslyUseHTMLString: false,
+      }
+    )
+    
+    await usersApi.deleteAuthUser(user.id)
+    ElMessage.success(`User "${user.username}" deleted permanently`)
+    loadUsers()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('Failed to delete user:', error)
+      ElMessage.error(error.response?.data?.detail || 'Failed to delete user')
+    }
+  }
 }
 
 onMounted(() => {
