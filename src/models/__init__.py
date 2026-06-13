@@ -6,6 +6,7 @@ with SQLAlchemy before any relationships are resolved.
 
 from src.models.audit_log import AuditLog
 from src.models.auth_user import AuthUser
+from src.models.auto_assign_rule import PullRequestReviewAutoAssignmentRule
 from src.models.notification import Notification, NotificationPreference
 from src.models.organization import OrganizationGroup
 from src.models.personal_access_token import PersonalAccessToken
@@ -34,6 +35,7 @@ __all__ = [
     "UserRoleAssignment",
     "AuditLog",
     "ProjectRegistry",
+    "PullRequestReviewAutoAssignmentRule",
     "SystemSetting",
     "Notification",
     "NotificationPreference",
