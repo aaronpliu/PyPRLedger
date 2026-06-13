@@ -1082,9 +1082,13 @@ class ReviewService:
             list(bases), filters.reviewer, filters.visible_to_username
         )
         total = len(flattened_reviews)
-        start = (page - 1) * page_size
-        end = start + page_size
-        reviews = flattened_reviews[start:end]
+        if page_size == 0:
+            # page_size=0 sentinel: return all matching records (no pagination slicing)
+            reviews = flattened_reviews
+        else:
+            start = (page - 1) * page_size
+            end = start + page_size
+            reviews = flattened_reviews[start:end]
 
         # Cache the result (only if no app_name filter)
         if not app_names and use_cache and reviews:

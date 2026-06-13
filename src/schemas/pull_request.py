@@ -415,7 +415,9 @@ class ReviewListResponse(BaseModel):
     )
     total: int = Field(..., description="Total number of reviews")
     page: int = Field(default=1, ge=1, description="Current page number")
-    page_size: int = Field(default=20, ge=1, le=100, description="Number of items per page")
+    page_size: int = Field(
+        default=20, ge=0, le=100, description="Number of items per page (0 = return all)"
+    )
 
     model_config = {
         "from_attributes": True,

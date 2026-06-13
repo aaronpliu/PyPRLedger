@@ -1141,7 +1141,7 @@ const fetchAllDataForExport = async (): Promise<Review[]> => {
   try {
     const params: any = {
       page: 1,
-      page_size: 100, // Max page_size backend allows
+      page_size: 0, // 0 = return all matching records (no pagination)
     }
     
     // Add ALL filter parameters for server-side filtering
