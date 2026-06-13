@@ -21,6 +21,7 @@
               <el-sub-menu v-if="isAdmin" index="/task-assignment">
                 <template #title>{{ t('menu.taskAssignment') }}</template>
                 <el-menu-item index="/task-assignment">{{ t('menu.taskAssignment') }}</el-menu-item>
+                <el-menu-item index="/task-assignment/rules">{{ t('menu.autoRules') }}</el-menu-item>
                 <el-menu-item index="/task-assignment/analytics">{{ t('menu.analytics') }}</el-menu-item>
               </el-sub-menu>
               <el-sub-menu index="/scores">
