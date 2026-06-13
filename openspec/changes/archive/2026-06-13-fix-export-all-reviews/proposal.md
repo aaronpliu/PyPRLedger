@@ -23,4 +23,5 @@ The root cause is that the export function calls the same paginated `GET /api/v1
 
 - **Backend**: `src/api/v1/endpoints/reviews.py` — change `page_size` validation from `ge=1` to `ge=0`
 - **Backend**: `src/services/review_service.py` — in `list_reviews()`, when `page_size == 0`, skip the pagination slice and return all records
+- **Backend**: `src/schemas/pull_request.py` — change `ReviewListResponse.page_size` Pydantic field validation from `ge=1` to `ge=0` to accept `page_size=0` in the response
 - **Frontend**: `src/views/reviews/ReviewListView.vue` — change `page_size: 100` to `page_size: 0` in `fetchAllDataForExport()`
