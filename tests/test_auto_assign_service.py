@@ -271,7 +271,7 @@ class TestAutoAssignIntegration:
             # Verify assignment fields
             assignment = assignments[0]
             assert assignment.reviewer == "alice"
-            assert assignment.assigned_by == "auto_assign"
+            assert assignment.assigned_by is None  # NULL because FK references user(username)
             assert assignment.assignment_status == "pending"
             assert assignment.review_base_id == review_base.id
 
