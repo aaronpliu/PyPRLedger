@@ -5,6 +5,46 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.1] - 2026-06-14
+
+**Backend Version**: 1.17.1
+**Frontend Version**: 1.12.1
+
+### Added
+- Consolidated Prometheus, Grafana, and AlertManager into standalone `monitoring/` directory
+- Standalone `monitoring/docker-compose.yml` for independent monitoring stack deployment
+- AlertManager configuration with severity-based routing and optional Slack integration
+- Prometheus alert rules for application health (API down, error rate, latency, backlog)
+- Prometheus alert rules for infrastructure health (CPU, memory, disk, DB connections)
+- Auto-provisioned Grafana dashboards: PRLedger Overview + Review Analytics
+
+### Fixed
+- Grafana container restart loop — fixed healthcheck timing and removed deprecated plugin
+- AlertManager startup crash — fixed `--test.config` flag removed in AlertManager 0.25+
+- AlertManager Slack integration — entrypoint script conditionally generates config
+- Metrics exposure — merged MetricsCollector business metrics onto shared registry with Instrumentator
+- Prometheus scrape target — entrypoint now handles env var substitution reliably
+- Podman port binding — explicit `0.0.0.0:` for external network access
+- Docker network consistency — all monitoring services use `code-review-network`
+
+### Changed
+- Refactored Prometheus config to use template + entrypoint for config generation
+- Simplified Grafana healthcheck to avoid false restarts
+
+### Documentation
+- Updated README with monitoring stack deployment instructions
+- Updated `monitoring/.env.example` with all configurable variables
+
+### Dependencies
+- add environment varaible for monitoring
+
+### Other Changes
+- c9ffd90 Merge pull request #24 from aaronpliu/main
+- f598cf9 Merge pull request #23 from aaronpliu/feature/PRLedger_NewUI
+- 25dafd0 Merge pull request #22 from aaronpliu/feature/PRLedger_NewUI
+
+---
+
 ## [1.17.0] - 2026-06-13
 
 **Backend Version**: 1.17.0
