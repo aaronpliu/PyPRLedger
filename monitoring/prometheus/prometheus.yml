@@ -1,0 +1,36 @@
+# Prometheus Configuration — PRLedger Monitoring
+# Global defaults
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Load alert rules once and periodically evaluate them
+rule_files:
+  - "rules/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # PRLedger API Metrics
+  - job_name: "PRLedger"
+    static_configs:
+      - targets:
+          - "api:8000"
+    metrics_path: "/api/metrics"
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets:
+          - "localhost:9090"
+    scrape_interval: 15s
+    scrape_timeout: 10s

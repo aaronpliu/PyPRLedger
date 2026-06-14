@@ -1,0 +1,71 @@
+# ───────────────────────────────────────────────────────────
+# Infrastructure Alert Rules
+# Tier: System-level resource monitoring
+# ───────────────────────────────────────────────────────────
+
+groups:
+  - name: infrastructure
+    interval: 60s
+    rules:
+      # 🟡 WARNING: High CPU usage
+      - alert: HighCPUUsage
+        expr: system_cpu_usage_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage (>80%)"
+          description: |
+            CPU usage has been above 80% for over 5 minutes.
+            Value: {{ $value | humanize }}%
+
+      # 🟡 WARNING: High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            system_memory_usage_bytes
+            /
+            (
+              system_memory_usage_bytes
+              +
+              system_memory_available_bytes
+            )
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage (>90%)"
+          description: |
+            System memory usage is above 90%.
+            Used: {{ $value | humanizePercentage }}
+
+      # 🔴 CRITICAL: Low disk space
+      - alert: LowDiskSpace
+        expr: |
+          (
+            system_disk_available_bytes
+            /
+            system_disk_usage_bytes
+          ) < 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space (<10% free)"
+          description: |
+            Available disk space has dropped below 10%.
+            Free: {{ $value | humanizePercentage }}
+
+      # 🟡 WARNING: High database connections
+      - alert: DBConnectionsHigh
+        expr: db_connections_active > 80
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High database connection count (>80)"
+          description: |
+            Active database connections are above 80.
+            Current value: {{ $value }}
+            Consider increasing the connection pool size or investigating leaks.

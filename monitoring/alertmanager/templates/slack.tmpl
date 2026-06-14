@@ -1,0 +1,28 @@
+{{- /* Slack notification templates for PRLedger alerts */ -}}
+
+{{- define "slack.title" -}}
+  [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}
+{{- end -}}
+
+{{- define "slack.text" -}}
+{{- if eq .Status "firing" -}}
+🔥 *Alert Firing* — {{ .CommonLabels.alertname }}
+
+*Severity:* {{ .CommonLabels.severity }}
+*Summary:* {{ .CommonAnnotations.summary }}
+*Description:*
+{{ .CommonAnnotations.description }}
+
+*Labels:*
+{{ range .CommonLabels.SortedPairs }}{{ .Name }}: {{ .Value }}
+{{ end }}
+
+*Active For:* {{ .ActiveAt }}
+{{- else -}}
+✅ *Alert Resolved* — {{ .CommonLabels.alertname }}
+
+*Severity:* {{ .CommonLabels.severity }}
+*Summary:* {{ .CommonAnnotations.summary }}
+*Resolved At:* {{ .ActiveAt }}
+{{- end -}}
+{{- end -}}

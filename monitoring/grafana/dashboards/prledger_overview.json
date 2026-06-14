@@ -1,0 +1,318 @@
+{
+  "title": "PRLedger Overview",
+  "uid": "prledger-overview",
+  "description": "Main operational dashboard for PRLedger — request rate, latency, errors, and system resources",
+  "tags": ["prledger", "overview", "production"],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate (RPS) by Endpoint",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[5m])) by (endpoint)",
+          "legendFormat": "{{ endpoint }}",
+          "interval": "30s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "stacking": { "mode": "normal" }, "fillOpacity": 30 }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 2,
+      "title": "HTTP Status Breakdown",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"2[0-9]{2}\"}[5m]))",
+          "legendFormat": "2xx Success",
+          "interval": "30s"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"4[0-9]{2}\"}[5m]))",
+          "legendFormat": "4xx Client Error",
+          "interval": "30s"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"5[0-9]{2}\"}[5m]))",
+          "legendFormat": "5xx Server Error",
+          "interval": "30s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 40 }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "5xx Server Error" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#E02F44" } }] },
+          { "matcher": { "id": "byName", "options": "4xx Client Error" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF9830" } }] },
+          { "matcher": { "id": "byName", "options": "2xx Success" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } }] }
+        ]
+      },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 3,
+      "title": "Request Latency (P50 / P95 / P99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50",
+          "interval": "30s"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95",
+          "interval": "30s"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99",
+          "interval": "30s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "fillOpacity": 10 },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 0.5 },
+            { "color": "red", "value": 2.0 }
+          ]}
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 4,
+      "title": "Error Rate (5xx / Total)",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(errors_total[5m])) / sum(rate(http_requests_total[5m]))",
+          "legendFormat": "Error Rate",
+          "interval": "30s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 0.01 },
+            { "color": "red", "value": 0.05 }
+          ]}
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 5,
+      "title": "Active Reviews by Project",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(review_total) by (project)",
+          "legendFormat": "{{ project }}",
+          "interval": "30s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 30, "stacking": { "mode": "normal" } } },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 10,
+      "title": "Cache Hit Ratio",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 22 },
+      "targets": [
+        {
+          "expr": "sum(rate(cache_hits_total[5m])) / (sum(rate(cache_hits_total[5m])) + sum(rate(cache_misses_total[5m])))",
+          "legendFormat": "Hit Ratio"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "orange", "value": 0.7 },
+            { "color": "green", "value": 0.9 }
+          ]}
+        },
+        "overrides": []
+      },
+      "options": { "orientation": "auto", "showThresholdLabels": false, "showThresholdMarkers": true }
+    },
+    {
+      "id": 11,
+      "title": "Active DB Connections",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 22 },
+      "targets": [
+        {
+          "expr": "db_connections_active",
+          "legendFormat": "Active Connections"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 50 },
+            { "color": "red", "value": 80 }
+          ]}
+        },
+        "overrides": []
+      },
+      "options": { "orientation": "auto", "showThresholdLabels": false, "showThresholdMarkers": true }
+    },
+    {
+      "id": 12,
+      "title": "Users & Reviewers (Total)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 22 },
+      "targets": [
+        {
+          "expr": "users_total",
+          "legendFormat": "Total Users"
+        },
+        {
+          "expr": "reviewers_total",
+          "legendFormat": "Total Reviewers"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "vertical", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "id": 13,
+      "title": "Open PRs & Backlog",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 22 },
+      "targets": [
+        {
+          "expr": "sum(pull_requests_open)",
+          "legendFormat": "Open PRs"
+        },
+        {
+          "expr": "review_backlog_count",
+          "legendFormat": "Backlog"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Backlog" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF9830" } }] }
+        ]
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "vertical", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "id": 20,
+      "title": "CPU Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 28 },
+      "targets": [
+        {
+          "expr": "system_cpu_usage_percent",
+          "legendFormat": "CPU %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 60 },
+            { "color": "red", "value": 80 }
+          ]}
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 21,
+      "title": "Memory Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 28 },
+      "targets": [
+        {
+          "expr": "system_memory_usage_bytes",
+          "legendFormat": "Used"
+        },
+        {
+          "expr": "system_memory_available_bytes",
+          "legendFormat": "Available"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Available" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } }] }
+        ]
+      },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 22,
+      "title": "Disk Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 28 },
+      "targets": [
+        {
+          "expr": "system_disk_usage_bytes",
+          "legendFormat": "Used"
+        },
+        {
+          "expr": "system_disk_available_bytes",
+          "legendFormat": "Available"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Available" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } }] }
+        ]
+      },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"] }
+}
