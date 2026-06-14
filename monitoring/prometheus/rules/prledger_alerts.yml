@@ -1,0 +1,77 @@
+# ───────────────────────────────────────────────────────────
+# PRLedger Application Alert Rules
+# Tier: Application-level health & performance
+# ───────────────────────────────────────────────────────────
+
+groups:
+  - name: prledger_application
+    interval: 30s
+    rules:
+      # 🔴 CRITICAL: API is unreachable
+      - alert: PRLedgerDown
+        expr: absent(up{job="PRLedger"}) == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PRLedger API is down"
+          description: |
+            The PRLedger API has been unreachable for more than 1 minute.
+            Check the API container and its dependencies (MySQL, Redis).
+
+      # 🟡 WARNING: Elevated error rate (>5% 5xx over 5m)
+      - alert: APIErrorRateHigh
+        expr: |
+          (
+            rate(errors_total[5m])
+            /
+            rate(http_requests_total[5m])
+          ) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PRLedger API error rate > 5%"
+          description: |
+            The API 5xx error rate is above 5% over the last 5 minutes.
+            Value: {{ $value | humanizePercentage }}
+
+      # 🟡 WARNING: High P99 latency (>2s)
+      - alert: APILatencyHigh
+        expr: |
+          histogram_quantile(
+            0.99,
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 2
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PRLedger API P99 latency > 2s"
+          description: |
+            The P99 request latency is above 2 seconds.
+            Value: {{ $value | humanizeDuration }}
+
+      # 🔵 INFO: Review backlog growing
+      - alert: ReviewBacklogGrowing
+        expr: review_backlog_count > 50
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Review backlog > 50 pending PRs"
+          description: |
+            There are {{ $value | humanize }} pull requests waiting for review.
+            Consider reassigning reviewers or adjusting review capacity.
+
+      # 🟡 WARNING: Cache errors detected
+      - alert: CacheErrorRatePositive
+        expr: rate(cache_errors_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis cache errors detected"
+          description: |
+            Cache operations are failing. Check Redis connectivity and memory.
+            Error rate: {{ $value | humanize }} per second

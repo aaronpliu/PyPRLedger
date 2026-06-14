@@ -1,0 +1,49 @@
+# ───────────────────────────────────────────────────────────
+# AlertManager Configuration — PRLedger Monitoring (Base)
+# ───────────────────────────────────────────────────────────
+# Slack integration is configured dynamically at startup
+# via the entrypoint script. If SLACK_WEBHOOK_URL is set in
+# the environment, Slack will be added automatically.
+# ───────────────────────────────────────────────────────────
+
+route:
+  receiver: "default"
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+  # Severity-based routing:
+  #   critical → all receivers
+  #   warning  → all receivers
+  #   info     → default receiver (console only)
+  routes:
+    - match:
+        severity: critical
+      receiver: "default"
+      repeat_interval: 1h
+
+    - match:
+        severity: warning
+      receiver: "default"
+      repeat_interval: 4h
+
+    - match:
+        severity: info
+      receiver: "default"
+      repeat_interval: 8h
+
+# ─── Receivers ───────────────────────────────────────────
+receivers:
+  # Default receiver: console (/dev/null — alerts are visible in logs)
+  - name: "default"
+
+# ─── Inhibition Rules ───────────────────────────────────
+# Critical alerts suppress warning alerts of the same type
+# to reduce noise during incidents.
+inhibit_rules:
+  - source_match:
+      severity: "critical"
+    target_match:
+      severity: "warning"
+    equal: ["alertname"]

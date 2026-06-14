@@ -1,0 +1,233 @@
+{
+  "title": "Review Analytics",
+  "uid": "prledger-review-analytics",
+  "description": "Deep-dive into the PR review process — volume, cycle time, scores, reviewer load, and backlog",
+  "tags": ["prledger", "reviews", "analytics"],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "1m",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Review Volume by Project",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(review_total[24h])) by (project)",
+          "legendFormat": "{{ project }}",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "showValue": "auto",
+        "legend": { "showLegend": true, "placement": "right" },
+        "xTickLabelRotation": 0,
+        "groupWidth": 50,
+        "barWidth": 0.8
+      }
+    },
+    {
+      "id": 2,
+      "title": "Review Volume by Reviewer",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(review_total[24h])) by (reviewer)",
+          "legendFormat": "{{ reviewer }}",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "showValue": "auto",
+        "legend": { "showLegend": true, "placement": "right" },
+        "xTickLabelRotation": 0,
+        "groupWidth": 50,
+        "barWidth": 0.8
+      }
+    },
+    {
+      "id": 3,
+      "title": "Review Cycle Time (P50 / P95 / P99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(review_cycle_time_seconds_bucket[24h])) by (le))",
+          "legendFormat": "P50",
+          "interval": "1m"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(review_cycle_time_seconds_bucket[24h])) by (le))",
+          "legendFormat": "P95",
+          "interval": "1m"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(review_cycle_time_seconds_bucket[24h])) by (le))",
+          "legendFormat": "P99",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "fillOpacity": 10 },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 86400 },
+            { "color": "red", "value": 259200 }
+          ]}
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 4,
+      "title": "Review Score Distribution",
+      "type": "histogram",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(review_score_bucket[7d])) by (le)",
+          "legendFormat": "Score",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": []
+      },
+      "options": {
+        "bucketOffset": 0,
+        "legend": { "showLegend": true, "placement": "bottom" },
+        "tooltip": { "mode": "single" },
+        "combine": false
+      }
+    },
+    {
+      "id": 5,
+      "title": "Review Duration by Project",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(review_duration_seconds_bucket[24h])) by (le, project))",
+          "legendFormat": "P95 - {{ project }}",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": true, "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 6,
+      "title": "Reviewer Load Balance",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "reviewers_load",
+          "legendFormat": "{{ project }}",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "showValue": "auto",
+        "legend": { "showLegend": true, "placement": "right" },
+        "barWidth": 0.8,
+        "groupWidth": 50
+      }
+    },
+    {
+      "id": 7,
+      "title": "Active Reviewers by Project",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "active_reviewers",
+          "legendFormat": "{{ project }}",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "showValue": "auto",
+        "legend": { "showLegend": true, "placement": "right" },
+        "barWidth": 0.8,
+        "groupWidth": 50
+      }
+    },
+    {
+      "id": 8,
+      "title": "Review Backlog by Project",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "review_backlog_count",
+          "legendFormat": "{{ project }}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": { "align": "auto", "displayMode": "auto" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Value" },
+            "properties": [
+              { "id": "custom.displayMode", "value": "color-background" },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "orange", "value": 20 },
+                    { "color": "red", "value": 50 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "sortBy": [{ "displayName": "Value", "desc": true }],
+        "footer": { "show": false }
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"] }
+}

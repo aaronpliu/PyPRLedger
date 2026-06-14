@@ -631,7 +631,9 @@ async def list_reviews(
         description="Filter to reviews pinned by the current user",
     ),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
-    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
+    page_size: int = Query(
+        20, ge=0, le=100, description="Number of items per page (0 = return all)"
+    ),
 ) -> ReviewListResponse:
     """
     List pull request reviews with filtering and pagination
