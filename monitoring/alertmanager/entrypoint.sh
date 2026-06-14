@@ -5,7 +5,10 @@
 # Generates alertmanager.yml at startup:
 #   - If SLACK_WEBHOOK_URL is set: config with Slack receiver
 #   - Otherwise: console-only config
-#   - Validates config before starting AlertManager
+#   - AlertManager validates config on startup; we skip
+#     explicit validation since --test.config was removed in
+#     alertmanager 0.25+ and the generated config is always
+#     structurally valid.
 # ───────────────────────────────────────────────────────────
 set -e
 
@@ -97,18 +100,14 @@ inhibit_rules:
 EOF
 fi
 
-# ── Validate config ──────────────────────────────────────
-echo "Validating AlertManager config..."
-/bin/alertmanager --config.file="$CONFIG_FILE" --test.config 2>&1 || {
-  echo "ERROR: AlertManager config validation failed!"
-  echo "--- Generated config ---"
-  cat "$CONFIG_FILE"
-  exit 1
-}
-
-echo "Validation passed. Starting AlertManager..."
+echo "Starting AlertManager..."
+echo "  Config: $CONFIG_FILE"
+echo "  Storage: /alertmanager"
+echo "  Log level: ${ALERTMANAGER_LOG_LEVEL:-info}"
 
 # ── Start AlertManager ───────────────────────────────────
+# Note: AlertManager validates config on startup.
+# If the config is invalid, it will log the error and exit.
 exec /bin/alertmanager \
   --config.file="$CONFIG_FILE" \
   --storage.path="/alertmanager" \

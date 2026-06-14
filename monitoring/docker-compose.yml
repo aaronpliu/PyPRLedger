@@ -54,6 +54,8 @@ services:
 
   # ─── Grafana ────────────────────────────────────────────────
   grafana:
+    # Using latest; pin to a specific version (e.g., grafana/grafana:11.5.2)
+    # if the rolling latest has issues.
     image: grafana/grafana:latest
     container_name: prledger-grafana
     ports:
@@ -62,7 +64,10 @@ services:
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=${GF_USERS_ALLOW_SIGN_UP:-false}
-      - GF_INSTALL_PLUGINS=${GF_INSTALL_PLUGINS:-grafana-piechart-panel}
+      # grafana-piechart-panel is deprecated and removed in Grafana 11+;
+      # dashboards use built-in visualization types instead.
+      # Remove this if you need the plugin, but prefer native chart types.
+      - GF_INSTALL_PLUGINS=${GF_INSTALL_PLUGINS:-}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -72,15 +77,16 @@ services:
       prometheus:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://localhost:3000/api/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    deploy:
-      resources:
-        limits:
-          memory: 128M
+      # Check if Grafana's HTTP server is up by testing the API health endpoint.
+      # Uses wget first (Alpine), falls back to curl (Ubuntu-based images).
+      # The start_period gives Grafana time to initialize (~60s) before failures count.
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/api/health > /dev/null 2>&1 || curl -sf http://localhost:3000/api/health > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    # No explicit memory limit — Grafana 11.x with apiserver + 52 plugins
+    # can spike past 512M at startup. Let it use what it needs.
     networks:
       - code-review-network
 
