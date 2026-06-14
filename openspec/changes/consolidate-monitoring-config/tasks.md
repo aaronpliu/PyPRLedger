@@ -72,6 +72,9 @@
 
 ## 8. Verification
 
+- [x] **FIXED: AlertManager startup failure** — Root cause: `slack_configs` with empty `api_url` crashes AlertManager >= 0.22. Also: console receiver had broken webhook loop (posting to localhost:9093).
+  ✓ **Fix**: Replaced static config with an entrypoint script that generates `alertmanager.yml` at runtime. If `SLACK_WEBHOOK_URL` is set → generates config WITH Slack integration. If not set → generates console-only config. Both variants validated before starting.
+  ✓ **Also fixed**: Network name inconsistency (`app-network` vs `code-review-network`) — all 3 services now consistently use `code-review-network`.
 - [x] 8.1 Run `docker network create code-review-network` and verify both stacks can attach
   ✓ Network created: `code-review-network` (Docker required at runtime)
 - [x] 8.2 Start monitoring stack with `docker compose -f monitoring/docker-compose.yml up -d` and verify all three containers are healthy

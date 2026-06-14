@@ -6,7 +6,7 @@
 #
 # Prerequisites:
 #   1. Docker network (run once):
-#        docker network create app-network
+#        docker network create code-review-network
 #   2. The main PRLedger stack must be running on the same
 #      network so Prometheus can scrape api:8000/metrrics.
 #
@@ -50,7 +50,7 @@ services:
         limits:
           memory: 256M
     networks:
-      - app-network
+      - code-review-network
 
   # ─── Grafana ────────────────────────────────────────────────
   grafana:
@@ -82,7 +82,7 @@ services:
         limits:
           memory: 128M
     networks:
-      - app-network
+      - code-review-network
 
   # ─── AlertManager ──────────────────────────────────────────
   alertmanager:
@@ -93,14 +93,16 @@ services:
     environment:
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
       - SLACK_CHANNEL=${SLACK_CHANNEL:-#monitoring-alerts}
+      - ALERTMANAGER_LOG_LEVEL=info
     volumes:
-      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      # Entrypoint generates alertmanager.yml at runtime (conditionally adds Slack)
+      - ./alertmanager/entrypoint.sh:/entrypoint.sh:ro
+      # Templates dir for Slack message formatting (only used when Slack enabled)
       - ./alertmanager/templates:/etc/alertmanager/templates:ro
+      # Base config file (kept as reference — entrypoint generates the active config)
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.reference.yml:ro
       - alertmanager-data:/alertmanager
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
-      - '--storage.path=/alertmanager'
-      - '--log.level=info'
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "-O-", "http://localhost:9093/-/ready"]
@@ -113,7 +115,7 @@ services:
         limits:
           memory: 128M
     networks:
-      - app-network
+      - code-review-network
 
 # ─── Persistent Volumes ────────────────────────────────────
 volumes:
@@ -129,11 +131,11 @@ volumes:
 # PRLedger app stack so Prometheus can scrape api:8000/metrics.
 #
 # Create this network before deploying:
-#   docker network create app-network
+#   docker network create code-review-network
 #
 # If you already ran the main PRLedger stack, the network
 # should already exist. Verify with:
-#   docker network ls | grep app-network
+#   docker network ls | grep code-review-network
 networks:
-  app-network:
+  code-review-network:
     external: true
