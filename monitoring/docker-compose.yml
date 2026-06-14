@@ -27,6 +27,7 @@ services:
     environment:
       - PROMETHEUS_RETENTION_TIME=${PROMETHEUS_RETENTION_TIME:-15d}
       - PROMETHEUS_RETENTION_SIZE=${PROMETHEUS_RETENTION_SIZE:-10GB}
+      - PRLEDGER_SCRAPE_TARGET=${PRLEDGER_SCRAPE_TARGET:-api:8000}
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/rules:/etc/prometheus/rules:ro

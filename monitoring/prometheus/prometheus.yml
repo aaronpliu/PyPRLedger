@@ -19,10 +19,12 @@ rule_files:
 # Scrape configurations
 scrape_configs:
   # PRLedger API Metrics
+  # Target is configurable via PRLEDGER_SCRAPE_TARGET env var.
+  # Default: api:8000. Override in .env if your API runs on a different port.
   - job_name: "PRLedger"
     static_configs:
       - targets:
-          - "api:8000"
+          - "${PRLEDGER_SCRAPE_TARGET}"
     metrics_path: "/api/metrics"
     scrape_interval: 10s
     scrape_timeout: 5s
