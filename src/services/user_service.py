@@ -20,7 +20,7 @@ from src.schemas.user import (
     UserStats,
     UserUpdate,
 )
-from src.utils.metrics import MetricsCollector
+from src.utils.metrics import MetricsCollector, metrics
 from src.utils.redis import get_redis_client
 
 
@@ -33,7 +33,7 @@ class UserService:
     def __init__(self, metrics_collector: MetricsCollector | None = None):
         """Initialize the user service"""
         self.redis_client = get_redis_client()
-        self.metrics = metrics_collector or MetricsCollector()
+        self.metrics = metrics_collector or metrics
 
     @staticmethod
     def hash_password(password: str) -> str:

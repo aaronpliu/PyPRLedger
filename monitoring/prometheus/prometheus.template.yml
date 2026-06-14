@@ -18,13 +18,15 @@ rule_files:
 
 # Scrape configurations
 scrape_configs:
-  # PRLedger API Metrics
-  # Target is configurable via PRLEDGER_SCRAPE_TARGET env var.
-  # Default: api:8000. Override in .env if your API runs on a different port.
+  # PRLedger API
+  # Target placeholder is replaced by entrypoint.sh using the
+  # PRLEDGER_SCRAPE_TARGET env var (set in .env or docker-compose).
+  # Default: api:8000. Configure via .env as:
+  #   PRLEDGER_SCRAPE_TARGET=api:9097
   - job_name: "PRLedger"
     static_configs:
       - targets:
-          - "${PRLEDGER_SCRAPE_TARGET}"
+          - "__PRLEDGER_SCRAPE_TARGET__"
     metrics_path: "/api/metrics"
     scrape_interval: 10s
     scrape_timeout: 5s

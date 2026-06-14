@@ -20,7 +20,7 @@ from src.schemas.project import (
     ProjectStats,
     ProjectUpdate,
 )
-from src.utils.metrics import MetricsCollector
+from src.utils.metrics import MetricsCollector, metrics
 from src.utils.redis import get_redis_client
 from src.utils.timezone import get_current_time
 
@@ -34,7 +34,7 @@ class ProjectService:
     def __init__(self, metrics_collector: MetricsCollector | None = None):
         """Initialize the project service"""
         self.redis_client = get_redis_client()
-        self.metrics = metrics_collector or MetricsCollector()
+        self.metrics = metrics_collector or metrics
 
     def _get_cache_key(self, project_id: int) -> str:
         """Generate cache key for a project"""

@@ -4,6 +4,7 @@ import time
 from fastapi import Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
+    REGISTRY,
     CollectorRegistry,
     Counter,
     Gauge,
@@ -26,26 +27,16 @@ class MetricsCollector:
         Args:
             registry: Optional custom registry. If not provided, creates a new one.
         """
-        self.registry = registry or CollectorRegistry()
+        self.registry = registry or REGISTRY
         self._init_metrics()
 
     def _init_metrics(self):
-        """Initialize all Prometheus metrics"""
-        # Request metrics
-        self.http_requests_total = Counter(
-            "http_requests_total",
-            "Total HTTP requests",
-            ["method", "endpoint", "status"],
-            registry=self.registry,
-        )
+        """Initialize all Prometheus metrics.
 
-        self.http_request_duration_seconds = Histogram(
-            "http_request_duration_seconds",
-            "HTTP request latency in seconds",
-            ["method", "endpoint"],
-            registry=self.registry,
-        )
-
+        Note: HTTP request metrics (http_requests_total, http_request_duration_seconds)
+        are handled by prometheus_fastapi_instrumentator on the default registry.
+        We skip them here to avoid duplicate metric registration.
+        """
         # Review metrics
         self.review_total = Counter(
             "review_total",
@@ -292,30 +283,6 @@ class MetricsCollector:
         )
 
         logger.info("Initialized all Prometheus metrics")
-
-    def increment_http_request(self, method: str, endpoint: str, status: int) -> None:
-        """
-        Increment HTTP request counter
-
-        Args:
-            method: HTTP method (GET, POST, etc.)
-            endpoint: API endpoint
-            status: HTTP status code
-        """
-        self.http_requests_total.labels(method=method, endpoint=endpoint, status=status).inc()
-
-    def observe_http_request_duration(self, method: str, endpoint: str, duration: float) -> None:
-        """
-        Observe HTTP request duration
-
-        Args:
-            method: HTTP method
-            endpoint: API endpoint
-            duration: Request duration in seconds
-        """
-        self.http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(
-            duration
-        )
 
     def increment_review(self, project: str, reviewer: str, status: str = "open") -> None:
         """
@@ -755,13 +722,7 @@ class OperationTimer:
         if self.start_time:
             duration = time.time() - self.start_time
 
-            if self.operation_type == "http_request":
-                self.metrics.observe_http_request_duration(
-                    method=self.labels.get("method", "unknown"),
-                    endpoint=self.labels.get("endpoint", "unknown"),
-                    duration=duration,
-                )
-            elif self.operation_type == "db_query":
+            if self.operation_type == "db_query":
                 self.metrics.observe_db_query_duration(
                     operation=self.labels.get("operation", "unknown"), duration=duration
                 )

@@ -26,17 +26,13 @@ from src.core.middleware import (
 from src.services.rbac_service import RBACService
 from src.utils.i18n import i18n
 from src.utils.log import get_logger, setup_logging
-from src.utils.metrics import MetricsCollector
+from src.utils.metrics import metrics as metrics_collector
 from src.utils.redis import close_redis, init_redis
 
 
 # Configure logging system
 setup_logging()
 logger = get_logger(__name__)
-
-
-# Initialize metrics collector
-metrics_collector = MetricsCollector()
 
 # Background task management
 background_tasks: list[asyncio.Task] = []

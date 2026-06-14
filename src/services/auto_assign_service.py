@@ -21,7 +21,7 @@ from src.models.user import User
 from src.schemas.notification import NotificationCreate
 from src.schemas.pull_request import ReviewCreate
 from src.services.notification_service import NotificationService
-from src.utils.metrics import MetricsCollector
+from src.utils.metrics import MetricsCollector, metrics
 from src.utils.timezone import get_current_time
 
 
@@ -36,7 +36,7 @@ class AutoTaskAssignmentService:
     """Service for evaluating auto-assignment rules and creating assignments"""
 
     def __init__(self, metrics_collector: MetricsCollector | None = None):
-        self.metrics = metrics_collector or MetricsCollector()
+        self.metrics = metrics_collector or metrics
         self._notification_service: NotificationService | None = None
 
     @property

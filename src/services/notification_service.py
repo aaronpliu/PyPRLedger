@@ -17,6 +17,7 @@ from src.schemas.notification import (
     NotificationResponse,
     NotificationStats,
 )
+from src.utils import metrics as metrics_module
 from src.utils.metrics import MetricsCollector
 from src.utils.redis import get_redis_client
 
@@ -28,7 +29,7 @@ class NotificationService:
     """Service for managing notifications and preferences"""
 
     def __init__(self, metrics: MetricsCollector | None = None):
-        self.metrics = metrics or MetricsCollector()
+        self.metrics = metrics or metrics_module.metrics
         self.redis_client = get_redis_client()
 
     async def create_notification(

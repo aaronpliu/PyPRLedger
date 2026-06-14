@@ -29,17 +29,13 @@ services:
       - PROMETHEUS_RETENTION_SIZE=${PROMETHEUS_RETENTION_SIZE:-10GB}
       - PRLEDGER_SCRAPE_TARGET=${PRLEDGER_SCRAPE_TARGET:-api:8000}
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Template config — entrypoint substitutes PRLEDGER_SCRAPE_TARGET
+      - ./prometheus/prometheus.template.yml:/etc/prometheus/prometheus.template.yml:ro
+      # Entrypoint script generates the final prometheus.yml
+      - ./prometheus/entrypoint.sh:/entrypoint.sh:ro
       - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-15d}'
-      - '--storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-10GB}'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle'
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "-O-", "http://localhost:9090/-/ready"]

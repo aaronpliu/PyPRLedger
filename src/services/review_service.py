@@ -37,7 +37,7 @@ from src.services.entity_sync_service import EntitySyncService
 from src.services.project_registry_service import ProjectRegistryService
 from src.services.review_score_service import ReviewScoreService
 from src.utils.ai_review_utils import generate_ai_review_id
-from src.utils.metrics import MetricsCollector
+from src.utils.metrics import MetricsCollector, metrics
 from src.utils.redis import get_redis_client
 from src.utils.timezone import get_current_time, utc_to_local
 
@@ -51,7 +51,7 @@ class ReviewService:
     def __init__(self, metrics_collector: MetricsCollector | None = None):
         """Initialize the review service"""
         self.redis_client = get_redis_client()
-        self.metrics = metrics_collector or MetricsCollector()
+        self.metrics = metrics_collector or metrics
 
     @staticmethod
     def _get_cache_key(project_key: str, repository_slug: str, pull_request_id: str) -> str:
