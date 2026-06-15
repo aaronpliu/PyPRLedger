@@ -518,6 +518,11 @@ class ProjectService:
             total_reviews=total_reviews,
         )
 
+        # Update metrics
+        self.metrics.set_projects_total(total_projects)
+        self.metrics.set_projects_active(active_projects)
+        self.metrics.set_repositories_total(total_repositories)
+
         # Cache the result
         if use_cache:
             try:

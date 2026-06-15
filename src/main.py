@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import psutil
 from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -81,6 +82,43 @@ async def delegation_status_cleanup_task():
         await asyncio.sleep(cleanup_interval)
 
 
+async def system_metrics_collection_task():
+    """Background task to collect system metrics (CPU, memory, disk) every 60s."""
+    logger = get_logger(__name__)
+    interval = 60
+
+    while True:
+        try:
+            # CPU
+            cpu_percent = psutil.cpu_percent(interval=1)
+            metrics_collector.set_cpu_usage(cpu_percent)
+
+            # Memory
+            mem = psutil.virtual_memory()
+            metrics_collector.set_memory_usage(mem.used)
+            metrics_collector.set_memory_available(mem.available)
+
+            # Disk
+            disk = psutil.disk_usage("/")
+            metrics_collector.set_disk_usage("/", disk.used)
+            metrics_collector.set_disk_available("/", disk.free)
+
+            logger.debug(
+                "System metrics collected",
+                extra={
+                    "cpu_percent": cpu_percent,
+                    "memory_used": mem.used,
+                    "memory_available": mem.available,
+                    "disk_used": disk.used,
+                    "disk_free": disk.free,
+                },
+            )
+        except Exception as e:
+            logger.warning(f"Failed to collect system metrics: {e}", exc_info=True)
+
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
     """Application lifecycle management"""
@@ -95,6 +133,9 @@ async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
     delegation_cleanup = asyncio.create_task(delegation_status_cleanup_task())
     background_tasks.append(delegation_cleanup)
     logger.info("Background delegation cleanup task started (interval: 5 minutes)")
+    system_metrics = asyncio.create_task(system_metrics_collection_task())
+    background_tasks.append(system_metrics)
+    logger.info("System metrics collection task started (interval: 60 seconds)")
 
     logger.info("Application started successfully")
 

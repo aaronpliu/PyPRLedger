@@ -568,6 +568,12 @@ class UserService:
             active_reviewers=active_reviewers,
         )
 
+        # Update metrics
+        self.metrics.set_users_total(total_users)
+        self.metrics.set_users_active(active_users)
+        self.metrics.set_reviewers_total(total_reviewers)
+        self.metrics.set_reviewers_active(active_reviewers)
+
         # Cache the result
         if use_cache:
             try:

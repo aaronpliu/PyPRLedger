@@ -10,6 +10,7 @@ from starlette.types import ASGIApp
 
 from src.core.config import settings
 from src.core.exceptions import RateLimitException
+from src.utils.metrics import metrics
 from src.utils.redis import get_redis_client
 
 
@@ -80,6 +81,12 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             # Calculate processing time
             process_time = time.time() - start_time
 
+            # Track error metric
+            metrics.increment_error(
+                error_type=type(exc).__name__,
+                endpoint=request.url.path,
+            )
+
             # Record exception
             logger.error(
                 f"Request failed: {request.method} {request.url.path} - Error: {str(exc)}",
@@ -149,6 +156,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                         "period_seconds": self.period_seconds,
                     },
                 )
+                metrics.increment_rate_limit_error(endpoint=request.url.path)
                 raise RateLimitException(
                     message=f"Rate limit exceeded. Maximum {self.max_requests} requests per {self.period_seconds} seconds"
                 )

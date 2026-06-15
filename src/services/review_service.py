@@ -494,7 +494,11 @@ class ReviewService:
             review_data=review_dict,
         )
 
-        # Update metrics (only if reviewer is set)
+        # Update metrics
+        self.metrics.increment_pull_request(
+            project=str(project.project_key),
+            status=review_data.pull_request_status or "open",
+        )
         if reviewer:
             self.metrics.increment_review(
                 project=str(project.project_key), reviewer=str(reviewer.username)
@@ -604,7 +608,11 @@ class ReviewService:
                     review_data=review_dict,
                 )
 
-                # Update metrics (only if reviewer is set)
+                # Update metrics
+                self.metrics.increment_pull_request(
+                    project=str(project.project_key),
+                    status=review_data.pull_request_status or "open",
+                )
                 if reviewer:
                     self.metrics.increment_review(
                         project=str(project.project_key), reviewer=str(reviewer.username)
