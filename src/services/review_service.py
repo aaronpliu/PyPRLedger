@@ -389,6 +389,44 @@ class ReviewService:
     ) -> ReviewResponse:
         return ReviewResponse(**ReviewService._serialize_review(base, assignment))
 
+    async def _count_open_prs(self, db: AsyncSession, project_key: str) -> int:
+        """Count total distinct pull requests for a project (all PR event types)."""
+        result = await db.execute(
+            select(
+                func.count(
+                    func.distinct(
+                        PullRequestReviewBase.project_key,
+                        PullRequestReviewBase.pull_request_id,
+                        PullRequestReviewBase.repository_slug,
+                    )
+                )
+            ).where(PullRequestReviewBase.project_key == project_key)
+        )
+        return result.scalar() or 0
+
+    async def _count_pending_reviews(self, db: AsyncSession, project_key: str) -> int:
+        """Count distinct PRs without any reviewer assigned (all PR event types)."""
+        result = await db.execute(
+            select(
+                func.count(
+                    func.distinct(
+                        PullRequestReviewBase.project_key,
+                        PullRequestReviewBase.pull_request_id,
+                        PullRequestReviewBase.repository_slug,
+                    )
+                )
+            )
+            .outerjoin(
+                PullRequestReviewAssignment,
+                PullRequestReviewBase.id == PullRequestReviewAssignment.review_base_id,
+            )
+            .where(
+                PullRequestReviewBase.project_key == project_key,
+                PullRequestReviewAssignment.id.is_(None),
+            )
+        )
+        return result.scalar() or 0
+
     async def create_review(
         self, review_data: ReviewCreate, db: AsyncSession, include_details: bool = False
     ) -> ReviewResponse:
@@ -503,6 +541,16 @@ class ReviewService:
             self.metrics.increment_review(
                 project=str(project.project_key), reviewer=str(reviewer.username)
             )
+
+        # Update open PR count and backlog
+        try:
+            project_key_str = str(project.project_key)
+            open_count = await self._count_open_prs(db, project_key_str)
+            self.metrics.set_pull_requests_open(open_count, project=project_key_str)
+            backlog_count = await self._count_pending_reviews(db, project_key_str)
+            self.metrics.set_review_backlog(backlog_count, project=project_key_str)
+        except Exception as e:
+            logger.warning(f"Failed to update PR metrics: {e}")
 
         logger.info(f"Created new review: {new_base.pull_request_id}")
         return ReviewResponse(**review_dict)

@@ -24,7 +24,9 @@ from src.core.middleware import (
     LoggingMiddleware,
     RateLimitMiddleware,
 )
+from src.services.project_service import ProjectService
 from src.services.rbac_service import RBACService
+from src.services.user_service import UserService
 from src.utils.i18n import i18n
 from src.utils.log import get_logger, setup_logging
 from src.utils.metrics import metrics as metrics_collector
@@ -127,6 +129,17 @@ async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
     await init_db()
     await init_redis()
     metrics_collector.startup()
+
+    # Initialize metrics with real values from database
+    try:
+        async with get_db_context() as db:
+            user_service = UserService()
+            project_service = ProjectService()
+            await user_service.get_user_statistics(db, use_cache=False)
+            await project_service.get_project_statistics(db, use_cache=False)
+        logger.info("Initial metrics loaded from database")
+    except Exception as e:
+        logger.warning(f"Failed to initialize metrics from database: {e}")
 
     # Start background tasks
     logger.info("Starting background tasks...")

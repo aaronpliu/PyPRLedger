@@ -1,7 +1,7 @@
 ## 1. Pull Request metrics in review_service
 
 - [x] 1.1 Add `increment_pull_request()` call in `create_review()` (review_service.py) after review is saved (also in upsert_review)
-- [ ] ~~1.2 Add `set_pull_requests_open()` call — requires additional DB query, defer~~ — Deferred: needs a full count query per project
+- [x] 1.2 Add `set_pull_requests_open()` and `set_review_backlog()` with `_count_open_prs()` and `_count_pending_reviews()` helpers
 - [ ] ~~1.3 Add `observe_review_duration()` call — wrapped with timing~~ — Deferred: needs OperationTimer integration
 - [ ] ~~1.4 Add `increment_files_reviewed()` and `increment_lines_changed()` calls — complex, needs git diff parsing~~ — Deferred: no file count data in schema
 - [ ] ~~1.5 Add `set_review_backlog()` call — complex DB query~~ — Deferred: significant query overhead
@@ -36,6 +36,7 @@
 
 - [x] 6.1 Add `set_users_total()`, `set_users_active()`, `set_reviewers_total()`, `set_reviewers_active()` in `user_service.py`
 - [x] 6.2 Add `set_projects_total()`, `set_projects_active()`, `set_repositories_total()` in `project_service.py`
+- [x] 6.3 Add initial stats query in lifespan (main.py) to populate user/project metrics with real DB values at startup
 
 ## 7. Verify
 
