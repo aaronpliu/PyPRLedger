@@ -683,11 +683,47 @@ class MetricsCollector:
     def startup(self) -> None:
         """Initialize metrics on application startup"""
         logger.info("Starting metrics collection")
-        # Initialize counters to 0 if needed
+
+        # Initialize all Gauge metrics to 0 so they appear in
+        # generate_latest() output immediately. prometheus_client
+        # silently omits metrics with no values set.
+
+        # User metrics
         self.users_total.set(0)
+        self.users_active.set(0)
         self.reviewers_total.set(0)
+        self.reviewers_active.set(0)
+
+        # Project metrics
         self.projects_total.set(0)
+        self.projects_active.set(0)
+
+        # Repository metrics
         self.repositories_total.set(0)
+
+        # Pull Request metrics (labeled gauges use sentinel defaults)
+        self.pull_requests_open.labels(project="all").set(0)
+        self.pull_requests_merged.labels(project="all").set(0)
+
+        # Review backlog & load
+        self.review_backlog_count.labels(project="all").set(0)
+        self.reviewers_load.labels(project="all").set(0)
+
+        # Active reviewers
+        self.active_reviewers.labels(project="all").set(0)
+
+        # Database metrics
+        self.db_connections_active.set(0)
+
+        # System metrics
+        self.system_cpu_usage_percent.set(0)
+        self.system_memory_usage_bytes.set(0)
+        self.system_memory_available_bytes.set(0)
+        self.system_disk_usage_bytes.labels(path="/").set(0)
+        self.system_disk_available_bytes.labels(path="/").set(0)
+
+        # SSE metrics
+        self.sse_connections_active.set(0)
 
     def shutdown(self) -> None:
         """Cleanup metrics on application shutdown"""
