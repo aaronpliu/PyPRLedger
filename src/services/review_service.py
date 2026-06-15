@@ -391,30 +391,28 @@ class ReviewService:
 
     async def _count_open_prs(self, db: AsyncSession, project_key: str) -> int:
         """Count total distinct pull requests for a project (all PR event types)."""
-        result = await db.execute(
+        # Use subquery with DISTINCT (supports multiple columns)
+        distinct_prs = (
             select(
-                func.count(
-                    func.distinct(
-                        PullRequestReviewBase.project_key,
-                        PullRequestReviewBase.pull_request_id,
-                        PullRequestReviewBase.repository_slug,
-                    )
-                )
-            ).where(PullRequestReviewBase.project_key == project_key)
+                PullRequestReviewBase.project_key,
+                PullRequestReviewBase.pull_request_id,
+                PullRequestReviewBase.repository_slug,
+            )
+            .where(PullRequestReviewBase.project_key == project_key)
+            .distinct()
+            .subquery()
         )
+        result = await db.execute(select(func.count()).select_from(distinct_prs))
         return result.scalar() or 0
 
     async def _count_pending_reviews(self, db: AsyncSession, project_key: str) -> int:
         """Count distinct PRs without any reviewer assigned (all PR event types)."""
-        result = await db.execute(
+        # Use subquery with DISTINCT for multi-column uniqueness
+        distinct_prs = (
             select(
-                func.count(
-                    func.distinct(
-                        PullRequestReviewBase.project_key,
-                        PullRequestReviewBase.pull_request_id,
-                        PullRequestReviewBase.repository_slug,
-                    )
-                )
+                PullRequestReviewBase.project_key,
+                PullRequestReviewBase.pull_request_id,
+                PullRequestReviewBase.repository_slug,
             )
             .outerjoin(
                 PullRequestReviewAssignment,
@@ -424,7 +422,10 @@ class ReviewService:
                 PullRequestReviewBase.project_key == project_key,
                 PullRequestReviewAssignment.id.is_(None),
             )
+            .distinct()
+            .subquery()
         )
+        result = await db.execute(select(func.count()).select_from(distinct_prs))
         return result.scalar() or 0
 
     async def create_review(
