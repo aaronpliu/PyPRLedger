@@ -5,6 +5,21 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.2] - 2026-06-15
+
+**Backend Version**: 1.17.2
+**Frontend Version**: 1.12.1
+
+### Fixed
+- Wired all MetricsCollector gauges to service/endpoint code (user stats, project stats, PR counts, backlog)
+- Added system metrics collection background task (CPU, memory, disk via psutil every 60s)
+- Added error tracking in middleware (errors_total on exceptions, rate limit errors)
+- Fixed PR count queries: now counts distinct PRs correctly across all status types
+- Initialized user/project/PR metrics with real database values at startup
+- Fixed SQL incompatibility in `func.distinct()` for multi-column distinct counts
+
+---
+
 ## [1.17.1] - 2026-06-14
 
 **Backend Version**: 1.17.1
