@@ -37,7 +37,7 @@ from src.services.entity_sync_service import EntitySyncService
 from src.services.project_registry_service import ProjectRegistryService
 from src.services.review_score_service import ReviewScoreService
 from src.utils.ai_review_utils import generate_ai_review_id
-from src.utils.metrics import MetricsCollector
+from src.utils.metrics import MetricsCollector, metrics
 from src.utils.redis import get_redis_client
 from src.utils.timezone import get_current_time, utc_to_local
 
@@ -51,7 +51,7 @@ class ReviewService:
     def __init__(self, metrics_collector: MetricsCollector | None = None):
         """Initialize the review service"""
         self.redis_client = get_redis_client()
-        self.metrics = metrics_collector or MetricsCollector()
+        self.metrics = metrics_collector or metrics
 
     @staticmethod
     def _get_cache_key(project_key: str, repository_slug: str, pull_request_id: str) -> str:
@@ -389,6 +389,45 @@ class ReviewService:
     ) -> ReviewResponse:
         return ReviewResponse(**ReviewService._serialize_review(base, assignment))
 
+    async def _count_open_prs(self, db: AsyncSession, project_key: str) -> int:
+        """Count total distinct pull requests for a project (all PR event types)."""
+        # Use subquery with DISTINCT (supports multiple columns)
+        distinct_prs = (
+            select(
+                PullRequestReviewBase.project_key,
+                PullRequestReviewBase.pull_request_id,
+                PullRequestReviewBase.repository_slug,
+            )
+            .where(PullRequestReviewBase.project_key == project_key)
+            .distinct()
+            .subquery()
+        )
+        result = await db.execute(select(func.count()).select_from(distinct_prs))
+        return result.scalar() or 0
+
+    async def _count_pending_reviews(self, db: AsyncSession, project_key: str) -> int:
+        """Count distinct PRs without any reviewer assigned (all PR event types)."""
+        # Use subquery with DISTINCT for multi-column uniqueness
+        distinct_prs = (
+            select(
+                PullRequestReviewBase.project_key,
+                PullRequestReviewBase.pull_request_id,
+                PullRequestReviewBase.repository_slug,
+            )
+            .outerjoin(
+                PullRequestReviewAssignment,
+                PullRequestReviewBase.id == PullRequestReviewAssignment.review_base_id,
+            )
+            .where(
+                PullRequestReviewBase.project_key == project_key,
+                PullRequestReviewAssignment.id.is_(None),
+            )
+            .distinct()
+            .subquery()
+        )
+        result = await db.execute(select(func.count()).select_from(distinct_prs))
+        return result.scalar() or 0
+
     async def create_review(
         self, review_data: ReviewCreate, db: AsyncSession, include_details: bool = False
     ) -> ReviewResponse:
@@ -494,11 +533,25 @@ class ReviewService:
             review_data=review_dict,
         )
 
-        # Update metrics (only if reviewer is set)
+        # Update metrics
+        self.metrics.increment_pull_request(
+            project=str(project.project_key),
+            status=review_data.pull_request_status or "open",
+        )
         if reviewer:
             self.metrics.increment_review(
                 project=str(project.project_key), reviewer=str(reviewer.username)
             )
+
+        # Update open PR count and backlog
+        try:
+            project_key_str = str(project.project_key)
+            open_count = await self._count_open_prs(db, project_key_str)
+            self.metrics.set_pull_requests_open(open_count, project=project_key_str)
+            backlog_count = await self._count_pending_reviews(db, project_key_str)
+            self.metrics.set_review_backlog(backlog_count, project=project_key_str)
+        except Exception as e:
+            logger.warning(f"Failed to update PR metrics: {e}")
 
         logger.info(f"Created new review: {new_base.pull_request_id}")
         return ReviewResponse(**review_dict)
@@ -604,7 +657,11 @@ class ReviewService:
                     review_data=review_dict,
                 )
 
-                # Update metrics (only if reviewer is set)
+                # Update metrics
+                self.metrics.increment_pull_request(
+                    project=str(project.project_key),
+                    status=review_data.pull_request_status or "open",
+                )
                 if reviewer:
                     self.metrics.increment_review(
                         project=str(project.project_key), reviewer=str(reviewer.username)

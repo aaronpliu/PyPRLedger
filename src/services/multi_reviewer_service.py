@@ -27,7 +27,7 @@ from src.schemas.review import (
 )
 from src.services.notification_service import NotificationService
 from src.services.project_registry_service import ProjectRegistryService
-from src.utils.metrics import MetricsCollector
+from src.utils.metrics import MetricsCollector, metrics
 from src.utils.timezone import get_current_time
 
 
@@ -38,7 +38,7 @@ class MultiReviewerService:
     """Service for managing reviews with multiple reviewers"""
 
     def __init__(self, metrics_collector: MetricsCollector | None = None):
-        self.metrics = metrics_collector or MetricsCollector()
+        self.metrics = metrics_collector or metrics
         self._notification_service: NotificationService | None = None
 
     @property

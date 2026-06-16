@@ -217,14 +217,27 @@
     },
     {
       "id": 13,
-      "title": "Open PRs & Backlog",
+      "title": "Total PRs",
       "type": "stat",
-      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 22 },
+      "gridPos": { "h": 4, "w": 4, "x": 18, "y": 22 },
       "targets": [
         {
           "expr": "sum(pull_requests_open)",
-          "legendFormat": "Open PRs"
-        },
+          "legendFormat": "Total PRs"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "vertical", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "id": 14,
+      "title": "Backlog (Unassigned)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 22, "y": 22 },
+      "targets": [
         {
           "expr": "review_backlog_count",
           "legendFormat": "Backlog"
@@ -232,17 +245,39 @@
       ],
       "fieldConfig": {
         "defaults": { "unit": "none" },
-        "overrides": [
-          { "matcher": { "id": "byName", "options": "Backlog" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF9830" } }] }
-        ]
+        "overrides": []
       },
       "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "orientation": "vertical", "reduceOptions": { "calcs": ["lastNotNull"], "values": false } }
+    },
+    {
+      "id": 15,
+      "title": "PRs by Status",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 8, "x": 18, "y": 26 },
+      "targets": [
+        {
+          "expr": "sum(pull_requests_total) by (status)",
+          "legendFormat": "{{ status }}",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "none" },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "showValue": "auto",
+        "legend": { "showLegend": true, "placement": "right" },
+        "barWidth": 0.8,
+        "groupWidth": 50
+      }
     },
     {
       "id": 20,
       "title": "CPU Usage",
       "type": "timeseries",
-      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 28 },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 34 },
       "targets": [
         {
           "expr": "system_cpu_usage_percent",
@@ -268,7 +303,7 @@
       "id": 21,
       "title": "Memory Usage",
       "type": "timeseries",
-      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 28 },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 34 },
       "targets": [
         {
           "expr": "system_memory_usage_bytes",
@@ -291,7 +326,7 @@
       "id": 22,
       "title": "Disk Usage",
       "type": "timeseries",
-      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 28 },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 34 },
       "targets": [
         {
           "expr": "system_disk_usage_bytes",

@@ -37,9 +37,9 @@ class ReviewScoreService:
 
     def __init__(self, metrics_collector: Any | None = None):
         self.redis_client = get_redis_client()
-        from src.utils.metrics import MetricsCollector
+        from src.utils.metrics import metrics
 
-        self.metrics = metrics_collector or MetricsCollector()
+        self.metrics = metrics_collector or metrics
 
     async def upsert_score(
         self,
