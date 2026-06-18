@@ -5,6 +5,7 @@ from typing import Any
 from redis.asyncio import ConnectionPool, Redis
 
 from src.core.config import settings
+from src.utils.metrics import metrics
 
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,7 @@ class RedisCache:
             return await self.client.get(key)
         except Exception as e:
             logger.warning(f"Redis GET failed for key {key}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return None
 
     async def get_json(self, key: str) -> dict[str, Any] | None:
@@ -143,6 +145,7 @@ class RedisCache:
                 return json.loads(value)
             except json.JSONDecodeError:
                 logger.warning(f"Failed to parse JSON for key {key}")
+                metrics.increment_cache_error(cache_type="redis", error_type="JSONDecodeError")
         return None
 
     async def set(self, key: str, value: str, expire: int | None = None) -> bool:
@@ -164,6 +167,7 @@ class RedisCache:
                 return await self.client.set(key, value)
         except Exception as e:
             logger.warning(f"Redis SET failed for key {key}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return False
 
     async def set_json(self, key: str, value: dict[str, Any], expire: int | None = None) -> bool:
@@ -183,6 +187,7 @@ class RedisCache:
             return await self.set(key, json_value, expire)
         except Exception as e:
             logger.warning(f"Redis SET JSON failed for key {key}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return False
 
     async def delete(self, *keys: str) -> int:
@@ -199,6 +204,7 @@ class RedisCache:
             return await self.client.delete(*keys)
         except Exception as e:
             logger.warning(f"Redis DELETE failed for keys {keys}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return 0
 
     async def exists(self, key: str) -> bool:
@@ -215,6 +221,7 @@ class RedisCache:
             return await self.client.exists(key) > 0
         except Exception as e:
             logger.warning(f"Redis EXISTS failed for key {key}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return False
 
     async def expire(self, key: str, seconds: int) -> bool:
@@ -232,6 +239,7 @@ class RedisCache:
             return await self.client.expire(key, seconds)
         except Exception as e:
             logger.warning(f"Redis EXPIRE failed for key {key}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return False
 
     async def ttl(self, key: str) -> int:
@@ -249,6 +257,7 @@ class RedisCache:
             return await self.client.ttl(key)
         except Exception as e:
             logger.warning(f"Redis TTL failed for key {key}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return -2
 
     async def incr(self, key: str) -> int:
@@ -265,6 +274,7 @@ class RedisCache:
             return await self.client.incr(key)
         except Exception as e:
             logger.warning(f"Redis INCR failed for key {key}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return 0
 
     async def decr(self, key: str) -> int:
@@ -281,6 +291,7 @@ class RedisCache:
             return await self.client.decr(key)
         except Exception as e:
             logger.warning(f"Redis DECR failed for key {key}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return 0
 
     async def keys(self, pattern: str) -> list[str]:
@@ -297,6 +308,7 @@ class RedisCache:
             return await self.client.keys(pattern)
         except Exception as e:
             logger.warning(f"Redis KEYS failed for pattern {pattern}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return []
 
     async def hget(self, name: str, key: str) -> str | None:
@@ -314,6 +326,7 @@ class RedisCache:
             return await self.client.hget(name, key)
         except Exception as e:
             logger.warning(f"Redis HGET failed for {name}.{key}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return None
 
     async def hset(self, name: str, key: str, value: str) -> bool:
@@ -332,6 +345,7 @@ class RedisCache:
             return await self.client.hset(name, key, value) > 0
         except Exception as e:
             logger.warning(f"Redis HSET failed for {name}.{key}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return False
 
     async def hgetall(self, name: str) -> dict[str, str]:
@@ -348,6 +362,7 @@ class RedisCache:
             return await self.client.hgetall(name)
         except Exception as e:
             logger.warning(f"Redis HGETALL failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return {}
 
     async def hdel(self, name: str, *keys: str) -> int:
@@ -365,6 +380,7 @@ class RedisCache:
             return await self.client.hdel(name, *keys)
         except Exception as e:
             logger.warning(f"Redis HDEL failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return 0
 
     async def lpush(self, name: str, *values: str) -> int:
@@ -382,6 +398,7 @@ class RedisCache:
             return await self.client.lpush(name, *values)
         except Exception as e:
             logger.warning(f"Redis LPUSH failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return 0
 
     async def rpush(self, name: str, *values: str) -> int:
@@ -399,6 +416,7 @@ class RedisCache:
             return await self.client.rpush(name, *values)
         except Exception as e:
             logger.warning(f"Redis RPUSH failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return 0
 
     async def lpop(self, name: str) -> str | None:
@@ -415,6 +433,7 @@ class RedisCache:
             return await self.client.lpop(name)
         except Exception as e:
             logger.warning(f"Redis LPOP failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return None
 
     async def rpop(self, name: str) -> str | None:
@@ -431,6 +450,7 @@ class RedisCache:
             return await self.client.rpop(name)
         except Exception as e:
             logger.warning(f"Redis RPOP failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return None
 
     async def llen(self, name: str) -> int:
@@ -447,6 +467,7 @@ class RedisCache:
             return await self.client.llen(name)
         except Exception as e:
             logger.warning(f"Redis LLEN failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return 0
 
     async def lrange(self, name: str, start: int = 0, end: int = -1) -> list[str]:
@@ -465,6 +486,7 @@ class RedisCache:
             return await self.client.lrange(name, start, end)
         except Exception as e:
             logger.warning(f"Redis LRANGE failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return []
 
     async def zadd(self, name: str, mapping: dict[str, float]) -> int:
@@ -482,6 +504,7 @@ class RedisCache:
             return await self.client.zadd(name, mapping)
         except Exception as e:
             logger.warning(f"Redis ZADD failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return 0
 
     async def zrem(self, name: str, *values: str) -> int:
@@ -499,6 +522,7 @@ class RedisCache:
             return await self.client.zrem(name, *values)
         except Exception as e:
             logger.warning(f"Redis ZREM failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return 0
 
     async def zrange(
@@ -521,6 +545,7 @@ class RedisCache:
             return await self.client.zrange(name, start, end, desc=desc, withscores=withscores)
         except Exception as e:
             logger.warning(f"Redis ZRANGE failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return []
 
     async def zrank(self, name: str, value: str) -> int | None:
@@ -538,6 +563,7 @@ class RedisCache:
             return await self.client.zrank(name, value)
         except Exception as e:
             logger.warning(f"Redis ZRANK failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return None
 
     async def zscore(self, name: str, value: str) -> float | None:
@@ -555,6 +581,7 @@ class RedisCache:
             return await self.client.zscore(name, value)
         except Exception as e:
             logger.warning(f"Redis ZSCORE failed for {name}: {str(e)}")
+            metrics.increment_cache_error(cache_type="redis", error_type=type(e).__name__)
             return None
 
 

@@ -77,6 +77,34 @@ class ReviewService:
         filter_str = ":".join(f"{k}={v}" for k, v in sorted(filters.items()) if v is not None)
         return f"reviews:list:{filter_str}:{page}:{page_size}"
 
+    @staticmethod
+    def _count_diff_lines(diff_text: str | None) -> tuple[int, int]:
+        """
+        Count added and deleted lines from a git diff.
+
+        Counts lines starting with ``+`` (but not ``+++``) as additions,
+        and lines starting with ``-`` (but not ``---``) as deletions.
+
+        Args:
+            diff_text: Raw git diff content, or None.
+
+        Returns:
+            Tuple of (added_lines, deleted_lines).
+        """
+        if not diff_text:
+            return 0, 0
+
+        added = 0
+        deleted = 0
+        for line in diff_text.splitlines():
+            if line.startswith("+++") or line.startswith("---") or line.startswith("@@"):
+                continue
+            if line.startswith("+"):
+                added += 1
+            elif line.startswith("-"):
+                deleted += 1
+        return added, deleted
+
     async def _get_review_from_cache(
         self, project_key: str, repository_slug: str, pull_request_id: str
     ) -> dict[str, Any] | None:
@@ -428,6 +456,22 @@ class ReviewService:
         result = await db.execute(select(func.count()).select_from(distinct_prs))
         return result.scalar() or 0
 
+    async def _count_active_reviewers(self, db: AsyncSession, project_key: str) -> int:
+        """Count distinct reviewers with active assignments for a project."""
+        # Use subquery to get distinct reviewers from assignments
+        distinct_reviewers = (
+            select(PullRequestReviewAssignment.reviewer)
+            .join(
+                PullRequestReviewBase,
+                PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
+            )
+            .where(PullRequestReviewBase.project_key == project_key)
+            .distinct()
+            .subquery()
+        )
+        result = await db.execute(select(func.count()).select_from(distinct_reviewers))
+        return result.scalar() or 0
+
     async def create_review(
         self, review_data: ReviewCreate, db: AsyncSession, include_details: bool = False
     ) -> ReviewResponse:
@@ -543,6 +587,16 @@ class ReviewService:
                 project=str(project.project_key), reviewer=str(reviewer.username)
             )
 
+        # Track review detail metrics
+        project_key_str = str(project.project_key)
+        if review_data.source_filename:
+            self.metrics.increment_files_reviewed(project=project_key_str)
+        added, deleted = self._count_diff_lines(review_data.git_code_diff)
+        if added > 0:
+            self.metrics.increment_lines_changed(project=project_key_str, change_type="added")
+        if deleted > 0:
+            self.metrics.increment_lines_changed(project=project_key_str, change_type="deleted")
+
         # Update open PR count and backlog
         try:
             project_key_str = str(project.project_key)
@@ -550,6 +604,9 @@ class ReviewService:
             self.metrics.set_pull_requests_open(open_count, project=project_key_str)
             backlog_count = await self._count_pending_reviews(db, project_key_str)
             self.metrics.set_review_backlog(backlog_count, project=project_key_str)
+            active_reviewers_count = await self._count_active_reviewers(db, project_key_str)
+            reviewers_load = backlog_count / max(active_reviewers_count, 1)
+            self.metrics.set_reviewers_load(reviewers_load, project=project_key_str)
         except Exception as e:
             logger.warning(f"Failed to update PR metrics: {e}")
 
@@ -665,6 +722,20 @@ class ReviewService:
                 if reviewer:
                     self.metrics.increment_review(
                         project=str(project.project_key), reviewer=str(reviewer.username)
+                    )
+
+                # Track review detail metrics
+                up_project_key_str = str(project.project_key)
+                if review_data.source_filename:
+                    self.metrics.increment_files_reviewed(project=up_project_key_str)
+                added, deleted = self._count_diff_lines(review_data.git_code_diff)
+                if added > 0:
+                    self.metrics.increment_lines_changed(
+                        project=up_project_key_str, change_type="added"
+                    )
+                if deleted > 0:
+                    self.metrics.increment_lines_changed(
+                        project=up_project_key_str, change_type="deleted"
                     )
 
                 logger.info(f"Updated review: {existing_base.pull_request_id}")
@@ -1711,10 +1782,17 @@ class ReviewService:
                 target_status=new_status,
             )
 
+        old_status = base.pull_request_status
         base.pull_request_status = new_status
         base.updated_date = get_current_time()
         await db.flush()
         await db.commit()
+
+        # Track merge metrics
+        if new_status == "merged" and old_status != "merged":
+            prj_key = str(base.project_key)
+            self.metrics.set_pull_requests_merged(1, project=prj_key)
+            # observe_pr_merge_time would go here if PR creation timestamp were available
 
         await self._invalidate_review_cache(
             str(base.project_key), str(base.repository_slug), pull_request_id
