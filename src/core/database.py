@@ -1,8 +1,10 @@
 import logging
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import (
@@ -15,6 +17,7 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 
 from src.core.config import settings
+from src.utils.metrics import metrics
 
 
 logger = logging.getLogger(__name__)
@@ -30,6 +33,148 @@ _async_session_maker: async_sessionmaker | None = None
 def _is_disconnected_error(e: Exception) -> bool:
     """Check if the given exception is a disconnected error"""
     return isinstance(e, DBAPIError) and bool(e.connection_invalidated)
+
+
+def _extract_operation(clause: Any) -> str:
+    """
+    Extract the SQL operation type from a SQLAlchemy clause.
+
+    Args:
+        clause: The SQLAlchemy clause statement.
+
+    Returns:
+        str: Operation type (SELECT, INSERT, UPDATE, DELETE, or unknown).
+    """
+    clause_str = str(clause).strip().upper()
+    for op in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+        if clause_str.startswith(op):
+            return op
+    return "unknown"
+
+
+def _extract_table(clause: Any) -> str:
+    """
+    Best-effort extraction of the first table name from a SQLAlchemy clause.
+
+    For simple statements, parses the FROM/JOIN/INTO clauses.
+    Falls back to 'unknown' when parsing is ambiguous.
+
+    Args:
+        clause: The SQLAlchemy clause statement.
+
+    Returns:
+        str: Table name or 'unknown'.
+    """
+    clause_str = str(clause).strip()
+    upper_str = clause_str.upper()
+
+    if upper_str.startswith("SELECT"):
+        # Look for FROM ... JOIN pattern
+        from_idx = upper_str.find("FROM ")
+        if from_idx >= 0:
+            after_from = clause_str[from_idx + 5 :].strip()
+            # Take the first identifier (before space, comma, JOIN, WHERE, etc.)
+            for delim in (" ", ",", "\n", "\t", "JOIN", "WHERE", "ORDER", "GROUP", "LIMIT"):
+                idx = _find_non_quoted(after_from, delim)
+                if idx >= 0:
+                    return after_from[:idx].strip().strip('"').strip("`")
+            return after_from.strip().strip('"').strip("`")
+    elif upper_str.startswith("INSERT"):
+        into_idx = upper_str.find("INTO ")
+        if into_idx >= 0:
+            after_into = clause_str[into_idx + 5 :].strip()
+            space_idx = _find_non_quoted(after_into, " ")
+            return (
+                after_into[:space_idx].strip().strip('"').strip("`")
+                if space_idx >= 0
+                else after_into.strip().strip('"').strip("`")
+            )
+    elif upper_str.startswith("UPDATE"):
+        # UPDATE table_name SET ...
+        after_update = clause_str[6:].strip()
+        space_idx = _find_non_quoted(after_update, " ")
+        return (
+            after_update[:space_idx].strip().strip('"').strip("`")
+            if space_idx >= 0
+            else after_update.strip().strip('"').strip("`")
+        )
+    elif upper_str.startswith("DELETE"):
+        from_idx = upper_str.find("FROM ")
+        if from_idx >= 0:
+            after_from = clause_str[from_idx + 5 :].strip()
+            space_idx = _find_non_quoted(after_from, " ")
+            return (
+                after_from[:space_idx].strip().strip('"').strip("`")
+                if space_idx >= 0
+                else after_from.strip().strip('"').strip("`")
+            )
+        # Also check for DELETE table_name WHERE ...
+        after_delete = clause_str[6:].strip()
+        space_idx = _find_non_quoted(after_delete, " ")
+        if space_idx >= 0 and after_delete[:space_idx].upper() != "FROM":
+            return after_delete[:space_idx].strip().strip('"').strip("`")
+    return "unknown"
+
+
+def _find_non_quoted(text: str, delim: str) -> int:
+    """
+    Find the first occurrence of a delimiter that is not inside quotes.
+
+    Args:
+        text: The text to search.
+        delim: The delimiter to find.
+
+    Returns:
+        int: Index of the delimiter, or -1 if not found.
+    """
+    in_quote = False
+    quote_char = None
+    for i, ch in enumerate(text):
+        if in_quote:
+            if ch == quote_char:
+                in_quote = False
+        else:
+            if ch in ('"', "`", "'"):
+                in_quote = True
+                quote_char = ch
+            elif text[i : i + len(delim)] == delim:
+                return i
+    return -1
+
+
+def _register_db_metric_listeners(engine: AsyncEngine) -> None:
+    """
+    Register SQLAlchemy event listeners on an engine to track database metrics.
+
+    Listens for ``before_execute`` / ``after_execute`` to count queries and
+    observe durations, and pool ``checkout`` to track active connections.
+
+    Args:
+        engine: The SQLAlchemy async engine to instrument.
+    """
+    sync_engine = engine.sync_engine
+
+    @event.listens_for(sync_engine, "before_execute")
+    def receive_before_execute(conn, clause, multiparams, params, execution_options):
+        conn.info["_query_start_time"] = time.monotonic()
+
+    @event.listens_for(sync_engine, "after_execute")
+    def receive_after_execute(conn, clause, multiparams, params, execution_options, result):
+        operation = _extract_operation(clause)
+        table = _extract_table(clause)
+        metrics.increment_db_query(operation=operation, table=table)
+        start_time = conn.info.pop("_query_start_time", None)
+        if start_time is not None:
+            duration = time.monotonic() - start_time
+            metrics.observe_db_query_duration(operation=operation, duration=duration)
+
+    # Pool events are only meaningful when using a connection pool (not NullPool)
+    if not isinstance(sync_engine.pool, NullPool):
+        sync_pool = sync_engine.pool
+
+        @event.listens_for(sync_pool, "checkout")
+        def receive_checkout(dbapi_conn, conn_record, conn_proxy):
+            metrics.set_db_connections_active(sync_pool.checkedin())
 
 
 def get_engine() -> AsyncEngine:
@@ -81,6 +226,7 @@ def create_engine() -> AsyncEngine:
         engine_kwargs["poolclass"] = NullPool
 
     engine = create_async_engine(settings.database_url, **engine_kwargs)
+    _register_db_metric_listeners(engine)
     return engine
 
 

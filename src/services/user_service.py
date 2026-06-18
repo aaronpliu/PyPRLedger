@@ -573,6 +573,7 @@ class UserService:
         self.metrics.set_users_active(active_users)
         self.metrics.set_reviewers_total(total_reviewers)
         self.metrics.set_reviewers_active(active_reviewers)
+        self.metrics.set_active_reviewers(count=active_reviewers, project="all")
 
         # Cache the result
         if use_cache:
