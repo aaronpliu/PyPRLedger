@@ -7,6 +7,24 @@
 
       <!-- Filters -->
       <el-form :inline="true" class="filter-form">
+        <el-form-item label="App Name">
+          <el-select
+            v-model="appNameFilter"
+            clearable
+            filterable
+            placeholder="All Applications"
+            style="width: 200px"
+            @change="loadScores"
+          >
+            <el-option
+              v-for="app in appOptions"
+              :key="app.app_name"
+              :label="app.app_name"
+              :value="app.app_name"
+            />
+          </el-select>
+        </el-form-item>
+        
         <el-form-item :label="t('scores.filters.project_filter')">
           <el-select 
             v-model="projectFilter" 
@@ -40,7 +58,7 @@
       </el-form>
 
       <!-- Scores Table -->
-      <el-table :data="scores" v-loading="loading" stripe style="width: 100%">
+      <el-table :data="scores" v-loading="loading" stripe style="width: 100%" row-key="id">
         <template #empty>
           <div class="empty-data">
             <el-empty description="No scores found">
@@ -234,14 +252,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { scoresApi } from '@/api/scores'
 import { reviewsApi } from '@/api/reviews'
 import { projectsApi } from '@/api/projects'
+import { projectRegistryApi } from '@/api/projectRegistry'
 import type { Score, ScoreStats } from '@/api/scores'
 import type { ProjectSummary } from '@/api/projects'
+import type { AppInfo } from '@/api/projectRegistry'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { useAuthStore } from '@/stores/auth'
@@ -255,6 +275,8 @@ const projectsLoading = ref(false)
 const scores = ref<Score[]>([])
 const projects = ref<ProjectSummary[]>([])
 const projectFilter = ref('')
+const appNameFilter = ref('')
+const appOptions = ref<AppInfo[]>([])
 const levelFilter = ref('') // 'pr' or 'file'
 const stats = ref<ScoreStats>({
   average_score: 0,
@@ -392,6 +414,14 @@ const loadProjects = async () => {
   }
 }
 
+const loadAppOptions = async () => {
+  try {
+    appOptions.value = await projectRegistryApi.listApps()
+  } catch (error) {
+    console.error('Failed to load app options:', error)
+  }
+}
+
 const loadScores = async () => {
   loading.value = true
   try {
@@ -415,6 +445,11 @@ const loadScores = async () => {
     // Apply project filter if specified
     if (projectFilter.value) {
       scoresParams.project_key = projectFilter.value
+    }
+    
+    // Apply app name filter if specified
+    if (appNameFilter.value) {
+      scoresParams.app_names = appNameFilter.value
     }
     
     console.log('Loading scores with params:', scoresParams)
@@ -488,7 +523,9 @@ const loadScores = async () => {
     scores.value = filteredScores
     
     if (filteredScores.length === 0) {
-      ElMessage.info('No scores found for the selected filters')
+      nextTick(() => {
+        ElMessage.info('No scores found for the selected filters')
+      })
     }
   } catch (error) {
     console.error('Failed to load scores:', error)
@@ -542,6 +579,7 @@ const confirmDelete = async (score: Score) => {
 
 onMounted(() => {
   loadProjects()
+  loadAppOptions()
   loadScores()
 })
 </script>

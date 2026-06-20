@@ -101,6 +101,7 @@ export const scoresApi = {
   listScores(params: {
     reviewer?: string
     project_key?: string
+    app_names?: string
     page?: number
     page_size?: number
   }): Promise<{ total: number; items: Score[]; page: number; page_size: number }> {

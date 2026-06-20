@@ -1050,6 +1050,10 @@ async def get_review_statistics(
     project_key: str | None = Query(
         None, min_length=1, max_length=32, description="Filter statistics by project key"
     ),
+    app_names: str | None = Query(
+        None,
+        description="Filter by application names (comma-separated)",
+    ),
 ) -> ReviewStats:
     """
     Get pull request review statistics for current user
@@ -1062,6 +1066,7 @@ async def get_review_statistics(
     Args:
         current_user: Current authenticated user
         project_key: Optional project key to filter statistics
+        app_names: Optional application names to filter statistics
         db: Database session
         review_service: Review service instance
 
@@ -1090,8 +1095,13 @@ async def get_review_statistics(
                 reviews_this_month=0,
             )
 
+        # Parse app_names
+        app_names_list = None
+        if app_names:
+            app_names_list = [name.strip() for name in app_names.split(",") if name.strip()]
+
         stats = await review_service.get_review_statistics(
-            project_key=project_key, db=db, reviewer_username=git_username
+            project_key=project_key, db=db, reviewer_username=git_username, app_names=app_names_list
         )
         logger.info(
             f"Statistics for {git_username}: total={stats.total_reviews}, avg_score={stats.average_score}"
@@ -1773,6 +1783,10 @@ async def list_scores(
     score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
     reviewer: str | None = Query(None, description="Filter by reviewer username"),
     project_key: str | None = Query(None, description="Filter by project key"),
+    app_names: str | None = Query(
+        None,
+        description="Filter by application names (comma-separated for multiple apps, e.g., 'app1,app2')",
+    ),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> ReviewScoreListResponse:
@@ -1789,6 +1803,7 @@ async def list_scores(
         score_service: Review score service instance
         reviewer: Filter by reviewer username (optional, restricted for non-admins)
         project_key: Filter by project key (optional)
+        app_names: Filter by registered app names (comma-separated, optional)
         page: Page number (1-indexed)
         page_size: Number of items per page (max 100)
 
@@ -1801,6 +1816,11 @@ async def list_scores(
     try:
         # Enforce access control
         effective_reviewer = reviewer
+
+        # Params app_names from comma-separated string
+        app_names_list = None
+        if app_names:
+            app_names_list = [name.strip() for name in app_names.split(",") if name.strip()]
 
         # Check if user has review_admin role (by checking 'assign' permission)
         rbac_service = RBACService(db)
@@ -1833,6 +1853,7 @@ async def list_scores(
             db=db,
             reviewer=effective_reviewer,
             project_key=project_key,
+            app_names=app_names_list,
             page=page,
             page_size=page_size,
         )

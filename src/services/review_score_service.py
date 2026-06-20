@@ -4,11 +4,12 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.config import settings
+from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import (
     PullRequestReviewAssignment,
     PullRequestReviewBase,
@@ -540,6 +541,7 @@ class ReviewScoreService:
         db: AsyncSession,
         reviewer: str | None = None,
         project_key: str | None = None,
+        app_names: list[str] | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> dict[str, Any]:
@@ -550,6 +552,7 @@ class ReviewScoreService:
             db: Database session
             reviewer: Filter by reviewer username (optional)
             project_key: Filter by project key (optional)
+            app_names: Filter by app names (optional, resolved via project_registry)
             page: Page number (1-indexed)
             page_size: Number of items per page (max 100)
 
@@ -561,7 +564,6 @@ class ReviewScoreService:
                 "page_size": int
             }
         """
-        from sqlalchemy import func
 
         # Enforce page_size limits
         page_size = min(max(page_size, 1), 100)
@@ -575,6 +577,27 @@ class ReviewScoreService:
 
         if project_key:
             base_query = base_query.where(PullRequestScore.project_key == project_key)
+
+        # Handle app_names filtering
+        if app_names:
+            registry_query = select(
+                ProjectRegistry.project_key,
+                ProjectRegistry.repository_slug,
+            ).where(ProjectRegistry.app_name.in_(app_names))
+            registry_result = await db.execute(registry_query)
+            project_repo_pairs = registry_result.all()
+
+            if project_repo_pairs:
+                app_conditions = [
+                    and_(
+                        PullRequestScore.project_key == pk,
+                        PullRequestScore.repository_slug == rs,
+                    )
+                    for pk, rs in project_repo_pairs
+                ]
+                base_query = base_query.where(or_(*app_conditions))
+            else:
+                return {"total": 0, "items": [], "page": page, "page_size": page_size}
 
         # Get total count using the base query
         count_query = select(func.count()).select_from(base_query.subquery())
@@ -602,6 +625,25 @@ class ReviewScoreService:
         if project_key:
             query = query.where(PullRequestScore.project_key == project_key)
 
+        # Handle app_names filtering for data query
+        if app_names:
+            registry_query = select(
+                ProjectRegistry.project_key,
+                ProjectRegistry.repository_slug,
+            ).where(ProjectRegistry.app_name.in_(app_names))
+            registry_result = await db.execute(registry_query)
+            project_repo_pairs = registry_result.all()
+
+            if project_repo_pairs:
+                app_conditions = [
+                    and_(
+                        PullRequestScore.project_key == pk,
+                        PullRequestScore.repository_slug == rs,
+                    )
+                    for pk, rs in project_repo_pairs
+                ]
+                query = query.where(or_(*app_conditions))
+
         # Apply pagination
         offset = (page - 1) * page_size
         query = query.order_by(PullRequestScore.created_date.desc()).offset(offset).limit(page_size)
@@ -625,8 +667,6 @@ class ReviewScoreService:
         # Batch load PRs with user relationships
         pr_map = {}
         if pr_keys:
-            from sqlalchemy import and_, or_
-
             conditions = [
                 and_(
                     PullRequestReviewBase.pull_request_id == pr_id,

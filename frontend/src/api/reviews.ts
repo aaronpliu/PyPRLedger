@@ -231,7 +231,7 @@ export const reviewsApi = {
   /**
    * Get review statistics
    */
-  getStats(params?: { project_key?: string }): Promise<any> {
+  getStats(params?: { project_key?: string; app_names?: string }): Promise<any> {
     return request.get('/reviews/statistics', { params })
   },
 
