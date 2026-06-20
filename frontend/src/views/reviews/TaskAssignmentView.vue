@@ -393,7 +393,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, ArrowUp, Refresh, Search, Link, CircleCheck, Edit, Close } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
@@ -409,6 +409,7 @@ import { useSse } from '@/composables/useSse'
 import { type SSEReviewCreatedEvent } from '@/utils/sse'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const { t } = useI18n()
 const { getPrUrl } = usePrUrl()
@@ -554,6 +555,7 @@ const loadProjects = async () => {
 const handleResetFilters = () => {
   searchQuery.value = ''
   appFilter.value = []
+  sessionStorage.removeItem('taskAssignmentApp')
   prUserFilter.value = ''
   reviewerFilter.value = ''
   scoredFilter.value = ''
@@ -962,6 +964,37 @@ watch(hideDone, () => {
   loadReviews()
 })
 
+// Watch route appName param — handle navigation between apps
+watch(() => route.params.appName, (newAppName) => {
+  if (newAppName) {
+    // Set filter from route param and save to storage
+    appFilter.value = [newAppName as string]
+    sessionStorage.setItem('taskAssignmentApp', newAppName as string)
+  } else {
+    // No route param — restore from storage (e.g., coming back from detail page)
+    const storedApp = sessionStorage.getItem('taskAssignmentApp')
+    if (storedApp) {
+      appFilter.value = [storedApp]
+    } else {
+      appFilter.value = []
+    }
+  }
+  currentPage.value = 1
+  loadReviews()
+}, { immediate: true })
+
+onBeforeRouteLeave((to) => {
+  // Keep filter when navigating to detail page
+  if (to.name === 'TaskAssignmentDetail') {
+    return
+  }
+  // Clear storage when navigating away from app routes
+  // (All Tasks, or leaving task assignment entirely)
+  if (!to.path.startsWith('/task-assignment/app/')) {
+    sessionStorage.removeItem('taskAssignmentApp')
+  }
+})
+
 let filterChangeTimeout: ReturnType<typeof setTimeout>
 
 onMounted(() => {
@@ -971,6 +1004,8 @@ onMounted(() => {
   loadAvailableApps()
   loadPRUsers()
   loadReviewers()
+
+  // App filter from route param is handled by the watch above
 
   // Connect to SSE stream for real-time review notifications
   // Backend handles authorization and filtering based on user roles

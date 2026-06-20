@@ -65,6 +65,23 @@
             />
           </el-select>
         </el-form-item>
+
+        <el-form-item label="App Name">
+          <el-select
+            v-model="appNameFilter"
+            placeholder="All Apps"
+            clearable
+            style="width: 200px"
+            @change="loadAnalytics"
+          >
+            <el-option
+              v-for="app in appOptions"
+              :key="app.app_name"
+              :label="app.app_name"
+              :value="app.app_name"
+            />
+          </el-select>
+        </el-form-item>
       </el-form>
     </el-card>
 
@@ -439,6 +456,8 @@ import Sparkline from '@/components/stats/Sparkline.vue'
 import { taskAssignmentApi } from '@/api/taskAssignment'
 import { usersApi } from '@/api/users'
 import { projectsApi } from '@/api/projects'
+import { projectRegistryApi } from '@/api/projectRegistry'
+import type { AppInfo } from '@/api/projectRegistry'
 import { useTaskAssignmentAnalytics } from '@/composables/useTaskAssignmentAnalytics'
 import dayjs from 'dayjs'
 
@@ -475,10 +494,12 @@ const selectedPeriod = ref<'daily' | 'weekly' | 'monthly'>('weekly')
 const dateRange = ref<[Date, Date] | null>(null)
 const projectFilter = ref('')
 const reviewerFilter = ref('')
+const appNameFilter = ref('')
 
 // Filter options
 const projectOptions = ref<Array<{ label: string; value: string }>>([])
 const reviewerOptions = ref<Array<{ label: string; value: string }>>([])
+const appOptions = ref<AppInfo[]>([])
 
 // Fullscreen state
 const fullscreenChart = ref<'timeTrend' | 'scoringTrend' | 'severityTrend' | 'prUser' | 'project' | 'assignments' | 'scored' | null>(null)
@@ -747,6 +768,9 @@ const loadFilterOptions = async () => {
       label: r.display_name || r.username,
       value: r.username,
     }))
+
+    // Load app names
+    appOptions.value = await projectRegistryApi.listApps()
   } catch (error) {
     console.error('Failed to load filter options:', error)
   }
@@ -765,6 +789,10 @@ const loadAnalytics = async () => {
 
     if (reviewerFilter.value) {
       baseParams.reviewer = reviewerFilter.value
+    }
+
+    if (appNameFilter.value) {
+      baseParams.app_names = appNameFilter.value
     }
 
     if (dateRange.value && dateRange.value.length === 2) {

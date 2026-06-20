@@ -63,6 +63,13 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/reviews/RulesManagementView.vue'),
         meta: { requiresReviewAdmin: true },
       },
+      // App-filtered task assignment
+      {
+        path: 'task-assignment/app/:appName',
+        name: 'TaskAssignmentByApp',
+        component: () => import('@/views/reviews/TaskAssignmentView.vue'),
+        meta: { requiresReviewAdmin: true },
+      },
       {
         path: 'task-assignment/:id',
         name: 'TaskAssignmentDetail',

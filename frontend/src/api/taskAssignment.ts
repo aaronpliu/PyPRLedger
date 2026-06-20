@@ -161,6 +161,7 @@ export const taskAssignmentApi = {
     page_size?: number
     project_key?: string
     reviewer?: string
+    app_names?: string
     pull_request_user?: string
     date_from?: string
     date_to?: string
