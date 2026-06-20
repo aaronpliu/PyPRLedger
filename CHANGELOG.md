@@ -5,6 +5,20 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2026-06-20
+
+**Backend Version**: 1.18.0
+**Frontend Version**: 1.13.0
+
+### Added
+- add "app name" as filter in scores page
+- navigate to project as per app name from menu
+
+### Documentation
+- implement multiple app view and query
+
+---
+
 ## [1.17.3] - 2026-06-18
 
 **Backend Version**: 1.17.3
