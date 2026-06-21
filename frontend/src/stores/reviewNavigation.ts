@@ -5,6 +5,7 @@ const STORAGE_KEY = 'review-navigation-context'
 
 export interface ReviewNavigationItem {
   id: number
+  publicId: string
   projectKey: string
   repositorySlug: string
   pullRequestId: string

@@ -1272,6 +1272,7 @@ const viewReview = (review: Review) => {
   reviewNavigationStore.setContext({
     items: reviews.value.map(item => ({
       id: item.id,
+      publicId: item.public_id || item.id.toString(),
       projectKey: item.project_key,
       repositorySlug: item.repository_slug,
       pullRequestId: item.pull_request_id,
@@ -1282,14 +1283,12 @@ const viewReview = (review: Review) => {
     pageSize: pageSize.value,
     totalItems: total.value,
     hasMorePages: hasMorePages,
-    filters: filterParams, // Store filters for pagination consistency
+    filters: filterParams,
   })
 
-  // Navigate using numeric ID so the navigation store can match it
-  // Public_id is used only for display, not for route matching
   router.push({
     name: 'ReviewDetail',
-    params: { id: review.id.toString() },
+    params: { id: review.public_id || review.id.toString() },
     query: {
       projectKey: review.project_key,
       repositorySlug: review.repository_slug,

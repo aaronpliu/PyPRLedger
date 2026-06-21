@@ -10,9 +10,9 @@
 - [x] 2.1 Add `public_id: str` field to `ReviewResponse` schema; populate in endpoint handlers (via model_validator)
 - [x] 2.2 Add `public_id: str` field to `ReviewRawResponse` schema (via model_validator)
 - [x] 2.3 Add `GET /reviews/by-public-id/{public_id}` endpoint that decodes and delegates to existing lookup
-- [ ] 2.4 Add `GET /reviews/by-public-id/{public_id}/pin` endpoints (check pin, pin, unpin) — deferred: existing pin endpoints used internally
-- [ ] 2.5 Add `POST /reviews/by-public-id/{public_id}/associate/{target_public_id}` with decoded IDs — deferred: frontend uses real IDs internally
-- [ ] 2.6 Add `DELETE /reviews/by-public-id/{public_id}/associate/{target_public_id}` with decoded IDs — deferred: frontend uses real IDs internally
+- [x] 2.4 Add `GET /reviews/by-public-id/{public_id}/pin` endpoints (check pin, pin, unpin) via `_decode_public_id` helper
+- [x] 2.5 Add `POST /reviews/by-public-id/{public_id}/associate/{target_public_id}` via `_decode_public_id` helper
+- [x] 2.6 Add `DELETE /reviews/by-public-id/{public_id}/associate/{target_public_id}` via `_decode_public_id` helper
 
 ## 3. Frontend — Display public_id
 

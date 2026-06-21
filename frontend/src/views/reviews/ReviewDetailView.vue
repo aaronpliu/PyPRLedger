@@ -889,9 +889,10 @@ const currentReviewIndex = computed(() => {
   const reviewer = normalizeRouteQueryValue(route.query.reviewer)
   const sourceFilename = normalizeRouteQueryValue(route.query.sourceFilename)
 
+  const routeId = route.params.id as string
   return reviewNavigationStore.items.findIndex(item => {
     return (
-      item.id === Number(route.params.id) &&
+      item.publicId === routeId &&
       item.projectKey === normalizeNavigationValue(projectKey) &&
       item.repositorySlug === normalizeNavigationValue(repositorySlug) &&
       item.pullRequestId === normalizeNavigationValue(pullRequestId) &&
@@ -957,8 +958,11 @@ const findMatchingReview = (items: Review[], id: number): Review | null => {
 }
 
 const loadReview = async () => {
-  const id = Number(route.params.id)
-  if (!id) return
+  const rawId = route.params.id as string
+  if (!rawId) return
+
+  const isNumeric = /^\d+$/.test(rawId)
+  const id = isNumeric ? Number(rawId) : 0
 
   const projectKey = normalizeRouteQueryValue(route.query.projectKey)
   const repositorySlug = normalizeRouteQueryValue(route.query.repositorySlug)
@@ -977,8 +981,10 @@ const loadReview = async () => {
         }
       )
       review.value = findMatchingReview(response.items, id)
-    } else {
+    } else if (isNumeric) {
       review.value = await reviewsApi.getReviewById(id)
+    } else {
+      review.value = await reviewsApi.getReviewByPublicId(rawId)
     }
     
     if (!review.value) {
@@ -1044,7 +1050,7 @@ const goToNextReview = async () => {
   if (nextReview.value) {
     router.replace({
       name: 'ReviewDetail',
-      params: { id: nextReview.value.id },
+      params: { id: nextReview.value.publicId },
       query: {
         projectKey: nextReview.value.projectKey,
         repositorySlug: nextReview.value.repositorySlug,
@@ -1066,8 +1072,7 @@ const goToPreviousReview = async () => {
   // If there's a previous review on current page, navigate to it
   if (previousReview.value) {
     router.replace({
-      name: 'ReviewDetail',
-      params: { id: previousReview.value.id },
+      params: { id: previousReview.value.publicId },
       query: {
         projectKey: previousReview.value.projectKey,
         repositorySlug: previousReview.value.repositorySlug,
@@ -1121,6 +1126,7 @@ const loadNextPage = async () => {
     reviewNavigationStore.setContext({
       items: response.items.map(item => ({
         id: item.id,
+        publicId: item.public_id || item.id.toString(),
         projectKey: item.project_key,
         repositorySlug: item.repository_slug,
         pullRequestId: item.pull_request_id,
@@ -1139,7 +1145,7 @@ const loadNextPage = async () => {
     if (firstReview) {
       router.replace({
         name: 'ReviewDetail',
-        params: { id: firstReview.id },
+        params: { id: firstReview.public_id || firstReview.id.toString() },
         query: {
           projectKey: firstReview.project_key,
           repositorySlug: firstReview.repository_slug,
@@ -1193,6 +1199,7 @@ const loadPreviousPage = async () => {
     reviewNavigationStore.setContext({
       items: response.items.map(item => ({
         id: item.id,
+        publicId: item.public_id || item.id.toString(),
         projectKey: item.project_key,
         repositorySlug: item.repository_slug,
         pullRequestId: item.pull_request_id,
@@ -1211,7 +1218,7 @@ const loadPreviousPage = async () => {
     if (lastReview) {
       router.replace({
         name: 'ReviewDetail',
-        params: { id: lastReview.id },
+        params: { id: lastReview.public_id || lastReview.id.toString() },
         query: {
           projectKey: lastReview.project_key,
           repositorySlug: lastReview.repository_slug,
