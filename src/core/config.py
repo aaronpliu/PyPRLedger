@@ -175,6 +175,12 @@ class Settings(BaseSettings):
     ALLOWED_AVATAR_TYPES: set = {"image/jpeg", "image/png", "image/webp", "image/gif"}
     AVATAR_BASE_URL: str = Field(default="/api/v1/users/avatars")
 
+    # ID obfuscation configuration
+    ID_OBFUSCATOR_SALT: str = Field(
+        default="change-me-in-production",
+        description="Secret salt for hashids ID obfuscation. Must be set to a unique random value in production.",
+    )
+
     # API Documentation visibility configuration
     ENABLE_API_DOCS: bool = Field(
         default=True,

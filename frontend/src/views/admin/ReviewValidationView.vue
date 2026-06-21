@@ -45,6 +45,15 @@ const formatRelativeTime = (dateStr: string) => {
   return `${diffDays}d ago`
 }
 
+const formatPublicId = (record: { public_id?: string; id: number }): string => {
+  if (record.public_id) {
+    const parts = record.public_id.split('_')
+    const hash = parts.length > 1 ? parts.slice(1).join('_') : record.public_id
+    return `RAW-${hash}`
+  }
+  return `#${record.id}`
+}
+
 const getErrorMessage = (record: ReviewRawRecord) => {
   if (record.error_message) {
     return record.error_message
@@ -74,7 +83,7 @@ const loadValidationData = async () => {
 const handleRetry = async (record: ReviewRawRecord) => {
   try {
     await ElMessageBox.confirm(
-      `Retry failed review #${record.id}? This will attempt to reprocess the review using the stored raw data.`,
+      `Retry ${formatPublicId(record)}? This will attempt to reprocess the review using the stored raw data.`,
       'Confirm Retry',
       {
         confirmButtonText: 'Retry',
@@ -102,7 +111,7 @@ const handleRetry = async (record: ReviewRawRecord) => {
 const handleDelete = async (record: ReviewRawRecord) => {
   try {
     await ElMessageBox.confirm(
-      `Delete failed review #${record.id}? This will remove the record from the validation table. This action cannot be undone.`,
+      `Delete ${formatPublicId(record)}? This will remove the record from the validation table. This action cannot be undone.`,
       'Confirm Delete',
       {
         confirmButtonText: 'Delete',
@@ -293,7 +302,11 @@ onMounted(() => {
         style="width: 100%"
         empty-text="No failed reviews"
       >
-        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column label="ID" width="130">
+          <template #default="{ row }">
+            <span class="public-id-cell">{{ formatPublicId(row) }}</span>
+          </template>
+        </el-table-column>
         
         <el-table-column label="Pull Request" min-width="150">
           <template #default="{ row }">
@@ -545,6 +558,12 @@ onMounted(() => {
 
 [data-theme='dark'] .section-header h3 {
   color: var(--el-text-color-primary);
+}
+
+.public-id-cell {
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .actions-cell {

@@ -2,6 +2,7 @@ import request from '@/utils/request'
 
 export interface Review {
   id: number
+  public_id?: string
   pull_request_id: string
   pull_request_commit_id?: string | null
   
@@ -137,6 +138,7 @@ export interface ReviewAssignmentRequest {
 
 export interface ReviewRawRecord {
   id: number
+  public_id?: string
   request_payload: Record<string, any>
   status: 'pending' | 'success' | 'failed'
   error_message?: string | null
@@ -206,6 +208,14 @@ export const reviewsApi = {
   // Get review by ID - uses dedicated endpoint
   async getReviewById(id: number): Promise<Review> {
     const response = await request.get(`/reviews/${id}`, {
+      _suppressGlobalError: true,
+    } as any)
+    return response.data || response
+  },
+
+  // Get review by obfuscated public ID
+  async getReviewByPublicId(publicId: string): Promise<Review> {
+    const response = await request.get(`/reviews/by-public-id/${publicId}`, {
       _suppressGlobalError: true,
     } as any)
     return response.data || response

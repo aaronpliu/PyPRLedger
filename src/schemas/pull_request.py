@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from src.utils.id_obfuscator import format_public_id
 
 
 class ReviewBase(BaseModel):
@@ -243,6 +245,17 @@ class ReviewResponse(BaseModel):
     """Schema for pull request review response with full entity information"""
 
     id: int = Field(..., description="Review database ID")
+    public_id: str = Field(
+        "", description="Obfuscated public ID for display (e.g., 'rev_kM8xP31R')"
+    )
+
+    @model_validator(mode="after")
+    def _set_public_id(self) -> "ReviewResponse":
+        """Auto-populate public_id from the database ID."""
+        if not self.public_id and self.id:
+            self.public_id = format_public_id("review", self.id)
+        return self
+
     pull_request_id: str = Field(..., description="Pull request identifier")
     pull_request_commit_id: str | None = Field(
         None, description="Commit ID for this specific review"
@@ -699,6 +712,17 @@ class ReviewRawResponse(BaseModel):
     """Response schema for raw review record"""
 
     id: int
+    public_id: str = Field(
+        "", description="Obfuscated public ID for display (e.g., 'rev_kM8xP31R')"
+    )
+
+    @model_validator(mode="after")
+    def _set_raw_public_id(self) -> "ReviewRawResponse":
+        """Auto-populate public_id from the database ID."""
+        if not self.public_id and self.id:
+            self.public_id = format_public_id("raw", self.id)
+        return self
+
     request_payload: dict[str, Any]
     status: str
     error_message: str | None

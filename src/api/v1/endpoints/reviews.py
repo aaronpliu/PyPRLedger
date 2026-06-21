@@ -42,6 +42,7 @@ from src.services.rbac_service import RBACService
 from src.services.review_score_service import ReviewScoreService
 from src.services.review_service import ReviewService
 from src.services.review_validation_service import ReviewValidationService
+from src.utils.id_obfuscator import decode
 from src.utils.metrics import OperationTimer, metrics
 from src.utils.timezone import get_current_time
 
@@ -2101,6 +2102,55 @@ async def delete_score(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to delete score"},
+        )
+
+
+@router.get("/by-public-id/{public_id}", response_model=ReviewResponse)
+async def get_review_by_public_id(
+    public_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+) -> ReviewResponse:
+    """
+    Retrieve a single review by its obfuscated public ID.
+
+    Decodes the public_id to a real database ID and delegates to
+    the standard review lookup. Returns 404 if the public_id is invalid.
+    """
+    real_id = decode(public_id)
+    if real_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "NOT_FOUND", "message": f"Invalid public ID: {public_id}"},
+        )
+
+    try:
+        review = await review_service.get_review_by_id(
+            review_id=real_id,
+            db=db,
+            current_user_id=current_user.id,
+        )
+        if not review:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": f"Review with ID {real_id} not found",
+                },
+            )
+        return ReviewResponse(**review)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get review by public id {public_id}: {str(e)}", exc_info=True)
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint="GET /api/v1/reviews/by-public-id/{public_id}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get review"},
         )
 
 

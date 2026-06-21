@@ -822,6 +822,12 @@ const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
 }
 
+const formatPublicId = (publicId: string): string => {
+  const parts = publicId.split('_')
+  const hash = parts.length > 1 ? parts.slice(1).join('_') : publicId
+  return `REV-${hash}`
+}
+
 // Get score color class based on score value
 const getScoreColorClass = (score: number): string => {
   if (score >= 9) return 'score-excellent'
@@ -1291,7 +1297,7 @@ const confirmDelete = async () => {
   
   try {
     await ElMessageBox.confirm(
-      `Are you sure you want to delete review #${review.value.id}?`,
+      `Are you sure you want to delete ${review.value.public_id ? formatPublicId(review.value.public_id) : `review #${review.value.id}`}?`,
       'Confirm Delete',
       {
         type: 'warning',
