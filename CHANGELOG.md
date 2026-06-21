@@ -5,6 +5,28 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.1] - 2026-06-21
+
+**Backend Version**: 1.18.1
+**Frontend Version**: 1.13.1
+
+### Added
+- take public id in url of review details
+- enhance review ID for security requirement
+- delete failed reviews in admin UI
+- enhance permission for system admin
+- add new columns in rules table
+
+### Fixed
+- upgrade element-plus to 2.14.2
+
+### Documentation
+- archied id-obfuscator
+- handle ID with security approach
+- remove app-name of openspec
+
+---
+
 ## [1.18.0] - 2026-06-20
 
 **Backend Version**: 1.18.0
