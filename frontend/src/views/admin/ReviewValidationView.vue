@@ -9,6 +9,7 @@ const { t } = useI18n()
 
 const loading = ref(false)
 const retrying = ref<number | null>(null)
+const deleting = ref<number | null>(null)
 const validationData = ref<ReviewValidationSummary | null>(null)
 
 // Filter parameters
@@ -95,6 +96,35 @@ const handleRetry = async (record: ReviewRawRecord) => {
     }
   } finally {
     retrying.value = null
+  }
+}
+
+const handleDelete = async (record: ReviewRawRecord) => {
+  try {
+    await ElMessageBox.confirm(
+      `Delete failed review #${record.id}? This will remove the record from the validation table. This action cannot be undone.`,
+      'Confirm Delete',
+      {
+        confirmButtonText: 'Delete',
+        cancelButtonText: 'Cancel',
+        type: 'error',
+        confirmButtonClass: 'el-button--danger',
+      }
+    )
+
+    deleting.value = record.id
+    const result = await reviewsApi.deleteFailedReview(record.id)
+
+    ElMessage.success(result.message || 'Record deleted successfully')
+
+    // Reload data
+    await loadValidationData()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.detail || 'Failed to delete record')
+    }
+  } finally {
+    deleting.value = null
   }
 }
 
@@ -312,16 +342,27 @@ onMounted(() => {
           </template>
         </el-table-column>
 
-        <el-table-column label="Actions" width="120" fixed="right">
+        <el-table-column label="Actions" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button
-              type="primary"
-              size="small"
-              :loading="retrying === row.id"
-              @click="handleRetry(row)"
-            >
-              Retry
-            </el-button>
+            <div class="actions-cell">
+              <el-button
+                type="primary"
+                size="small"
+                :loading="retrying === row.id"
+                @click="handleRetry(row)"
+              >
+                Retry
+              </el-button>
+              <el-button
+                type="danger"
+                size="small"
+                :loading="deleting === row.id"
+                :disabled="retrying === row.id"
+                @click="handleDelete(row)"
+              >
+                Delete
+              </el-button>
+            </div>
           </template>
         </el-table-column>
         </el-table>
@@ -504,5 +545,11 @@ onMounted(() => {
 
 [data-theme='dark'] .section-header h3 {
   color: var(--el-text-color-primary);
+}
+
+.actions-cell {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
 }
 </style>

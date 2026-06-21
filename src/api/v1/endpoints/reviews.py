@@ -1171,6 +1171,57 @@ async def disassociate_reviews(
 
 
 @router.delete(
+    "/validation/raw/{raw_record_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete a failed raw review record",
+    description="Delete a failed or pending raw review record from the validation table",
+)
+async def delete_raw_record(
+    raw_record_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+):
+    """
+    Delete a failed or pending raw review record.
+
+    This allows administrators to clean up failed review records
+    from the validation table without retrying them.
+
+    Args:
+        raw_record_id: ID of the raw record to delete
+
+    Returns:
+        dict: Success confirmation
+
+    Raises:
+        HTTPException: 403 if insufficient permissions, 404 if record not found
+    """
+    # Check permission
+    rbac_service = RBACService(db)
+    has_permission = await rbac_service.check_permission(
+        auth_user_id=current_user.id,
+        action="delete",
+        resource_type="reviews",
+    )
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    validation_service = ReviewValidationService(db)
+
+    try:
+        result = await validation_service.delete_raw_record(raw_record_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to delete raw record {raw_record_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to delete raw record"},
+        )
+
+
+@router.delete(
     "/{project_key}/{repository_slug}/{pull_request_id}", status_code=status.HTTP_204_NO_CONTENT
 )
 async def delete_review(

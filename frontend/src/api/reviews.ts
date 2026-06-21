@@ -332,6 +332,16 @@ export const reviewsApi = {
   },
 
   /**
+   * Delete a failed or pending raw review record
+   */
+  deleteFailedReview(rawRecordId: number): Promise<{
+    success: boolean
+    message: string
+  }> {
+    return request.delete(`/reviews/validation/raw/${rawRecordId}`)
+  },
+
+  /**
    * Get all scores for a specific review (returns array of individual scores)
    */
   getReviewScores(params: {

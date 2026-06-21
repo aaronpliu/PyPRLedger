@@ -123,6 +123,37 @@ class ReviewValidationService:
             await self.db.rollback()
             raise
 
+    async def delete_raw_record(self, raw_record_id: int) -> dict:
+        """Delete a failed raw record by its ID.
+
+        Args:
+            raw_record_id: ID of the raw record to delete
+
+        Returns:
+            dict: Success confirmation
+
+        Raises:
+            ValueError: If the record is not found or has already been processed
+        """
+        raw_record = await self.db.get(PullRequestReviewRaw, raw_record_id)
+        if not raw_record:
+            raise ValueError(f"Raw record {raw_record_id} not found")
+
+        if raw_record.status == "success":
+            raise ValueError(
+                f"Cannot delete record with status '{raw_record.status}'. "
+                "Only 'pending' or 'failed' records can be deleted."
+            )
+
+        await self.db.delete(raw_record)
+        await self.db.commit()
+
+        logger.info(f"Raw record {raw_record_id} deleted successfully")
+        return {
+            "success": True,
+            "message": f"Raw record #{raw_record_id} deleted successfully",
+        }
+
     async def cleanup_old_raw_records(self, days_to_keep: int = 30, batch_size: int = 1000) -> dict:
         """Clean up old raw records to prevent database bloat"""
 
