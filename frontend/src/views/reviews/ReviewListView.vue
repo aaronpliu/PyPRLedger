@@ -329,7 +329,9 @@
         </el-table-column>
         
         <!-- Selection column only for review admins -->
-        <el-table-column v-if="isReviewAdmin" type="selection" width="55" fixed="left" />
+        <template v-if="isReviewAdmin">
+          <el-table-column type="selection" width="55" fixed="left" />
+        </template>
         <!-- Pin column -->
         <el-table-column width="40" fixed="left">
           <template #header>
@@ -602,8 +604,8 @@
         </div>
       </div>
       
-      <template #footer v-if="!bulkOperationLoading">
-        <el-button type="primary" @click="closeProgressDialog">Close</el-button>
+      <template #footer>
+        <el-button v-if="!bulkOperationLoading" type="primary" @click="closeProgressDialog">Close</el-button>
       </template>
     </el-dialog>
     
