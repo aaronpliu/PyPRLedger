@@ -590,6 +590,8 @@
     "col_conditions": "条件",
     "col_assign_to": "分配给",
     "col_max": "最大",
+    "col_starts_at": "开始时间",
+    "col_expires_at": "结束时间",
     "col_status": "状态",
     "col_created": "创建时间",
     "col_actions": "操作",

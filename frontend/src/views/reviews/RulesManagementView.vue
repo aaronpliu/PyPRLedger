@@ -53,6 +53,7 @@
 
       <!-- Rules Table -->
       <div v-else>
+        <div class="table-wrapper">
         <el-table
           :data="displayRules"
           v-loading="loading"
@@ -60,9 +61,9 @@
           border
           style="width: 100%"
         >
-          <el-table-column prop="name" :label="t('auto_rules.col_name')" min-width="180" />
-          <el-table-column prop="priority" :label="t('auto_rules.col_priority')" width="90" align="center" />
-          <el-table-column :label="t('auto_rules.col_conditions')" min-width="220">
+          <el-table-column prop="name" :label="t('auto_rules.col_name')" min-width="160" />
+          <el-table-column prop="priority" :label="t('auto_rules.col_priority')" width="80" align="center" />
+          <el-table-column :label="t('auto_rules.col_conditions')" min-width="200">
             <template #default="{ row }">
               <el-tooltip
                 placement="top"
@@ -73,7 +74,7 @@
               </el-tooltip>
             </template>
           </el-table-column>
-          <el-table-column :label="t('auto_rules.col_assign_to')" min-width="180">
+          <el-table-column :label="t('auto_rules.col_assign_to')" min-width="160">
             <template #default="{ row }">
               <el-tag
                 v-for="username in row.assign_to"
@@ -88,6 +89,20 @@
           <el-table-column prop="max_assignments" :label="t('auto_rules.col_max')" width="80" align="center">
             <template #default="{ row }">
               {{ row.max_assignments === 0 ? t('auto_rules.all') : row.max_assignments }}
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('auto_rules.col_starts_at')" width="175" align="center">
+            <template #default="{ row }">
+              <span class="date-cell" :class="{ 'date-null': !row.starts_at }">
+                {{ formatDateTime(row.starts_at) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('auto_rules.col_expires_at')" width="175" align="center">
+            <template #default="{ row }">
+              <span class="date-cell" :class="{ 'date-null': !row.expires_at }">
+                {{ formatDateTime(row.expires_at) }}
+              </span>
             </template>
           </el-table-column>
           <el-table-column :label="t('auto_rules.col_status')" width="100" align="center">
@@ -117,6 +132,8 @@
             </template>
           </el-table-column>
         </el-table>
+
+        </div>
 
         <!-- Pagination -->
         <div class="pagination-wrapper">
@@ -564,6 +581,12 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString()
 }
 
+function formatDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 // === Replace cond fields from conditions JSON (used when editing) ===
 function applyConditionsToForm(conditions: Record<string, any>) {
   cond.project_key = conditions.project_key || []
@@ -772,6 +795,26 @@ async function loadAppOptions() {
 .filter-hint {
   font-size: 13px;
   color: var(--el-text-color-secondary);
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.table-wrapper :deep(.el-table) {
+  min-width: 100%;
+}
+
+.date-cell {
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.date-cell.date-null {
+  color: var(--el-text-color-placeholder);
+  font-family: inherit;
+  font-style: italic;
 }
 
 .conditions-preview {

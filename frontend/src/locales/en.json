@@ -590,6 +590,8 @@
     "col_conditions": "Conditions",
     "col_assign_to": "Assign To",
     "col_max": "Max",
+    "col_starts_at": "Start Date",
+    "col_expires_at": "End Date",
     "col_status": "Active",
     "col_created": "Created",
     "col_actions": "Actions",
