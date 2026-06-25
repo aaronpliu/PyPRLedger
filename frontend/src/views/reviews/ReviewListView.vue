@@ -366,13 +366,6 @@
           </template>
         </el-table-column>
         
-        <!-- ID -->
-        <el-table-column :label="t('reviews.detail.id', 'ID')" width="70">
-          <template #default="{ row }">
-            <span class="text-secondary">{{ formatPublicId(row.public_id, row.id) }}</span>
-          </template>
-        </el-table-column>
-        
         <!-- App Name -->
         <el-table-column :label="t('reviews.app_name')" width="150">
           <template #default="{ row }">
