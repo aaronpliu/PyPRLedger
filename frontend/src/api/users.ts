@@ -24,13 +24,19 @@ export const usersApi = {
   /**
    * Get all Bitbucket/Git users (for task assignment - includes all users, not just reviewers)
    */
-  async getAllBitbucketUsers(limit: number = 500, username?: string): Promise<ReviewerUser[]> {
-    const params: any = { limit }
-    if (username) {
-      params.username = username
-    }
-    
-    const response: any = await request.get('/users/git', { params })
+  async getAllBitbucketUsers(params?: {
+    limit?: number
+    username?: string
+    active?: boolean
+    is_reviewer?: boolean
+  }): Promise<ReviewerUser[]> {
+    const queryParams: any = {}
+    if (params?.limit) queryParams.limit = params.limit
+    if (params?.username) queryParams.username = params.username
+    if (params?.active !== undefined) queryParams.active = params.active
+    if (params?.is_reviewer !== undefined) queryParams.is_reviewer = params.is_reviewer
+
+    const response: any = await request.get('/users/git', { params: queryParams })
     return response.items || []
   },
 
@@ -56,9 +62,9 @@ export const usersApi = {
   },
 
   /**
-   * Update user
+   * Update a git user (requires system_admin role)
    */
-  updateUser(userId: number, data: Partial<User>): Promise<User> {
+  updateUser(userId: number, data: Record<string, any>): Promise<any> {
     return request.put(`/users/git/${userId}`, data)
   },
 
@@ -103,6 +109,33 @@ export const usersApi = {
    */
   deleteAvatar(username: string): Promise<{ avatar_url: null }> {
     return request.delete(`/users/auth/${username}/avatar`)
+  },
+
+  /**
+   * Create a new git user (requires system_admin role)
+   */
+  createGitUser(data: {
+    user_id: number
+    username: string
+    display_name: string
+    email_address: string
+    is_reviewer?: boolean
+  }): Promise<any> {
+    return request.post('/users/git', data)
+  },
+
+  /**
+   * Delete a git user (requires system_admin role)
+   */
+  deleteGitUser(gitUserId: number): Promise<void> {
+    return request.delete(`/users/git/${gitUserId}`)
+  },
+
+  /**
+   * Toggle reviewer status for a git user (requires system_admin role)
+   */
+  toggleReviewerStatus(gitUserId: number): Promise<any> {
+    return request.patch(`/users/git/${gitUserId}/toggle-reviewer`)
   },
 
   /**

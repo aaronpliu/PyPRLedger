@@ -16,9 +16,13 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>{{ t('menu.dashboard') }}</span>
         </el-menu-item>
-        <el-menu-item index="/myadmin/users">
+        <el-menu-item index="/myadmin/system-users">
           <el-icon><User /></el-icon>
-          <span>{{ t('menu.users') }}</span>
+          <span>{{ t('menu.systemUsers') }}</span>
+        </el-menu-item>
+        <el-menu-item index="/myadmin/git-users">
+          <el-icon><UserFilled /></el-icon>
+          <span>{{ t('menu.gitUsers') }}</span>
         </el-menu-item>
         <el-menu-item index="/myadmin/roles">
           <el-icon><Lock /></el-icon>
@@ -114,7 +118,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { User, Lock, Share, Document, Monitor, ArrowDown, DataAnalysis, Folder, Setting, TrendCharts } from '@element-plus/icons-vue'
+import { User, UserFilled, Lock, Share, Document, Monitor, ArrowDown, DataAnalysis, Folder, Setting, TrendCharts } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'

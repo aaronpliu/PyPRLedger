@@ -1413,7 +1413,7 @@ const loadPRUsers = async () => {
   try {
     prUsersLoading.value = true
     // Fetch all active users once - cache for client-side filtering
-    const users = await usersApi.getAllBitbucketUsers(500)
+    const users = await usersApi.getAllBitbucketUsers({ limit: 500 })
     const activeUsers = users.filter(u => u.active !== false)
     allPRUsers.value = activeUsers
     availablePRUsers.value = activeUsers

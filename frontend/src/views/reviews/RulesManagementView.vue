@@ -536,7 +536,7 @@ async function loadProjects() {
 
 async function loadUsers() {
   try {
-    gitUsers.value = await usersApi.getAllBitbucketUsers(500)
+    gitUsers.value = await usersApi.getAllBitbucketUsers({ limit: 500 })
   } catch {
     gitUsers.value = []
   }

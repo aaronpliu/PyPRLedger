@@ -117,7 +117,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/AdminDashboardView.vue'),
       },
       {
-        path: 'users',
+        path: 'system-users',
         name: 'UserManagement',
         component: () => import('@/views/admin/UserManagementView.vue'),
       },
@@ -156,6 +156,11 @@ const routes: RouteRecordRaw[] = [
         name: 'ReviewValidation',
         component: () => import('@/views/admin/ReviewValidationView.vue'),
         meta: { requiresReviewAdmin: true },
+      },
+      {
+        path: 'git-users',
+        name: 'GitUserManagement',
+        component: () => import('@/views/admin/GitUserManagementView.vue'),
       },
     ],
   },
