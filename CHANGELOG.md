@@ -5,6 +5,25 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.2] - 2026-06-25
+
+**Backend Version**: 1.18.2
+**Frontend Version**: 1.13.2
+
+### Added
+- add i18n for git user management
+- manage git user in admin
+
+### Fixed
+- enhanced user add by admin
+- remove review ID since it's hashed for now
+- enhance git user creation and remove duplicate endpoint
+
+### Dependencies
+- rename UserManagementView
+
+---
+
 ## [1.18.1] - 2026-06-21
 
 **Backend Version**: 1.18.1
