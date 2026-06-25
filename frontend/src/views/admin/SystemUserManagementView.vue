@@ -486,7 +486,11 @@ const handleCreate = async () => {
     if (valid) {
       creating.value = true
       try {
-        // TODO: Implement actual API call
+        await authApi.adminCreateUser({
+          username: createForm.username,
+          email: createForm.email,
+          password: createForm.password,
+        })
         ElMessage.success('User created successfully')
         showCreateDialog.value = false
         // Reset form
