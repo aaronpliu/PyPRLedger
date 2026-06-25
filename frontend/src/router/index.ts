@@ -119,7 +119,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'system-users',
         name: 'UserManagement',
-        component: () => import('@/views/admin/UserManagementView.vue'),
+        component: () => import('@/views/admin/SystemUserManagementView.vue'),
       },
       {
         path: 'roles',

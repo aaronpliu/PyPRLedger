@@ -378,6 +378,16 @@ const validatePass2 = (rule: any, value: string, callback: any) => {
   }
 }
 
+const validateCreatePass2 = (rule: any, value: string, callback: any) => {
+  if (value === '') {
+    callback(new Error('Please input password again'))
+  } else if (value !== createForm.password) {
+    callback(new Error("Two inputs don't match!"))
+  } else {
+    callback()
+  }
+}
+
 const resetPasswordRules: FormRules = {
   new_password: [
     { required: true, message: 'Please input new password', trigger: 'blur' },
@@ -402,7 +412,7 @@ const createRules: FormRules = {
     { min: 6, message: 'Password must be at least 6 characters', trigger: 'blur' },
   ],
   confirmPassword: [
-    { validator: validatePass2, trigger: 'blur' },
+    { validator: validateCreatePass2, trigger: 'blur' },
   ],
 }
 
