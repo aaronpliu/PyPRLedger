@@ -670,7 +670,9 @@
       "manageSessions": "管理会话",
       "systemSettings": "系统设置",
       "recentAuditLogs": "最近审计日志"
-    }
+    },
+    "git_user_management": "Git 用户管理",
+    "add_git_user": "添加 Git 用户"
   },
   "errors": {
     "forbidden": "403 禁止访问",

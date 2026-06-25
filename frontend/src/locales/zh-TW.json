@@ -670,7 +670,9 @@
       "manageSessions": "管理工作階段",
       "systemSettings": "系統設定",
       "recentAuditLogs": "最近稽核日誌"
-    }
+    },
+    "git_user_management": "Git 使用者管理",
+    "add_git_user": "新增 Git 使用者"
   },
   "errors": {
     "forbidden": "403 禁止存取",

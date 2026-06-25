@@ -677,7 +677,9 @@
       "loadFailed": "Failed to load system settings",
       "saveSuccess": "Settings saved successfully",
       "saveFailed": "Failed to save settings"
-    }
+    },
+    "git_user_management": "Git User Management",
+    "add_git_user": "Add Git User"
   },
   "errors": {
     "forbidden": "403 Forbidden",
