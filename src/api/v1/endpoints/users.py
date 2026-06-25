@@ -279,7 +279,6 @@ async def get_reviewers(
 
 
 @auth_router.get("", response_model=dict)
-@auth_router.get("/", response_model=dict)
 async def list_auth_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],

@@ -128,6 +128,7 @@ class UserService:
         # Create new user
         # hashed_password = self.hash_password(user_data.password)
         new_user = User(
+            user_id=user_data.user_id,
             username=user_data.username,
             display_name=user_data.display_name,
             email_address=user_data.email_address,
