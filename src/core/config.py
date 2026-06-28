@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     DATABASE_POOL_TIMEOUT: int = Field(default=30)
     DATABASE_POOL_RECYCLE: int = Field(default=60)
 
+    # LLM Proxy configuration (fallback defaults, system_settings takes precedence)
+    LLM_PROXY_ENABLED: bool = Field(default=False)
+    LLM_DEFAULT_MODEL: str = Field(default="")
+    LLM_DEFAULT_BASE_URL: str = Field(default="")
+    LLM_DEFAULT_API_KEY: str = Field(default="")
+
     @property
     def database_url(self) -> str:
         """Get database connection URL"""

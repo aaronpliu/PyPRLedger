@@ -34,6 +34,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "md-editor-v3": "^6.4.2",
+    "page-agent": "^1.10.0",
     "pinia": "^3.0.4",
     "socket.io-client": "^4.8.3",
     "ua-parser-js": "^2.0.9",

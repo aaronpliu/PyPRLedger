@@ -6,9 +6,30 @@
 </template>
 
 <script setup lang="ts">
+import { watch } from 'vue'
 import PWAInstallPrompt from '@/components/common/PWAInstallPrompt.vue'
+import { useAuthStore } from '@/stores/auth'
+import { usePageAgent } from '@/composables/usePageAgent'
+
 // Theme is now managed globally by useTheme composable
 // The composable auto-initializes on import
+
+// PageAgent - AI assistant that lives in the webpage
+const { init: initPageAgent, destroy: destroyPageAgent } = usePageAgent()
+const authStore = useAuthStore()
+
+// Auto-init PageAgent when user logs in, destroy on logout
+watch(
+  () => authStore.isAuthenticated,
+  async (isAuth) => {
+    if (isAuth) {
+      await initPageAgent()
+    } else {
+      destroyPageAgent()
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <style>
