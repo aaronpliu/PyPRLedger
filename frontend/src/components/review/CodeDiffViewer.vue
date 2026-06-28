@@ -188,80 +188,33 @@ const renderDiff = () => {
   overflow: auto;
 }
 
-/* 
- * CRITICAL FIXES ONLY - Match diff2html official demo behavior
- * The demo works perfectly with minimal CSS, so we should too.
- * Only fix the known positioning bug, nothing else.
- */
-
-/* Fix 1: Line number positioning bug (known diff2html issue) */
-:deep(.d2h-code-linenumber),
-:deep(.d2h-code-side-linenumber) {
-  position: relative !important;
-}
-
-:deep(.d2h-gutter) {
-  position: relative !important;
-}
-
-/* Fix 2: Remove solid background colors that don't adapt to themes */
-:deep(.d2h-wrapper),
-:deep(.d2h-file-wrapper),
-:deep(.d2h-file-header),
-:deep(.d2h-diff-table),
-:deep(.d2h-code-line-ctn),
-:deep(.d2h-code-line),
-:deep(.d2h-code-side-line),
-:deep(.d2h-ins),
-:deep(.d2h-del),
-:deep(.d2h-emptyplaceholder),
+/* Line numbers need relative positioning to stay inside the table flow
+   when rendered within a scrollable container with overflow:hidden wrapper.
+   Also override official display (inline-block/block) to table-cell so the
+   <td> elements stay as proper table cells with position:relative, otherwise
+   the two columns in side-by-side panels are rendered inconsistently. */
 :deep(.d2h-code-linenumber),
 :deep(.d2h-code-side-linenumber),
 :deep(.d2h-gutter) {
-  background-color: transparent !important;
+  position: relative !important;
+  display: table-cell !important;
+  height: auto !important;
+  overflow: visible !important;
 }
 
-/* Fix 3: Ensure added/removed lines have subtle backgrounds that work in both themes */
-:deep(.d2h-ins) {
-  background-color: rgba(34, 197, 94, 0.1) !important;
+/* Widen side-by-side line number column (official 4em is too tight) */
+:deep(.d2h-code-side-linenumber) {
+  width: 6em !important;
+  min-width: 6em !important;
 }
 
-:deep(.d2h-del) {
-  background-color: rgba(239, 68, 68, 0.1) !important;
+:deep(.d2h-diff-table td) {
+  padding: 0 !important;
 }
 
-/* Fix 4: Ensure the diff container itself has no background */
-:deep(.d2h-file-diff) {
-  background: transparent !important;
-}
-
-/* Fix 5: Ensure file header has solid background when sticky/scrolled */
-:deep(.d2h-file-header) {
-  background-color: var(--el-bg-color) !important;
-}
-
-[data-theme='dark'] :deep(.d2h-file-header) {
-  background-color: #1e293b !important;
-}
-
-/* Ensure sticky header doesn't become transparent */
-:deep(.d2h-sticky-header) {
-  background-color: var(--el-bg-color) !important;
-  backdrop-filter: none !important;
-}
-
-[data-theme='dark'] :deep(.d2h-sticky-header) {
-  background-color: #1e293b !important;
-}
-
-/* Fix 6: Minimal spacing adjustments - only override what's necessary */
-:deep(.d2h-code-line) {
-  padding: 0 1em !important;
-  width: calc(100% - 2em) !important;
-}
-
+:deep(.d2h-code-line),
 :deep(.d2h-code-side-line) {
-  padding: 0 0.5em !important;
-  width: calc(100% - 1em) !important;
+  padding: 0 !important;
+  width: 100% !important;
 }
 </style>
