@@ -5,6 +5,23 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] - 2026-06-28
+
+**Backend Version**: 1.19.0
+**Frontend Version**: 1.14.0
+
+### Added
+- enhance the behavior of page agent
+- enhance page agent style
+- allow page agent to show
+- setup llm proxy in backend
+- integrate page agent into prledger system
+
+### Fixed
+- enhance the diff2html style
+
+---
+
 ## [1.18.2] - 2026-06-25
 
 **Backend Version**: 1.18.2
