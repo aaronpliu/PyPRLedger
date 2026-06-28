@@ -690,7 +690,9 @@
       "llmApiKey": "API 密钥",
       "llmApiKeyPlaceholder": "输入新的 API 密钥",
       "llmApiKeyMasked": "已设置 - 输入新值替换",
-      "llmApiKeyDesc": "API 密钥仅存储在服务器端，不会暴露给前端"
+      "llmApiKeyDesc": "API 密钥仅存储在服务器端，不会暴露给前端",
+      "llmShow": "打开 AI 助手",
+      "llmHide": "关闭 AI 助手"
     },
     "git_user_management": "Git 用户管理",
     "add_git_user": "添加 Git 用户"

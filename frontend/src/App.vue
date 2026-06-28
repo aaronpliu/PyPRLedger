@@ -2,12 +2,18 @@
   <div id="app">
     <router-view />
     <PWAInstallPrompt />
+    <PageAgentLauncher
+      v-if="pageAgentInitialized && !pageAgentVisible"
+      :visible="pageAgentVisible"
+      @toggle="pageAgentToggle"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { watch } from 'vue'
 import PWAInstallPrompt from '@/components/common/PWAInstallPrompt.vue'
+import PageAgentLauncher from '@/components/common/PageAgentLauncher.vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePageAgent } from '@/composables/usePageAgent'
 
@@ -15,7 +21,13 @@ import { usePageAgent } from '@/composables/usePageAgent'
 // The composable auto-initializes on import
 
 // PageAgent - AI assistant that lives in the webpage
-const { init: initPageAgent, destroy: destroyPageAgent } = usePageAgent()
+const {
+  init: initPageAgent,
+  destroy: destroyPageAgent,
+  toggle: pageAgentToggle,
+  visible: pageAgentVisible,
+  initialized: pageAgentInitialized,
+} = usePageAgent()
 const authStore = useAuthStore()
 
 // Auto-init PageAgent when user logs in, destroy on logout
