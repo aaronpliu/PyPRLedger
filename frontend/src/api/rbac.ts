@@ -138,4 +138,26 @@ export const rbacApi = {
   updateRegistrationEnabled(enabled: boolean): Promise<{ message: string; registration_enabled: boolean }> {
     return request.put('/rbac/settings/registration-enabled', { registration_enabled: enabled })
   },
+
+  // ===== LLM Settings APIs =====
+
+  /** Get LLM proxy settings (apiKey excluded from response) */
+  getLlmConfig(): Promise<{
+    enabled: boolean
+    model: string
+    base_url: string
+    has_api_key: boolean
+  }> {
+    return request.get('/rbac/settings/llm')
+  },
+
+  /** Update LLM proxy settings */
+  updateLlmConfig(data: {
+    enabled?: boolean
+    model?: string
+    base_url?: string
+    api_key?: string
+  }): Promise<{ message: string }> {
+    return request.put('/rbac/settings/llm', data)
+  },
 }

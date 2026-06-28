@@ -361,3 +361,103 @@ async def update_registration_enabled(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update registration setting: {str(e)}",
         ) from e
+
+
+# ============================================================================
+# LLM Proxy Settings Endpoints
+# ============================================================================
+
+
+@router.get(
+    "/settings/llm",
+    response_model=dict,
+    summary="Get LLM proxy settings",
+    description="Returns LLM proxy configuration (without API key). Requires manage settings permission.",
+)
+async def get_llm_settings(
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+) -> dict:
+    """Get LLM proxy settings (api_key excluded from response)"""
+    await rbac_service.require_permission(current_user.id, "manage", "settings")
+
+    try:
+        enabled = await rbac_service.get_setting("llm_enabled", default_value="false")
+        model = await rbac_service.get_setting("llm_model", default_value="")
+        base_url = await rbac_service.get_setting("llm_base_url", default_value="")
+        api_key = await rbac_service.get_setting("llm_api_key", default_value="")
+        return {
+            "enabled": enabled.lower() == "true",
+            "model": model,
+            "base_url": base_url,
+            "has_api_key": bool(api_key),
+        }
+    except Exception as e:
+        logger.error(f"Failed to get LLM settings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get LLM settings: {str(e)}",
+        ) from e
+
+
+@router.put(
+    "/settings/llm",
+    response_model=dict,
+    summary="Update LLM proxy settings",
+    description="Update LLM proxy configuration (model, base_url, api_key). Requires manage settings permission.",
+)
+async def update_llm_settings(
+    setting_data: dict,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict:
+    """Update LLM proxy settings"""
+    await rbac_service.require_permission(current_user.id, "manage", "settings")
+
+    try:
+        # Update each setting individually
+        if "enabled" in setting_data:
+            value_str = str(setting_data["enabled"]).lower()
+            await rbac_service.update_setting(
+                setting_key="llm_enabled",
+                setting_value=value_str,
+                updated_by=current_user.id,
+                description="Enable or disable LLM proxy for PageAgent",
+            )
+
+        if "model" in setting_data:
+            await rbac_service.update_setting(
+                setting_key="llm_model",
+                setting_value=setting_data["model"],
+                updated_by=current_user.id,
+                description="Default LLM model for PageAgent",
+            )
+
+        if "base_url" in setting_data:
+            await rbac_service.update_setting(
+                setting_key="llm_base_url",
+                setting_value=setting_data["base_url"],
+                updated_by=current_user.id,
+                description="Base URL for LLM provider API",
+            )
+
+        if "api_key" in setting_data and setting_data["api_key"]:
+            await rbac_service.update_setting(
+                setting_key="llm_api_key",
+                setting_value=setting_data["api_key"],
+                updated_by=current_user.id,
+                description="API key for LLM provider (server-side only)",
+            )
+
+        return {"message": "LLM settings updated successfully"}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        logger.error(f"Failed to update LLM settings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update LLM settings: {str(e)}",
+        ) from e

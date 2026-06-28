@@ -671,6 +671,27 @@
       "systemSettings": "系統設定",
       "recentAuditLogs": "最近稽核日誌"
     },
+    "systemSettings": {
+      "title": "系統設定",
+      "registrationEnabled": "用戶註冊",
+      "registrationEnabledDesc": "允許新用戶創建帳戶。禁用後，只有管理員可以創建新用戶帳戶。",
+      "loadFailed": "加載系統設定失敗",
+      "saveSuccess": "設定保存成功",
+      "saveFailed": "保存設定失敗",
+      "llmSettings": "AI 助手 (PageAgent)",
+      "llmEnabled": "啟用 AI 助手",
+      "llmEnabledDesc": "在頁面中啟用 AI 助手懸浮面板",
+      "llmModel": "模型",
+      "llmModelPlaceholder": "例如: qwen-max",
+      "llmModelDesc": "用於 PageAgent 的默認 LLM 模型",
+      "llmBaseUrl": "API 基礎地址",
+      "llmBaseUrlPlaceholder": "例如: https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "llmBaseUrlDesc": "LLM 提供商 API 的基礎 URL",
+      "llmApiKey": "API 密鑰",
+      "llmApiKeyPlaceholder": "輸入新的 API 密鑰",
+      "llmApiKeyMasked": "已設定 - 輸入新值替換",
+      "llmApiKeyDesc": "API 密鑰僅存儲在服務器端，不會暴露給前端"
+    },
     "git_user_management": "Git 使用者管理",
     "add_git_user": "新增 Git 使用者"
   },
