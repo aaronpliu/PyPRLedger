@@ -16,13 +16,14 @@ export function usePageAgent() {
     if (!config.enabled) return
 
     // Initialize PageAgent with backend proxy baseURL
-    // Panel auto-shows on construction
+    // Panel starts hidden — show it so the user can interact
     agent.value = new PageAgent({
       model: config.model,
       baseURL: '/api/v1/llm/proxy', // Backend proxy handles auth
       apiKey: 'proxy',               // Dummy key, backend adds real key
       language: getSupportedLanguage(),
     })
+    agent.value.panel.show()
     initialized.value = true
   }
 

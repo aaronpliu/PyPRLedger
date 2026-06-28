@@ -90,7 +90,6 @@ async def llm_proxy(
     path: str,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db_session)],
-    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ):
     """Proxy any LLM API request path (e.g., chat/completions) to the configured provider."""
     config = await _get_llm_config(db)
