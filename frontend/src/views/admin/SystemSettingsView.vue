@@ -176,6 +176,8 @@ const handleLlmSave = async () => {
     await rbacApi.updateLlmConfig(data)
     // Reload to get fresh has_api_key status
     await loadLlmSettings()
+    // Notify PageAgent composable to re-check config immediately
+    window.dispatchEvent(new CustomEvent('pageagent-config-changed'))
     ElMessage.success(t('admin.systemSettings.saveSuccess'))
   } catch (error: any) {
     console.error('Failed to save LLM settings:', error)
