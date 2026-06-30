@@ -329,7 +329,9 @@
         </el-table-column>
         
         <!-- Selection column only for review admins -->
-        <el-table-column v-if="isReviewAdmin" type="selection" width="55" fixed="left" />
+        <template v-if="isReviewAdmin">
+          <el-table-column type="selection" width="55" fixed="left" />
+        </template>
         <!-- Pin column -->
         <el-table-column width="40" fixed="left">
           <template #header>
@@ -361,13 +363,6 @@
         <el-table-column :label="t('reviews.seq_number')" width="80">
           <template #default="{ $index }">
             {{ (currentPage - 1) * pageSize + $index + 1 }}
-          </template>
-        </el-table-column>
-        
-        <!-- ID -->
-        <el-table-column :label="t('reviews.detail.id', 'ID')" width="70">
-          <template #default="{ row }">
-            <span class="text-secondary">#{{ row.id }}</span>
           </template>
         </el-table-column>
         
@@ -565,7 +560,7 @@
       <div class="delete-preview">
         <div v-for="review in selectedReviews.slice(0, 5)" :key="review.id" class="preview-item">
           <el-icon><Document /></el-icon>
-          <span>Review #{{ review.id }} - {{ truncateUrl(review.pull_request_id) }}</span>
+          <span>{{ formatPublicId(review.public_id, review.id) }} - {{ truncateUrl(review.pull_request_id) }}</span>
         </div>
         <div v-if="selectedReviews.length > 5" class="preview-more">
           ... and {{ selectedReviews.length - 5 }} more
@@ -602,8 +597,8 @@
         </div>
       </div>
       
-      <template #footer v-if="!bulkOperationLoading">
-        <el-button type="primary" @click="closeProgressDialog">Close</el-button>
+      <template #footer>
+        <el-button v-if="!bulkOperationLoading" type="primary" @click="closeProgressDialog">Close</el-button>
       </template>
     </el-dialog>
     
@@ -618,7 +613,7 @@
         <!-- Current review header -->
         <div class="associate-current-review">
           <span class="associate-label">{{ t('reviews.current_review', 'Current Review') }}</span>
-          <el-tag type="primary" size="large">#{{ associateTargetReview.id }}</el-tag>
+          <el-tag type="primary" size="large">{{ formatPublicId(associateTargetReview.public_id, associateTargetReview.id) }}</el-tag>
           <span class="associate-current-detail">
             {{ associateTargetReview.app_name || associateTargetReview.project_key }} — {{ associateTargetReview.pull_request_id }}
           </span>
@@ -637,7 +632,7 @@
               filterable
               :remote="true"
               :remote-method="filterAssociateOptions"
-              :placeholder="t('reviews.associate_search_placeholder', 'Type review ID to search...')"
+              :placeholder="t('reviews.associate_search_placeholder', 'Search by project, PR ID, or user...')"
               class="associate-select"
               clearable
               style="flex: 1"
@@ -645,7 +640,7 @@
               <el-option
                 v-for="item in associateOptions"
                 :key="item.id"
-                :label="`#${item.id} - ${item.app_name || item.project_key} - ${item.pull_request_user_info?.display_name || item.pull_request_user} - ${item.source_branch} \u2192 ${item.target_branch}`"
+                :label="`${item.app_name || item.project_key}/${item.repository_slug} - PR #${item.pull_request_id} - ${item.pull_request_user_info?.display_name || item.pull_request_user || ''}`"
                 :value="item.id"
               />
             </el-select>
@@ -664,7 +659,7 @@
             </label>
             <div v-for="assoc in currentAssociations" :key="assoc.id" class="assoc-item-card">
               <div class="assoc-item-left">
-                <el-tag type="info" size="small">#{{ assoc.id }}</el-tag>
+                <el-tag type="info" size="small">{{ formatPublicId(assoc.public_id, assoc.id) }}</el-tag>
                 <span class="assoc-item-info">
                   {{ assoc.app_name || assoc.project_key }} — {{ assoc.pull_request_id }}
                 </span>
@@ -797,41 +792,51 @@ const unlinkingId = ref<string | null>(null)
 const associateOptions = ref<Review[]>([])
 
 const filterAssociateOptions = async (query: string) => {
-  // Strip '#' prefix (users may paste '#123' from ID column) and non-numeric chars
-  const sanitized = query.replace(/^#/, '').replace(/\D/g, '')
-  if (!sanitized) {
+  const trimmed = query.trim()
+  if (!trimmed) {
     associateOptions.value = []
     return
   }
-  const numericId = Number(sanitized)
-  
-  // First check if the review is already loaded in the current page
-  let match = reviews.value.find(r => r.id === numericId)
-  
-  // If not in current page, fetch via API
-  if (!match) {
+
+  // Try to search the current page's reviews first (fast, no API call)
+  const lowerQuery = trimmed.toLowerCase()
+  let matches = reviews.value.filter(r => {
+    // Match by project key, pull request ID, repo slug, app name, or PR user display name
+    const searchableText = [
+      r.project_key,
+      r.pull_request_id,
+      r.repository_slug,
+      r.app_name,
+      r.pull_request_user_info?.display_name,
+      r.pull_request_user,
+      r.reviewer_info?.display_name,
+      r.reviewer,
+    ].filter(Boolean).join(' ').toLowerCase()
+
+    return searchableText.includes(lowerQuery)
+  })
+
+  // If no matches on current page, search the full API using the search_query parameter
+  if (matches.length === 0) {
     try {
-      match = await reviewsApi.getReviewById(numericId)
+      const response = await reviewsApi.getReviews({
+        page: 1,
+        page_size: 10,
+        search_query: trimmed,
+      })
+      matches = response.items || []
     } catch {
-      // Review not found or no permission — ignore
+      // API search failed — ignore
     }
   }
-  
-  if (!match) {
-    associateOptions.value = []
-    return
-  }
-  
+
   // Exclude current review and already-associated reviews
-  if (
-    match.id === associateTargetReview.value?.id ||
-    associateTargetReview.value?.associated_review_ids?.includes(match.id)
-  ) {
-    associateOptions.value = []
-    return
-  }
-  
-  associateOptions.value = [match]
+  matches = matches.filter(m =>
+    m.id !== associateTargetReview.value?.id &&
+    !(associateTargetReview.value?.associated_review_ids || []).includes(m.id)
+  )
+
+  associateOptions.value = matches.slice(0, 10)
 }
 
 const progressStatus = ref<'success' | 'exception' | 'warning'>()
@@ -845,6 +850,16 @@ const totalCount = ref(0)
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
+}
+
+const formatPublicId = (publicId: string | null | undefined, fallbackId: number): string => {
+  // public_id comes as "rev_kM8xP31R" — strip prefix and show as "REV-kM8xP31R"
+  if (publicId) {
+    const parts = publicId.split('_')
+    const hash = parts.length > 1 ? parts.slice(1).join('_') : publicId
+    return `REV-${hash}`
+  }
+  return `#${fallbackId}`  // fallback if no public_id available
 }
 
 // Get score color class for visual indication
@@ -1250,6 +1265,7 @@ const viewReview = (review: Review) => {
   reviewNavigationStore.setContext({
     items: reviews.value.map(item => ({
       id: item.id,
+      publicId: item.public_id || item.id.toString(),
       projectKey: item.project_key,
       repositorySlug: item.repository_slug,
       pullRequestId: item.pull_request_id,
@@ -1260,12 +1276,12 @@ const viewReview = (review: Review) => {
     pageSize: pageSize.value,
     totalItems: total.value,
     hasMorePages: hasMorePages,
-    filters: filterParams, // Store filters for pagination consistency
+    filters: filterParams,
   })
 
   router.push({
     name: 'ReviewDetail',
-    params: { id: review.id },
+    params: { id: review.public_id || review.id.toString() },
     query: {
       projectKey: review.project_key,
       repositorySlug: review.repository_slug,
@@ -1397,7 +1413,7 @@ const loadPRUsers = async () => {
   try {
     prUsersLoading.value = true
     // Fetch all active users once - cache for client-side filtering
-    const users = await usersApi.getAllBitbucketUsers(500)
+    const users = await usersApi.getAllBitbucketUsers({ limit: 500 })
     const activeUsers = users.filter(u => u.active !== false)
     allPRUsers.value = activeUsers
     availablePRUsers.value = activeUsers

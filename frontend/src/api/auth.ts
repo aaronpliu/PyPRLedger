@@ -76,4 +76,19 @@ export const authApi = {
   adminResetPassword(authUserId: number, data: AdminPasswordResetRequest): Promise<{ message: string }> {
     return request.post(`/auth/users/${authUserId}/reset-password`, data)
   },
+
+  // Admin create a new auth user (system user)
+  adminCreateUser(data: {
+    username: string
+    email: string
+    password: string
+  }): Promise<{
+    id: number
+    username: string
+    email: string | null
+    is_active: boolean
+    created_at: string | null
+  }> {
+    return request.post('/users/auth/create', data)
+  },
 }

@@ -20,6 +20,27 @@
         </div>
       </template>
 
+      <!-- App Name Filter -->
+      <div v-if="rules.length > 0" class="app-filter-bar">
+        <el-select
+          v-model="appFilter"
+          placeholder="All Applications"
+          clearable
+          style="width: 250px"
+          @change="currentPage = 1"
+        >
+          <el-option
+            v-for="app in appOptions"
+            :key="app.app_name"
+            :label="app.app_name"
+            :value="app.app_name"
+          />
+        </el-select>
+        <span v-if="appFilter" class="filter-hint">
+          Showing rules matching {{ appFilter }}
+        </span>
+      </div>
+
       <!-- Empty State -->
       <div v-if="!loading && rules.length === 0" class="empty-state">
         <el-empty :description="t('auto_rules.empty_description')">
@@ -32,16 +53,17 @@
 
       <!-- Rules Table -->
       <div v-else>
+        <div class="table-wrapper">
         <el-table
-          :data="paginatedRules"
+          :data="displayRules"
           v-loading="loading"
           stripe
           border
           style="width: 100%"
         >
-          <el-table-column prop="name" :label="t('auto_rules.col_name')" min-width="180" />
-          <el-table-column prop="priority" :label="t('auto_rules.col_priority')" width="90" align="center" />
-          <el-table-column :label="t('auto_rules.col_conditions')" min-width="220">
+          <el-table-column prop="name" :label="t('auto_rules.col_name')" min-width="160" />
+          <el-table-column prop="priority" :label="t('auto_rules.col_priority')" width="80" align="center" />
+          <el-table-column :label="t('auto_rules.col_conditions')" min-width="200">
             <template #default="{ row }">
               <el-tooltip
                 placement="top"
@@ -52,7 +74,7 @@
               </el-tooltip>
             </template>
           </el-table-column>
-          <el-table-column :label="t('auto_rules.col_assign_to')" min-width="180">
+          <el-table-column :label="t('auto_rules.col_assign_to')" min-width="160">
             <template #default="{ row }">
               <el-tag
                 v-for="username in row.assign_to"
@@ -67,6 +89,20 @@
           <el-table-column prop="max_assignments" :label="t('auto_rules.col_max')" width="80" align="center">
             <template #default="{ row }">
               {{ row.max_assignments === 0 ? t('auto_rules.all') : row.max_assignments }}
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('auto_rules.col_starts_at')" width="175" align="center">
+            <template #default="{ row }">
+              <span class="date-cell" :class="{ 'date-null': !row.starts_at }">
+                {{ formatDateTime(row.starts_at) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('auto_rules.col_expires_at')" width="175" align="center">
+            <template #default="{ row }">
+              <span class="date-cell" :class="{ 'date-null': !row.expires_at }">
+                {{ formatDateTime(row.expires_at) }}
+              </span>
             </template>
           </el-table-column>
           <el-table-column :label="t('auto_rules.col_status')" width="100" align="center">
@@ -97,12 +133,14 @@
           </el-table-column>
         </el-table>
 
+        </div>
+
         <!-- Pagination -->
         <div class="pagination-wrapper">
           <el-pagination
             v-model:current-page="currentPage"
             v-model:page-size="pageSize"
-            :total="total"
+            :total="displayRules.length"
             :page-sizes="[10, 20, 50, 100]"
             layout="total, sizes, prev, pager, next"
             @current-change="loadRules"
@@ -159,42 +197,23 @@
         <!-- Match Conditions -->
         <el-divider content-position="left">{{ t('auto_rules.section_conditions') }}</el-divider>
 
-        <el-form-item :label="t('auto_rules.f_project_key')">
+        <el-form-item label="App Name">
           <el-select
-            v-model="cond.project_key"
+            v-model="cond.app_name"
             multiple
             filterable
             clearable
-            placeholder="e.g. PROJ-A"
+            placeholder="Select applications"
             style="width: 100%"
           >
             <el-option
-              v-for="p in projects"
-              :key="p.project_key"
-              :label="`${p.project_key} - ${p.project_name}`"
-              :value="p.project_key"
+              v-for="app in appOptions"
+              :key="app.app_name"
+              :label="`${app.app_name} (${app.project_count} projects)`"
+              :value="app.app_name"
             />
           </el-select>
-          <div class="form-help-text">{{ t('auto_rules.f_project_key_hint') }}</div>
-        </el-form-item>
-
-        <el-form-item :label="t('auto_rules.f_repository_slug')">
-          <el-select
-            v-model="cond.repository_slug"
-            multiple
-            filterable
-            clearable
-            placeholder="e.g. frontend-store"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="r in filteredRepos"
-              :key="r.repository_slug"
-              :label="r.repository_slug"
-              :value="r.repository_slug"
-            />
-          </el-select>
-          <div class="form-help-text">{{ t('auto_rules.f_repo_hint') }}</div>
+          <div class="form-help-text">Conditions will be resolved to project_key and repository_slug in JSON</div>
         </el-form-item>
 
         <el-form-item :label="t('auto_rules.f_pr_user')">
@@ -355,6 +374,8 @@ import {
 } from '@/api/autoAssignRules'
 import { projectsApi, type ProjectSummary, type RepositorySummary } from '@/api/projects'
 import { usersApi, type ReviewerUser } from '@/api/users'
+import { projectRegistryApi } from '@/api/projectRegistry'
+import type { AppInfo } from '@/api/projectRegistry'
 
 const { t } = useI18n()
 
@@ -372,6 +393,11 @@ const projects = ref<ProjectSummary[]>([])
 const gitUsers = ref<ReviewerUser[]>([])
 const reviewerUsers = ref<ReviewerUser[]>([])
 
+// === App Filter ===
+const appFilter = ref('')
+const appOptions = ref<AppInfo[]>([])
+const registryMap = ref<Record<string, string[]>>({}) // app_name -> ['project_key/repo_slug', ...]
+
 // === Dialog State ===
 const dialogVisible = ref(false)
 const isEditing = ref(false)
@@ -380,6 +406,7 @@ const formRef = ref<any>(null)
 
 // === Condition form fields (structured, mapped to conditions JSON) ===
 const cond = reactive({
+  app_name: [] as string[],
   project_key: [] as string[],
   repository_slug: [] as string[],
   pull_request_user: [] as string[],
@@ -419,6 +446,22 @@ function buildConditions(): Record<string, any> {
   return c
 }
 
+// Watch app_name — resolve to project_key + repository_slug via registry map
+watch(() => cond.app_name, (newApps) => {
+  const pkSet = new Set<string>()
+  const slugSet = new Set<string>()
+  for (const app of newApps) {
+    const entries = registryMap.value[app] || []
+    for (const entry of entries) {
+      const [pk, slug] = entry.split('/')
+      if (pk) pkSet.add(pk)
+      if (slug) slugSet.add(slug)
+    }
+  }
+  cond.project_key = Array.from(pkSet)
+  cond.repository_slug = Array.from(slugSet)
+}, { deep: true })
+
 // Sync conditions from cond form -> form.conditions (for the API payload)
 watch(
   () => conditionsPreview.value,
@@ -431,18 +474,36 @@ watch(
 // === Filtered repos based on selected projects ===
 // Map of project_key -> repos; populated during loadProjects()
 const projectReposMap = ref<Record<string, RepositorySummary[]>>({})
-const filteredRepos = computed(() => {
-  const keys = cond.project_key.length > 0 ? cond.project_key : Object.keys(projectReposMap.value)
-  const all: RepositorySummary[] = []
-  for (const key of keys) {
-    const repos = projectReposMap.value[key] || []
-    all.push(...repos)
-  }
-  return all
-})
 
 // === Computed ===
 const paginatedRules = computed(() => rules.value)
+
+// Filter rules by selected app name (client-side)
+const displayRules = computed(() => {
+  if (!appFilter.value || !registryMap.value[appFilter.value]) {
+    return rules.value
+  }
+  const appEntries = registryMap.value[appFilter.value] || []
+  return rules.value.filter(rule => {
+    const cond = rule.conditions || {}
+    const pks = Array.isArray(cond.project_key) ? cond.project_key : (cond.project_key ? [cond.project_key] : [])
+    const slugs = Array.isArray(cond.repository_slug) ? cond.repository_slug : (cond.repository_slug ? [cond.repository_slug] : [])
+    // If no project/repo conditions, the rule applies to all -> include it
+    if (pks.length === 0 && slugs.length === 0) return true
+    // Check if any (project_key, repository_slug) combo matches the selected app
+    if (pks.length === 0) {
+      // Only repo slugs specified - match if any slug belongs to this app
+      return slugs.some(slug => appEntries.some(entry => entry.endsWith(`/${slug}`)))
+    }
+    // Check each project_key against app entries
+    return pks.some(pk => {
+      if (slugs.length === 0) {
+        return appEntries.some(entry => entry.startsWith(`${pk}/`))
+      }
+      return slugs.some(slug => appEntries.includes(`${pk}/${slug}`))
+    })
+  })
+})
 
 // === Form Validation ===
 const formRules = {
@@ -475,7 +536,7 @@ async function loadProjects() {
 
 async function loadUsers() {
   try {
-    gitUsers.value = await usersApi.getAllBitbucketUsers(500)
+    gitUsers.value = await usersApi.getAllBitbucketUsers({ limit: 500 })
   } catch {
     gitUsers.value = []
   }
@@ -520,6 +581,12 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString()
 }
 
+function formatDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 // === Replace cond fields from conditions JSON (used when editing) ===
 function applyConditionsToForm(conditions: Record<string, any>) {
   cond.project_key = conditions.project_key || []
@@ -528,10 +595,25 @@ function applyConditionsToForm(conditions: Record<string, any>) {
   cond.source_branch_prefix = conditions.source_branch_prefix || ''
   cond.target_branch = conditions.target_branch || []
   cond.pull_request_status = conditions.pull_request_status || []
+  // Reverse-map project_key/repository_slug back to app_name
+  const selectedApps: string[] = []
+  for (const [app, entries] of Object.entries(registryMap.value)) {
+    const matchAll = cond.project_key.every(pk =>
+      entries.some(e => e.startsWith(`${pk}/`))
+    )
+    const matchSlugs = cond.repository_slug.length === 0 || cond.repository_slug.every(slug =>
+      entries.some(e => e.endsWith(`/${slug}`))
+    )
+    if (matchAll && matchSlugs) {
+      selectedApps.push(app)
+    }
+  }
+  cond.app_name = selectedApps
   form.value.conditions = buildConditions()
 }
 
 function resetConditions() {
+  cond.app_name = []
   cond.project_key = []
   cond.repository_slug = []
   cond.pull_request_user = []
@@ -643,8 +725,28 @@ onMounted(async () => {
     loadRules(),
     loadProjects(),
     loadUsers(),
+    loadAppOptions(),
   ])
 })
+
+// Load app names and registry map for filtering
+async function loadAppOptions() {
+  try {
+    appOptions.value = await projectRegistryApi.listApps()
+    const allRegistry = await projectRegistryApi.listAllRegisteredProjects()
+    // Build map: app_name -> ['project_key/repo_slug', ...]
+    const map: Record<string, string[]> = {}
+    for (const entry of allRegistry) {
+      if (!map[entry.app_name]) {
+        map[entry.app_name] = []
+      }
+      map[entry.app_name].push(`${entry.project_key}/${entry.repository_slug}`)
+    }
+    registryMap.value = map
+  } catch (e) {
+    console.error('Failed to load app options:', e)
+  }
+}
 </script>
 
 <style scoped>
@@ -680,6 +782,39 @@ onMounted(async () => {
   display: flex;
   justify-content: center;
   padding: 60px 0;
+}
+
+.app-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  margin-bottom: 4px;
+}
+
+.filter-hint {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.table-wrapper :deep(.el-table) {
+  min-width: 100%;
+}
+
+.date-cell {
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.date-cell.date-null {
+  color: var(--el-text-color-placeholder);
+  font-family: inherit;
+  font-style: italic;
 }
 
 .conditions-preview {

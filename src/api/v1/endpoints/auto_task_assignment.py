@@ -29,18 +29,29 @@ router = APIRouter(prefix="/auto-task-assignment", tags=["auto-task-assignment"]
 
 
 async def _get_git_username(auth_user_id: int, db: AsyncSession) -> str | None:
-    """Get the Git username associated with an auth user"""
+    """Get the Git username associated with an auth user
+
+    Falls back to the auth user's own username if no linked Git account exists.
+    This allows system administrators (who may not have Bitbucket accounts)
+    to manage auto-assignment rules.
+    """
     stmt = select(AuthUser).where(AuthUser.id == auth_user_id)
     result = await db.execute(stmt)
     auth_user = result.scalar_one_or_none()
 
-    if not auth_user or not auth_user.user_id:
+    if not auth_user:
         return None
 
-    stmt = select(User).where(User.id == auth_user.user_id)
-    result = await db.execute(stmt)
-    git_user = result.scalar_one_or_none()
-    return git_user.username if git_user else None
+    # If a linked Git user exists, use their username
+    if auth_user.user_id:
+        stmt = select(User).where(User.id == auth_user.user_id)
+        result = await db.execute(stmt)
+        git_user = result.scalar_one_or_none()
+        if git_user and git_user.username:
+            return git_user.username
+
+    # Fall back to the auth user's own username (for system admins, etc.)
+    return auth_user.username
 
 
 async def _require_assign_permission(

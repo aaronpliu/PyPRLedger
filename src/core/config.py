@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     DATABASE_POOL_TIMEOUT: int = Field(default=30)
     DATABASE_POOL_RECYCLE: int = Field(default=60)
 
+    # LLM Proxy configuration (fallback defaults, system_settings takes precedence)
+    LLM_PROXY_ENABLED: bool = Field(default=False)
+    LLM_DEFAULT_MODEL: str = Field(default="")
+    LLM_DEFAULT_BASE_URL: str = Field(default="")
+    LLM_DEFAULT_API_KEY: str = Field(default="")
+
     @property
     def database_url(self) -> str:
         """Get database connection URL"""
@@ -174,6 +180,12 @@ class Settings(BaseSettings):
     MAX_AVATAR_SIZE: int = Field(default=5 * 1024 * 1024)  # 5MB
     ALLOWED_AVATAR_TYPES: set = {"image/jpeg", "image/png", "image/webp", "image/gif"}
     AVATAR_BASE_URL: str = Field(default="/api/v1/users/avatars")
+
+    # ID obfuscation configuration
+    ID_OBFUSCATOR_SALT: str = Field(
+        default="change-me-in-production",
+        description="Secret salt for hashids ID obfuscation. Must be set to a unique random value in production.",
+    )
 
     # API Documentation visibility configuration
     ENABLE_API_DOCS: bool = Field(

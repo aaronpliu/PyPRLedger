@@ -1480,6 +1480,7 @@ class ReviewService:
         db: AsyncSession = None,
         use_cache: bool = True,
         reviewer_username: str | None = None,
+        app_names: list[str] | None = None,
     ) -> ReviewStats:
         """
         Get pull request review statistics
@@ -1489,12 +1490,13 @@ class ReviewService:
             db: Database session
             use_cache: Whether to use cache
             reviewer_username: Optional username to filter statistics by reviewer
+            app_names: Optional list of app names to filter by (resolved via project_registry)
 
         Returns:
             ReviewStats: Review statistics
         """
         # Try cache first
-        cache_key = f"stats:reviews:{project_key or 'all'}:{reviewer_username or 'all'}"
+        cache_key = f"stats:reviews:{project_key or 'all'}:{reviewer_username or 'all'}:{','.join(sorted(app_names)) if app_names else 'all'}"
         if use_cache:
             try:
                 cached = await self.redis_client.get(cache_key)
@@ -1505,12 +1507,52 @@ class ReviewService:
                 logger.warning(f"Failed to get review stats from cache: {str(e)}")
 
         logger.info(
-            f"Calculating review statistics - project_key={project_key}, reviewer_username={reviewer_username}"
+            f"Calculating review statistics - project_key={project_key}, reviewer_username={reviewer_username}, app_names={app_names}"
         )
+
+        # Resolve app_names to (project_key, repository_slug) pairs
+        app_conditions = None
+        score_app_conditions = None
+        if app_names:
+            registry_query = select(
+                ProjectRegistry.project_key,
+                ProjectRegistry.repository_slug,
+            ).where(ProjectRegistry.app_name.in_(app_names))
+            registry_result = await db.execute(registry_query)
+            project_repo_pairs = registry_result.all()
+            if project_repo_pairs:
+                app_conditions = [
+                    and_(
+                        PullRequestReviewBase.project_key == pk,
+                        PullRequestReviewBase.repository_slug == rs,
+                    )
+                    for pk, rs in project_repo_pairs
+                ]
+                score_app_conditions = [
+                    and_(
+                        PullRequestScore.project_key == pk,
+                        PullRequestScore.repository_slug == rs,
+                    )
+                    for pk, rs in project_repo_pairs
+                ]
+            else:
+                return ReviewStats(
+                    total_reviews=0,
+                    open_reviews=0,
+                    merged_reviews=0,
+                    closed_reviews=0,
+                    average_score=0.0,
+                    reviews_today=0,
+                    reviews_this_week=0,
+                    reviews_this_month=0,
+                )
+
         # Build base query for PullRequestReviewBase
         base_query = select(PullRequestReviewBase)
         if project_key:
             base_query = base_query.where(PullRequestReviewBase.project_key == project_key)
+        if app_conditions:
+            base_query = base_query.where(or_(*app_conditions))
 
         # Filter by reviewer if specified (assigned reviews)
         if reviewer_username:
@@ -1526,6 +1568,8 @@ class ReviewService:
         )
         if project_key:
             total_query = total_query.where(PullRequestReviewBase.project_key == project_key)
+        if app_conditions:
+            total_query = total_query.where(or_(*app_conditions))
 
         # Apply reviewer filter
         if reviewer_username:
@@ -1546,6 +1590,8 @@ class ReviewService:
             status_subquery = status_subquery.where(
                 PullRequestReviewBase.project_key == project_key
             )
+        if app_conditions:
+            status_subquery = status_subquery.where(or_(*app_conditions))
 
         # Apply reviewer filter
         if reviewer_username:
@@ -1572,6 +1618,8 @@ class ReviewService:
         # Apply same project_key filter if provided
         if project_key:
             avg_score_query = avg_score_query.where(PullRequestScore.project_key == project_key)
+        if score_app_conditions:
+            avg_score_query = avg_score_query.where(or_(*score_app_conditions))
 
         # Filter scores by reviewer if specified
         if reviewer_username:
@@ -1591,6 +1639,8 @@ class ReviewService:
         ).where(PullRequestReviewBase.created_date >= today)
         if project_key:
             today_query = today_query.where(PullRequestReviewBase.project_key == project_key)
+        if app_conditions:
+            today_query = today_query.where(or_(*app_conditions))
 
         # Apply reviewer filter
         if reviewer_username:
@@ -1608,6 +1658,8 @@ class ReviewService:
         ).where(PullRequestReviewBase.created_date >= week_ago)
         if project_key:
             week_query = week_query.where(PullRequestReviewBase.project_key == project_key)
+        if app_conditions:
+            week_query = week_query.where(or_(*app_conditions))
 
         # Apply reviewer filter
         if reviewer_username:
@@ -1625,6 +1677,8 @@ class ReviewService:
         ).where(PullRequestReviewBase.created_date >= month_ago)
         if project_key:
             month_query = month_query.where(PullRequestReviewBase.project_key == project_key)
+        if app_conditions:
+            month_query = month_query.where(or_(*app_conditions))
 
         # Apply reviewer filter
         if reviewer_username:

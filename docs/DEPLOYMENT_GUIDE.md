@@ -212,6 +212,7 @@ ENV=production
 DEBUG=False
 SECRET_KEY=<your-strong-secret-key>
 DATABASE_PASSWORD=<your-db-password>
+ID_OBFUSCATOR_SALT=<generate-a-random-64-char-hex-string>
 ```
 
 ### 2. SSL/TLS Configuration

@@ -13,6 +13,17 @@
 
       <!-- Filters -->
       <el-form :inline="true" class="filter-form">
+        <el-form-item label="App Name">
+          <el-select v-model="appNameFilter" placeholder="All Applications" clearable filterable style="width: 200px" @change="loadAnalytics">
+            <el-option
+              v-for="app in appOptions"
+              :key="app.app_name"
+              :label="app.app_name"
+              :value="app.app_name"
+            />
+          </el-select>
+        </el-form-item>
+
         <el-form-item :label="t('scores.analytics.date_range', 'Date Range')">
           <el-date-picker
             v-model="dateRange"
@@ -150,6 +161,8 @@ import { reviewsApi } from '@/api/reviews'
 import { scoresApi } from '@/api/scores'
 import { usersApi } from '@/api/users'
 import { projectsApi } from '@/api/projects'
+import { projectRegistryApi } from '@/api/projectRegistry'
+import type { AppInfo } from '@/api/projectRegistry'
 import dayjs from 'dayjs'
 import { ElMessage } from 'element-plus'
 
@@ -159,6 +172,8 @@ const loading = ref(false)
 const dateRange = ref<[Date, Date] | null>(null)
 const projectFilter = ref('')
 const reviewerFilter = ref('')
+const appNameFilter = ref('')
+const appOptions = ref<AppInfo[]>([])
 
 // Summary data
 const summary = reactive({
@@ -178,6 +193,9 @@ const reviewerOptions = ref<Array<{ label: string; value: string }>>([])
 
 const loadFilterOptions = async () => {
   try {
+    // Load app options
+    appOptions.value = await projectRegistryApi.listApps()
+
     // Load projects
     const projectsResponse = await projectsApi.listProjects({ page_size: 100 })
     projectOptions.value = (projectsResponse.items || []).map((p) => ({
@@ -202,6 +220,7 @@ const loadAnalytics = async () => {
     // Fetch review statistics
     const stats = await reviewsApi.getStats({
       project_key: projectFilter.value || undefined,
+      app_names: appNameFilter.value || undefined,
     })
 
     // Update summary cards with real data
@@ -249,6 +268,7 @@ const resetFilters = () => {
   dateRange.value = null
   projectFilter.value = ''
   reviewerFilter.value = ''
+  appNameFilter.value = ''
   loadAnalytics()
 }
 

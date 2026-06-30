@@ -138,4 +138,45 @@ export const rbacApi = {
   updateRegistrationEnabled(enabled: boolean): Promise<{ message: string; registration_enabled: boolean }> {
     return request.put('/rbac/settings/registration-enabled', { registration_enabled: enabled })
   },
+
+  // ===== LLM Settings APIs =====
+
+  /** Get LLM proxy settings (apiKey excluded from response) */
+  getLlmConfig(): Promise<{
+    enabled: boolean
+    model: string
+    base_url: string
+    has_api_key: boolean
+  }> {
+    return request.get('/rbac/settings/llm')
+  },
+
+  /** Update LLM proxy settings */
+  updateLlmConfig(data: {
+    enabled?: boolean
+    model?: string
+    base_url?: string
+    api_key?: string
+  }): Promise<{ message: string }> {
+    return request.put('/rbac/settings/llm', data)
+  },
+
+  // ===== Banner Settings APIs =====
+
+  /** Get reviews page banner config */
+  getBanner(): Promise<BannerConfig> {
+    return request.get('/rbac/settings/banner')
+  },
+
+  /** Update reviews page banner config */
+  updateBanner(data: BannerConfig): Promise<{ message: string }> {
+    return request.put('/rbac/settings/banner', data)
+  },
+}
+
+export interface BannerConfig {
+  enabled: boolean
+  content: string
+  start_date: string
+  end_date: string
 }

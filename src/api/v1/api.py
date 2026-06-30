@@ -6,6 +6,7 @@ from src.api.v1.endpoints import (
     auth,
     auto_task_assignment,  # Auto-assignment rule management
     delegation,
+    llm_proxy,
     notifications,  # Notification management endpoints
     personal_access_tokens,
     project_registry,
@@ -57,6 +58,9 @@ api_router.include_router(personal_access_tokens.router, tags=["personal-access-
 
 # Global search endpoint
 api_router.include_router(search.router, prefix="/search", tags=["search"])
+
+# LLM Proxy endpoint (for PageAgent AI assistant)
+api_router.include_router(llm_proxy.router, tags=["llm-proxy"])
 
 
 # API information endpoint

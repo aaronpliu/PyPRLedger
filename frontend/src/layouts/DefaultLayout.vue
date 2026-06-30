@@ -20,7 +20,18 @@
               <el-menu-item index="/reviews">{{ t('menu.reviews') }}</el-menu-item>
               <el-sub-menu v-if="isAdmin" index="/task-assignment">
                 <template #title>{{ t('menu.taskAssignment') }}</template>
-                <el-menu-item index="/task-assignment">{{ t('menu.taskAssignment') }}</el-menu-item>
+                <!-- Applications sub-group -->
+                <el-sub-menu index="/applications">
+                  <template #title>{{ t('menu.applications') }}</template>
+                  <el-menu-item index="/task-assignment">{{ t('menu.allTasks') }}</el-menu-item>
+                  <el-menu-item
+                    v-for="app in apps"
+                    :key="app.app_name"
+                    :index="`/task-assignment/app/${encodeURIComponent(app.app_name)}`"
+                  >
+                    {{ app.app_name }}
+                  </el-menu-item>
+                </el-sub-menu>
                 <el-menu-item index="/task-assignment/rules">{{ t('menu.autoRules') }}</el-menu-item>
                 <el-menu-item index="/task-assignment/analytics">{{ t('menu.analytics') }}</el-menu-item>
               </el-sub-menu>
@@ -92,6 +103,7 @@
 
     <!-- Main content -->
     <el-main class="layout-main" role="main">
+      <ReviewsBanner v-if="isReviewsPage" />
       <div class="page-wrapper">
         <router-view />
         
@@ -122,7 +134,9 @@ import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
+import ReviewsBanner from '@/components/common/ReviewsBanner.vue'
 import { UI_VERSION, COPYRIGHT, fetchApiVersion, getApiVersion } from '@/config/versions'
+import { projectRegistryApi, type AppInfo } from '@/api/projectRegistry'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -132,6 +146,12 @@ const languageStore = useLanguage()
 
 // API version state
 const apiVersion = ref<string>('loading...')
+
+// Check if current page is Reviews page
+const isReviewsPage = computed(() => route.path.startsWith('/reviews'))
+
+// App names for menu
+const apps = ref<AppInfo[]>([])
 
 // Fetch API version on mount
 onMounted(async () => {
@@ -152,6 +172,15 @@ onMounted(() => {
       })
       localStorage.setItem('shortcuts_hint_shown', 'true')
     }, 2000)
+  }
+})
+
+// Load app names for menu
+onMounted(async () => {
+  try {
+    apps.value = await projectRegistryApi.listApps()
+  } catch (e) {
+    console.error('Failed to load app names for menu:', e)
   }
 })
 

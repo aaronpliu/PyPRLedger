@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from src.core.database import get_db_session
 from src.core.exceptions import (
+    AppException,
     InvalidCredentialsException,
     UserAlreadyExistsException,
     UserNotFoundException,
@@ -17,6 +18,7 @@ from src.core.exceptions import (
 from src.core.permissions import get_current_user_with_token, require_permission
 from src.models.auth_user import AuthUser
 from src.models.rbac import UserRoleAssignment
+from src.schemas.auth import RegisterRequest
 from src.schemas.user import (
     UserCreate,
     UserListResponse,
@@ -279,7 +281,6 @@ async def get_reviewers(
 
 
 @auth_router.get("", response_model=dict)
-@auth_router.get("/", response_model=dict)
 async def list_auth_users(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
@@ -718,6 +719,47 @@ async def deactivate_user(
                 "error": "INTERNAL_SERVER_ERROR",
                 "message": f"Failed to deactivate auth user: {str(e)}",
             },
+        )
+
+
+@auth_router.post("/create", status_code=status.HTTP_201_CREATED)
+async def admin_create_auth_user(
+    register_data: RegisterRequest,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(require_permission("manage", "users"))],
+) -> dict:
+    """
+    Create a new auth user (requires system_admin role)
+
+    This bypasses the registration_enabled check and does not generate tokens.
+    Designed for admin UI user creation workflow.
+
+    Args:
+        register_data: User registration data (username, email, password)
+        db: Database session
+        current_user: Authenticated user with manage users permission
+
+    Returns:
+        dict: The created auth user info
+
+    Raises:
+        AppException: If username already exists
+        ForbiddenException: If user lacks manage users permission
+    """
+    try:
+        auth_service = AuthService(db)
+        new_user = await auth_service.admin_create_user(register_data)
+        return {
+            "id": new_user.id,
+            "username": new_user.username,
+            "email": new_user.email,
+            "is_active": new_user.is_active,
+            "created_at": new_user.created_at.isoformat() if new_user.created_at else None,
+        }
+    except AppException as e:
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"error": e.code, "message": e.message, "detail": e.detail},
         )
 
 

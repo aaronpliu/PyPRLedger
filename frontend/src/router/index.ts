@@ -63,6 +63,13 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/reviews/RulesManagementView.vue'),
         meta: { requiresReviewAdmin: true },
       },
+      // App-filtered task assignment
+      {
+        path: 'task-assignment/app/:appName',
+        name: 'TaskAssignmentByApp',
+        component: () => import('@/views/reviews/TaskAssignmentView.vue'),
+        meta: { requiresReviewAdmin: true },
+      },
       {
         path: 'task-assignment/:id',
         name: 'TaskAssignmentDetail',
@@ -110,9 +117,9 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/AdminDashboardView.vue'),
       },
       {
-        path: 'users',
+        path: 'system-users',
         name: 'UserManagement',
-        component: () => import('@/views/admin/UserManagementView.vue'),
+        component: () => import('@/views/admin/SystemUserManagementView.vue'),
       },
       {
         path: 'roles',
@@ -149,6 +156,11 @@ const routes: RouteRecordRaw[] = [
         name: 'ReviewValidation',
         component: () => import('@/views/admin/ReviewValidationView.vue'),
         meta: { requiresReviewAdmin: true },
+      },
+      {
+        path: 'git-users',
+        name: 'GitUserManagement',
+        component: () => import('@/views/admin/GitUserManagementView.vue'),
       },
     ],
   },

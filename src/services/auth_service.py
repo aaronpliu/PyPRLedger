@@ -708,6 +708,52 @@ class AuthService:
         logger.debug(f"No Bitbucket user found for username: {auth_user.username}")
         return False
 
+    async def admin_create_user(self, register_data: RegisterRequest) -> AuthUser:
+        """Create a new auth user as admin (bypasses registration_enabled check)
+
+        Unlike register(), this does NOT generate tokens or check registration_enabled.
+        Used by system admins to create users from the admin UI.
+
+        Args:
+            register_data: Registration data with username, email, password
+
+        Returns:
+            AuthUser: The newly created auth user
+
+        Raises:
+            AppException: If username already exists
+        """
+        # Check if username already exists
+        stmt = select(AuthUser).where(AuthUser.username == register_data.username)
+        result = await self.db.execute(stmt)
+        existing_user = result.scalar_one_or_none()
+
+        if existing_user:
+            raise AppException(
+                code=ErrorCode.RESOURCE_ALREADY_EXISTS,
+                message=f"Username '{register_data.username}' already exists",
+                status_code=400,
+            )
+
+        # Create new auth user
+        hashed = hash_password(register_data.password)
+        new_auth_user = AuthUser(
+            username=register_data.username,
+            email=register_data.email,
+            password_hash=hashed,
+            is_active=True,
+            must_change_password=True,
+        )
+
+        self.db.add(new_auth_user)
+        await self.db.commit()
+        await self.db.refresh(new_auth_user)
+
+        # Assign default role
+        await self._assign_default_role(new_auth_user.id, has_git_user=False)
+
+        return new_auth_user
+
     async def _assign_default_role(self, auth_user_id: int, has_git_user: bool) -> None:
         """Assign default role to newly registered user
 

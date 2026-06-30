@@ -2,6 +2,7 @@ import request from '@/utils/request'
 
 export interface Review {
   id: number
+  public_id?: string
   pull_request_id: string
   pull_request_commit_id?: string | null
   
@@ -137,6 +138,7 @@ export interface ReviewAssignmentRequest {
 
 export interface ReviewRawRecord {
   id: number
+  public_id?: string
   request_payload: Record<string, any>
   status: 'pending' | 'success' | 'failed'
   error_message?: string | null
@@ -211,6 +213,14 @@ export const reviewsApi = {
     return response.data || response
   },
 
+  // Get review by obfuscated public ID
+  async getReviewByPublicId(publicId: string): Promise<Review> {
+    const response = await request.get(`/reviews/by-public-id/${publicId}`, {
+      _suppressGlobalError: true,
+    } as any)
+    return response.data || response
+  },
+
   // Update review (status only - reviews are read-only except for status)
   updateReview(id: number, data: ReviewUpdate): Promise<Review> {
     return request.put(`/reviews/${id}`, data)
@@ -231,7 +241,7 @@ export const reviewsApi = {
   /**
    * Get review statistics
    */
-  getStats(params?: { project_key?: string }): Promise<any> {
+  getStats(params?: { project_key?: string; app_names?: string }): Promise<any> {
     return request.get('/reviews/statistics', { params })
   },
 
@@ -329,6 +339,16 @@ export const reviewsApi = {
     pull_request_id: string
   }> {
     return request.post(`/reviews/validation/retry/${rawRecordId}`)
+  },
+
+  /**
+   * Delete a failed or pending raw review record
+   */
+  deleteFailedReview(rawRecordId: number): Promise<{
+    success: boolean
+    message: string
+  }> {
+    return request.delete(`/reviews/validation/raw/${rawRecordId}`)
   },
 
   /**

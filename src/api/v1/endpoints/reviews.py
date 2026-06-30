@@ -42,6 +42,7 @@ from src.services.rbac_service import RBACService
 from src.services.review_score_service import ReviewScoreService
 from src.services.review_service import ReviewService
 from src.services.review_validation_service import ReviewValidationService
+from src.utils.id_obfuscator import decode
 from src.utils.metrics import OperationTimer, metrics
 from src.utils.timezone import get_current_time
 
@@ -1050,6 +1051,10 @@ async def get_review_statistics(
     project_key: str | None = Query(
         None, min_length=1, max_length=32, description="Filter statistics by project key"
     ),
+    app_names: str | None = Query(
+        None,
+        description="Filter by application names (comma-separated)",
+    ),
 ) -> ReviewStats:
     """
     Get pull request review statistics for current user
@@ -1062,6 +1067,7 @@ async def get_review_statistics(
     Args:
         current_user: Current authenticated user
         project_key: Optional project key to filter statistics
+        app_names: Optional application names to filter statistics
         db: Database session
         review_service: Review service instance
 
@@ -1090,8 +1096,13 @@ async def get_review_statistics(
                 reviews_this_month=0,
             )
 
+        # Parse app_names
+        app_names_list = None
+        if app_names:
+            app_names_list = [name.strip() for name in app_names.split(",") if name.strip()]
+
         stats = await review_service.get_review_statistics(
-            project_key=project_key, db=db, reviewer_username=git_username
+            project_key=project_key, db=db, reviewer_username=git_username, app_names=app_names_list
         )
         logger.info(
             f"Statistics for {git_username}: total={stats.total_reviews}, avg_score={stats.average_score}"
@@ -1157,6 +1168,57 @@ async def disassociate_reviews(
                 "error": "INTERNAL_SERVER_ERROR",
                 "message": "Failed to disassociate reviews",
             },
+        )
+
+
+@router.delete(
+    "/validation/raw/{raw_record_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete a failed raw review record",
+    description="Delete a failed or pending raw review record from the validation table",
+)
+async def delete_raw_record(
+    raw_record_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+):
+    """
+    Delete a failed or pending raw review record.
+
+    This allows administrators to clean up failed review records
+    from the validation table without retrying them.
+
+    Args:
+        raw_record_id: ID of the raw record to delete
+
+    Returns:
+        dict: Success confirmation
+
+    Raises:
+        HTTPException: 403 if insufficient permissions, 404 if record not found
+    """
+    # Check permission
+    rbac_service = RBACService(db)
+    has_permission = await rbac_service.check_permission(
+        auth_user_id=current_user.id,
+        action="delete",
+        resource_type="reviews",
+    )
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    validation_service = ReviewValidationService(db)
+
+    try:
+        result = await validation_service.delete_raw_record(raw_record_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to delete raw record {raw_record_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to delete raw record"},
         )
 
 
@@ -1773,6 +1835,10 @@ async def list_scores(
     score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
     reviewer: str | None = Query(None, description="Filter by reviewer username"),
     project_key: str | None = Query(None, description="Filter by project key"),
+    app_names: str | None = Query(
+        None,
+        description="Filter by application names (comma-separated for multiple apps, e.g., 'app1,app2')",
+    ),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
 ) -> ReviewScoreListResponse:
@@ -1789,6 +1855,7 @@ async def list_scores(
         score_service: Review score service instance
         reviewer: Filter by reviewer username (optional, restricted for non-admins)
         project_key: Filter by project key (optional)
+        app_names: Filter by registered app names (comma-separated, optional)
         page: Page number (1-indexed)
         page_size: Number of items per page (max 100)
 
@@ -1801,6 +1868,11 @@ async def list_scores(
     try:
         # Enforce access control
         effective_reviewer = reviewer
+
+        # Params app_names from comma-separated string
+        app_names_list = None
+        if app_names:
+            app_names_list = [name.strip() for name in app_names.split(",") if name.strip()]
 
         # Check if user has review_admin role (by checking 'assign' permission)
         rbac_service = RBACService(db)
@@ -1833,6 +1905,7 @@ async def list_scores(
             db=db,
             reviewer=effective_reviewer,
             project_key=project_key,
+            app_names=app_names_list,
             page=page,
             page_size=page_size,
         )
@@ -2032,6 +2105,55 @@ async def delete_score(
         )
 
 
+@router.get("/by-public-id/{public_id}", response_model=ReviewResponse)
+async def get_review_by_public_id(
+    public_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+) -> ReviewResponse:
+    """
+    Retrieve a single review by its obfuscated public ID.
+
+    Decodes the public_id to a real database ID and delegates to
+    the standard review lookup. Returns 404 if the public_id is invalid.
+    """
+    real_id = decode(public_id)
+    if real_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "NOT_FOUND", "message": f"Invalid public ID: {public_id}"},
+        )
+
+    try:
+        review = await review_service.get_review_by_id(
+            review_id=real_id,
+            db=db,
+            current_user_id=current_user.id,
+        )
+        if not review:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": "NOT_FOUND",
+                    "message": f"Review with ID {real_id} not found",
+                },
+            )
+        return ReviewResponse(**review)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get review by public id {public_id}: {str(e)}", exc_info=True)
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR",
+            endpoint="GET /api/v1/reviews/by-public-id/{public_id}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get review"},
+        )
+
+
 @router.get("/{review_id}", response_model=ReviewResponse)
 async def get_review_by_id(
     review_id: int,
@@ -2071,6 +2193,197 @@ async def get_review_by_id(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to get review"},
+        )
+
+
+def _decode_public_id(public_id: str) -> int:
+    """Decode a public_id to a real database ID, or raise 404."""
+    real_id = decode(public_id)
+    if real_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "NOT_FOUND", "message": f"Invalid public ID: {public_id}"},
+        )
+    return real_id
+
+
+@router.get("/by-public-id/{public_id}/pin", status_code=status.HTTP_200_OK)
+@router.post("/by-public-id/{public_id}/pin", status_code=status.HTTP_201_CREATED)
+async def pin_review_by_public_id(
+    public_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+) -> dict:
+    """Pin/bookmark a review by its public ID."""
+    review_id = _decode_public_id(public_id)
+    try:
+        stmt = select(UserPinnedReview).where(
+            UserPinnedReview.user_id == current_user.id,
+            UserPinnedReview.review_id == review_id,
+        )
+        result = await db.execute(stmt)
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            return {"message": "Review already pinned", "is_pinned": True}
+
+        git_username = await _get_git_username(current_user.id, db)
+        pin = UserPinnedReview(
+            user_id=current_user.id,
+            username=git_username or current_user.username,
+            review_id=review_id,
+        )
+        db.add(pin)
+        await db.flush()
+        await db.commit()
+
+        logger.info(
+            "Review pinned via public_id",
+            extra={"review_id": review_id, "public_id": public_id, "user_id": current_user.id},
+        )
+        return {"message": "Review pinned successfully", "is_pinned": True}
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to pin review {public_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to pin review"},
+        )
+
+
+@router.delete("/by-public-id/{public_id}/pin", status_code=status.HTTP_200_OK)
+async def unpin_review_by_public_id(
+    public_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+) -> dict:
+    """Unpin/remove bookmark from a review by its public ID."""
+    review_id = _decode_public_id(public_id)
+    try:
+        stmt = select(UserPinnedReview).where(
+            UserPinnedReview.user_id == current_user.id,
+            UserPinnedReview.review_id == review_id,
+        )
+        result = await db.execute(stmt)
+        pin = result.scalar_one_or_none()
+
+        if not pin:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "NOT_FOUND", "message": "Pin not found"},
+            )
+
+        await db.delete(pin)
+        await db.commit()
+
+        logger.info(
+            "Review unpinned via public_id",
+            extra={"review_id": review_id, "public_id": public_id, "user_id": current_user.id},
+        )
+        return {"message": "Review unpinned successfully", "is_pinned": False}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to unpin review {public_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to unpin review"},
+        )
+
+
+@router.post(
+    "/by-public-id/{public_id}/associate/{target_public_id}", status_code=status.HTTP_201_CREATED
+)
+async def associate_reviews_by_public_id(
+    public_id: str,
+    target_public_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+) -> dict:
+    """Associate two reviews together using their public IDs."""
+    review_id = _decode_public_id(public_id)
+    target_review_id = _decode_public_id(target_public_id)
+    try:
+        created = await review_service.associate_reviews(
+            review_id=review_id,
+            target_review_id=target_review_id,
+            created_by=current_user.id,
+            db=db,
+        )
+
+        if not created:
+            return {"message": "Reviews already associated", "associated": True}
+
+        await db.commit()
+
+        logger.info(
+            "Reviews associated via public_id",
+            extra={
+                "review_id": review_id,
+                "target_review_id": target_review_id,
+                "user_id": current_user.id,
+            },
+        )
+        return {"message": "Reviews associated successfully", "associated": True}
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to associate reviews via public_id: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to associate reviews"},
+        )
+
+
+@router.delete(
+    "/by-public-id/{public_id}/associate/{target_public_id}", status_code=status.HTTP_200_OK
+)
+async def disassociate_reviews_by_public_id(
+    public_id: str,
+    target_public_id: str,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    review_service: Annotated[ReviewService, Depends(get_review_service)],
+) -> dict:
+    """Remove the association between two reviews using their public IDs."""
+    review_id = _decode_public_id(public_id)
+    target_review_id = _decode_public_id(target_public_id)
+    try:
+        removed = await review_service.disassociate_reviews(
+            review_id=review_id,
+            target_review_id=target_review_id,
+            db=db,
+        )
+
+        if not removed:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "NOT_FOUND", "message": "Association not found"},
+            )
+
+        await db.commit()
+
+        logger.info(
+            "Reviews disassociated via public_id",
+            extra={
+                "review_id": review_id,
+                "target_review_id": target_review_id,
+                "user_id": current_user.id,
+            },
+        )
+        return {"message": "Association removed successfully", "associated": False}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to disassociate reviews via public_id: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": "Failed to disassociate reviews",
+            },
         )
 
 
