@@ -160,4 +160,23 @@ export const rbacApi = {
   }): Promise<{ message: string }> {
     return request.put('/rbac/settings/llm', data)
   },
+
+  // ===== Banner Settings APIs =====
+
+  /** Get reviews page banner config */
+  getBanner(): Promise<BannerConfig> {
+    return request.get('/rbac/settings/banner')
+  },
+
+  /** Update reviews page banner config */
+  updateBanner(data: BannerConfig): Promise<{ message: string }> {
+    return request.put('/rbac/settings/banner', data)
+  },
+}
+
+export interface BannerConfig {
+  enabled: boolean
+  content: string
+  start_date: string
+  end_date: string
 }

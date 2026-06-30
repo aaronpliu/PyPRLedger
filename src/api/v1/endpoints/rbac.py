@@ -364,6 +364,102 @@ async def update_registration_enabled(
 
 
 # ============================================================================
+# Banner Settings Endpoints
+# ============================================================================
+
+
+@router.get(
+    "/settings/banner",
+    response_model=dict,
+    summary="Get reviews page banner config",
+    description="Returns banner content, enabled status, and optional date range display window",
+)
+async def get_banner_settings(
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict:
+    """Get reviews page banner configuration"""
+    try:
+        enabled_str = await rbac_service.get_setting("banner_enabled", default_value="false")
+        content = await rbac_service.get_setting("banner_content", default_value="")
+        start_date = await rbac_service.get_setting("banner_start_date", default_value="")
+        end_date = await rbac_service.get_setting("banner_end_date", default_value="")
+        return {
+            "enabled": enabled_str.lower() == "true",
+            "content": content,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get banner settings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get banner settings",
+        ) from e
+
+
+@router.put(
+    "/settings/banner",
+    response_model=dict,
+    summary="Update reviews page banner config",
+    description="Update banner content, enabled status, and date range. Requires manage settings permission.",
+)
+async def update_banner_settings(
+    setting_data: dict,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict:
+    """Update reviews page banner configuration"""
+    await rbac_service.require_permission(current_user.id, "manage", "settings")
+
+    try:
+        if "enabled" in setting_data:
+            value_str = str(setting_data["enabled"]).lower()
+            await rbac_service.update_setting(
+                setting_key="banner_enabled",
+                setting_value=value_str,
+                updated_by=current_user.id,
+                description="Enable or disable the reviews page announcement banner",
+            )
+
+        if "content" in setting_data:
+            await rbac_service.update_setting(
+                setting_key="banner_content",
+                setting_value=setting_data["content"],
+                updated_by=current_user.id,
+                description="Announcement banner text shown on the Reviews page",
+            )
+
+        if "start_date" in setting_data:
+            await rbac_service.update_setting(
+                setting_key="banner_start_date",
+                setting_value=setting_data["start_date"],
+                updated_by=current_user.id,
+                description="Optional start date for the banner (ISO 8601, empty = no limit)",
+            )
+
+        if "end_date" in setting_data:
+            await rbac_service.update_setting(
+                setting_key="banner_end_date",
+                setting_value=setting_data["end_date"],
+                updated_by=current_user.id,
+                description="Optional end date for the banner (ISO 8601, empty = no limit)",
+            )
+
+        return {"message": "Banner settings updated successfully"}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        logger.error(f"Failed to update banner settings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update banner settings: {str(e)}",
+        ) from e
+
+
+# ============================================================================
 # LLM Proxy Settings Endpoints
 # ============================================================================
 

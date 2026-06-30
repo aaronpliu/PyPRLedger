@@ -692,7 +692,15 @@
       "llmApiKeyMasked": "已設定 - 輸入新值替換",
       "llmApiKeyDesc": "API 密鑰僅存儲在服務器端，不會暴露給前端",
       "llmShow": "開啟 AI 助理",
-      "llmHide": "關閉 AI 助理"
+      "llmHide": "關閉 AI 助理",
+      "banner": "審查頁面橫幅",
+      "bannerEnabled": "啟用橫幅",
+      "bannerContent": "橫幅內容",
+      "bannerContentPlaceholder": "輸入在審查頁面顯示的公告資訊",
+      "bannerDateRange": "顯示日期範圍",
+      "bannerDateRangeDesc": "留空表示（啟用時）持續顯示",
+      "bannerSaveSuccess": "橫幅設定已儲存",
+      "bannerPreview": "預覽"
     },
     "git_user_management": "Git 使用者管理",
     "add_git_user": "新增 Git 使用者"

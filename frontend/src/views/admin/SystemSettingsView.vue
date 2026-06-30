@@ -88,14 +88,84 @@
         </el-form-item>
       </el-form>
     </el-card>
+
+    <el-card shadow="hover" style="margin-top: 20px;">
+      <template #header>
+        <div class="card-header">
+          <span>{{ t('admin.systemSettings.banner') }}</span>
+        </div>
+      </template>
+
+      <el-form label-width="200px" style="max-width: 600px;">
+        <!-- Banner Enabled Toggle -->
+        <el-form-item :label="t('admin.systemSettings.bannerEnabled')">
+          <el-switch
+            v-model="bannerSettings.enabled"
+            :active-text="t('common.enabled')"
+            :inactive-text="t('common.disabled')"
+            :loading="bannerSaving"
+          />
+        </el-form-item>
+
+        <!-- Banner Content -->
+        <el-form-item :label="t('admin.systemSettings.bannerContent')">
+          <el-input
+            v-model="bannerSettings.content"
+            type="textarea"
+            :rows="3"
+            :placeholder="t('admin.systemSettings.bannerContentPlaceholder')"
+            clearable
+          />
+        </el-form-item>
+
+        <!-- Banner Date Range -->
+        <el-form-item :label="t('admin.systemSettings.bannerDateRange')">
+          <el-date-picker
+            v-model="bannerDateRange"
+            type="datetimerange"
+            range-separator="—"
+            :start-placeholder="'Start Date'"
+            :end-placeholder="'End Date'"
+            value-format="YYYY-MM-DDTHH:mm:ssZ"
+            style="width: 100%"
+          />
+          <div class="setting-description">
+            {{ t('admin.systemSettings.bannerDateRangeDesc') }}
+          </div>
+        </el-form-item>
+
+        <!-- Save Button & Preview -->
+        <el-form-item>
+          <el-button
+            type="primary"
+            :loading="bannerSaving"
+            @click="handleBannerSave"
+          >
+            {{ t('common.save') }}
+          </el-button>
+        </el-form-item>
+
+        <!-- Banner Preview -->
+        <el-form-item v-if="bannerSettings.content" :label="t('admin.systemSettings.bannerPreview')">
+          <div class="banner-preview-box">
+            <el-alert
+              :title="bannerSettings.content"
+              type="info"
+              show-icon
+              :closable="false"
+            />
+          </div>
+        </el-form-item>
+      </el-form>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { rbacApi } from '@/api/rbac'
+import { rbacApi, type BannerConfig } from '@/api/rbac'
 
 const { t } = useI18n()
 
@@ -114,11 +184,32 @@ const llmSettings = ref({
 const saving = ref(false)
 const llmSaving = ref(false)
 
+const bannerSettings = ref<BannerConfig>({
+  enabled: false,
+  content: '',
+  start_date: '',
+  end_date: '',
+})
+const bannerDateRange = ref<[string, string] | null>(null)
+const bannerSaving = ref(false)
+
+// Sync date picker with banner settings
+watch(bannerDateRange, (range) => {
+  if (range) {
+    bannerSettings.value.start_date = range[0]
+    bannerSettings.value.end_date = range[1]
+  } else {
+    bannerSettings.value.start_date = ''
+    bannerSettings.value.end_date = ''
+  }
+})
+
 // Load settings on mount
 onMounted(async () => {
   await Promise.all([
     loadSettings(),
     loadLlmSettings(),
+    loadBannerSettings(),
   ])
 })
 
@@ -188,6 +279,36 @@ const handleLlmSave = async () => {
     llmSaving.value = false
   }
 }
+
+const loadBannerSettings = async () => {
+  try {
+    const config = await rbacApi.getBanner()
+    bannerSettings.value = config
+    // Sync date picker with loaded values
+    if (config.start_date && config.end_date) {
+      bannerDateRange.value = [config.start_date, config.end_date]
+    } else {
+      bannerDateRange.value = null
+    }
+  } catch (error) {
+    console.error('Failed to load banner settings:', error)
+    ElMessage.error(t('admin.systemSettings.loadFailed'))
+  }
+}
+
+const handleBannerSave = async () => {
+  bannerSaving.value = true
+  try {
+    await rbacApi.updateBanner(bannerSettings.value)
+    await loadBannerSettings()
+    ElMessage.success(t('admin.systemSettings.bannerSaveSuccess'))
+  } catch (error: any) {
+    console.error('Failed to save banner settings:', error)
+    ElMessage.error(error.response?.data?.detail || t('admin.systemSettings.saveFailed'))
+  } finally {
+    bannerSaving.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -208,5 +329,13 @@ const handleLlmSave = async () => {
   color: var(--el-text-color-secondary);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.banner-preview-box {
+  width: 100%;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 4px;
+  padding: 8px;
+  background: var(--el-fill-color-lighter);
 }
 </style>

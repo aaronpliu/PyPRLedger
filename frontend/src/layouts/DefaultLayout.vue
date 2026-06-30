@@ -103,6 +103,7 @@
 
     <!-- Main content -->
     <el-main class="layout-main" role="main">
+      <ReviewsBanner v-if="isReviewsPage" />
       <div class="page-wrapper">
         <router-view />
         
@@ -133,6 +134,7 @@ import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
+import ReviewsBanner from '@/components/common/ReviewsBanner.vue'
 import { UI_VERSION, COPYRIGHT, fetchApiVersion, getApiVersion } from '@/config/versions'
 import { projectRegistryApi, type AppInfo } from '@/api/projectRegistry'
 
@@ -144,6 +146,9 @@ const languageStore = useLanguage()
 
 // API version state
 const apiVersion = ref<string>('loading...')
+
+// Check if current page is Reviews page
+const isReviewsPage = computed(() => route.path.startsWith('/reviews'))
 
 // App names for menu
 const apps = ref<AppInfo[]>([])
