@@ -37,7 +37,8 @@ def upgrade() -> None:
             "users": ["read", "create", "update", "delete", "manage"],
             "roles": ["read", "create", "update", "delete", "manage"],
             "settings": ["read", "update", "manage"],
-            "audit_logs": ["read", "export"]
+            "audit_logs": ["read", "export"],
+            "project_registry": ["read", "create", "update", "delete", "manage"]
         }',
         updated_at = NOW()
         WHERE name = 'system_admin'
@@ -57,7 +58,8 @@ def downgrade() -> None:
             "users": ["read", "create", "update", "delete", "manage"],
             "roles": ["read", "create", "update", "delete", "manage"],
             "settings": ["read", "update", "manage"],
-            "audit_logs": ["read", "export"]
+            "audit_logs": ["read", "export"],
+            "project_registry": ["read", "create", "update", "delete", "manage"]
         }',
         updated_at = NOW()
         WHERE name = 'system_admin'
