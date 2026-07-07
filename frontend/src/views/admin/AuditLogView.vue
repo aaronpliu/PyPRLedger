@@ -140,36 +140,42 @@
 
     <!-- Details Dialog -->
     <el-dialog v-model="showDetailsDialog" title="Audit Log Details" width="800px" class="audit-detail-dialog">
-      <el-descriptions :column="1" border v-if="selectedLog">
-        <el-descriptions-item label="Log ID">{{ selectedLog.id }}</el-descriptions-item>
-        <el-descriptions-item label="Action">{{ selectedLog.action }}</el-descriptions-item>
-        <el-descriptions-item label="Resource Type">{{ selectedLog.resource_type }}</el-descriptions-item>
-        <el-descriptions-item label="Resource ID">{{ selectedLog.resource_id }}</el-descriptions-item>
-        <el-descriptions-item label="Request Method">{{ selectedLog.request_method }}</el-descriptions-item>
-        <el-descriptions-item label="Request Path">
-          <span class="text-ellipsis">{{ selectedLog.request_path }}</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="Response Status">{{ selectedLog.response_status }}</el-descriptions-item>
-        <el-descriptions-item label="IP Address">{{ selectedLog.ip_address }}</el-descriptions-item>
-        <el-descriptions-item label="User Agent">
-          <span class="text-ellipsis">{{ selectedLog.user_agent }}</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="Execution Time">{{ selectedLog.execution_time_ms }}ms</el-descriptions-item>
-        <el-descriptions-item label="Error Message" v-if="selectedLog.error_message">
-          <span class="text-ellipsis">{{ selectedLog.error_message }}</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="Old Values" v-if="selectedLog.old_values">
+      <template v-if="selectedLog">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="Log ID">{{ selectedLog.id }}</el-descriptions-item>
+          <el-descriptions-item label="Action">{{ selectedLog.action }}</el-descriptions-item>
+          <el-descriptions-item label="Resource Type">{{ selectedLog.resource_type }}</el-descriptions-item>
+          <el-descriptions-item label="Resource ID">{{ selectedLog.resource_id }}</el-descriptions-item>
+          <el-descriptions-item label="Request Method">{{ selectedLog.request_method }}</el-descriptions-item>
+          <el-descriptions-item label="Request Path">
+            <span class="text-ellipsis">{{ selectedLog.request_path }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="Response Status">{{ selectedLog.response_status }}</el-descriptions-item>
+          <el-descriptions-item label="IP Address">{{ selectedLog.ip_address }}</el-descriptions-item>
+          <el-descriptions-item label="User Agent">
+            <span class="text-ellipsis">{{ selectedLog.user_agent }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="Execution Time">{{ selectedLog.execution_time_ms }}ms</el-descriptions-item>
+          <el-descriptions-item label="Error Message" v-if="selectedLog.error_message">
+            <span class="text-ellipsis">{{ selectedLog.error_message }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="Created At">{{ formatDate(selectedLog.created_at) }}</el-descriptions-item>
+        </el-descriptions>
+
+        <!-- JSON fields rendered outside the descriptions table for proper overflow handling -->
+        <div v-if="selectedLog.old_values" class="json-section">
+          <div class="json-label">Old Values</div>
           <div class="json-block">
             <pre>{{ JSON.stringify(selectedLog.old_values, null, 2) }}</pre>
           </div>
-        </el-descriptions-item>
-        <el-descriptions-item label="New Values" v-if="selectedLog.new_values">
+        </div>
+        <div v-if="selectedLog.new_values" class="json-section">
+          <div class="json-label">New Values</div>
           <div class="json-block">
             <pre>{{ JSON.stringify(selectedLog.new_values, null, 2) }}</pre>
           </div>
-        </el-descriptions-item>
-        <el-descriptions-item label="Created At">{{ formatDate(selectedLog.created_at) }}</el-descriptions-item>
-      </el-descriptions>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -355,12 +361,23 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
+.json-section {
+  margin-top: 12px;
+}
+
+.json-label {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--el-text-color-primary);
+  margin-bottom: 6px;
+}
+
 .json-block {
   max-height: 300px;
   overflow: auto;
   border: 1px solid var(--el-border-color-light);
   border-radius: 4px;
-  width: 100%;
+  max-width: 100%;
 }
 
 .json-block pre {
@@ -371,11 +388,7 @@ onMounted(() => {
   line-height: 1.5;
   tab-size: 2;
   color: var(--el-text-color-primary);
-}
-
-/* Ensure dialog body clips content so nothing overflows outside */
-.audit-detail-dialog :deep(.el-dialog__body) {
-  overflow: hidden;
+  word-break: break-all;
 }
 
 /* Text overflow for long single-line fields */
