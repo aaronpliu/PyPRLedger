@@ -1416,58 +1416,61 @@ class ReviewService:
         Returns:
             bool: True if deleted, False if not found
         """
-        # Get review - will auto-detect project_key and repository_slug if not provided
-        reviews = await self.get_review(
-            project_key=project_key,
-            repository_slug=repository_slug,
-            pull_request_id=pull_request_id,
-            db=db,
+        # Build query to find the base review by composite key
+        query = select(PullRequestReviewBase).where(
+            PullRequestReviewBase.pull_request_id == pull_request_id
         )
-        if not reviews:
+        if project_key:
+            query = query.where(PullRequestReviewBase.project_key == project_key)
+        if repository_slug:
+            query = query.where(PullRequestReviewBase.repository_slug == repository_slug)
+
+        result = await db.execute(query)
+        base = result.scalar_one_or_none()
+
+        if not base:
             return False
 
-        review = reviews[0]
+        resolved_project_key = str(project_key or base.project_key)
+        resolved_repository_slug = str(repository_slug or base.repository_slug)
 
-        if review.get("reviewer"):
-            stmt = select(PullRequestReviewAssignment).where(
-                PullRequestReviewAssignment.id == review["id"]
+        # Soft-delete associated scores (no FK cascade to base - uses composite key)
+        score_stmt = select(PullRequestScore).where(
+            and_(
+                PullRequestScore.pull_request_id == pull_request_id,
+                PullRequestScore.project_key == resolved_project_key,
+                PullRequestScore.repository_slug == resolved_repository_slug,
             )
-            result = await db.execute(stmt)
-            assignment = result.scalar_one_or_none()
-            if not assignment:
-                return False
-            await db.delete(assignment)
-        else:
-            stmt = select(PullRequestReviewBase).where(PullRequestReviewBase.id == review["id"])
-            result = await db.execute(stmt)
-            base = result.scalar_one_or_none()
-            if not base:
-                return False
-            await db.delete(base)
+        )
+        scores = (await db.execute(score_stmt)).scalars().all()
+        for score in scores:
+            score.active = False
+            score.deleted_by = "system"
+            score.deleted_at = get_current_time()
 
-        # Also delete any associated raw records (both pending and failed)
-        # This ensures consistency - when a PR review is deleted, all related raw data is also removed
+        # Delete associated raw records (both pending and failed)
         cleanup_raw_query = select(PullRequestReviewRaw).where(
             and_(
                 func.json_extract(PullRequestReviewRaw.request_payload, "$.pull_request_id")
-                == str(review["pull_request_id"]),
+                == pull_request_id,
                 func.json_extract(PullRequestReviewRaw.request_payload, "$.project_key")
-                == str(review["project_key"]),
+                == resolved_project_key,
                 func.json_extract(PullRequestReviewRaw.request_payload, "$.repository_slug")
-                == str(review["repository_slug"]),
+                == resolved_repository_slug,
             )
         )
         raw_records_to_delete = (await db.execute(cleanup_raw_query)).scalars().all()
         for raw_record in raw_records_to_delete:
             await db.delete(raw_record)
-            logger.info(
-                f"Deleted associated raw record {raw_record.id} for PR {review['pull_request_id']}"
-            )
+            logger.info(f"Deleted associated raw record {raw_record.id} for PR {pull_request_id}")
+
+        # Delete the base review (cascades to assignments, pins, associations via FK)
+        await db.delete(base)
 
         await db.commit()
 
         await self._invalidate_review_cache(
-            str(review["project_key"]), str(review["repository_slug"]), pull_request_id
+            resolved_project_key, resolved_repository_slug, pull_request_id
         )
         await self._invalidate_list_cache()
 

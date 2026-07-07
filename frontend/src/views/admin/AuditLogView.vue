@@ -139,26 +139,34 @@
     </el-card>
 
     <!-- Details Dialog -->
-    <el-dialog v-model="showDetailsDialog" title="Audit Log Details" width="700px">
+    <el-dialog v-model="showDetailsDialog" title="Audit Log Details" width="800px" class="audit-detail-dialog">
       <el-descriptions :column="1" border v-if="selectedLog">
         <el-descriptions-item label="Log ID">{{ selectedLog.id }}</el-descriptions-item>
         <el-descriptions-item label="Action">{{ selectedLog.action }}</el-descriptions-item>
         <el-descriptions-item label="Resource Type">{{ selectedLog.resource_type }}</el-descriptions-item>
         <el-descriptions-item label="Resource ID">{{ selectedLog.resource_id }}</el-descriptions-item>
         <el-descriptions-item label="Request Method">{{ selectedLog.request_method }}</el-descriptions-item>
-        <el-descriptions-item label="Request Path">{{ selectedLog.request_path }}</el-descriptions-item>
+        <el-descriptions-item label="Request Path">
+          <span class="text-ellipsis">{{ selectedLog.request_path }}</span>
+        </el-descriptions-item>
         <el-descriptions-item label="Response Status">{{ selectedLog.response_status }}</el-descriptions-item>
         <el-descriptions-item label="IP Address">{{ selectedLog.ip_address }}</el-descriptions-item>
-        <el-descriptions-item label="User Agent">{{ selectedLog.user_agent }}</el-descriptions-item>
+        <el-descriptions-item label="User Agent">
+          <span class="text-ellipsis">{{ selectedLog.user_agent }}</span>
+        </el-descriptions-item>
         <el-descriptions-item label="Execution Time">{{ selectedLog.execution_time_ms }}ms</el-descriptions-item>
         <el-descriptions-item label="Error Message" v-if="selectedLog.error_message">
-          {{ selectedLog.error_message }}
+          <span class="text-ellipsis">{{ selectedLog.error_message }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="Old Values" v-if="selectedLog.old_values">
-          <pre>{{ JSON.stringify(selectedLog.old_values, null, 2) }}</pre>
+          <div class="json-block">
+            <pre>{{ JSON.stringify(selectedLog.old_values, null, 2) }}</pre>
+          </div>
         </el-descriptions-item>
         <el-descriptions-item label="New Values" v-if="selectedLog.new_values">
-          <pre>{{ JSON.stringify(selectedLog.new_values, null, 2) }}</pre>
+          <div class="json-block">
+            <pre>{{ JSON.stringify(selectedLog.new_values, null, 2) }}</pre>
+          </div>
         </el-descriptions-item>
         <el-descriptions-item label="Created At">{{ formatDate(selectedLog.created_at) }}</el-descriptions-item>
       </el-descriptions>
@@ -347,17 +355,45 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
-pre {
-  background: var(--el-fill-color-light);
-  padding: 12px;
+.json-block {
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--el-border-color-light);
   border-radius: 4px;
-  max-height: 200px;
-  overflow-y: auto;
+  width: 100%;
+}
+
+.json-block pre {
+  margin: 0;
+  padding: 12px;
+  white-space: pre;
+  font-size: 13px;
+  line-height: 1.5;
+  tab-size: 2;
   color: var(--el-text-color-primary);
 }
 
+/* Ensure dialog body clips content so nothing overflows outside */
+.audit-detail-dialog :deep(.el-dialog__body) {
+  overflow: hidden;
+}
+
+/* Text overflow for long single-line fields */
+.text-ellipsis {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
 /* Dark theme adjustments */
-[data-theme='dark'] pre {
+[data-theme='dark'] .json-block {
+  border-color: var(--el-border-color-darker);
+}
+
+[data-theme='dark'] .json-block pre {
   background: var(--el-fill-color-dark);
   color: var(--el-text-color-primary);
 }

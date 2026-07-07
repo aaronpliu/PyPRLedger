@@ -1278,6 +1278,21 @@ async def delete_review(
                 },
             )
 
+        # Capture review data for audit trail before deletion
+        audit_old_values = None
+        try:
+            stmt = select(PullRequestReviewBase).where(
+                PullRequestReviewBase.pull_request_id == pull_request_id,
+                PullRequestReviewBase.project_key == project_key,
+                PullRequestReviewBase.repository_slug == repository_slug,
+            )
+            audit_result = await db.execute(stmt)
+            audit_base = audit_result.scalar_one_or_none()
+            if audit_base:
+                audit_old_values = audit_base.to_dict()
+        except Exception as e:
+            logger.warning(f"Failed to capture review data for audit: {e}")
+
         # Use composite key for precise cache operations
         deleted = await review_service.delete_review(
             pull_request_id=pull_request_id,
@@ -1297,6 +1312,22 @@ async def delete_review(
                     "message": f"Review with ID {pull_request_id} not found in project {project_key}/{repository_slug}",
                 },
             )
+
+        # Log audit trail for successful deletion
+        try:
+            audit_service = AuditService(db)
+            await audit_service.log_action(
+                auth_user_id=current_user.id,
+                action="delete",
+                resource_type="reviews",
+                resource_id=f"{project_key}/{repository_slug}/{pull_request_id}",
+                old_values=audit_old_values,
+                request_method="DELETE",
+                request_path=f"/api/v1/reviews/{project_key}/{repository_slug}/{pull_request_id}",
+                response_status=status.HTTP_204_NO_CONTENT,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log audit for review deletion: {e}")
     except HTTPException:
         raise
     except Exception:
