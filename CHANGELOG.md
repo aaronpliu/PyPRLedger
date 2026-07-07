@@ -5,6 +5,29 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.2] - 2026-07-07
+
+**Backend Version**: 1.19.2
+**Frontend Version**: 1.14.2
+
+### Added
+- enhance redis connections
+- record reviews deletion in audit log
+
+### Fixed
+- enhance review deletion
+
+### Other Changes
+- f8810ac styles: fix audit log details dialog layout issues
+- 34ce5b1 Merge pull request #30 from aaronpliu/main
+- c50d01d Merge pull request #29 from aaronpliu/feature/PRLedger_NewUI
+- 47033e5 Merge pull request #28 from aaronpliu/feature/PRLedger_NewUI
+- e27f9b0 Merge pull request #27 from aaronpliu/feature/PRLedger_NewUI
+- fd72e17 Merge pull request #26 from aaronpliu/feature/PRLedger_NewUI
+- 4ef7c77 Merge pull request #25 from aaronpliu/feature/PRLedger_NewUI
+
+---
+
 ## [1.19.1] - 2026-06-30
 
 **Backend Version**: 1.19.1
