@@ -21,7 +21,7 @@ from src.models.user import User
 from src.services.auth_service import AuthService
 from src.services.rbac_service import RBACService
 from src.utils.metrics import metrics
-from src.utils.redis import get_redis_client
+from src.utils.redis import get_redis_pubsub_client
 
 
 logger = logging.getLogger(__name__)
@@ -266,7 +266,7 @@ async def stream_reviews(
         HTTPException 403: If user account is inactive
         HTTPException 429: If connection limit exceeded
     """
-    redis_client = get_redis_client()
+    redis_client = get_redis_pubsub_client()
     connection_id = str(uuid.uuid4())
 
     # Validate JWT token and get auth user (requires DB session)

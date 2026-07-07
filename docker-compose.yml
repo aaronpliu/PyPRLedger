@@ -16,6 +16,8 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
       - REDIS_DB=0
+      - REDIS_MAX_CONNECTIONS=100
+      - REDIS_PUBSUB_MAX_CONNECTIONS=20
       - ENV=production
       - DEBUG=False
       - LOG_LEVEL=INFO
