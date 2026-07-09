@@ -1055,7 +1055,8 @@ class ReviewService:
         if filters.date_from:
             query = query.where(PullRequestReviewBase.created_date >= filters.date_from)
         if filters.date_to:
-            query = query.where(PullRequestReviewBase.created_date <= filters.date_to)
+            adjusted_date_to = filters.date_to + timedelta(days=1)
+            query = query.where(PullRequestReviewBase.created_date < adjusted_date_to)
         score_join = and_(
             PullRequestScore.pull_request_id == PullRequestReviewBase.pull_request_id,
             PullRequestScore.project_key == PullRequestReviewBase.project_key,
