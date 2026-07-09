@@ -59,6 +59,9 @@ export interface ReviewV2 {
   completed_reviewers: number
   pending_reviewers: number
   
+  // Score tracking
+  has_scores: boolean
+  
   // Pin/Flag feature
   is_pinned_by_me?: boolean
 }

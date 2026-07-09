@@ -17,6 +17,7 @@ from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import (
     PullRequestReviewAssignment,
     PullRequestReviewBase,
+    PullRequestScore,
     UserPinnedReview,
 )
 from src.schemas.notification import NotificationCreate
@@ -290,6 +291,34 @@ class MultiReviewerService:
             except Exception as e:
                 logger.warning(f"Failed to fetch pinned reviews: {str(e)}")
 
+        # Batch query which reviews have scores (by composite key)
+        review_keys = {(b.pull_request_id, b.project_key, b.repository_slug) for b in bases}
+        scored_keys: set[tuple[str, str, str]] = set()
+        if review_keys:
+            score_stmt = (
+                select(
+                    PullRequestScore.pull_request_id,
+                    PullRequestScore.project_key,
+                    PullRequestScore.repository_slug,
+                )
+                .where(PullRequestScore.active == True)  # noqa: E712
+                .where(
+                    or_(
+                        *(
+                            and_(
+                                PullRequestScore.pull_request_id == pid,
+                                PullRequestScore.project_key == pk,
+                                PullRequestScore.repository_slug == rs,
+                            )
+                            for pid, pk, rs in review_keys
+                        )
+                    )
+                )
+                .distinct()
+            )
+            score_result = await db.execute(score_stmt)
+            scored_keys = {(row[0], row[1], row[2]) for row in score_result.all()}
+
         # Convert to response models with app_name
         reviews = []
         for base in bases:
@@ -343,6 +372,13 @@ class MultiReviewerService:
             # Add is_pinned_by_me flag
             base_dict["is_pinned_by_me"] = base.id in pinned_ids
 
+            # Check if this review has any scores
+            has_scores = (
+                base.pull_request_id,
+                base.project_key,
+                base.repository_slug,
+            ) in scored_keys
+
             # Create response object
             review_response = ReviewWithAssignmentsResponse(
                 **base_dict,
@@ -350,6 +386,7 @@ class MultiReviewerService:
                 total_reviewers=len(assignments),
                 completed_reviewers=completed,
                 pending_reviewers=pending,
+                has_scores=has_scores,
             )
             reviews.append(review_response)
 
@@ -380,7 +417,25 @@ class MultiReviewerService:
         if not base:
             raise ReviewNotFoundException(review_id=str(review_id))
 
-        return self._base_to_response(base)
+        response = self._base_to_response(base)
+
+        # Check if this review has any scores
+        score_stmt = (
+            select(func.count())
+            .select_from(PullRequestScore)
+            .where(
+                and_(
+                    PullRequestScore.pull_request_id == base.pull_request_id,
+                    PullRequestScore.project_key == base.project_key,
+                    PullRequestScore.repository_slug == base.repository_slug,
+                    PullRequestScore.active == True,  # noqa: E712
+                )
+            )
+        )
+        score_count = (await db.execute(score_stmt)).scalar() or 0
+        response.has_scores = score_count > 0
+
+        return response
 
     async def create_review_base(
         self, db: AsyncSession, review_data: dict[str, Any]

@@ -206,27 +206,21 @@ export function useTaskAssignmentAnalytics() {
 
   /**
    * Calculate overall scoring statistics
+   *
+   * Scoring rate is review-level: a review is considered "scored"
+   * if it has at least one score record (has_scores === true).
    */
   const calculateScoringStats = (): ScoringStats => {
-    let totalAssigned = 0
-    let totalCompleted = 0
+    const totalReviews = reviews.value.length
+    const scoredReviews = reviews.value.filter((r) => r.has_scores).length
 
-    reviews.value.forEach((review) => {
-      review.reviewers?.forEach((assignment) => {
-        totalAssigned++
-        if (assignment.assignment_status === 'completed') {
-          totalCompleted++
-        }
-      })
-    })
-
-    const completionRate = totalAssigned > 0 
-      ? (totalCompleted / totalAssigned) * 100 
+    const completionRate = totalReviews > 0
+      ? (scoredReviews / totalReviews) * 100
       : 0
 
     return {
-      totalAssigned,
-      totalCompleted,
+      totalAssigned: totalReviews,
+      totalCompleted: scoredReviews,
       completionRate: Math.round(completionRate * 100) / 100,
     }
   }
