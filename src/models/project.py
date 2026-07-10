@@ -33,6 +33,10 @@ class Project(Base):
 
     project_url: Mapped[str] = mapped_column(String(255), nullable=False)
 
+    git_provider: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="bitbucket_server", server_default="bitbucket_server"
+    )
+
     # Status fields
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
@@ -85,6 +89,7 @@ class Project(Base):
             "project_name": self.project_name,
             "project_key": self.project_key,
             "project_url": self.project_url,
+            "git_provider": self.git_provider,
             "created_date": utc_to_local(self.created_date).isoformat()
             if self.created_date
             else None,
@@ -111,6 +116,7 @@ class Project(Base):
             project_name=data.get("project_name"),
             project_key=data.get("project_key"),
             project_url=data.get("project_url"),
+            git_provider=data.get("git_provider", "bitbucket_server"),
             is_active=data.get("is_active", True),
             created_date=created_date,
             updated_date=updated_date,

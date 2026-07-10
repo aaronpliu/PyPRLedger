@@ -170,7 +170,7 @@ onMounted(() => {
                   </p>
                   <p>
                     <strong>Key Features:</strong> Track success rates, identify failed reviews with error details,
-                    and retry failed submissions without requiring users to resubmit from Bitbucket.
+                    and retry failed submissions without requiring users to resubmit from their Git provider.
                   </p>
                 </div>
               </template>

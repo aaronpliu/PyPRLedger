@@ -49,6 +49,7 @@ export interface ReviewV2 {
     project_name: string
     project_key: string
     project_url: string
+    git_provider?: string
     created_date: string
     updated_date: string
   } | null

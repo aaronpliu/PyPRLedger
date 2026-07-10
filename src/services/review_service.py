@@ -486,11 +486,11 @@ class ReviewService:
         Returns:
             ReviewResponse: The created review
         """
-        # Initialize entity sync service
-        entity_sync_service = EntitySyncService(db)
+        # Initialize entity sync service with optional provider hint
+        entity_sync_service = EntitySyncService(db, git_provider=review_data.git_provider)
 
         # Sync all related entities using business keys only
-        # This will query DB first, then fetch from Bitbucket API if not exists
+        # This will query DB first, then fetch from Git provider API if not exists
         project: Project = await entity_sync_service.sync_project(review_data.project_key)
 
         repository = await entity_sync_service.sync_repository(
@@ -637,8 +637,8 @@ class ReviewService:
 
         try:
             # Step 2: Process review (existing logic)
-            # Initialize entity sync service
-            entity_sync_service = EntitySyncService(db)
+            # Initialize entity sync service with optional provider hint
+            entity_sync_service = EntitySyncService(db, git_provider=review_data.git_provider)
 
             # Sync all related entities using business keys only
             project: Project = await entity_sync_service.sync_project(review_data.project_key)
@@ -2024,6 +2024,7 @@ class ReviewService:
                     "project_name": review.project.project_name,
                     "project_key": review.project.project_key,
                     "project_url": review.project.project_url,
+                    "git_provider": review.project.git_provider,
                     "created_date": review.project.created_date.isoformat()
                     if review.project.created_date
                     else None,
@@ -2116,7 +2117,7 @@ class ReviewService:
             # Get project info
             project_result = await db.execute(
                 text("""
-                    SELECT id, project_id, project_name, project_key, project_url, created_date, updated_date 
+                    SELECT id, project_id, project_name, project_key, project_url, git_provider, created_date, updated_date 
                     FROM project 
                     WHERE project_key = :project_key
                 """),
@@ -2131,8 +2132,9 @@ class ReviewService:
                     "project_name": project_row[2],
                     "project_key": project_row[3],
                     "project_url": project_row[4],
-                    "created_date": project_row[5].isoformat() if project_row[5] else None,
-                    "updated_date": project_row[6].isoformat() if project_row[6] else None,
+                    "git_provider": project_row[5],
+                    "created_date": project_row[6].isoformat() if project_row[6] else None,
+                    "updated_date": project_row[7].isoformat() if project_row[7] else None,
                 }
 
                 # Get repository info

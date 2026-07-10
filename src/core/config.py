@@ -138,6 +138,16 @@ class Settings(BaseSettings):
         default="default", description="Default workspace/project key for Bitbucket repositories"
     )
 
+    # GitHub Enterprise API configuration
+    GITHUB_ENTERPRISE_URL: str | None = Field(
+        default=None,
+        description="GitHub Enterprise base URL (e.g., https://github.example.com)",
+    )
+    GITHUB_ENTERPRISE_TOKEN: str | None = Field(
+        default=None,
+        description="GitHub Enterprise personal access token or app token",
+    )
+
     # Review status constants
     REVIEW_STATUS_OPEN: str = "open"
     REVIEW_STATUS_MERGED: str = "merged"

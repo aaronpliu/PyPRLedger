@@ -24,7 +24,18 @@ class ProjectRegistry(Base):
     2. Auto-registration with default 'Unknown' app
     3. Admin-managed application boundaries
     4. Multiple projects per application
+    5. Per-project Git provider tracking (bitbucket_server, github_enterprise)
     """
+
+    PROVIDER_BITBUCKET_SERVER = "bitbucket_server"
+    PROVIDER_BITBUCKET_CLOUD = "bitbucket_cloud"
+    PROVIDER_GITHUB_ENTERPRISE = "github_enterprise"
+    VALID_PROVIDERS = {
+        PROVIDER_BITBUCKET_SERVER,
+        PROVIDER_BITBUCKET_CLOUD,
+        PROVIDER_GITHUB_ENTERPRISE,
+    }
+    DEFAULT_PROVIDER = PROVIDER_BITBUCKET_SERVER
 
     __tablename__ = "project_registry"
 
@@ -43,6 +54,11 @@ class ProjectRegistry(Base):
     )
 
     repository_slug: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+
+    # Git provider for this project (bitbucket_server, github_enterprise)
+    git_provider: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=DEFAULT_PROVIDER, server_default=DEFAULT_PROVIDER
+    )
 
     # Optional description
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -82,5 +98,6 @@ class ProjectRegistry(Base):
     def __repr__(self) -> str:
         return (
             f"<ProjectRegistry(id={self.id}, app_name='{self.app_name}', "
-            f"project_key='{self.project_key}', repository_slug='{self.repository_slug}')>"
+            f"project_key='{self.project_key}', repository_slug='{self.repository_slug}', "
+            f"git_provider='{self.git_provider}')>"
         )

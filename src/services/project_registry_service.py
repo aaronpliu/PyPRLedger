@@ -150,6 +150,7 @@ class ProjectRegistryService:
         repository_slug: str,
         description: str | None = None,
         db: AsyncSession = None,
+        git_provider: str = ProjectRegistry.DEFAULT_PROVIDER,
     ) -> ProjectRegistry:
         """
         Register a new project-repo pair to an app
@@ -160,6 +161,7 @@ class ProjectRegistryService:
             repository_slug: Repository slug
             description: Optional description
             db: Database session
+            git_provider: Git provider (bitbucket_server, github_enterprise)
 
         Returns:
             Created ProjectRegistry entry
@@ -176,9 +178,18 @@ class ProjectRegistryService:
                     f"Project {project_key}/{repository_slug} already registered to '{existing.app_name}'. "
                     f"Cannot reassign to '{app_name}'."
                 )
-            # Already registered to same app, update description if provided
+            # Already registered to same app, update description and/or provider if provided
+            updated = False
             if description:
                 existing.description = description
+                updated = True
+            if (
+                git_provider != ProjectRegistry.DEFAULT_PROVIDER
+                and existing.git_provider != git_provider
+            ):
+                existing.git_provider = git_provider
+                updated = True
+            if updated:
                 await db.commit()
                 await db.refresh(existing)
             return existing
@@ -188,6 +199,7 @@ class ProjectRegistryService:
             app_name=app_name,
             project_key=project_key,
             repository_slug=repository_slug,
+            git_provider=git_provider,
             description=description or f"Registered to {app_name}",
         )
 
@@ -195,7 +207,9 @@ class ProjectRegistryService:
         await db.commit()
         await db.refresh(registry)
 
-        logger.info(f"Registered {project_key}/{repository_slug} to app '{app_name}'")
+        logger.info(
+            f"Registered {project_key}/{repository_slug} to app '{app_name}' (provider: {git_provider})"
+        )
         return registry
 
     async def unregister_project(

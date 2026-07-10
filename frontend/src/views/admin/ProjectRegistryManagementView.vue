@@ -37,6 +37,13 @@
         <el-table-column prop="app_name" label="Application" width="180" />
         <el-table-column prop="project_key" label="Project Key" width="150" />
         <el-table-column prop="repository_slug" label="Repository Slug" min-width="200" />
+        <el-table-column prop="git_provider" label="Git Provider" width="180">
+          <template #default="{ row }">
+            <el-tag :type="getProviderTagType(row.git_provider)" size="small">
+              {{ getProviderLabel(row.git_provider) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="description" label="Description" min-width="200" show-overflow-tooltip />
         <el-table-column prop="created_date" label="Created" width="180">
           <template #default="{ row }">
@@ -97,6 +104,13 @@
           </el-select>
         </el-form-item>
         
+        <el-form-item label="Git Provider" prop="gitProvider">
+          <el-select v-model="registerForm.gitProvider" style="width: 100%">
+            <el-option label="Bitbucket Server" value="bitbucket_server" />
+            <el-option label="GitHub Enterprise" value="github_enterprise" />
+          </el-select>
+        </el-form-item>
+
         <el-form-item label="Description" prop="description">
           <el-input 
             v-model="registerForm.description" 
@@ -191,8 +205,27 @@ const registerForm = reactive({
   appName: '',
   projectKey: '',
   repositorySlug: '',
+  gitProvider: 'bitbucket_server',
   description: '',
 })
+
+const providerOptions = [
+  { value: 'bitbucket_server', label: 'Bitbucket Server' },
+  { value: 'github_enterprise', label: 'GitHub Enterprise' },
+]
+
+const getProviderLabel = (provider: string) => {
+  const found = providerOptions.find(p => p.value === provider)
+  return found ? found.label : provider
+}
+
+const getProviderTagType = (provider: string): '' | 'success' | 'warning' | 'info' => {
+  switch (provider) {
+    case 'bitbucket_server': return ''
+    case 'github_enterprise': return 'success'
+    default: return 'info'
+  }
+}
 
 const updateForm = reactive({
   newAppName: '',
@@ -308,7 +341,8 @@ const handleRegister = async () => {
           registerForm.appName,
           registerForm.projectKey,
           registerForm.repositorySlug,
-          registerForm.description || undefined
+          registerForm.description || undefined,
+          registerForm.gitProvider
         )
         ElMessage.success('Project registered successfully')
         showRegisterDialog.value = false
@@ -316,6 +350,7 @@ const handleRegister = async () => {
         registerForm.appName = ''
         registerForm.projectKey = ''
         registerForm.repositorySlug = ''
+        registerForm.gitProvider = 'bitbucket_server'
         registerForm.description = ''
         // Reload data
         await loadApps()

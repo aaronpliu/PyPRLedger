@@ -81,6 +81,11 @@ class ReviewCreate(ReviewBase):
         default="open", description="Pull request status (open, merged, closed, draft)"
     )
     metadata: dict[str, Any] | None = Field(None, description="Additional metadata in JSON format")
+    git_provider: str | None = Field(
+        None,
+        description="Git provider hint (bitbucket_server, github_enterprise). "
+        "Used for auto-registration on first review submission.",
+    )
 
     @field_validator("pull_request_status")
     def validate_status(cls, v):

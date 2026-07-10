@@ -5,6 +5,7 @@ export interface ProjectRegistry {
   app_name: string
   project_key: string
   repository_slug: string
+  git_provider?: string
   description?: string | null
   created_date?: string
   updated_date?: string
@@ -48,12 +49,14 @@ export const projectRegistryApi = {
     appName: string,
     projectKey: string,
     repositorySlug: string,
-    description?: string
+    description?: string,
+    gitProvider?: string
   ): Promise<{
     message: string
     app_name: string
     project_key: string
     repository_slug: string
+    git_provider?: string
     description?: string
   }> {
     return request.post('/admin/registry/register', null, {
@@ -62,6 +65,7 @@ export const projectRegistryApi = {
         project_key: projectKey,
         repository_slug: repositorySlug,
         ...(description && { description }),
+        ...(gitProvider && { git_provider: gitProvider }),
       },
     })
   },

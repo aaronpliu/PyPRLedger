@@ -37,6 +37,10 @@ class ProjectResponse(ProjectBase):
     """Schema for project response"""
 
     id: int = Field(..., description="Project database ID")
+    git_provider: str = Field(
+        default="bitbucket_server",
+        description="Git provider (bitbucket_server, github_enterprise)",
+    )
     created_date: datetime = Field(..., description="Project creation timestamp")
     updated_date: datetime = Field(..., description="Project last update timestamp")
 

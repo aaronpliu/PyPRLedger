@@ -14,9 +14,16 @@ export function usePrUrl() {
     if (!review.project?.project_url || !review.repository_slug || !review.pull_request_id) {
       return null
     }
-    
-    // Construct URL: <project_url>/repos/<repository_slug>/pull-requests/<pull_request_id>/diff
+
     const baseUrl = review.project.project_url.replace(/\/$/, '') // Remove trailing slash
+    const gitProvider = review.project.git_provider
+
+    if (gitProvider === 'github_enterprise') {
+      // GitHub Enterprise: <project_url>/<repo>/pull/<id>
+      return `${baseUrl}/${review.repository_slug}/pull/${review.pull_request_id}`
+    }
+
+    // Bitbucket Server (default): <project_url>/repos/<slug>/pull-requests/<id>/diff
     return `${baseUrl}/repos/${review.repository_slug}/pull-requests/${review.pull_request_id}/diff`
   }
 

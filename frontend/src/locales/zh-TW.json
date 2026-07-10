@@ -342,9 +342,9 @@
       "pin": "標記",
       "pinned": "已標記",
       "no_score_permission": "您沒有提交評分的權限。",
-      "link_account_required": "請先將您的帳戶關聯到Bitbucket使用者後再提交評分。",
+      "link_account_required": "請先將您的帳戶關聯到Git使用者後再提交評分。",
       "no_reviewer_assigned": "此審查尚未分配審查者，分配後方可進行評分。",
-      "not_assigned_reviewer": "您只能對分配給您的關聯Bitbucket使用者的審查進行評分。"
+      "not_assigned_reviewer": "您只能對分配給您的關聯Git使用者的審查進行評分。"
     }
   },
   "scores": {

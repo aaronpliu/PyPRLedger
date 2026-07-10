@@ -1,8 +1,11 @@
 """Entity Synchronization Service
 
 This service handles automatic synchronization of related entities (Project, Repository, User)
-when inserting PR reviews. It queries existing records and fetches from Bitbucket API if needed.
+when inserting PR reviews. It queries existing records and fetches from Git provider API if needed.
+Supports multiple providers (Bitbucket Server, GitHub Enterprise) via provider abstraction.
 """
+
+from __future__ import annotations
 
 import logging
 
@@ -10,20 +13,65 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.project import Project
+from src.models.project_registry import ProjectRegistry
 from src.models.repository import Repository
 from src.models.user import User
-from src.services.bitbucket_service import get_bitbucket_service
+from src.services.git_providers import BaseGitProvider, get_git_provider
 
 
 logger = logging.getLogger(__name__)
 
 
 class EntitySyncService:
-    """Service for synchronizing entities from Bitbucket API"""
+    """Service for synchronizing entities from Git provider API.
 
-    def __init__(self, db: AsyncSession):
+    Provider resolution (hybrid strategy):
+    1. Check project_registry for (project_key, repository_slug) -> use registered provider
+    2. Fall back to git_provider hint from payload (if provided)
+    3. Default to bitbucket_server (preserves existing behavior)
+    """
+
+    def __init__(self, db: AsyncSession, git_provider: str | None = None):
         self.db = db
-        self.bitbucket = get_bitbucket_service()
+        self._provider: BaseGitProvider | None = None
+        self._payload_hint: str | None = git_provider
+
+    async def _resolve_provider(self) -> BaseGitProvider:
+        """Lazy-resolve provider on first use, then memoize for the session."""
+        if self._provider is not None:
+            return self._provider
+        await self._try_resolve_provider_from_registry(None, None)
+        if self._provider is None:
+            if self._payload_hint:
+                self._provider = get_git_provider(self._payload_hint)
+            else:
+                self._provider = get_git_provider("bitbucket_server")
+        return self._provider
+
+    async def _try_resolve_provider_from_registry(
+        self, project_key: str | None, repository_slug: str | None
+    ) -> None:
+        """Try to determine provider from project_registry (best effort)."""
+        if not project_key or not repository_slug:
+            return
+        try:
+            result = await self.db.execute(
+                select(ProjectRegistry).where(
+                    and_(
+                        ProjectRegistry.project_key == project_key,
+                        ProjectRegistry.repository_slug == repository_slug,
+                    )
+                )
+            )
+            entry = result.scalar_one_or_none()
+            if entry:
+                self._provider = get_git_provider(entry.git_provider)
+                logger.debug(
+                    f"Resolved provider '{entry.git_provider}' from registry "
+                    f"for {project_key}/{repository_slug}"
+                )
+        except Exception:
+            pass
 
     async def sync_project(self, project_key: str) -> Project:
         """
@@ -35,7 +83,6 @@ class EntitySyncService:
         Returns:
             Project instance (either existing or newly created)
         """
-        # Try to find existing project
         project_result = await self.db.execute(
             select(Project).where(Project.project_key == project_key)
         )
@@ -45,24 +92,24 @@ class EntitySyncService:
             logger.debug(f"Project already exists: {project_key}")
             return project
 
-        # Fetch from Bitbucket API
-        logger.info(f"Project not found, fetching from Bitbucket: {project_key}")
-        project_info = await self.bitbucket.get_project_info(project_key)
+        provider = await self._resolve_provider()
+        logger.info(f"Project not found, fetching from {provider.name}: {project_key}")
+        project_info = await provider.get_project_info(project_key)
 
         if not project_info:
             raise ValueError(f"Failed to fetch project info for {project_key}")
 
-        # Create new project
         project = Project(
             project_id=project_info["project_id"],
             project_name=project_info["project_name"],
             project_key=project_info["project_key"],
             project_url=project_info["project_url"],
+            git_provider=provider.name,
         )
         self.db.add(project)
         await self.db.flush()
 
-        logger.info(f"Created project from Bitbucket API: {project_key}")
+        logger.info(f"Created project from {provider.name} API: {project_key}")
         return project
 
     async def sync_repository(
@@ -80,7 +127,6 @@ class EntitySyncService:
         Returns:
             Repository instance (either existing or newly created)
         """
-        # Try to find existing repository - must query by both project_id and repository_slug
         repo_result = await self.db.execute(
             select(Repository).where(
                 Repository.project_id == project.project_id,
@@ -95,16 +141,17 @@ class EntitySyncService:
             )
             return repository
 
-        # Fetch from Bitbucket API using project_key as workspace
+        await self._try_resolve_provider_from_registry(project.project_key, repository_slug)
+        provider = await self._resolve_provider()
         logger.info(
-            f"Repository not found, fetching from Bitbucket: {project.project_key}/{repository_slug}"
+            f"Repository not found, fetching from {provider.name}: "
+            f"{project.project_key}/{repository_slug}"
         )
-        repo_info = await self.bitbucket.get_repository_info(project.project_key, repository_slug)
+        repo_info = await provider.get_repository_info(project.project_key, repository_slug)
 
         if not repo_info:
             raise ValueError(f"Failed to fetch repository info for {repository_slug}")
 
-        # Create new repository
         repository = Repository(
             repository_id=repo_info["repository_id"],
             project_id=project.project_id,
@@ -115,7 +162,7 @@ class EntitySyncService:
         self.db.add(repository)
         await self.db.flush()
 
-        logger.info(f"Created repository from Bitbucket API: {repository_slug}")
+        logger.info(f"Created repository from {provider.name} API: {repository_slug}")
         return repository
 
     async def sync_user(self, username: str, is_reviewer: bool = False) -> User:
@@ -129,30 +176,24 @@ class EntitySyncService:
         Returns:
             User instance (either existing or newly created)
         """
-        # Try to find existing user
         user_result = await self.db.execute(select(User).where(User.username == username))
         user = user_result.scalar_one_or_none()
 
         if user:
             logger.debug(f"User already exists: {username}")
-            # Update reviewer status if needed
             if is_reviewer and not user.is_reviewer:
                 user.is_reviewer = True
                 await self.db.flush()
-
-                # If user has linked auth_user, upgrade role to reviewer
                 await self._upgrade_linked_auth_user_role(user)
-
             return user
 
-        # Fetch from Bitbucket API
-        logger.info(f"User not found, fetching from Bitbucket: {username}")
-        user_info = await self.bitbucket.get_user_info(username)
+        provider = await self._resolve_provider()
+        logger.info(f"User not found, fetching from {provider.name}: {username}")
+        user_info = await provider.get_user_info(username)
 
         if not user_info:
             raise ValueError(f"Failed to fetch user info for {username}")
 
-        # Create new user
         user = User(
             user_id=user_info["user_id"],
             username=username,
@@ -164,12 +205,9 @@ class EntitySyncService:
         self.db.add(user)
         await self.db.flush()
 
-        logger.info(f"Created user from Bitbucket API: {username}")
+        logger.info(f"Created user from {provider.name} API: {username}")
 
-        # Auto-associate with auth_user if exists
         await self._auto_associate_auth_user(user)
-
-        # Invalidate user list cache since a new user was created
         await self._invalidate_user_list_cache()
 
         return user
