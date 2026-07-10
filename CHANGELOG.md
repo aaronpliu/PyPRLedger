@@ -5,6 +5,23 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.3] - 2026-07-10
+
+**Backend Version**: 1.19.3
+**Frontend Version**: 1.14.3
+
+### Fixed
+- enhance the date range filter
+
+### Changed
+- [Refactor] enhance scoring rate
+
+### Documentation
+- update github
+- handle github PR
+
+---
+
 ## [1.19.2] - 2026-07-07
 
 **Backend Version**: 1.19.2
