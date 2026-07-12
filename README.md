@@ -1,9 +1,10 @@
 # PRLedger
 
-A production-ready FastAPI + Vue 3 PR Code Review Result Storage System with MySQL, Redis, and Prometheus integration.
+A production-ready FastAPI + Vue 3 PR Code Review Result Storage System with MySQL, Redis, and Prometheus integration. Supports **Bitbucket Server** and **GitHub Enterprise** as Git providers.
 
 ## Features
 
+- **Multi-Git Provider**: Per-project provider tracking supporting Bitbucket Server and GitHub Enterprise concurrently, with hybrid provider resolution (registry → payload hint → default)
 - **RESTful API**: Complete REST API for managing pull request reviews, users, projects, and auto-assignment rules
 - **Auto-Assignment Rules**: Configurable rules to automatically assign reviewers based on project, repository, branch, PR author, and status conditions — with priority ordering, date ranges, and enable/disable toggling
 - **Multi-Reviewer System**: Support for multiple reviewers per pull request, each with independent assignments, status tracking (pending → in_progress → completed), and scoring
@@ -28,7 +29,7 @@ A production-ready FastAPI + Vue 3 PR Code Review Result Storage System with MyS
 ```
 PyPRLedger/
 ├── alembic/                      # Database migrations
-│   ├── versions/                 # Migration scripts (027 total)
+│   ├── versions/                 # Migration scripts (029 total)
 │   └── env.py                    # Alembic environment
 ├── docs/                         # Documentation
 ├── frontend/                     # Vue 3 + Element Plus SPA
@@ -106,8 +107,12 @@ PyPRLedger/
 │   │   ├── auth_service.py       # Authentication service
 │   │   ├── auto_assign_service.py    # Auto-assignment engine (NEW v1.17.0)
 │   │   ├── avatar_service.py     # Avatar upload
-│   │   ├── bitbucket_service.py  # Bitbucket API integration
-│   │   ├── entity_sync_service.py    # Auto-sync entities from Bitbucket
+│   │   ├── bitbucket_service.py  # Bitbucket API integration (wrapped by git_providers)
+│   │   ├── entity_sync_service.py    # Auto-sync entities from Git providers
+│   │   ├── git_providers/        # Multi-provider abstraction
+│   │   │   ├── base.py           # Abstract BaseGitProvider
+│   │   │   ├── bitbucket_server.py   # Bitbucket Server adapter
+│   │   │   └── github_enterprise.py  # GitHub Enterprise provider
 │   │   ├── multi_reviewer_service.py # Multi-reviewer assignment + notifications
 │   │   ├── notification_service.py   # Notification dispatch
 │   │   ├── pat_service.py        # Personal access token service
@@ -409,6 +414,9 @@ Key configuration options:
 - `REDIS_*`: Redis cache configuration
 - `TIMEZONE`: Application timezone (default: Asia/Shanghai)
 - `USE_UTC_IN_DB`: Store datetime in UTC in database (default: True, recommended)
+- `BITBUCKET_*`: Bitbucket Server API configuration (URL, credentials, default workspace)
+- `GITHUB_ENTERPRISE_URL`: GitHub Enterprise base URL (e.g., `https://github.example.com`)
+- `GITHUB_ENTERPRISE_TOKEN`: GitHub Enterprise personal access token
 - `PROMETHEUS_ENABLED`: Enable/disable Prometheus metrics
 - `RATE_LIMIT_*`: Rate limiting configuration
 - `CACHE_TTL_*`: Cache TTL settings
@@ -428,7 +436,7 @@ The system uses MySQL with the following tables:
 
 | Table | Purpose |
 |---|---|
-| `user` | Git/Bitbucket users |
+| `user` | Git users (Bitbucket Server / GitHub Enterprise) |
 | `auth_user` | System login users with password auth |
 | `project` | Code review projects |
 | `repository` | Code repositories per project |
@@ -439,7 +447,7 @@ The system uses MySQL with the following tables:
 | `pull_request_review_association` | Bidirectional review linking |
 | `user_pinned_reviews` | Per-user review pinning |
 | `pull_request_review_auto_assignment_rule` | Auto-assignment rule definitions |
-| `project_registry` | Project-to-application mappings |
+| `project_registry` | Project-to-application mappings with Git provider tracking |
 | `role` | RBAC roles with JSON permissions |
 | `user_role_assignment` | User-to-role assignments (global/project/repository scope) |
 | `notification` | In-app notifications |
