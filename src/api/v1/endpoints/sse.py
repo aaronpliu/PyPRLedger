@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -44,6 +45,9 @@ _sse_abort_flags: dict[str, bool] = {}
 MAX_CONNECTIONS_PER_USER = 3
 MAX_CONNECTIONS_PER_ADMIN = 10
 
+# Maximum total SSE connections across all users (safety net against pool exhaustion)
+MAX_TOTAL_CONNECTIONS = 200
+
 # Heartbeat interval in seconds — keeps connection alive and detects dead clients
 HEARTBEAT_INTERVAL = 30
 
@@ -51,11 +55,90 @@ HEARTBEAT_INTERVAL = 30
 # Prevents zombie connections from occupying tracked slots forever
 IDLE_TIMEOUT = 300  # 5 minutes
 
+# Redis pub/sub retry configuration
+REDIS_PUBSUB_MAX_RETRIES = 3
+REDIS_PUBSUB_RETRY_BASE_DELAY = 0.5  # seconds, doubles each attempt
 
 CONNECTION_LIFETIME_WARNING = (
     "Connection limit reached — oldest connection pruned. "
     "This is normal after page refresh but excessive pruning suggests a leak."
 )
+
+# Background cleanup task handle
+_cleanup_task: asyncio.Task | None = None
+
+
+async def _periodic_stale_connection_cleanup():
+    """Background task to clean up stale SSE connections.
+
+    Runs every 60 seconds and removes connection tracking entries
+    that have exceeded the idle timeout. This prevents zombie connections
+    from accumulating and exhausting the Redis pub/sub pool.
+    """
+    while True:
+        await asyncio.sleep(60)
+        try:
+            now = time.monotonic()
+            stale_count = 0
+
+            for username, connections in list(_sse_connections.items()):
+                fresh_connections = []
+                for conn_id, start_time in connections:
+                    age = now - start_time
+                    if age > IDLE_TIMEOUT and not _sse_abort_flags.get(conn_id):
+                        # Mark stale connection for abort
+                        _sse_abort_flags[conn_id] = True
+                        stale_count += 1
+                        logger.info(
+                            "Stale SSE connection marked for cleanup",
+                            extra={
+                                "connection_id": conn_id,
+                                "username": username,
+                                "age_seconds": int(age),
+                            },
+                        )
+                    else:
+                        fresh_connections.append((conn_id, start_time))
+
+                if fresh_connections:
+                    _sse_connections[username] = fresh_connections
+                elif username in _sse_connections:
+                    del _sse_connections[username]
+
+            if stale_count > 0:
+                total = sum(len(c) for c in _sse_connections.values())
+                logger.info(
+                    "SSE stale connection cleanup complete",
+                    extra={
+                        "stale_pruned": stale_count,
+                        "total_remaining": total,
+                    },
+                )
+
+                # Update active connections gauge
+                metrics.sse_connections_active.set(total)
+
+        except Exception:
+            logger.warning("Error in SSE stale connection cleanup", exc_info=True)
+
+
+async def start_sse_cleanup_task():
+    """Start the background stale connection cleanup task."""
+    global _cleanup_task
+    if _cleanup_task is None or _cleanup_task.done():
+        _cleanup_task = asyncio.create_task(_periodic_stale_connection_cleanup())
+        logger.info("SSE stale connection cleanup task started (interval: 60s)")
+
+
+async def stop_sse_cleanup_task():
+    """Stop the background stale connection cleanup task."""
+    global _cleanup_task
+    if _cleanup_task is not None and not _cleanup_task.done():
+        _cleanup_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await _cleanup_task
+        _cleanup_task = None
+        logger.info("SSE stale connection cleanup task stopped")
 
 
 def _is_user_involved_in_review(
@@ -313,6 +396,26 @@ async def stream_reviews(
             f"admin:{auth_user.id}" if is_admin else auth_user.username
         )
 
+    # Enforce global connection limit (safety net against Redis pool exhaustion)
+    total_connections = sum(len(conns) for conns in _sse_connections.values())
+    if total_connections >= MAX_TOTAL_CONNECTIONS:
+        logger.warning(
+            "Global SSE connection limit reached — rejecting new connection",
+            extra={
+                "total_connections": total_connections,
+                "max_total": MAX_TOTAL_CONNECTIONS,
+                "username": tracking_username,
+            },
+        )
+        metrics.sse_connections_total.labels(status="rejected_global_limit").inc()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "error": "SSE_UNAVAILABLE",
+                "message": "Too many real-time connections. Please try again in a moment.",
+            },
+        )
+
     # Enforce per-user connection limit — prune oldest connection to make room
     # This handles the common case where a user refreshes the page and the old
     # connection hasn't been cleaned up yet (e.g., beforeunload didn't fire).
@@ -368,24 +471,66 @@ async def stream_reviews(
         },
     )
 
-    # Initialise Redis pub/sub before creating StreamingResponse
-    # so that any Redis failure is returned as 503, not a silently broken stream.
-    try:
-        pubsub = redis_client.pubsub()
-        await pubsub.subscribe(REVIEW_CREATED_CHANNEL)
-    except Exception as exc:
-        logger.error(
-            "Failed to initialise Redis pub/sub for SSE",
-            extra={"error": str(exc), "username": tracking_username},
-        )
+    # Ensure the stale connection cleanup task is running
+    await start_sse_cleanup_task()
+
+    # Initialise Redis pub/sub with retry logic for transient failures.
+    # Each SSE connection holds a dedicated pub/sub subscription, so we
+    # retry with backoff to handle momentary pool exhaustion or network blips.
+    pubsub = None
+    last_exc = None
+    for attempt in range(1, REDIS_PUBSUB_MAX_RETRIES + 1):
+        try:
+            pubsub = redis_client.pubsub()
+            await pubsub.subscribe(REVIEW_CREATED_CHANNEL)
+            break
+        except Exception as exc:
+            last_exc = exc
+            # Clean up the failed pubsub object to release the connection
+            with contextlib.suppress(Exception):
+                await pubsub.close()
+            pubsub = None
+
+            if attempt < REDIS_PUBSUB_MAX_RETRIES:
+                delay = REDIS_PUBSUB_RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                logger.warning(
+                    "Redis pub/sub init failed, retrying",
+                    extra={
+                        "attempt": attempt,
+                        "max_retries": REDIS_PUBSUB_MAX_RETRIES,
+                        "delay_seconds": delay,
+                        "username": tracking_username,
+                        "error": str(exc),
+                    },
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(
+                    "Failed to initialise Redis pub/sub for SSE after all retries",
+                    extra={
+                        "error": str(exc),
+                        "username": tracking_username,
+                        "attempts": REDIS_PUBSUB_MAX_RETRIES,
+                    },
+                )
+
+    if pubsub is None:
+        # All retries exhausted — clean up connection tracking
+        if tracking_username and tracking_username in _sse_connections:
+            _sse_connections[tracking_username] = [
+                (cid, t) for (cid, t) in _sse_connections[tracking_username] if cid != connection_id
+            ]
+            if not _sse_connections[tracking_username]:
+                del _sse_connections[tracking_username]
+
         metrics.sse_connections_total.labels(status="redis_failed").inc()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
                 "error": "SSE_UNAVAILABLE",
-                "message": "Real-time service temporarily unavailable",
+                "message": "Real-time service temporarily unavailable. Please try again.",
             },
-        ) from exc
+        ) from last_exc
 
     async def event_stream() -> AsyncGenerator[str, None]:
         try:

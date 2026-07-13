@@ -3,10 +3,12 @@
  *
  * Features:
  * - JWT authentication via query parameter
- * - Automatic reconnection with exponential backoff (3s base, max 30s, ±20% jitter)
+ * - Automatic reconnection with exponential backoff (2s base, max 30s, ±20% jitter)
  * - Connection lifecycle management
  * - Type-safe event parsing
  * - Per-tab connection isolation (each tab gets its own instance)
+ * - Visibility change handling — reconnects when tab becomes visible
+ * - Fast recovery from 503 errors with shorter retry delay
  */
 
 import router from '@/router'
@@ -28,12 +30,14 @@ export interface SSECallbackMap {
 }
 
 export interface SSEServiceOptions {
-  /** Maximum reconnection attempts before giving up (default: 5) */
+  /** Maximum reconnection attempts before giving up (default: 15) */
   maxReconnectAttempts: number
-  /** Base reconnection delay in ms, doubled each attempt (default: 3000) */
+  /** Base reconnection delay in ms, doubled each attempt (default: 2000) */
   reconnectBaseDelay: number
   /** Maximum reconnection delay in ms (default: 30000) */
   maxReconnectDelay: number
+  /** Fast retry delay for 503 errors in ms (default: 1500) */
+  fastRetryDelay: number
 }
 
 export class SSEService {
@@ -70,11 +74,21 @@ export class SSEService {
   /** Debounce delay before actual disconnect on page navigation (ms) */
   private static readonly DISCONNECT_DEBOUNCE_MS = 2000
 
+  /** Whether the last error was a 503 (triggers fast retry) */
+  private _lastErrorWas503 = false
+
+  /** Bound visibility change handler reference for cleanup */
+  private boundVisibilityChange: (() => void) | null = null
+
+  /** Bound pageshow handler reference for cleanup */
+  private boundPageShow: ((event: PageTransitionEvent) => void) | null = null
+
   constructor(options: Partial<SSEServiceOptions> = {}) {
     this.options = {
-      maxReconnectAttempts: 5,
-      reconnectBaseDelay: 3000,
+      maxReconnectAttempts: 15,
+      reconnectBaseDelay: 2000,
       maxReconnectDelay: 30000,
+      fastRetryDelay: 1500,
       ...options,
     }
   }
@@ -133,6 +147,12 @@ export class SSEService {
       this.eventSource = null
     }
 
+    // Clear any pending reconnect — we're starting fresh
+    if (this.reconnectTimeout !== null) {
+      clearTimeout(this.reconnectTimeout)
+      this.reconnectTimeout = null
+    }
+
     // Store callbacks
     this.currentOnEvent = onEvent
     this.currentOnError = onError || null
@@ -142,6 +162,7 @@ export class SSEService {
     this.url = `/api/v1/sse/stream?token=${encodeURIComponent(token)}`
     this.isManualDisconnect = false
     this.reconnectAttempts = 0
+    this._lastErrorWas503 = false
     this._enabled = true
 
     // Save last connect params for reconnection on setEnabled(true)
@@ -162,6 +183,13 @@ export class SSEService {
     this.boundBeforeUnload = () => this.disconnectImmediate()
     window.addEventListener('beforeunload', this.boundBeforeUnload)
 
+    // Register visibility change listener — reconnect when tab becomes visible
+    // and the connection is not active
+    this._setupVisibilityListener()
+
+    // Register pageshow listener for bfcache restoration
+    this._setupPageShowListener()
+
     this.eventSource = new EventSource(this.url, { withCredentials: false })
 
     this.eventSource.addEventListener('open', () => {
@@ -171,6 +199,7 @@ export class SSEService {
       }
       console.log('[SSE] Connection opened')
       this.reconnectAttempts = 0
+      this._lastErrorWas503 = false
       this.currentOnOpen?.()
     })
 
@@ -241,11 +270,16 @@ export class SSEService {
     console.log('[SSE] Immediate disconnect')
     this.isManualDisconnect = true
     this.pendingDisconnectTimeout = null
+    this._lastErrorWas503 = false
 
     if (this.reconnectTimeout !== null) {
       clearTimeout(this.reconnectTimeout)
       this.reconnectTimeout = null
     }
+
+    // Remove visibility/pageshow listeners
+    this._teardownVisibilityListener()
+    this._teardownPageShowListener()
 
     if (this.eventSource) {
       this.eventSource.close()
@@ -288,10 +322,9 @@ export class SSEService {
 
   /**
    * Reconnect with a new token (after token refresh).
-   * Updates the stored token and reconnects if currently connected.
+   * Updates the stored token and reconnects if currently connected or enabled.
    */
   reconnectWithToken(newToken: string): void {
-    const wasConnected = this.isConnected()
     // Update stored token so reconnection attempts use the new token
     this.token = newToken
     this.lastToken = newToken
@@ -299,38 +332,12 @@ export class SSEService {
     // Also update the URL for reconnection
     this.url = `/api/v1/sse/stream?token=${encodeURIComponent(newToken)}`
 
-    if (wasConnected) {
+    if (this._enabled && this.lastOnEvent) {
       console.log('[SSE] Reconnecting with refreshed token')
-      if (this.eventSource) {
-        this.eventSource.close()
-        this.eventSource = null
-      }
       this.reconnectAttempts = 0
-      this._enabled = true
-
-      this.connectionGeneration++
-      const myGeneration = this.connectionGeneration
-
-      this.eventSource = new EventSource(this.url!, { withCredentials: false })
-
-      this.eventSource.addEventListener('open', () => {
-        if (myGeneration !== this.connectionGeneration) return
-        console.log('[SSE] Connection opened (reconnect)')
-        this.reconnectAttempts = 0
-        this.currentOnOpen?.()
-      })
-
-      this.eventSource.addEventListener('review_created', (rawEvent: Event) => {
-        if (myGeneration !== this.connectionGeneration) return
-        if (this.currentOnEvent) {
-          this.handleReviewCreated(rawEvent as MessageEvent, this.currentOnEvent)
-        }
-      })
-
-      this.eventSource.addEventListener('error', (event: Event) => {
-        if (myGeneration !== this.connectionGeneration) return
-        this.handleError(event, this.currentOnError || undefined, this.currentOnEvent!)
-      })
+      this._lastErrorWas503 = false
+      // Use connect() to get full setup including visibility listeners
+      this.connect(newToken, this.lastOnEvent, this.lastOnError || undefined, this.lastOnOpen || undefined)
     }
   }
 
@@ -393,6 +400,18 @@ export class SSEService {
       return
     }
 
+    // Detect 503 errors — EventSource doesn't expose HTTP status directly,
+    // but when readyState goes to CLOSED immediately after CONNECTING,
+    // it's typically a server rejection (503, 429, etc.)
+    // We use a heuristic: if the connection never opened and is now closed,
+    // treat it as a fast-retry candidate.
+    if (
+      this.eventSource?.readyState === EventSource.CLOSED &&
+      this.reconnectAttempts === 0
+    ) {
+      this._lastErrorWas503 = true
+    }
+
     // If the EventSource is already closed by the browser, attempt reconnection
     if (this.eventSource?.readyState === EventSource.CLOSED || !this.eventSource) {
       onError?.(event)
@@ -443,6 +462,7 @@ export class SSEService {
   /**
    * Attempt to reconnect with exponential backoff and ±20% jitter.
    * Uses the current stored token and callbacks for reconnection.
+   * Uses faster retry delay for 503 errors.
    */
   private attemptReconnect(
     onEvent?: (event: SSEReviewCreatedEvent) => void,
@@ -455,13 +475,20 @@ export class SSEService {
 
     this.reconnectAttempts++
 
-    // Exponential: base * 2^(attempt-1), clamped to max
-    const exponentialDelay = this.options.reconnectBaseDelay * Math.pow(2, this.reconnectAttempts - 1)
-    const cappedDelay = Math.min(exponentialDelay, this.options.maxReconnectDelay)
+    let delay: number
+    if (this._lastErrorWas503) {
+      // Fast retry for 503 errors — the server may recover quickly
+      delay = this.options.fastRetryDelay
+      console.log(`[SSE] Fast retry for 503 error in ${delay}ms`)
+    } else {
+      // Exponential: base * 2^(attempt-1), clamped to max
+      const exponentialDelay = this.options.reconnectBaseDelay * Math.pow(2, this.reconnectAttempts - 1)
+      const cappedDelay = Math.min(exponentialDelay, this.options.maxReconnectDelay)
 
-    // Add ±20% jitter to avoid thundering herd
-    const jitter = cappedDelay * 0.2 * (Math.random() * 2 - 1)
-    const delay = Math.max(0, Math.round(cappedDelay + jitter))
+      // Add ±20% jitter to avoid thundering herd
+      const jitter = cappedDelay * 0.2 * (Math.random() * 2 - 1)
+      delay = Math.max(0, Math.round(cappedDelay + jitter))
+    }
 
     console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.options.maxReconnectAttempts})`)
 
@@ -472,6 +499,77 @@ export class SSEService {
         this.connect(this.token, onEvent!, onError)
       }
     }, delay)
+  }
+
+  /**
+   * Set up visibility change listener to reconnect when tab becomes visible.
+   * Browsers throttle or kill EventSource connections when the tab is hidden.
+   * When the user returns, we check if the connection is still alive and
+   * reconnect if needed.
+   */
+  private _setupVisibilityListener(): void {
+    this._teardownVisibilityListener()
+    this.boundVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && this._enabled && !this.isManualDisconnect) {
+        // Check if connection is dead and needs reconnection
+        if (!this.eventSource || this.eventSource.readyState === EventSource.CLOSED) {
+          console.log('[SSE] Tab became visible — connection dead, reconnecting')
+          this.reconnectAttempts = 0
+          this._lastErrorWas503 = false
+          if (this.lastToken) {
+            this.connect(this.lastToken, this.lastOnEvent!, this.lastOnError || undefined, this.lastOnOpen || undefined)
+          }
+        } else if (this.eventSource.readyState === EventSource.CONNECTING) {
+          // Connection is trying to reconnect — reset attempts to give it more chances
+          console.log('[SSE] Tab became visible — connection reconnecting, resetting attempts')
+          this.reconnectAttempts = 0
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', this.boundVisibilityChange)
+  }
+
+  /**
+   * Tear down visibility change listener.
+   */
+  private _teardownVisibilityListener(): void {
+    if (this.boundVisibilityChange) {
+      document.removeEventListener('visibilitychange', this.boundVisibilityChange)
+      this.boundVisibilityChange = null
+    }
+  }
+
+  /**
+   * Set up pageshow listener for bfcache restoration.
+   * When the browser restores a page from bfcache, the EventSource
+   * may be in a broken state.
+   */
+  private _setupPageShowListener(): void {
+    this._teardownPageShowListener()
+    this.boundPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted && this._enabled && !this.isManualDisconnect) {
+        // Page was restored from bfcache — check connection
+        if (!this.eventSource || this.eventSource.readyState !== EventSource.OPEN) {
+          console.log('[SSE] Page restored from bfcache — reconnecting')
+          this.reconnectAttempts = 0
+          this._lastErrorWas503 = false
+          if (this.lastToken) {
+            this.connect(this.lastToken, this.lastOnEvent!, this.lastOnError || undefined, this.lastOnOpen || undefined)
+          }
+        }
+      }
+    }
+    window.addEventListener('pageshow', this.boundPageShow)
+  }
+
+  /**
+   * Tear down pageshow listener.
+   */
+  private _teardownPageShowListener(): void {
+    if (this.boundPageShow) {
+      window.removeEventListener('pageshow', this.boundPageShow)
+      this.boundPageShow = null
+    }
   }
 }
 

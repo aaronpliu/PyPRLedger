@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str | None = Field(default=None)
     REDIS_DB: int = Field(default=0)
     REDIS_MAX_CONNECTIONS: int = Field(default=100)
-    REDIS_PUBSUB_MAX_CONNECTIONS: int = Field(default=20)
+    REDIS_PUBSUB_MAX_CONNECTIONS: int = Field(default=50)
 
     @property
     def redis_url(self) -> str:
