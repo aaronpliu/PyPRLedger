@@ -5,6 +5,22 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.1] - 2026-07-13
+
+**Backend Version**: 1.20.1
+**Frontend Version**: 1.15.1
+
+### Changed
+- [Refactor] enhance sse connections
+
+### Documentation
+- sync features change into AGENTS and README
+
+### Other Changes
+- 6bffad9 styles: enhanced task assignment details page layout
+
+---
+
 ## [1.20.0] - 2026-07-10
 
 **Backend Version**: 1.20.0
