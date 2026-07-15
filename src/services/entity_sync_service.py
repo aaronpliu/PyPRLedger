@@ -46,7 +46,14 @@ class EntitySyncService:
         await self._try_resolve_provider_from_registry(None, None)
         if self._provider is None:
             if self._payload_hint:
-                self._provider = get_git_provider(self._payload_hint)
+                if GitProvider.is_valid(self._payload_hint):
+                    self._provider = get_git_provider(self._payload_hint)
+                else:
+                    logger.warning(
+                        f"Invalid git_provider hint '{self._payload_hint}', "
+                        f"falling back to {GitProvider.default()}"
+                    )
+                    self._provider = get_git_provider(GitProvider.default())
             else:
                 self._provider = get_git_provider(GitProvider.default())
         return self._provider
@@ -68,11 +75,17 @@ class EntitySyncService:
             )
             entry = result.scalar_one_or_none()
             if entry:
-                self._provider = get_git_provider(entry.git_provider)
-                logger.debug(
-                    f"Resolved provider '{entry.git_provider}' from registry "
-                    f"for {project_key}/{repository_slug}"
-                )
+                try:
+                    self._provider = get_git_provider(entry.git_provider)
+                    logger.debug(
+                        f"Resolved provider '{entry.git_provider}' from registry "
+                        f"for {project_key}/{repository_slug}"
+                    )
+                except ValueError:
+                    logger.warning(
+                        f"Registry entry for {project_key}/{repository_slug} has "
+                        f"invalid git_provider '{entry.git_provider}', skipping"
+                    )
         except Exception:
             pass
 

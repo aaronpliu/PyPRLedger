@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.git_provider import GitProvider
 from src.models.project_registry import ProjectRegistry
 
 
@@ -167,8 +168,15 @@ class ProjectRegistryService:
             Created ProjectRegistry entry
 
         Raises:
-            ValueError: If project-repo pair already registered to different app
+            ValueError: If project-repo pair already registered to different app or invalid git_provider
         """
+        # Validate git_provider
+        if not GitProvider.is_valid(git_provider):
+            raise ValueError(
+                f"Invalid git_provider '{git_provider}'. "
+                f"Must be one of: {', '.join(sorted(GitProvider.values()))}"
+            )
+
         # Check if already registered
         existing = await self._get_registry_entry(project_key, repository_slug, db)
 

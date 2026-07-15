@@ -199,6 +199,17 @@ async def register_project_to_app(
     Raises:
         HTTPException: If already registered to different app or insufficient permissions
     """
+    # Validate git_provider
+    if not GitProvider.is_valid(git_provider):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "VALIDATION_ERROR",
+                "message": f"Invalid git_provider '{git_provider}'. "
+                f"Must be one of: {', '.join(sorted(GitProvider.values()))}",
+            },
+        )
+
     # Check if user has system_admin role with project_registry manage permission
     has_permission = await rbac_service.check_permission(
         auth_user_id=current_user.id,

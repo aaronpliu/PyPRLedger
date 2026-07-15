@@ -114,13 +114,20 @@ class Project(Base):
         if isinstance(updated_date, str):
             updated_date = datetime.fromisoformat(updated_date)
 
+        git_provider = data.get("git_provider", GitProvider.default().value)
+        if not GitProvider.is_valid(git_provider):
+            raise ValueError(
+                f"Invalid git_provider '{git_provider}'. "
+                f"Must be one of: {', '.join(sorted(GitProvider.values()))}"
+            )
+
         return cls(
             id=data.get("id"),
             project_id=data.get("project_id"),
             project_name=data.get("project_name"),
             project_key=data.get("project_key"),
             project_url=data.get("project_url"),
-            git_provider=data.get("git_provider", GitProvider.default().value),
+            git_provider=git_provider,
             is_active=data.get("is_active", True),
             created_date=created_date,
             updated_date=updated_date,

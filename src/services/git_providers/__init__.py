@@ -19,6 +19,9 @@ def get_git_provider(provider_name: str | GitProvider) -> BaseGitProvider:
 
     Returns:
         BaseGitProvider instance (cached singleton per provider name)
+
+    Raises:
+        ValueError: If provider_name is not a recognized GitProvider value
     """
     provider_str = provider_name.value if isinstance(provider_name, GitProvider) else provider_name
 
@@ -34,12 +37,10 @@ def get_git_provider(provider_name: str | GitProvider) -> BaseGitProvider:
 
         provider = GitHubEnterpriseProvider()
     else:
-        logger.warning(
-            f"Unknown git provider '{provider_str}', falling back to {GitProvider.default()}"
+        raise ValueError(
+            f"Unknown git provider '{provider_str}'. "
+            f"Valid providers: {', '.join(sorted(GitProvider.values()))}"
         )
-        from src.services.git_providers.bitbucket_server import BitbucketServerProvider
-
-        provider = BitbucketServerProvider()
 
     _provider_cache[provider_str] = provider
     return provider

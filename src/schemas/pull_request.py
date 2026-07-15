@@ -96,6 +96,16 @@ class ReviewCreate(ReviewBase):
             raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
         return v
 
+    @field_validator("git_provider")
+    @classmethod
+    def validate_git_provider(cls, v: str | None) -> str | None:
+        """Validate git_provider is a known provider or None."""
+        if v is not None and not GitProvider.is_valid(v):
+            raise ValueError(
+                f"Invalid git_provider '{v}'. Must be one of: {', '.join(sorted(GitProvider.values()))}"
+            )
+        return v
+
     @field_validator("ai_suggestions", "metadata")
     def validate_json_fields(cls, v):
         """Validate JSON fields are properly formatted"""
