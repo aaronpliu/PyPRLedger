@@ -5,6 +5,24 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.2] - 2026-07-15
+
+**Backend Version**: 1.20.2
+**Frontend Version**: 1.15.2
+
+### Fixed
+- update PR link of scores management page
+
+### Changed
+- [Refactor] enhance bitbucket service management
+- [Refactor] validate git provider
+- [Refactor] define enum to manage multiple git providers
+
+### Documentation
+- add docs to describe on how to increase git provider in future
+
+---
+
 ## [1.20.1] - 2026-07-13
 
 **Backend Version**: 1.20.1
