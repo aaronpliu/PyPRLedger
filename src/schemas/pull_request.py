@@ -97,7 +97,6 @@ class ReviewCreate(ReviewBase):
         return v
 
     @field_validator("git_provider")
-    @classmethod
     def validate_git_provider(cls, v: str | None) -> str | None:
         """Validate git_provider is a known provider or None."""
         if v is not None and not GitProvider.is_valid(v):
