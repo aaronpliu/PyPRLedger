@@ -199,7 +199,7 @@ async def mock_redis(db_session: AsyncSession):
     with (
         patch("src.utils.redis.get_redis_client", return_value=mock_redis),
         patch("src.core.middleware.get_redis_client", return_value=mock_redis),
-        patch("src.api.v1.endpoints.sse.get_redis_client", return_value=mock_redis),
+        patch("src.api.v1.endpoints.sse.get_redis_pubsub_client", return_value=mock_redis),
         patch("src.services.auth_service.get_redis_client", return_value=mock_redis),
         patch("src.core.database.get_db_context", side_effect=_fake_db_context),
         patch("src.api.v1.endpoints.sse.get_db_context", side_effect=_fake_db_context),
@@ -390,7 +390,7 @@ async def test_sse_allows_admin_without_git_binding_receives_all_events(
     mock_pubsub.unsubscribe = AsyncMock()
     mock_pubsub.close = AsyncMock()
 
-    with patch("src.api.v1.endpoints.sse.get_redis_client") as mock_get:
+    with patch("src.api.v1.endpoints.sse.get_redis_pubsub_client") as mock_get:
         mock_redis = MagicMock()
         mock_redis.pubsub = MagicMock(return_value=mock_pubsub)
         mock_get.return_value = mock_redis
@@ -413,17 +413,21 @@ async def test_sse_allows_admin_without_git_binding_receives_all_events(
 
 
 @pytest.mark.asyncio
-async def test_sse_returns_429_when_connection_limit_exceeded(
+async def test_sse_prunes_oldest_connection_when_limit_exceeded(
     async_client: AsyncClient, db_session: AsyncSession
 ):
-    """4th concurrent SSE connection for the same user → 429."""
+    """4th concurrent SSE connection for the same user → oldest pruned, new one succeeds."""
     auth_user, _ = await _seed_user(db_session)
     token = _make_token(auth_user.id)
 
     # Seed 3 existing connections to fill the per-user limit.
     from src.api.v1.endpoints import sse as sse_module
 
-    sse_module._sse_connections[auth_user.username] = {"conn-1", "conn-2", "conn-3"}
+    sse_module._sse_connections[auth_user.username] = [
+        ("conn-1", 0.0),
+        ("conn-2", 1.0),
+        ("conn-3", 2.0),
+    ]
 
     try:
         response = await async_client.get(
@@ -433,30 +437,32 @@ async def test_sse_returns_429_when_connection_limit_exceeded(
     finally:
         sse_module._sse_connections.pop(auth_user.username, None)
 
-    assert response.status_code == 429
-    body = response.json()
-    assert body["detail"]["error"] == "CONNECTION_LIMIT_EXCEEDED"
-    assert "Maximum 3 concurrent" in body["detail"]["message"]
+    # Connection should succeed (oldest was pruned to make room)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    # The oldest connection (conn-1) should have been marked for abort
+    assert sse_module._sse_abort_flags.get("conn-1") is True
 
 
 @pytest.mark.asyncio
 async def test_sse_returns_503_when_redis_unavailable(
     async_client: AsyncClient, db_session: AsyncSession
 ):
-    """Redis pub/sub init failure → 503 (validates Fix 1).
+    """Redis pub/sub init failure after retries → 503.
 
     The autouse ``mock_redis`` fixture provides a working default; we override
     ``pubsub()`` here so that ``subscribe`` raises a ``ConnectionError`` before
-    the StreamingResponse is created.
+    the StreamingResponse is created. With retry logic, all 3 attempts must fail.
     """
     auth_user, _ = await _seed_user(db_session)
     token = _make_token(auth_user.id)
 
     mock_pubsub = MagicMock()
     mock_pubsub.subscribe = AsyncMock(side_effect=ConnectionError("Redis connection refused"))
+    mock_pubsub.close = AsyncMock()
 
     # Override only the pubsub part of the default mock.
-    with patch("src.api.v1.endpoints.sse.get_redis_client") as mock_get:
+    with patch("src.api.v1.endpoints.sse.get_redis_pubsub_client") as mock_get:
         mock_redis = MagicMock()
         mock_redis.pubsub = MagicMock(return_value=mock_pubsub)
         mock_get.return_value = mock_redis
@@ -470,6 +476,8 @@ async def test_sse_returns_503_when_redis_unavailable(
     body = response.json()
     assert body["detail"]["error"] == "SSE_UNAVAILABLE"
     assert "Real-time service temporarily unavailable" in body["detail"]["message"]
+    # All 3 retry attempts should have been made
+    assert mock_pubsub.subscribe.await_count == 3
 
 
 @pytest.mark.asyncio
@@ -516,7 +524,7 @@ async def test_sse_returns_200_and_streams_events_on_valid_connection(
     mock_pubsub.close = AsyncMock()
 
     # Override the autouse mock_redis pubsub for this test.
-    with patch("src.api.v1.endpoints.sse.get_redis_client") as mock_get:
+    with patch("src.api.v1.endpoints.sse.get_redis_pubsub_client") as mock_get:
         mock_redis = MagicMock()
         mock_redis.pubsub = MagicMock(return_value=mock_pubsub)
         mock_get.return_value = mock_redis

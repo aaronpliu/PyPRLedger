@@ -18,6 +18,7 @@ export interface Score {
   // Enriched fields from review context
   project_name?: string
   project_url?: string
+  git_provider?: string
   pull_request_commit_id?: string
   pull_request_user?: string
   pull_request_user_info?: Record<string, any> | null

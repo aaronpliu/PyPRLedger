@@ -10,14 +10,19 @@ from src.utils.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
-# Global Redis client instance
+# Global Redis client instances
 _redis_client: Redis | None = None
 _connection_pool: ConnectionPool | None = None
+
+# Dedicated pool for pub/sub (SSE) — long-lived subscriptions hold connections
+# that would otherwise starve the regular cache/command pool
+_pubsub_client: Redis | None = None
+_pubsub_pool: ConnectionPool | None = None
 
 
 async def init_redis() -> None:
     """Initialize the Redis connection pool and client"""
-    global _redis_client, _connection_pool
+    global _redis_client, _connection_pool, _pubsub_client, _pubsub_pool
 
     try:
         logger.info("Initializing Redis connection...")
@@ -29,6 +34,9 @@ async def init_redis() -> None:
             decode_responses=True,
             encoding="utf-8",
             health_check_interval=30,
+            socket_connect_timeout=5,
+            socket_timeout=10,
+            retry_on_timeout=True,
         )
 
         # Create Redis client
@@ -39,32 +47,50 @@ async def init_redis() -> None:
 
         logger.info("Redis connection initialized successfully")
 
+        # Create a separate pool for pub/sub (SSE) connections.
+        # Pub/sub subscriptions hold a dedicated connection for their entire
+        # lifetime, so isolating them prevents pool exhaustion for regular ops.
+        _pubsub_pool = ConnectionPool.from_url(
+            settings.redis_url,
+            max_connections=settings.REDIS_PUBSUB_MAX_CONNECTIONS,
+            decode_responses=True,
+            encoding="utf-8",
+            health_check_interval=30,
+            socket_connect_timeout=5,
+            retry_on_timeout=True,
+        )
+        _pubsub_client = Redis(connection_pool=_pubsub_pool)
+        await _pubsub_client.ping()
+
+        logger.info(f"Redis pub/sub pool initialized (max={settings.REDIS_PUBSUB_MAX_CONNECTIONS})")
+
     except Exception as e:
         logger.error(f"Failed to initialize Redis connection: {str(e)}", exc_info=True)
         raise
 
 
 async def close_redis() -> None:
-    """Close the Redis connection"""
-    global _redis_client, _connection_pool
+    """Close the Redis connections"""
+    global _redis_client, _connection_pool, _pubsub_client, _pubsub_pool
 
     try:
-        if _redis_client is None:
-            return
+        if _redis_client is not None:
+            logger.info("Closing Redis connection...")
+            await _redis_client.close()
+            if _connection_pool:
+                await _connection_pool.disconnect()
+            _redis_client = None
+            _connection_pool = None
 
-        logger.info("Closing Redis connection...")
+        if _pubsub_client is not None:
+            logger.info("Closing Redis pub/sub connection...")
+            await _pubsub_client.close()
+            if _pubsub_pool:
+                await _pubsub_pool.disconnect()
+            _pubsub_client = None
+            _pubsub_pool = None
 
-        # Close the client and pool
-        await _redis_client.close()
-
-        if _connection_pool:
-            await _connection_pool.disconnect()
-
-        # Reset global variables
-        _redis_client = None
-        _connection_pool = None
-
-        logger.info("Redis connection closed successfully")
+        logger.info("Redis connections closed successfully")
 
     except Exception as e:
         logger.error(f"Error closing Redis connection: {str(e)}", exc_info=True)
@@ -84,6 +110,24 @@ def get_redis_client() -> Redis:
     if _redis_client is None:
         raise RuntimeError("Redis client not initialized. Call init_redis() first.")
     return _redis_client
+
+
+def get_redis_pubsub_client() -> Redis:
+    """
+    Get the dedicated Redis client for pub/sub (SSE) operations.
+
+    Uses a separate connection pool so long-lived subscriptions
+    don't starve the regular command pool.
+
+    Returns:
+        Redis: The Redis pub/sub client
+
+    Raises:
+        RuntimeError: If Redis is not initialized
+    """
+    if _pubsub_client is None:
+        raise RuntimeError("Redis pub/sub client not initialized. Call init_redis() first.")
+    return _pubsub_client
 
 
 class RedisCache:

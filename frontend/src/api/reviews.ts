@@ -36,6 +36,7 @@ export interface Review {
     project_name: string
     project_key: string
     project_url: string
+    git_provider?: string
     created_date: string
     updated_date: string
   } | null

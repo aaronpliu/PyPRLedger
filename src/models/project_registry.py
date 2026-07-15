@@ -5,6 +5,7 @@ from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+from src.core.git_provider import GitProvider
 from src.utils.timezone import get_current_time
 
 
@@ -24,7 +25,14 @@ class ProjectRegistry(Base):
     2. Auto-registration with default 'Unknown' app
     3. Admin-managed application boundaries
     4. Multiple projects per application
+    5. Per-project Git provider tracking
     """
+
+    PROVIDER_BITBUCKET_SERVER = GitProvider.BITBUCKET_SERVER.value
+    PROVIDER_BITBUCKET_CLOUD = GitProvider.BITBUCKET_CLOUD.value
+    PROVIDER_GITHUB_ENTERPRISE = GitProvider.GITHUB_ENTERPRISE.value
+    VALID_PROVIDERS = GitProvider.values()
+    DEFAULT_PROVIDER = GitProvider.default().value
 
     __tablename__ = "project_registry"
 
@@ -43,6 +51,11 @@ class ProjectRegistry(Base):
     )
 
     repository_slug: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+
+    # Git provider for this project (bitbucket_server, github_enterprise)
+    git_provider: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=DEFAULT_PROVIDER, server_default=DEFAULT_PROVIDER
+    )
 
     # Optional description
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -82,5 +95,6 @@ class ProjectRegistry(Base):
     def __repr__(self) -> str:
         return (
             f"<ProjectRegistry(id={self.id}, app_name='{self.app_name}', "
-            f"project_key='{self.project_key}', repository_slug='{self.repository_slug}')>"
+            f"project_key='{self.project_key}', repository_slug='{self.repository_slug}', "
+            f"git_provider='{self.git_provider}')>"
         )

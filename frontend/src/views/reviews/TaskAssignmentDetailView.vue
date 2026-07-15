@@ -14,7 +14,7 @@
 
       <div v-if="review" class="detail-content">
         <!-- PR Information -->
-        <el-descriptions :title="t('task_assignment.detail.pr_information')" :column="2" border>
+        <el-descriptions :title="t('task_assignment.detail.pr_information')" :column="3" border>
           <el-descriptions-item :label="t('task_assignment.detail.pr_id')">
             <a 
               v-if="review && getPrUrl(review)" 
@@ -47,124 +47,130 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <!-- Reviewers Management -->
+        <!-- Reviewers + AI Suggestions: two-column row -->
         <el-divider />
-        <div class="section-header">
-          <h3>{{ t('task_assignment.detail.reviewers') }} ({{ review.total_reviewers }})</h3>
-          <el-button type="primary" size="small" @click="handleAssignReviewer">
-            {{ t('task_assignment.detail.assign_reviewer') }}
-          </el-button>
-        </div>
-
-        <el-table :data="review.reviewers" stripe border header-align="center">
-          <el-table-column prop="id" :label="t('task_assignment.detail.id')" width="80" align="center" />
-          
-          <el-table-column :label="t('task_assignment.detail.reviewer')" min-width="150" align="center">
-            <template #default="{ row }">
-              <div class="reviewer-info">
-                <strong>{{ row.reviewer }}</strong>
-                <div v-if="row.reviewer_info" class="display-name">
-                  {{ row.reviewer_info.display_name }}
-                </div>
-              </div>
-            </template>
-          </el-table-column>
-
-          <el-table-column :label="t('task_assignment.detail.assigned_by')" width="150" align="center">
-            <template #default="{ row }">
-              {{ row.assigned_by || t('reviews.detail.na') }}
-            </template>
-          </el-table-column>
-
-          <el-table-column :label="t('task_assignment.detail.assigned_date')" width="180" align="center">
-            <template #default="{ row }">
-              {{ row.assigned_date ? formatDate(row.assigned_date) : t('reviews.detail.na') }}
-            </template>
-          </el-table-column>
-
-          <el-table-column :label="t('task_assignment.detail.status')" width="120" align="center">
-            <template #default="{ row }">
-              <el-dropdown @command="(cmd: string) => handleUpdateStatus(row.id, cmd)">
-                <el-tag :type="getAssignmentStatusType(row.assignment_status)" class="clickable">
-                  {{ formatAssignmentStatusLabel(row.assignment_status) }}
-                  <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                </el-tag>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="pending">{{ t('reviews.pending') }}</el-dropdown-item>
-                    <el-dropdown-item command="assigned">{{ t('reviews.assigned') }}</el-dropdown-item>
-                    <el-dropdown-item command="in_progress">{{ t('reviews.in_progress') }}</el-dropdown-item>
-                    <el-dropdown-item command="completed">{{ t('reviews.completed') }}</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </template>
-          </el-table-column>
-
-          <el-table-column :label="t('task_assignment.detail.comments')" min-width="200" align="left">
-            <template #default="{ row }">
-              <span v-if="row.reviewer_comments">{{ row.reviewer_comments }}</span>
-              <span v-else class="status-description">
-                {{ getAssignmentStatusDescription(row.assignment_status) }}
-              </span>
-            </template>
-          </el-table-column>
-
-          <el-table-column :label="t('task_assignment.detail.actions')" width="100" fixed="right" align="center">
-            <template #default="{ row }">
-              <el-button
-                size="small"
-                type="danger"
-                link
-                @click="handleRemoveReviewer(row.reviewer)"
-              >
-                {{ t('task_assignment.detail.remove') }}
+        <div class="reviewers-ai-row">
+          <!-- LEFT: Reviewers Management -->
+          <div class="reviewers-column">
+            <div class="section-header">
+              <h3>{{ t('task_assignment.detail.reviewers') }} ({{ review.total_reviewers }})</h3>
+              <el-button type="primary" size="small" @click="handleAssignReviewer">
+                {{ t('task_assignment.detail.assign_reviewer') }}
               </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+            </div>
 
-        <!-- AI Suggestions -->
-        <el-divider />
-        <div v-if="review.ai_suggestions" class="ai-section">
-          <div class="ai-header">
-            <h3>
-              {{ t('task_assignment.detail.ai_review_result') }}
-              <el-tag v-if="review.ai_review_id" size="small" type="info" style="margin-left: 8px">
-                {{ review.ai_review_id }}
-              </el-tag>
-            </h3>
-            <el-button
-              v-if="review.ai_review_id"
-              size="small"
-              text
-              @click="copyToClipboard(review.ai_review_id)"
-            >
-              <el-icon><CopyDocument /></el-icon>
-              {{ t('task_assignment.detail.copy_id') }}
-            </el-button>
+            <el-table :data="review.reviewers" stripe border header-align="center">
+              <el-table-column prop="id" :label="t('task_assignment.detail.id')" width="80" align="center" />
+              
+              <el-table-column :label="t('task_assignment.detail.reviewer')" min-width="150" align="center">
+                <template #default="{ row }">
+                  <div class="reviewer-info">
+                    <strong>{{ row.reviewer }}</strong>
+                    <div v-if="row.reviewer_info" class="display-name">
+                      {{ row.reviewer_info.display_name }}
+                    </div>
+                  </div>
+                </template>
+              </el-table-column>
+
+              <el-table-column :label="t('task_assignment.detail.assigned_by')" width="150" align="center">
+                <template #default="{ row }">
+                  {{ row.assigned_by || t('reviews.detail.na') }}
+                </template>
+              </el-table-column>
+
+              <el-table-column :label="t('task_assignment.detail.assigned_date')" width="180" align="center">
+                <template #default="{ row }">
+                  {{ row.assigned_date ? formatDate(row.assigned_date) : t('reviews.detail.na') }}
+                </template>
+              </el-table-column>
+
+              <el-table-column :label="t('task_assignment.detail.status')" width="120" align="center">
+                <template #default="{ row }">
+                  <el-dropdown @command="(cmd: string) => handleUpdateStatus(row.id, cmd)">
+                    <el-tag :type="getAssignmentStatusType(row.assignment_status)" class="clickable">
+                      {{ formatAssignmentStatusLabel(row.assignment_status) }}
+                      <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                    </el-tag>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="pending">{{ t('reviews.pending') }}</el-dropdown-item>
+                        <el-dropdown-item command="assigned">{{ t('reviews.assigned') }}</el-dropdown-item>
+                        <el-dropdown-item command="in_progress">{{ t('reviews.in_progress') }}</el-dropdown-item>
+                        <el-dropdown-item command="completed">{{ t('reviews.completed') }}</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </template>
+              </el-table-column>
+
+              <el-table-column :label="t('task_assignment.detail.comments')" min-width="200" align="left">
+                <template #default="{ row }">
+                  <span v-if="row.reviewer_comments">{{ row.reviewer_comments }}</span>
+                  <span v-else class="status-description">
+                    {{ getAssignmentStatusDescription(row.assignment_status) }}
+                  </span>
+                </template>
+              </el-table-column>
+
+              <el-table-column :label="t('task_assignment.detail.actions')" width="100" fixed="right" align="center">
+                <template #default="{ row }">
+                  <el-button
+                    size="small"
+                    type="danger"
+                    link
+                    @click="handleRemoveReviewer(row.reviewer)"
+                  >
+                    {{ t('task_assignment.detail.remove') }}
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
-          <el-alert
-            v-if="review.ai_suggestions.overall_assessment"
-            :title="review.ai_suggestions.overall_assessment"
-            type="info"
-            :closable="false"
-            style="margin-bottom: 16px"
-          />
-          
-          <div v-if="review.ai_suggestions.issues && review.ai_suggestions.issues.length > 0">
-            <h4>{{ t('task_assignment.detail.issues_found') }} ({{ review.ai_suggestions.issues.length }})</h4>
-            <el-collapse>
-              <el-collapse-item
-                v-for="(issue, index) in review.ai_suggestions.issues"
-                :key="index"
-                :title="`${issue.category} - ${issue.severity} (${issue.file}:${issue.line})`"
-              >
-                <p><strong>{{ t('task_assignment.detail.description') }}:</strong> {{ issue.description }}</p>
-                <p v-if="issue.suggestion"><strong>{{ t('task_assignment.detail.suggestion') }}:</strong> {{ issue.suggestion }}</p>
-                <pre v-if="issue.code_snippet" class="code-snippet">{{ issue.code_snippet }}</pre>
-              </el-collapse-item>
-            </el-collapse>
+
+          <!-- RIGHT: AI Suggestions -->
+          <div v-if="review.ai_suggestions" class="ai-column">
+            <div class="ai-section">
+              <div class="ai-header">
+                <h3>
+                  {{ t('task_assignment.detail.ai_review_result') }}
+                  <el-tag v-if="review.ai_review_id" size="small" type="info" style="margin-left: 8px">
+                    {{ review.ai_review_id }}
+                  </el-tag>
+                </h3>
+                <el-button
+                  v-if="review.ai_review_id"
+                  size="small"
+                  text
+                  @click="copyToClipboard(review.ai_review_id)"
+                >
+                  <el-icon><CopyDocument /></el-icon>
+                  {{ t('task_assignment.detail.copy_id') }}
+                </el-button>
+              </div>
+              <el-alert
+                v-if="review.ai_suggestions.overall_assessment"
+                :title="review.ai_suggestions.overall_assessment"
+                type="info"
+                :closable="false"
+                style="margin-bottom: 16px"
+              />
+              
+              <div v-if="review.ai_suggestions.issues && review.ai_suggestions.issues.length > 0">
+                <h4>{{ t('task_assignment.detail.issues_found') }} ({{ review.ai_suggestions.issues.length }})</h4>
+                <el-collapse>
+                  <el-collapse-item
+                    v-for="(issue, index) in review.ai_suggestions.issues"
+                    :key="index"
+                    :title="`${issue.category} - ${issue.severity} (${issue.file}:${issue.line})`"
+                  >
+                    <p><strong>{{ t('task_assignment.detail.description') }}:</strong> {{ issue.description }}</p>
+                    <p v-if="issue.suggestion"><strong>{{ t('task_assignment.detail.suggestion') }}:</strong> {{ issue.suggestion }}</p>
+                    <pre v-if="issue.code_snippet" class="code-snippet">{{ issue.code_snippet }}</pre>
+                  </el-collapse-item>
+                </el-collapse>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -488,7 +494,30 @@ onMounted(() => {
 }
 
 .detail-content {
-  max-width: 1200px;
+  width: 100%;
+}
+
+/* Two-column row: Reviewers (left) + AI Suggestions (right) */
+.reviewers-ai-row {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.reviewers-column {
+  flex: 3;
+  min-width: 0;
+}
+
+.ai-column {
+  flex: 2;
+  min-width: 0;
+  max-height: 600px;
+  overflow-y: auto;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 20px;
+  background: var(--el-fill-color-lighter);
 }
 
 .section-header {
@@ -548,7 +577,7 @@ onMounted(() => {
 }
 
 .ai-section {
-  margin-top: 20px;
+  margin-top: 0;
 }
 
 .ai-header {

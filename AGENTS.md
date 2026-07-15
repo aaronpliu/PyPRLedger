@@ -85,6 +85,7 @@ The typical flow:
 - MySQL + SQLAlchemy 2.0 (async), Alembic migrations
 - Redis caching, Prometheus metrics, Grafana dashboards
 - Pydantic v2, SQLModel, JWT auth, RBAC with delegation
+- Multi-Git provider: Bitbucket Server + GitHub Enterprise (provider abstraction in `src/services/git_providers/`)
 
 ## Quick Commands
 
@@ -295,6 +296,7 @@ src/
 ├── models/            # SQLAlchemy ORM (Mapped, mapped_column)
 ├── schemas/           # Pydantic v2 (from_attributes=True)
 ├── services/          # Business logic (caching, metrics)
+│   └── git_providers/ # Multi-provider abstraction (BaseGitProvider, Bitbucket, GitHub)
 ├── utils/             # redis, metrics, log, jwt, i18n
 └── main.py            # App factory, lifespan, middleware, handlers
 tests/                 # pytest with async fixtures
@@ -309,6 +311,8 @@ alembic/versions/      # DB migrations
 - **Don't forget cache invalidation** on create/update/delete
 - **Don't use `model_dump()` without `exclude_unset=True`** for PATCH
 - **Don't return ORM models** - convert to Pydantic schemas
+- **Don't call BitbucketService directly** - use `get_git_provider()` from `src/services/git_providers/` to support multi-provider routing
+- **Don't hardcode provider assumptions** - `project.git_provider` may be `bitbucket_server` or `github_enterprise`
 
 ## Key Files
 
@@ -317,7 +321,9 @@ alembic/versions/      # DB migrations
 - `src/core/exceptions.py:58` - `AppException` base class
 - `src/utils/redis.py:87` - `RedisCache` class
 - `src/utils/metrics.py` - Metrics collector
+- `src/services/git_providers/` - Multi-provider abstraction (BaseGitProvider, BitbucketServerProvider, GitHubEnterpriseProvider)
+- `src/services/entity_sync_service.py` - Entity sync with hybrid provider resolution
 
 ## Environment
 
-See `.env.example` for all variables. Key: `DATABASE_*`, `REDIS_*`, `SECRET_KEY`, `CACHE_TTL_*`.
+See `.env.example` for all variables. Key: `DATABASE_*`, `REDIS_*`, `SECRET_KEY`, `CACHE_TTL_*`, `BITBUCKET_*`, `GITHUB_ENTERPRISE_*`.

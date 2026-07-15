@@ -34,7 +34,8 @@ class ReviewValidationService:
         if date_from:
             base_filters.append(PullRequestReviewRaw.created_date >= date_from)
         if date_to:
-            base_filters.append(PullRequestReviewRaw.created_date <= date_to)
+            adjusted_date_to = date_to + timedelta(days=1)
+            base_filters.append(PullRequestReviewRaw.created_date < adjusted_date_to)
 
         # Count total attempted (all raw records)
         raw_query = select(func.count(PullRequestReviewRaw.id))

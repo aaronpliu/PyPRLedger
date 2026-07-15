@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
+from src.core.git_provider import GitProvider
+
 
 class ProjectBase(BaseModel):
     """Base project schema with common attributes"""
@@ -37,6 +39,10 @@ class ProjectResponse(ProjectBase):
     """Schema for project response"""
 
     id: int = Field(..., description="Project database ID")
+    git_provider: str = Field(
+        default=GitProvider.default().value,
+        description=f"Git provider ({', '.join(sorted(GitProvider.values()))})",
+    )
     created_date: datetime = Field(..., description="Project creation timestamp")
     updated_date: datetime = Field(..., description="Project last update timestamp")
 

@@ -56,7 +56,8 @@ class Settings(BaseSettings):
     REDIS_PORT: int = Field(default=6379)
     REDIS_PASSWORD: str | None = Field(default=None)
     REDIS_DB: int = Field(default=0)
-    REDIS_MAX_CONNECTIONS: int = Field(default=50)
+    REDIS_MAX_CONNECTIONS: int = Field(default=100)
+    REDIS_PUBSUB_MAX_CONNECTIONS: int = Field(default=50)
 
     @property
     def redis_url(self) -> str:
@@ -135,6 +136,16 @@ class Settings(BaseSettings):
     )
     BITBUCKET_DEFAULT_WORKSPACE: str = Field(
         default="default", description="Default workspace/project key for Bitbucket repositories"
+    )
+
+    # GitHub Enterprise API configuration
+    GITHUB_ENTERPRISE_URL: str | None = Field(
+        default=None,
+        description="GitHub Enterprise base URL (e.g., https://github.example.com)",
+    )
+    GITHUB_ENTERPRISE_TOKEN: str | None = Field(
+        default=None,
+        description="GitHub Enterprise personal access token or app token",
     )
 
     # Review status constants

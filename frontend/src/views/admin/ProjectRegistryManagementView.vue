@@ -37,6 +37,13 @@
         <el-table-column prop="app_name" label="Application" width="180" />
         <el-table-column prop="project_key" label="Project Key" width="150" />
         <el-table-column prop="repository_slug" label="Repository Slug" min-width="200" />
+        <el-table-column prop="git_provider" label="Git Provider" width="180">
+          <template #default="{ row }">
+            <el-tag :type="getProviderTagType(row.git_provider)" size="small">
+              {{ getProviderLabel(row.git_provider) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="description" label="Description" min-width="200" show-overflow-tooltip />
         <el-table-column prop="created_date" label="Created" width="180">
           <template #default="{ row }">
@@ -97,6 +104,17 @@
           </el-select>
         </el-form-item>
         
+        <el-form-item label="Git Provider" prop="gitProvider">
+          <el-select v-model="registerForm.gitProvider" style="width: 100%">
+            <el-option
+              v-for="option in GIT_PROVIDER_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+
         <el-form-item label="Description" prop="description">
           <el-input 
             v-model="registerForm.description" 
@@ -162,6 +180,12 @@ import type { ProjectSummary, RepositorySummary } from '@/api/projects'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
+import {
+  DEFAULT_GIT_PROVIDER,
+  GIT_PROVIDER_OPTIONS,
+  getGitProviderLabel,
+  getGitProviderTagType,
+} from '@/constants/gitProvider'
 
 const { t } = useI18n()
 
@@ -191,8 +215,14 @@ const registerForm = reactive({
   appName: '',
   projectKey: '',
   repositorySlug: '',
+  gitProvider: DEFAULT_GIT_PROVIDER,
   description: '',
 })
+
+const getProviderLabel = (provider: string) => getGitProviderLabel(provider)
+
+const getProviderTagType = (provider: string): '' | 'success' | 'warning' | 'info' | 'danger' =>
+  getGitProviderTagType(provider)
 
 const updateForm = reactive({
   newAppName: '',
@@ -308,7 +338,8 @@ const handleRegister = async () => {
           registerForm.appName,
           registerForm.projectKey,
           registerForm.repositorySlug,
-          registerForm.description || undefined
+          registerForm.description || undefined,
+          registerForm.gitProvider
         )
         ElMessage.success('Project registered successfully')
         showRegisterDialog.value = false
@@ -316,6 +347,7 @@ const handleRegister = async () => {
         registerForm.appName = ''
         registerForm.projectKey = ''
         registerForm.repositorySlug = ''
+        registerForm.gitProvider = DEFAULT_GIT_PROVIDER
         registerForm.description = ''
         // Reload data
         await loadApps()

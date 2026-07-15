@@ -24,14 +24,14 @@
                 size="small" 
                 type="success"
               >
-                ✓ Bitbucket
+                ✓ Git
               </el-tag>
               <el-tag 
                 v-else 
                 size="small" 
                 type="warning"
               >
-                ⚠ No Bitbucket
+                ⚠ No Git
               </el-tag>
             </span>
           </div>
@@ -47,12 +47,12 @@
           <template #default>
             <div style="font-size: 12px; margin-top: 4px;">
               <div style="margin-bottom: 4px;">
-                Bitbucket Status: 
+                Git User Status: 
                 <el-tag v-if="selectedUser.git_user_id" size="small" type="success">
                   ✓ Linked (ID: {{ selectedUser.git_user_id }})
                 </el-tag>
                 <el-tag v-else size="small" type="warning">
-                  ⚠ Not linked to Bitbucket
+                  ⚠ Not linked to Git user
                 </el-tag>
               </div>
               <div>
@@ -69,7 +69,7 @@
         </el-alert>
       </div>
       <div style="margin-top: 4px; color: var(--el-text-color-secondary); font-size: 12px;">
-        💡 Showing all active users. Users with Bitbucket linkage are recommended.
+        💡 Showing all active users. Users with Git user linkage are recommended.
       </div>
     </el-form-item>
     
@@ -301,9 +301,9 @@ const filterUsers = (queryString: string, cb: any) => {
     )
   }
   
-  // Sort: Bitbucket-linked users first, then by username
+  // Sort: Git-linked users first, then by username
   const sorted = [...users].sort((a, b) => {
-    // Prioritize users with Bitbucket linkage
+    // Prioritize users with Git linkage
     if (a.git_user_id && !b.git_user_id) return -1
     if (!a.git_user_id && b.git_user_id) return 1
     // Then sort by username

@@ -686,7 +686,7 @@ const handleDeleteUser = async (user: any) => {
       `• Remove all role assignments\n` +
       `• Delete personal access tokens\n` +
       `• Delete audit logs\n\n` +
-      `The linked Bitbucket user (if any) will NOT be deleted.\n` +
+      `The linked Git user (if any) will NOT be deleted.\n` +
       `Reviews and scores will NOT be affected.\n\n` +
       `This action CANNOT be undone.`,
       'Permanently Delete User',

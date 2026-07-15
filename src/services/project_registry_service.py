@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.git_provider import GitProvider
 from src.models.project_registry import ProjectRegistry
 
 
@@ -150,6 +151,7 @@ class ProjectRegistryService:
         repository_slug: str,
         description: str | None = None,
         db: AsyncSession = None,
+        git_provider: str = ProjectRegistry.DEFAULT_PROVIDER,
     ) -> ProjectRegistry:
         """
         Register a new project-repo pair to an app
@@ -160,13 +162,21 @@ class ProjectRegistryService:
             repository_slug: Repository slug
             description: Optional description
             db: Database session
+            git_provider: Git provider (bitbucket_server, github_enterprise)
 
         Returns:
             Created ProjectRegistry entry
 
         Raises:
-            ValueError: If project-repo pair already registered to different app
+            ValueError: If project-repo pair already registered to different app or invalid git_provider
         """
+        # Validate git_provider
+        if not GitProvider.is_valid(git_provider):
+            raise ValueError(
+                f"Invalid git_provider '{git_provider}'. "
+                f"Must be one of: {', '.join(sorted(GitProvider.values()))}"
+            )
+
         # Check if already registered
         existing = await self._get_registry_entry(project_key, repository_slug, db)
 
@@ -176,9 +186,18 @@ class ProjectRegistryService:
                     f"Project {project_key}/{repository_slug} already registered to '{existing.app_name}'. "
                     f"Cannot reassign to '{app_name}'."
                 )
-            # Already registered to same app, update description if provided
+            # Already registered to same app, update description and/or provider if provided
+            updated = False
             if description:
                 existing.description = description
+                updated = True
+            if (
+                git_provider != ProjectRegistry.DEFAULT_PROVIDER
+                and existing.git_provider != git_provider
+            ):
+                existing.git_provider = git_provider
+                updated = True
+            if updated:
                 await db.commit()
                 await db.refresh(existing)
             return existing
@@ -188,6 +207,7 @@ class ProjectRegistryService:
             app_name=app_name,
             project_key=project_key,
             repository_slug=repository_slug,
+            git_provider=git_provider,
             description=description or f"Registered to {app_name}",
         )
 
@@ -195,7 +215,9 @@ class ProjectRegistryService:
         await db.commit()
         await db.refresh(registry)
 
-        logger.info(f"Registered {project_key}/{repository_slug} to app '{app_name}'")
+        logger.info(
+            f"Registered {project_key}/{repository_slug} to app '{app_name}' (provider: {git_provider})"
+        )
         return registry
 
     async def unregister_project(

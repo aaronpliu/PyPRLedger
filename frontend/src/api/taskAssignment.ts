@@ -49,6 +49,7 @@ export interface ReviewV2 {
     project_name: string
     project_key: string
     project_url: string
+    git_provider?: string
     created_date: string
     updated_date: string
   } | null
@@ -58,6 +59,9 @@ export interface ReviewV2 {
   total_reviewers: number
   completed_reviewers: number
   pending_reviewers: number
+  
+  // Score tracking
+  has_scores: boolean
   
   // Pin/Flag feature
   is_pinned_by_me?: boolean

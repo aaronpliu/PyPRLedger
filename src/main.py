@@ -15,6 +15,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from src import __version__
 from src.api import api_router
+from src.api.v1.endpoints.sse import stop_sse_cleanup_task
 from src.core.config import settings
 from src.core.database import close_db, get_db_context, init_db
 from src.core.exceptions import AppException
@@ -169,6 +170,8 @@ async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
 
     await close_db()
     await close_redis()
+    await stop_sse_cleanup_task()  # Stop SSE cleanup task
+
     metrics_collector.shutdown()
     logger.info("Application shutdown complete")
 

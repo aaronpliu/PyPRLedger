@@ -5,6 +5,90 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.2] - 2026-07-15
+
+**Backend Version**: 1.20.2
+**Frontend Version**: 1.15.2
+
+### Fixed
+- update PR link of scores management page
+
+### Changed
+- [Refactor] enhance bitbucket service management
+- [Refactor] validate git provider
+- [Refactor] define enum to manage multiple git providers
+
+### Documentation
+- add docs to describe on how to increase git provider in future
+
+---
+
+## [1.20.1] - 2026-07-13
+
+**Backend Version**: 1.20.1
+**Frontend Version**: 1.15.1
+
+### Changed
+- [Refactor] enhance sse connections
+
+### Documentation
+- sync features change into AGENTS and README
+
+### Other Changes
+- 6bffad9 styles: enhanced task assignment details page layout
+
+---
+
+## [1.20.0] - 2026-07-10
+
+**Backend Version**: 1.20.0
+**Frontend Version**: 1.15.0
+
+### Added
+- support multiple git provider
+
+---
+
+## [1.19.3] - 2026-07-10
+
+**Backend Version**: 1.19.3
+**Frontend Version**: 1.14.3
+
+### Fixed
+- enhance the date range filter
+
+### Changed
+- [Refactor] enhance scoring rate
+
+### Documentation
+- update github
+- handle github PR
+
+---
+
+## [1.19.2] - 2026-07-07
+
+**Backend Version**: 1.19.2
+**Frontend Version**: 1.14.2
+
+### Added
+- enhance redis connections
+- record reviews deletion in audit log
+
+### Fixed
+- enhance review deletion
+
+### Other Changes
+- f8810ac styles: fix audit log details dialog layout issues
+- 34ce5b1 Merge pull request #30 from aaronpliu/main
+- c50d01d Merge pull request #29 from aaronpliu/feature/PRLedger_NewUI
+- 47033e5 Merge pull request #28 from aaronpliu/feature/PRLedger_NewUI
+- e27f9b0 Merge pull request #27 from aaronpliu/feature/PRLedger_NewUI
+- fd72e17 Merge pull request #26 from aaronpliu/feature/PRLedger_NewUI
+- 4ef7c77 Merge pull request #25 from aaronpliu/feature/PRLedger_NewUI
+
+---
+
 ## [1.19.1] - 2026-06-30
 
 **Backend Version**: 1.19.1

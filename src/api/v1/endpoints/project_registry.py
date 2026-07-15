@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
+from src.core.git_provider import GitProvider
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
 from src.services.project_registry_service import ProjectRegistryService
@@ -71,6 +72,7 @@ async def list_projects_by_app(
                 "app_name": p.app_name,
                 "project_key": p.project_key,
                 "repository_slug": p.repository_slug,
+                "git_provider": p.git_provider,
                 "description": p.description,
                 "created_date": p.created_date.isoformat(),
                 "updated_date": p.updated_date.isoformat(),
@@ -107,6 +109,7 @@ async def list_all_registered_projects(
                 "app_name": p.app_name,
                 "project_key": p.project_key,
                 "repository_slug": p.repository_slug,
+                "git_provider": p.git_provider,
                 "description": p.description,
                 "created_date": p.created_date.isoformat(),
                 "updated_date": p.updated_date.isoformat(),
@@ -165,6 +168,14 @@ async def register_project_to_app(
     repository_slug: Annotated[
         str, Query(min_length=1, max_length=128, description="Repository slug")
     ],
+    git_provider: Annotated[
+        str,
+        Query(
+            min_length=1,
+            max_length=32,
+            description=f"Git provider ({', '.join(sorted(GitProvider.values()))})",
+        ),
+    ] = GitProvider.default().value,
     description: Annotated[
         str | None, Query(max_length=255, description="Optional description")
     ] = None,
@@ -188,6 +199,17 @@ async def register_project_to_app(
     Raises:
         HTTPException: If already registered to different app or insufficient permissions
     """
+    # Validate git_provider
+    if not GitProvider.is_valid(git_provider):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "VALIDATION_ERROR",
+                "message": f"Invalid git_provider '{git_provider}'. "
+                f"Must be one of: {', '.join(sorted(GitProvider.values()))}",
+            },
+        )
+
     # Check if user has system_admin role with project_registry manage permission
     has_permission = await rbac_service.check_permission(
         auth_user_id=current_user.id,
@@ -206,13 +228,19 @@ async def register_project_to_app(
 
     try:
         registry = await registry_service.register_project(
-            app_name, project_key, repository_slug, description, db
+            app_name,
+            project_key,
+            repository_slug,
+            description,
+            db,
+            git_provider=git_provider,
         )
         return {
             "message": "Successfully registered",
             "app_name": registry.app_name,
             "project_key": registry.project_key,
             "repository_slug": registry.repository_slug,
+            "git_provider": registry.git_provider,
             "description": registry.description,
         }
     except ValueError as e:

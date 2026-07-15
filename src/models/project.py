@@ -7,6 +7,7 @@ from sqlalchemy import Boolean, DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+from src.core.git_provider import GitProvider
 from src.models.repository import Repository
 from src.utils.timezone import get_current_time, utc_to_local
 
@@ -32,6 +33,13 @@ class Project(Base):
     project_key: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
 
     project_url: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    git_provider: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=GitProvider.default().value,
+        server_default=GitProvider.default().value,
+    )
 
     # Status fields
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -85,6 +93,7 @@ class Project(Base):
             "project_name": self.project_name,
             "project_key": self.project_key,
             "project_url": self.project_url,
+            "git_provider": self.git_provider,
             "created_date": utc_to_local(self.created_date).isoformat()
             if self.created_date
             else None,
@@ -105,12 +114,20 @@ class Project(Base):
         if isinstance(updated_date, str):
             updated_date = datetime.fromisoformat(updated_date)
 
+        git_provider = data.get("git_provider", GitProvider.default().value)
+        if not GitProvider.is_valid(git_provider):
+            raise ValueError(
+                f"Invalid git_provider '{git_provider}'. "
+                f"Must be one of: {', '.join(sorted(GitProvider.values()))}"
+            )
+
         return cls(
             id=data.get("id"),
             project_id=data.get("project_id"),
             project_name=data.get("project_name"),
             project_key=data.get("project_key"),
             project_url=data.get("project_url"),
+            git_provider=git_provider,
             is_active=data.get("is_active", True),
             created_date=created_date,
             updated_date=updated_date,

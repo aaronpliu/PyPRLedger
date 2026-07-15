@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from src.core.git_provider import GitProvider
 from src.utils.id_obfuscator import format_public_id
 
 
@@ -81,6 +82,11 @@ class ReviewCreate(ReviewBase):
         default="open", description="Pull request status (open, merged, closed, draft)"
     )
     metadata: dict[str, Any] | None = Field(None, description="Additional metadata in JSON format")
+    git_provider: str | None = Field(
+        None,
+        description=f"Git provider hint ({', '.join(sorted(GitProvider.values()))}). "
+        "Used for auto-registration on first review submission.",
+    )
 
     @field_validator("pull_request_status")
     def validate_status(cls, v):
@@ -88,6 +94,15 @@ class ReviewCreate(ReviewBase):
         valid_statuses = {"open", "merged", "closed", "draft"}
         if v not in valid_statuses:
             raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+        return v
+
+    @field_validator("git_provider")
+    def validate_git_provider(cls, v: str | None) -> str | None:
+        """Validate git_provider is a known provider or None."""
+        if v is not None and not GitProvider.is_valid(v):
+            raise ValueError(
+                f"Invalid git_provider '{v}'. Must be one of: {', '.join(sorted(GitProvider.values()))}"
+            )
         return v
 
     @field_validator("ai_suggestions", "metadata")
