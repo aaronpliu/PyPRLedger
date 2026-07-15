@@ -380,14 +380,21 @@ const getScoreColor = (score: number) => {
 }
 
 const getPRUrl = (score: Score): string | null => {
-  // Need project_url, repository_slug, and pull_request_commit_id to construct URL
-  if (!score.project_url || !score.repository_slug || !score.pull_request_commit_id) {
+  // Need project_url, repository_slug, and pull_request_id to construct URL
+  if (!score.project_url || !score.repository_slug || !score.pull_request_id) {
     return null
   }
   
-  // Construct URL: <project_url>/repos/<repository_slug>/commits/<commit_id>
   const baseUrl = score.project_url.replace(/\/$/, '') // Remove trailing slash
-  return `${baseUrl}/repos/${score.repository_slug}/commits/${score.pull_request_commit_id}`
+  const gitProvider = score.git_provider
+
+  if (gitProvider === 'github_enterprise') {
+    // GitHub Enterprise: <project_url>/<repo>/pull/<id>
+    return `${baseUrl}/${score.repository_slug}/pull/${score.pull_request_id}`
+  }
+
+  // Bitbucket Server (default): <project_url>/repos/<slug>/pull-requests/<id>/diff
+  return `${baseUrl}/repos/${score.repository_slug}/pull-requests/${score.pull_request_id}/diff`
 }
 
 const canDeleteScore = (score: Score): boolean => {
@@ -493,6 +500,7 @@ const loadScores = async () => {
             ...score,
             project_name: matchingReview.project?.project_name || score.project_key,
             project_url: matchingReview.project?.project_url,
+            git_provider: matchingReview.project?.git_provider,
             repository_slug: score.repository_slug || matchingReview.repository_slug,
             pull_request_commit_id: score.pull_request_commit_id || matchingReview.pull_request_commit_id || undefined,
             pull_request_user: matchingReview.pull_request_user,
