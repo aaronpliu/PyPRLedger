@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from src.core.config import settings
+from src.core.git_provider import GitProvider
 from src.services.git_providers.base import BaseGitProvider
 
 
@@ -37,7 +38,7 @@ class GitHubEnterpriseProvider(BaseGitProvider):
 
     @property
     def name(self) -> str:
-        return "github_enterprise"
+        return GitProvider.GITHUB_ENTERPRISE.value
 
     async def _make_request(self, url: str) -> dict[str, Any] | None:
         try:

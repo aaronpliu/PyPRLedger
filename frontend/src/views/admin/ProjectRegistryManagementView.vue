@@ -106,8 +106,12 @@
         
         <el-form-item label="Git Provider" prop="gitProvider">
           <el-select v-model="registerForm.gitProvider" style="width: 100%">
-            <el-option label="Bitbucket Server" value="bitbucket_server" />
-            <el-option label="GitHub Enterprise" value="github_enterprise" />
+            <el-option
+              v-for="option in GIT_PROVIDER_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
           </el-select>
         </el-form-item>
 
@@ -176,6 +180,12 @@ import type { ProjectSummary, RepositorySummary } from '@/api/projects'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
+import {
+  DEFAULT_GIT_PROVIDER,
+  GIT_PROVIDER_OPTIONS,
+  getGitProviderLabel,
+  getGitProviderTagType,
+} from '@/constants/gitProvider'
 
 const { t } = useI18n()
 
@@ -205,27 +215,14 @@ const registerForm = reactive({
   appName: '',
   projectKey: '',
   repositorySlug: '',
-  gitProvider: 'bitbucket_server',
+  gitProvider: DEFAULT_GIT_PROVIDER,
   description: '',
 })
 
-const providerOptions = [
-  { value: 'bitbucket_server', label: 'Bitbucket Server' },
-  { value: 'github_enterprise', label: 'GitHub Enterprise' },
-]
+const getProviderLabel = (provider: string) => getGitProviderLabel(provider)
 
-const getProviderLabel = (provider: string) => {
-  const found = providerOptions.find(p => p.value === provider)
-  return found ? found.label : provider
-}
-
-const getProviderTagType = (provider: string): '' | 'success' | 'warning' | 'info' => {
-  switch (provider) {
-    case 'bitbucket_server': return ''
-    case 'github_enterprise': return 'success'
-    default: return 'info'
-  }
-}
+const getProviderTagType = (provider: string): '' | 'success' | 'warning' | 'info' | 'danger' =>
+  getGitProviderTagType(provider)
 
 const updateForm = reactive({
   newAppName: '',
@@ -350,7 +347,7 @@ const handleRegister = async () => {
         registerForm.appName = ''
         registerForm.projectKey = ''
         registerForm.repositorySlug = ''
-        registerForm.gitProvider = 'bitbucket_server'
+        registerForm.gitProvider = DEFAULT_GIT_PROVIDER
         registerForm.description = ''
         // Reload data
         await loadApps()

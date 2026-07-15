@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from src.core.git_provider import GitProvider
 from src.utils.id_obfuscator import format_public_id
 
 
@@ -83,7 +84,7 @@ class ReviewCreate(ReviewBase):
     metadata: dict[str, Any] | None = Field(None, description="Additional metadata in JSON format")
     git_provider: str | None = Field(
         None,
-        description="Git provider hint (bitbucket_server, github_enterprise). "
+        description=f"Git provider hint ({', '.join(sorted(GitProvider.values()))}). "
         "Used for auto-registration on first review submission.",
     )
 

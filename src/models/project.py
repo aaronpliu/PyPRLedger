@@ -7,6 +7,7 @@ from sqlalchemy import Boolean, DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
+from src.core.git_provider import GitProvider
 from src.models.repository import Repository
 from src.utils.timezone import get_current_time, utc_to_local
 
@@ -34,7 +35,10 @@ class Project(Base):
     project_url: Mapped[str] = mapped_column(String(255), nullable=False)
 
     git_provider: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="bitbucket_server", server_default="bitbucket_server"
+        String(32),
+        nullable=False,
+        default=GitProvider.default().value,
+        server_default=GitProvider.default().value,
     )
 
     # Status fields
@@ -116,7 +120,7 @@ class Project(Base):
             project_name=data.get("project_name"),
             project_key=data.get("project_key"),
             project_url=data.get("project_url"),
-            git_provider=data.get("git_provider", "bitbucket_server"),
+            git_provider=data.get("git_provider", GitProvider.default().value),
             is_active=data.get("is_active", True),
             created_date=created_date,
             updated_date=updated_date,

@@ -18,7 +18,7 @@ class BaseGitProvider(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Provider identifier (e.g., 'bitbucket_server', 'github_enterprise')."""
+        """Provider identifier (see GitProvider enum)."""
 
     @abstractmethod
     async def get_project_info(self, project_key: str) -> dict[str, Any] | None:

@@ -265,6 +265,7 @@ import type { AppInfo } from '@/api/projectRegistry'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { useAuthStore } from '@/stores/auth'
+import { GitProvider } from '@/constants/gitProvider'
 
 const { t } = useI18n()
 
@@ -388,7 +389,7 @@ const getPRUrl = (score: Score): string | null => {
   const baseUrl = score.project_url.replace(/\/$/, '') // Remove trailing slash
   const gitProvider = score.git_provider
 
-  if (gitProvider === 'github_enterprise') {
+  if (gitProvider === GitProvider.GITHUB_ENTERPRISE) {
     // GitHub Enterprise: <project_url>/<repo>/pull/<id>
     return `${baseUrl}/${score.repository_slug}/pull/${score.pull_request_id}`
   }

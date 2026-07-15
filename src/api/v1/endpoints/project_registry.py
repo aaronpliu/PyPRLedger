@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
+from src.core.git_provider import GitProvider
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
 from src.services.project_registry_service import ProjectRegistryService
@@ -172,9 +173,9 @@ async def register_project_to_app(
         Query(
             min_length=1,
             max_length=32,
-            description="Git provider (bitbucket_server, github_enterprise)",
+            description=f"Git provider ({', '.join(sorted(GitProvider.values()))})",
         ),
-    ] = "bitbucket_server",
+    ] = GitProvider.default().value,
     description: Annotated[
         str | None, Query(max_length=255, description="Optional description")
     ] = None,

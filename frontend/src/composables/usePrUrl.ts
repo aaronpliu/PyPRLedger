@@ -1,5 +1,6 @@
 import type { Review } from '@/api/reviews'
 import type { ReviewV2 } from '@/api/taskAssignment'
+import { GitProvider } from '@/constants/gitProvider'
 
 // Union type for all review types that have project information
 type ReviewWithProject = Review | ReviewV2
@@ -18,7 +19,7 @@ export function usePrUrl() {
     const baseUrl = review.project.project_url.replace(/\/$/, '') // Remove trailing slash
     const gitProvider = review.project.git_provider
 
-    if (gitProvider === 'github_enterprise') {
+    if (gitProvider === GitProvider.GITHUB_ENTERPRISE) {
       // GitHub Enterprise: <project_url>/<repo>/pull/<id>
       return `${baseUrl}/${review.repository_slug}/pull/${review.pull_request_id}`
     }

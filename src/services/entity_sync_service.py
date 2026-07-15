@@ -12,6 +12,7 @@ import logging
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.git_provider import GitProvider
 from src.models.project import Project
 from src.models.project_registry import ProjectRegistry
 from src.models.repository import Repository
@@ -31,10 +32,12 @@ class EntitySyncService:
     3. Default to bitbucket_server (preserves existing behavior)
     """
 
-    def __init__(self, db: AsyncSession, git_provider: str | None = None):
+    def __init__(self, db: AsyncSession, git_provider: str | GitProvider | None = None):
         self.db = db
         self._provider: BaseGitProvider | None = None
-        self._payload_hint: str | None = git_provider
+        self._payload_hint: str | None = (
+            git_provider.value if isinstance(git_provider, GitProvider) else git_provider
+        )
 
     async def _resolve_provider(self) -> BaseGitProvider:
         """Lazy-resolve provider on first use, then memoize for the session."""
@@ -45,7 +48,7 @@ class EntitySyncService:
             if self._payload_hint:
                 self._provider = get_git_provider(self._payload_hint)
             else:
-                self._provider = get_git_provider("bitbucket_server")
+                self._provider = get_git_provider(GitProvider.default())
         return self._provider
 
     async def _try_resolve_provider_from_registry(

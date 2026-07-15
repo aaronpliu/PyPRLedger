@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from src.core.git_provider import GitProvider
 from src.services.bitbucket_service import BitbucketService
 from src.services.git_providers.base import BaseGitProvider
 
@@ -18,7 +19,7 @@ class BitbucketServerProvider(BaseGitProvider):
 
     @property
     def name(self) -> str:
-        return "bitbucket_server"
+        return GitProvider.BITBUCKET_SERVER.value
 
     async def get_project_info(self, project_key: str) -> dict[str, Any] | None:
         return await self._service.get_project_info(project_key)
