@@ -14,7 +14,7 @@
       <!-- Application Filter -->
       <el-form :inline="true" class="filter-form">
         <el-form-item label="Application">
-          <el-select v-model="selectedApp" placeholder="All Applications" clearable style="width: 250px" @change="loadProjects">
+          <el-select v-model="selectedApp" placeholder="All Applications" clearable style="width: 250px" @change="handleFilterChange">
             <el-option 
               v-for="app in apps" 
               :key="app.app_name" 
@@ -23,10 +23,20 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="Search">
+          <el-input
+            v-model="searchTerm"
+            placeholder="Search project key, repo slug, or description"
+            clearable
+            style="width: 320px"
+            @clear="handleFilterChange"
+            @keyup.enter="handleFilterChange"
+          />
+        </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="loadProjects">
+          <el-button type="primary" @click="handleFilterChange">
             <el-icon><Search /></el-icon>
-            Refresh
+            Search
           </el-button>
         </el-form-item>
       </el-form>
@@ -61,6 +71,19 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- Pagination -->
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="totalItems"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handlePageChange"
+        />
+      </div>
     </el-card>
 
     <!-- Register Project Dialog -->
@@ -198,6 +221,12 @@ const projects = ref<ProjectRegistry[]>([])
 const selectedApp = ref<string | null>(null)
 const selectedProject = ref<ProjectRegistry | null>(null)
 
+// Pagination
+const currentPage = ref(1)
+const pageSize = ref(20)
+const totalItems = ref(0)
+const searchTerm = ref('')
+
 // Dropdown data
 const availableProjects = ref<ProjectSummary[]>([])
 const availableRepositories = ref<RepositorySummary[]>([])
@@ -310,20 +339,38 @@ const loadRepositoriesForProject = async (projectKey: string) => {
 const loadProjects = async () => {
   loading.value = true
   try {
-    if (selectedApp.value) {
-      // Load projects for selected app only
-      projects.value = await projectRegistryApi.listProjectsByApp(selectedApp.value)
-    } else {
-      // ✅ Use new efficient endpoint to fetch all registered projects in a single request
-      projects.value = await projectRegistryApi.listAllRegisteredProjects()
-    }
+    const response = await projectRegistryApi.listRegistryProjectsPaginated({
+      app_name: selectedApp.value || undefined,
+      search: searchTerm.value || undefined,
+      page: currentPage.value,
+      page_size: pageSize.value,
+    })
+    projects.value = response.items
+    totalItems.value = response.total
   } catch (error) {
     console.error('Failed to load projects:', error)
     ElMessage.error('Failed to load projects')
     projects.value = []
+    totalItems.value = 0
   } finally {
     loading.value = false
   }
+}
+
+const handleFilterChange = () => {
+  currentPage.value = 1
+  loadProjects()
+}
+
+const handlePageChange = (page: number) => {
+  currentPage.value = page
+  loadProjects()
+}
+
+const handleSizeChange = (size: number) => {
+  pageSize.value = size
+  currentPage.value = 1
+  loadProjects()
 }
 
 // Actions
@@ -444,6 +491,12 @@ onMounted(async () => {
 
 .filter-form {
   margin-bottom: 20px;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
 }
 
 .dialog-footer {

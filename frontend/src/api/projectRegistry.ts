@@ -11,6 +11,13 @@ export interface ProjectRegistry {
   updated_date?: string
 }
 
+export interface ProjectRegistryListResponse {
+  items: ProjectRegistry[]
+  total: number
+  page: number
+  page_size: number
+}
+
 export interface AppInfo {
   app_name: string
   project_count: number
@@ -38,6 +45,15 @@ export const projectRegistryApi = {
 
   async listAllRegisteredProjects(): Promise<ProjectRegistry[]> {
     return request.get('/apps/registry/all')
+  },
+
+  async listRegistryProjectsPaginated(params: {
+    app_name?: string
+    search?: string
+    page?: number
+    page_size?: number
+  }): Promise<ProjectRegistryListResponse> {
+    return request.get('/admin/registry/projects', { params })
   },
 
   async getAppName(projectKey: string, repositorySlug: string): Promise<{ app_name: string }> {

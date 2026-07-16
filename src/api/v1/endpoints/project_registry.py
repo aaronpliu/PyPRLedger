@@ -8,6 +8,7 @@ from src.core.database import get_db_session
 from src.core.git_provider import GitProvider
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
+from src.schemas.project_registry import ProjectRegistryListResponse, ProjectRegistryResponse
 from src.services.project_registry_service import ProjectRegistryService
 from src.services.rbac_service import RBACService
 
@@ -84,6 +85,86 @@ async def list_projects_by_app(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to list projects"},
+        )
+
+
+@router.get("/admin/registry/projects", response_model=ProjectRegistryListResponse)
+async def list_registry_projects_paginated(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    registry_service: Annotated[ProjectRegistryService, Depends(get_registry_service)],
+    app_name: Annotated[str | None, Query(description="Filter by application name")] = None,
+    search: Annotated[
+        str | None, Query(description="Search in project_key, repository_slug, or description")
+    ] = None,
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of items per page"),
+):
+    """
+    List registered projects with pagination and filtering (Admin only)
+
+    Requires system_admin role with project_registry:manage permission.
+
+    Args:
+        app_name: Filter by application name (optional)
+        search: Search term for project_key, repository_slug, or description (optional)
+        page: Page number (1-indexed)
+        page_size: Number of items per page
+
+    Returns:
+        ProjectRegistryListResponse: Paginated list of registry entries
+    """
+    has_permission = await rbac_service.check_permission(
+        auth_user_id=current_user.id,
+        action="manage",
+        resource_type="project_registry",
+    )
+
+    if not has_permission:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "FORBIDDEN",
+                "message": "Insufficient permissions. System administrator role required.",
+            },
+        )
+
+    try:
+        items, total = await registry_service.list_projects_paginated(
+            db=db,
+            app_name=app_name,
+            search=search,
+            page=page,
+            page_size=page_size,
+        )
+
+        return ProjectRegistryListResponse(
+            items=[
+                ProjectRegistryResponse(
+                    id=p.id,
+                    app_name=p.app_name,
+                    project_key=p.project_key,
+                    repository_slug=p.repository_slug,
+                    git_provider=p.git_provider,
+                    description=p.description,
+                    created_date=p.created_date.isoformat(),
+                    updated_date=p.updated_date.isoformat(),
+                )
+                for p in items
+            ],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+    except Exception as e:
+        logger.error(f"Failed to list registry projects: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": "Failed to list registry projects",
+            },
         )
 
 
