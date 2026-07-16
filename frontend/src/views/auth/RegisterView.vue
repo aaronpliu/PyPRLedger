@@ -134,7 +134,7 @@
       <div class="auth-switchers">
         <ThemeSwitcher />
         <el-dropdown @command="handleLanguageChange" trigger="click">
-          <span class="language-switcher" role="button" tabindex="0" aria-label="Switch language">
+          <span class="language-flag">
             {{ languageStore.getLanguageFlag(languageStore.currentLanguage as any) }}
           </span>
           <template #dropdown>
@@ -590,39 +590,14 @@ const handleLanguageChange = (lang: string) => {
   z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
-.language-switcher {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid var(--el-border-color);
+.language-flag {
+  font-size: 20px;
   cursor: pointer;
-  font-size: 14px;
-  transition: all 0.3s ease;
-  color: var(--el-text-color-primary);
-}
-
-.language-switcher:hover {
-  background: rgba(255, 255, 255, 1);
-  border-color: var(--el-color-primary);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-[data-theme='dark'] .language-switcher {
-  background: rgba(30, 30, 30, 0.9);
-  border-color: var(--el-border-color);
-  color: var(--el-text-color-primary);
-}
-
-[data-theme='dark'] .language-switcher:hover {
-  background: rgba(30, 30, 30, 1);
-  border-color: var(--el-color-primary);
+  line-height: 1;
+  user-select: none;
 }
 
 /* Responsive Design */

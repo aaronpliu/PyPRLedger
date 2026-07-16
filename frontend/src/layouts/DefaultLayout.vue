@@ -52,10 +52,9 @@
           <NotificationBell />
 
           <!-- Language Switcher -->
-          <el-dropdown @command="handleLanguageChange">
-            <span class="language-switcher" role="button" tabindex="0" aria-label="Switch language">
+          <el-dropdown @command="handleLanguageChange" trigger="click">
+            <span class="language-flag">
               {{ languageStore.getLanguageFlag(languageStore.currentLanguage as any) }}
-              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
               <el-dropdown-menu role="menu" aria-label="Language options">
@@ -250,19 +249,11 @@ const handleLanguageChange = (lang: string) => {
   gap: 16px;
 }
 
-.language-switcher {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.language-flag {
+  font-size: 20px;
   cursor: pointer;
-  color: white;
-  padding: 8px 12px;
-  border-radius: 4px;
-  transition: background-color 0.3s;
-}
-
-.language-switcher:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  line-height: 1;
+  user-select: none;
 }
 
 .user-info {
