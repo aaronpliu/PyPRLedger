@@ -85,7 +85,7 @@
       <!-- Theme and Language Switchers -->
       <div class="auth-switchers">
         <ThemeSwitcher />
-        <el-dropdown @command="handleLanguageChange">
+        <el-dropdown @command="handleLanguageChange" trigger="click">
           <span class="language-switcher" role="button" tabindex="0" aria-label="Switch language">
             {{ languageStore.getLanguageFlag(languageStore.currentLanguage as any) }}
           </span>
