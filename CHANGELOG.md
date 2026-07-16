@@ -5,6 +5,26 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.3] - 2026-07-16
+
+**Backend Version**: 1.20.3
+**Frontend Version**: 1.15.3
+
+### Added
+- Unified interaction behavior for language and theme switcher
+- Language switcher on auth page
+- Updated background of login page
+- Pagination handling for project registry
+
+### Fixed
+- update lang flag
+
+### Dependencies
+- update prompt in account registry
+- upgrade page-agent
+
+---
+
 ## [1.20.2] - 2026-07-15
 
 **Backend Version**: 1.20.2
