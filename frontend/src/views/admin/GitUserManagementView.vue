@@ -271,7 +271,7 @@ const handleSearchClear = () => {
 const loadUsers = async () => {
   loading.value = true
   try {
-    const items = await usersApi.getAllBitbucketUsers({
+    const items = await usersApi.getGitUsers({
       limit: 500,
       active: statusFilter.value !== null ? statusFilter.value : undefined,
       is_reviewer: reviewerFilter.value !== null ? reviewerFilter.value : undefined,

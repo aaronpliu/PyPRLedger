@@ -1409,18 +1409,34 @@ const loadAvailableApps = async () => {
 }
 
 // Load all PR users for filter dropdown (active users only)
-const loadPRUsers = async () => {
+const loadPRUsers = async (silent: boolean = false) => {
   try {
-    prUsersLoading.value = true
-    // Fetch all active users once - cache for client-side filtering
-    const users = await usersApi.getAllBitbucketUsers({ limit: 500 })
+    if (!silent) prUsersLoading.value = true
+    const users = await usersApi.getGitUsers({ limit: 500 })
     const activeUsers = users.filter(u => u.active !== false)
-    allPRUsers.value = activeUsers
-    availablePRUsers.value = activeUsers
+
+    if (silent && allPRUsers.value.length > 0) {
+      // SSE background refresh: only add new users, preserve existing list and search filter
+      const existingUsernames = new Set(allPRUsers.value.map(u => u.username))
+      const newUsers = activeUsers.filter(u => !existingUsernames.has(u.username))
+      if (newUsers.length > 0) {
+        allPRUsers.value = [...allPRUsers.value, ...newUsers]
+        // Re-apply current search filter if active
+        const query = prUserFilter.value?.trim()
+        if (query) {
+          searchPRUsers(query)
+        } else {
+          availablePRUsers.value = allPRUsers.value
+        }
+      }
+    } else {
+      allPRUsers.value = activeUsers
+      availablePRUsers.value = activeUsers
+    }
   } catch (error) {
     console.error('Failed to load PR users:', error)
   } finally {
-    prUsersLoading.value = false
+    if (!silent) prUsersLoading.value = false
   }
 }
 
@@ -1441,18 +1457,34 @@ const searchPRUsers = (query: string) => {
 }
 
 // Load all reviewers for filter dropdown using dedicated endpoint
-const loadReviewers = async () => {
+const loadReviewers = async (silent: boolean = false) => {
   try {
-    reviewersLoading.value = true
-    // Use dedicated /users/reviewers endpoint - returns active reviewers only
+    if (!silent) reviewersLoading.value = true
     const response = await usersApi.getReviewers(500)
     const reviewers = response.items || []
-    allReviewers.value = reviewers
-    availableReviewers.value = reviewers
+
+    if (silent && allReviewers.value.length > 0) {
+      // SSE background refresh: only add new reviewers, preserve existing list and search filter
+      const existingUsernames = new Set(allReviewers.value.map(u => u.username))
+      const newReviewers = reviewers.filter(u => !existingUsernames.has(u.username))
+      if (newReviewers.length > 0) {
+        allReviewers.value = [...allReviewers.value, ...newReviewers]
+        // Re-apply current search filter if active
+        const query = reviewerFilter.value?.trim()
+        if (query) {
+          searchReviewers(query)
+        } else {
+          availableReviewers.value = allReviewers.value
+        }
+      }
+    } else {
+      allReviewers.value = reviewers
+      availableReviewers.value = reviewers
+    }
   } catch (error) {
     console.error('Failed to load reviewers:', error)
   } finally {
-    reviewersLoading.value = false
+    if (!silent) reviewersLoading.value = false
   }
 }
 
@@ -1537,6 +1569,8 @@ function handleSSEReviewCreated(event: SSEReviewCreatedEvent) {
   sseRefreshTimeout = setTimeout(() => {
     console.log('[ReviewListView] Refreshing data after debounce')
     loadReviews(false) // Don't show loading indicator for SSE updates
+    loadPRUsers(true) // Silent reload - only adds new users without flashing
+    loadReviewers(true) // Silent reload - only adds new reviewers without flashing
     sseRefreshTimeout = null
   }, 1000) // 1 second debounce
 }
