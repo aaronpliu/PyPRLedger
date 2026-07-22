@@ -1,6 +1,6 @@
+from __future__ import annotations
+
 import asyncio
-import contextlib
-import json
 import logging
 import time
 import uuid
@@ -9,7 +9,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from redis.asyncio.client import PubSub
 from sqlalchemy import select
 
 from src.core.database import get_db_context
@@ -22,352 +21,85 @@ from src.models.auth_user import AuthUser
 from src.models.user import User
 from src.services.auth_service import AuthService
 from src.services.rbac_service import RBACService
+from src.services.sse_broker import get_sse_broker
 from src.utils.metrics import metrics
-from src.utils.redis import get_redis_pubsub_client
 
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Redis pub/sub channel for review creation events
-REVIEW_CREATED_CHANNEL = "reviews:created"
-
 # Connection tracking: {username: [(connection_id, start_time), ...]}
-# Using list of tuples so we can find and prune the oldest connections
 _sse_connections: dict[str, list[tuple[str, float]]] = {}
 
-# Abort signals for pruning stale connections: {connection_id: bool}
-# Set to True when a connection should be gracefully shut down
-_sse_abort_flags: dict[str, bool] = {}
-
-# Active pubsub objects registry: {connection_id: PubSub}
-# Allows the cleanup task to directly close Redis pubsub connections
-# when the generator's finally block hasn't run (e.g., delayed disconnect detection)
-_active_pubsubs: dict[str, PubSub] = {}
-
 # Maximum connections per user
-# Admin users get higher limit since they may access multiple pages simultaneously
 MAX_CONNECTIONS_PER_USER = 3
 MAX_CONNECTIONS_PER_ADMIN = 10
 
-# Maximum total SSE connections across all users (safety net against pool exhaustion)
-MAX_TOTAL_CONNECTIONS = 200
-
-# Heartbeat interval in seconds — keeps connection alive and detects dead clients
-HEARTBEAT_INTERVAL = 30
+# Maximum total SSE connections across all users
+MAX_TOTAL_CONNECTIONS = 2000
 
 # Idle timeout — close connection if no events are sent for this duration
-# Prevents zombie connections from occupying tracked slots forever
-# Heartbeat is sent every 30s, so 90s gives 3 missed heartbeats of tolerance
-IDLE_TIMEOUT = 90  # 90 seconds
-
-# Redis pub/sub retry configuration
-REDIS_PUBSUB_MAX_RETRIES = 5
-REDIS_PUBSUB_RETRY_BASE_DELAY = 1.0  # seconds, doubles each attempt
+IDLE_TIMEOUT = 300  # 5 minutes
 
 CONNECTION_LIFETIME_WARNING = (
     "Connection limit reached — oldest connection pruned. "
     "This is normal after page refresh but excessive pruning suggests a leak."
 )
 
-# Background cleanup task handle
-_cleanup_task: asyncio.Task | None = None
 
-# Cleanup interval in seconds
-CLEANUP_INTERVAL = 30  # Run cleanup every 30 seconds
-
-
-async def _run_stale_connection_cleanup():
-    """Run a single pass of stale connection cleanup.
-
-    Returns a summary dict with counts for logging.
-    """
-    now = time.monotonic()
-    stale_count = 0
-    closed_pubsub_count = 0
-
-    for username, connections in list(_sse_connections.items()):
-        fresh_connections = []
-        for conn_id, start_time in connections:
-            age = now - start_time
-            if age > IDLE_TIMEOUT and not _sse_abort_flags.get(conn_id):
-                _sse_abort_flags[conn_id] = True
-                stale_count += 1
-                logger.info(
-                    "Stale SSE connection marked for cleanup",
-                    extra={
-                        "connection_id": conn_id,
-                        "username": username,
-                        "age_seconds": int(age),
-                    },
-                )
-
-                pubsub = _active_pubsubs.pop(conn_id, None)
-                if pubsub:
-                    try:
-                        await pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
-                        await pubsub.close()
-                        closed_pubsub_count += 1
-                        logger.debug(
-                            "Stale pubsub connection closed by cleanup",
-                            extra={"connection_id": conn_id},
-                        )
-                    except Exception as pubsub_err:
-                        logger.warning(f"Failed to close stale pubsub: {pubsub_err}")
-            else:
-                fresh_connections.append((conn_id, start_time))
-
-        if fresh_connections:
-            _sse_connections[username] = fresh_connections
-        elif username in _sse_connections:
-            del _sse_connections[username]
-
-    tracked_ids = {cid for conns in _sse_connections.values() for cid, _ in conns}
-    orphaned_ids = set(_active_pubsubs.keys()) - tracked_ids
-    for orphan_id in orphaned_ids:
-        pubsub = _active_pubsubs.pop(orphan_id, None)
-        if pubsub:
-            try:
-                await pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
-                await pubsub.close()
-                closed_pubsub_count += 1
-                logger.debug(
-                    "Orphaned pubsub connection cleaned up",
-                    extra={"connection_id": orphan_id},
-                )
-            except Exception as pubsub_err:
-                logger.warning(f"Failed to close orphaned pubsub: {pubsub_err}")
-
-    return stale_count, closed_pubsub_count
-
-
-async def _periodic_stale_connection_cleanup():
-    """Background task to clean up stale SSE connections.
-
-    Runs every CLEANUP_INTERVAL seconds and:
-    1. Sets abort flags for connections exceeding idle timeout
-    2. Directly closes Redis pubsub objects for stale connections
-       (prevents pubsub pool exhaustion when generator finally blocks
-       haven't run yet due to delayed disconnect detection)
-    3. Removes stale entries from connection tracking and pubsub registry
-    """
-    while True:
-        await asyncio.sleep(CLEANUP_INTERVAL)
-        try:
-            stale_count, closed_pubsub_count = await _run_stale_connection_cleanup()
-
-            if stale_count > 0 or closed_pubsub_count > 0:
-                total = sum(len(c) for c in _sse_connections.values())
-                logger.info(
-                    "SSE stale connection cleanup complete",
-                    extra={
-                        "stale_pruned": stale_count,
-                        "pubsub_closed": closed_pubsub_count,
-                        "total_remaining": total,
-                    },
-                )
-
-                metrics.sse_connections_active.set(total)
-
-        except Exception:
-            logger.warning("Error in SSE stale connection cleanup", exc_info=True)
-
-
-async def start_sse_cleanup_task():
-    """Start the background stale connection cleanup task."""
-    global _cleanup_task
-    if _cleanup_task is None or _cleanup_task.done():
-        _cleanup_task = asyncio.create_task(_periodic_stale_connection_cleanup())
-        logger.info(f"SSE stale connection cleanup task started (interval: {CLEANUP_INTERVAL}s)")
-
-
-async def stop_sse_cleanup_task():
-    """Stop the background stale connection cleanup task."""
-    global _cleanup_task
-    if _cleanup_task is not None and not _cleanup_task.done():
-        _cleanup_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await _cleanup_task
-        _cleanup_task = None
-        logger.info("SSE stale connection cleanup task stopped")
-
-
-def _is_user_involved_in_review(
-    review: dict,
-    git_username: str | None,
-    is_admin: bool = False,
-) -> bool:
-    """
-    Determine if a user should receive a review event via SSE.
-
-    Admin users receive ALL review events (matching API visibility rules).
-    Regular users only receive events for reviews they're involved in:
-    - The PR author (pull_request_user)
-    - The assigned reviewer (reviewer)
-    - The user who assigned the review (assigned_by)
-
-    Args:
-        review: Review event payload from Redis
-        git_username: Bitbucket username of the authenticated user (None if not linked)
-        is_admin: Whether the user has an admin role (review_admin or system_admin)
-
-    Returns:
-        True if user should receive the event, False otherwise
-    """
-    # Admin users receive ALL events (matches API visibility)
-    if is_admin:
-        return True
-
-    # Regular users must have git binding to receive any events
-    if not git_username:
-        return False
-
-    # Check if user is involved in the review
-    if review.get("pull_request_user") == git_username:
-        return True
-    if review.get("reviewer") == git_username:
-        return True
-    return review.get("assigned_by") == git_username
+def _prune_oldest_user_connection(tracking_username: str) -> None:
+    """Prune the oldest connection for a user to make room for a new one."""
+    user_connections = _sse_connections.get(tracking_username, [])
+    if not user_connections:
+        return
+    user_connections.sort(key=lambda x: x[1])
+    old_id, _ = user_connections[0]
+    _sse_connections[tracking_username] = user_connections[1:]
+    if not _sse_connections[tracking_username]:
+        del _sse_connections[tracking_username]
+    logger.info(
+        "SSE connection abort signalled for pruning",
+        extra={"connection_id": old_id, "username": tracking_username},
+    )
 
 
 async def _sse_event_generator(
-    redis_client,
-    pubsub,
-    git_username: str | None,
-    is_admin: bool,
+    queue: asyncio.Queue[str | None],
     connection_id: str,
     tracking_username: str | None,
 ) -> AsyncGenerator[str, None]:
     """
-    Async generator that yields SSE-formatted review events for a connected user.
+    Async generator that yields SSE events from the broker queue.
 
-    Subscribes to the Redis reviews:created channel, filters events by user
-    involvement (or admin status), and yields SSE-formatted strings. Sends
-    periodic heartbeats to detect dead connections and checks the abort
-    flag for stale connection pruning. Cleans up the connection tracking
-    set when the generator is closed.
-
-    Args:
-        redis_client: Redis client for pub/sub
-        pubsub: Pre-initialised Redis pub/sub instance (caller handles errors)
-        git_username: Bitbucket username of the connected user (None if not linked)
-        is_admin: Whether the user has an admin role (receives all events)
-        connection_id: Unique ID for this SSE connection (for tracking)
-        tracking_username: Key used for per-user connection tracking
-
-    Yields:
-        SSE-formatted event strings
+    Reads from a personal asyncio.Queue fed by the shared SSEBroker.
+    Sends None from the queue as a signal to disconnect.
     """
-    last_event_time = time.monotonic()
-    last_heartbeat_time = time.monotonic()
-
     try:
         while True:
-            # Check if this connection should be pruned (stale connection replacement)
-            if _sse_abort_flags.get(connection_id):
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=IDLE_TIMEOUT)
+            except TimeoutError:
                 logger.info(
-                    "SSE connection pruned by newer connection",
+                    "SSE connection idle timeout",
+                    extra={"connection_id": connection_id, "idle_seconds": IDLE_TIMEOUT},
+                )
+                break
+
+            if event is None:
+                logger.info(
+                    "SSE connection disconnected by broker",
                     extra={"connection_id": connection_id},
                 )
                 break
 
-            # Check idle timeout — close if no events sent for too long
-            now = time.monotonic()
-            if now - last_event_time > IDLE_TIMEOUT:
-                logger.info(
-                    "SSE connection idle timeout",
-                    extra={
-                        "connection_id": connection_id,
-                        "idle_seconds": IDLE_TIMEOUT,
-                    },
-                )
-                break
+            yield event
 
-            # Poll for Redis message with 1s timeout
-            # Using poll instead of blocking listen() so we can periodically
-            # check abort flags, send heartbeats, and enforce idle timeout
-            message = await pubsub.get_message(timeout=1.0)
-
-            if message and message["type"] == "message":
-                try:
-                    review = json.loads(message["data"])
-                except (json.JSONDecodeError, TypeError) as e:
-                    logger.warning(f"Failed to parse SSE event from Redis: {e}")
-                    metrics.sse_events_filtered_total.labels(filtered="parse_error").inc()
-                    continue
-
-                is_involved = _is_user_involved_in_review(review, git_username, is_admin)
-
-                # Log filtering decision for debugging
-                logger.debug(
-                    "SSE event filtering",
-                    extra={
-                        "review_id": review.get("review_id"),
-                        "pull_request_user": review.get("pull_request_user"),
-                        "git_username": git_username,
-                        "is_admin": is_admin,
-                        "is_involved": is_involved,
-                    },
-                )
-
-                if is_involved:
-                    minimal_payload = {
-                        "review_id": review["review_id"],
-                        "project_key": review["project_key"],
-                        "repository_slug": review["repository_slug"],
-                        "pull_request_id": review["pull_request_id"],
-                        "created_date": review["created_date"],
-                    }
-                    event_data = json.dumps(minimal_payload)
-                    logger.info(
-                        "SSE event sent to user",
-                        extra={
-                            "review_id": review["review_id"],
-                            "tracking_username": tracking_username,
-                            "is_admin": is_admin,
-                        },
-                    )
-                    yield f"event: review_created\ndata: {event_data}\n\n"
-                    metrics.sse_events_filtered_total.labels(filtered="false").inc()
-                    last_event_time = time.monotonic()
-                else:
-                    metrics.sse_events_filtered_total.labels(filtered="true").inc()
-
-            # Send heartbeat every HEARTBEAT_INTERVAL seconds
-            now = time.monotonic()
-            if now - last_heartbeat_time >= HEARTBEAT_INTERVAL:
-                yield ": heartbeat\n\n"
-                last_heartbeat_time = now
     except asyncio.CancelledError:
-        # Client disconnected (browser refresh/close) — let cleanup proceed
         logger.debug(
             "SSE connection cancelled (client disconnected)",
             extra={"connection_id": connection_id},
         )
-    finally:
-        # Clean up pubsub from registry first to prevent double-close by cleanup task
-        _active_pubsubs.pop(connection_id, None)
-
-        try:
-            await pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
-            await pubsub.close()
-        except Exception as cleanup_err:
-            logger.debug(
-                f"Pubsub cleanup warning (may already be closed): {cleanup_err}",
-                extra={"connection_id": connection_id},
-            )
-
-        # Clean up abort flag
-        _sse_abort_flags.pop(connection_id, None)
-
-        # Clean up connection tracking
-        if tracking_username and tracking_username in _sse_connections:
-            _sse_connections[tracking_username] = [
-                (cid, t) for (cid, t) in _sse_connections[tracking_username] if cid != connection_id
-            ]
-            if not _sse_connections[tracking_username]:
-                del _sse_connections[tracking_username]
 
 
 @router.get("/stream")
@@ -377,10 +109,9 @@ async def stream_reviews(
     """
     Server-Sent Events (SSE) endpoint for real-time new review notifications.
 
-    Establishes a persistent connection that streams review creation events
-    to the authenticated user. Only events where the user is involved
-    (reviewer, assigner, or PR author) are forwarded, unless the user has
-    an admin role (review_admin or system_admin), who receive all events.
+    Uses a shared SSEBroker with a single Redis pubsub subscription that
+    multiplexes events to all connected clients via asyncio.Queues.
+    This supports thousands of concurrent connections using only 1 Redis connection.
 
     Authentication:
         JWT token passed as query parameter: ?token=<JWT>
@@ -388,32 +119,16 @@ async def stream_reviews(
     Authorization:
         - Any authenticated user can connect (no Bitbucket linkage required)
         - Non-admin users without linked Bitbucket account receive no events
-        - Admin users (review_admin, system_admin) receive all review events,
-          even without a linked Bitbucket account
+        - Admin users (review_admin, system_admin) receive all review events
 
     Connection limits:
         - Maximum 3 concurrent SSE connections per regular user
-        - Maximum 10 concurrent SSE connections per admin user (review_admin, system_admin)
+        - Maximum 10 concurrent SSE connections per admin user
         - When limit is exceeded, the oldest connection is automatically pruned
-          to make room for the new one (graceful degradation on page refresh)
-        - Connections idle for 5+ minutes are automatically closed
-        - Server sends a heartbeat every 30 seconds to detect dead clients
-
-    Args:
-        token: JWT access token from query parameter
-
-    Returns:
-        StreamingResponse with text/event-stream content type
-
-    Raises:
-        HTTPException 401: If token is invalid or expired
-        HTTPException 403: If user account is inactive
-        HTTPException 429: If connection limit exceeded
+        - Connections idle for 5 minutes are automatically closed
     """
-    redis_client = get_redis_pubsub_client()
     connection_id = str(uuid.uuid4())
 
-    # Validate JWT token and get auth user (requires DB session)
     async with get_db_context() as db:
         auth_service = AuthService(db)
         try:
@@ -429,20 +144,17 @@ async def stream_reviews(
                 detail={"error": "INVALID_TOKEN", "message": "Invalid token"},
             )
 
-        # Check if user account is active
         stmt = select(AuthUser).where(AuthUser.id == auth_user.id)
         result = await db.execute(stmt)
         auth_user_record = result.scalar_one_or_none()
         if not auth_user_record or not auth_user_record.is_active:
             raise UserInactiveException(username=auth_user.username)
 
-        # Check user roles to determine admin status
         rbac_service = RBACService(db)
         user_roles = await rbac_service.get_user_roles(auth_user.id)
         role_names = {role["role_name"] for role in user_roles}
         is_admin = "review_admin" in role_names or "system_admin" in role_names
 
-        # Get Bitbucket username for filtering and connection tracking
         stmt = select(User).where(User.id == auth_user.user_id)
         result = await db.execute(stmt)
         git_user = result.scalar_one_or_none()
@@ -450,14 +162,12 @@ async def stream_reviews(
         git_username = None
         if git_user:
             git_username = git_user.username
-        # Non-admin without git binding: allow connection but will receive no events
 
-        # Use git_username for tracking if available, otherwise use a fallback for admin without git binding
         tracking_username = git_username or (
             f"admin:{auth_user.id}" if is_admin else auth_user.username
         )
 
-    # Enforce global connection limit (safety net against Redis pool exhaustion)
+    # Enforce global connection limit
     total_connections = sum(len(conns) for conns in _sse_connections.values())
     if total_connections >= MAX_TOTAL_CONNECTIONS:
         logger.warning(
@@ -477,35 +187,16 @@ async def stream_reviews(
             },
         )
 
-    # Enforce per-user connection limit — prune oldest connection to make room
-    # This handles the common case where a user refreshes the page and the old
-    # connection hasn't been cleaned up yet (e.g., beforeunload didn't fire).
+    # Enforce per-user connection limit — prune oldest to make room
     user_connections = _sse_connections.get(tracking_username, [])
     max_connections = MAX_CONNECTIONS_PER_ADMIN if is_admin else MAX_CONNECTIONS_PER_USER
     if len(user_connections) >= max_connections:
-        # Sort by start_time (oldest first) and prune the oldest
-        user_connections.sort(key=lambda x: x[1])
-        pruned_count = len(user_connections) - max_connections + 1
-        for i in range(pruned_count):
-            old_id, _ = user_connections[i]
-            _sse_abort_flags[old_id] = True
-            logger.info(
-                "SSE connection abort signalled for pruning",
-                extra={
-                    "connection_id": old_id,
-                    "username": tracking_username,
-                },
-            )
-
-        # Keep only the (max_connections - 1) newest entries
-        _sse_connections[tracking_username] = user_connections[pruned_count:]
-
+        _prune_oldest_user_connection(tracking_username)
         logger.warning(
             CONNECTION_LIFETIME_WARNING,
             extra={
                 "username": tracking_username,
-                "pruned_count": pruned_count,
-                "remaining": len(_sse_connections[tracking_username]),
+                "remaining": len(_sse_connections.get(tracking_username, [])),
             },
         )
 
@@ -515,7 +206,6 @@ async def stream_reviews(
         _sse_connections[tracking_username] = []
     _sse_connections[tracking_username].append((connection_id, now))
 
-    # Update active connections gauge
     total_connections = sum(len(conns) for conns in _sse_connections.values())
     metrics.sse_connections_active.set(total_connections)
     metrics.sse_connections_total.labels(status="connected").inc()
@@ -532,62 +222,22 @@ async def stream_reviews(
         },
     )
 
-    # Ensure the stale connection cleanup task is running
-    await start_sse_cleanup_task()
-
-    # Initialise Redis pub/sub with retry logic for transient failures.
-    # Each SSE connection holds a dedicated pub/sub subscription, so we
-    # retry with backoff to handle momentary pool exhaustion or network blips.
-    pubsub = None
-    last_exc = None
-    for attempt in range(1, REDIS_PUBSUB_MAX_RETRIES + 1):
-        try:
-            pubsub = redis_client.pubsub()
-            await pubsub.subscribe(REVIEW_CREATED_CHANNEL)
-            # Register pubsub object so cleanup task can close it if connection goes stale
-            _active_pubsubs[connection_id] = pubsub
-            break
-        except Exception as exc:
-            last_exc = exc
-            # Clean up the failed pubsub object to release the connection
-            with contextlib.suppress(Exception):
-                await pubsub.close()
-            pubsub = None
-
-            if attempt < REDIS_PUBSUB_MAX_RETRIES:
-                delay = REDIS_PUBSUB_RETRY_BASE_DELAY * (2 ** (attempt - 1))
-                logger.warning(
-                    f"Redis pub/sub init failed, retrying — error: {exc}",
-                    extra={
-                        "attempt": attempt,
-                        "max_retries": REDIS_PUBSUB_MAX_RETRIES,
-                        "delay_seconds": delay,
-                        "username": tracking_username,
-                        "error": str(exc),
-                    },
-                )
-                # Trigger cleanup to free zombie connections before retrying
-                await _run_stale_connection_cleanup()
-                await asyncio.sleep(delay)
-            else:
-                logger.error(
-                    f"Failed to initialise Redis pub/sub for SSE after all retries — error: {last_exc}",
-                    extra={
-                        "error": str(last_exc),
-                        "username": tracking_username,
-                        "attempts": REDIS_PUBSUB_MAX_RETRIES,
-                    },
-                )
-
-    if pubsub is None:
-        # All retries exhausted — clean up connection tracking
-        if tracking_username and tracking_username in _sse_connections:
+    # Register with the shared broker — gets a personal asyncio.Queue
+    broker = get_sse_broker()
+    try:
+        queue = await broker.register(connection_id, git_username, is_admin)
+    except Exception as exc:
+        logger.error(
+            f"Failed to register with SSEBroker: {exc}",
+            extra={"connection_id": connection_id, "username": tracking_username},
+        )
+        # Clean up connection tracking
+        if tracking_username in _sse_connections:
             _sse_connections[tracking_username] = [
-                (cid, t) for (cid, t) in _sse_connections[tracking_username] if cid != connection_id
+                (cid, t) for cid, t in _sse_connections[tracking_username] if cid != connection_id
             ]
             if not _sse_connections[tracking_username]:
                 del _sse_connections[tracking_username]
-
         metrics.sse_connections_total.labels(status="redis_failed").inc()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -595,13 +245,11 @@ async def stream_reviews(
                 "error": "SSE_UNAVAILABLE",
                 "message": "Real-time service temporarily unavailable. Please try again.",
             },
-        ) from last_exc
+        ) from exc
 
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
-            async for event in _sse_event_generator(
-                redis_client, pubsub, git_username, is_admin, connection_id, tracking_username
-            ):
+            async for event in _sse_event_generator(queue, connection_id, tracking_username):
                 yield event
         except Exception as e:
             logger.error(
@@ -615,9 +263,21 @@ async def stream_reviews(
                 },
             )
         finally:
-            # Update active connections gauge on disconnect
-            total_connections = sum(len(conns) for conns in _sse_connections.values())
-            metrics.sse_connections_active.set(total_connections)
+            # Unregister from broker
+            await broker.unregister(connection_id)
+
+            # Clean up connection tracking
+            if tracking_username in _sse_connections:
+                _sse_connections[tracking_username] = [
+                    (cid, t)
+                    for cid, t in _sse_connections[tracking_username]
+                    if cid != connection_id
+                ]
+                if not _sse_connections[tracking_username]:
+                    del _sse_connections[tracking_username]
+
+            total = sum(len(conns) for conns in _sse_connections.values())
+            metrics.sse_connections_active.set(total)
             metrics.sse_connections_total.labels(status="disconnected").inc()
 
             logger.info(

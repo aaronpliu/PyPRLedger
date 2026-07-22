@@ -57,7 +57,10 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str | None = Field(default=None)
     REDIS_DB: int = Field(default=0)
     REDIS_MAX_CONNECTIONS: int = Field(default=100)
-    REDIS_PUBSUB_MAX_CONNECTIONS: int = Field(default=50)
+    REDIS_PUBSUB_MAX_CONNECTIONS: int = Field(
+        default=10,
+        description="Pubsub pool for SSE broker — only needs 1 connection (shared across all clients)",
+    )
 
     @property
     def redis_url(self) -> str:
