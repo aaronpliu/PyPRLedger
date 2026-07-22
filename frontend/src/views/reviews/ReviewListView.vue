@@ -535,8 +535,8 @@
           :total="total"
           :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadReviews"
-          @current-change="loadReviews"
+          @size-change="handlePageChange"
+          @current-change="handlePageChange"
         />
       </div>
     </el-card>
@@ -1196,6 +1196,58 @@ const fetchAllDataForExport = async (): Promise<Review[]> => {
   }
 }
 
+const REVIEW_FILTERS_KEY = 'reviewListFilters'
+
+const saveFilters = () => {
+  try {
+    const filterState = {
+      searchQuery: searchQuery.value,
+      statusFilter: statusFilter.value,
+      appFilter: appFilter.value,
+      prUserFilter: prUserFilter.value,
+      reviewerFilter: reviewerFilter.value,
+      scoredFilter: scoredFilter.value,
+      severityFilter: severityFilter.value,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+      hideArchived: hideArchived.value,
+      pinnedOnly: pinnedOnly.value,
+      currentPage: currentPage.value,
+    }
+    sessionStorage.setItem(REVIEW_FILTERS_KEY, JSON.stringify(filterState))
+  } catch { /* ignore quota errors */ }
+}
+
+const restoreFilters = () => {
+  try {
+    const stored = sessionStorage.getItem(REVIEW_FILTERS_KEY)
+    if (!stored) return
+    const parsed = JSON.parse(stored)
+    if (!parsed) return
+    searchQuery.value = parsed.searchQuery || ''
+    statusFilter.value = parsed.statusFilter || ''
+    appFilter.value = parsed.appFilter || []
+    prUserFilter.value = parsed.prUserFilter || ''
+    reviewerFilter.value = parsed.reviewerFilter || ''
+    scoredFilter.value = parsed.scoredFilter || ''
+    severityFilter.value = parsed.severityFilter || ''
+    dateFrom.value = parsed.dateFrom || ''
+    dateTo.value = parsed.dateTo || ''
+    hideArchived.value = parsed.hideArchived ?? true
+    pinnedOnly.value = parsed.pinnedOnly ?? false
+    currentPage.value = parsed.currentPage || 1
+  } catch { /* ignore parse errors */ }
+}
+
+const clearSavedFilters = () => {
+  sessionStorage.removeItem(REVIEW_FILTERS_KEY)
+}
+
+const handlePageChange = () => {
+  saveFilters()
+  loadReviews()
+}
+
 const handleResetFilters = () => {
   searchQuery.value = ''
   appFilter.value = []
@@ -1209,6 +1261,7 @@ const handleResetFilters = () => {
   hideArchived.value = true // Reset to default (hide scored reviews)
   pinnedOnly.value = false // Reset to show all reviews
   currentPage.value = 1 // Reset to first page
+  clearSavedFilters()
   loadReviews() // Reload from backend with reset filters
 }
 
@@ -1512,6 +1565,7 @@ watch(
     clearTimeout(filterChangeTimeout)
     filterChangeTimeout = setTimeout(() => {
       currentPage.value = 1 // Reset to first page when filters change
+      saveFilters()
       loadReviews()
     }, 300)
   },
@@ -1523,6 +1577,9 @@ let filterChangeTimeout: ReturnType<typeof setTimeout>
 // Load reviews when component mounts
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+
+  // Restore saved filters before loading data
+  restoreFilters()
 
   // Check for query parameters from notification navigation
   const prId = route.query.pr_id as string | undefined

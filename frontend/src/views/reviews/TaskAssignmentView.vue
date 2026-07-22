@@ -289,8 +289,8 @@
         :total="total"
         :page-sizes="[10, 20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
-        @size-change="loadReviews"
-        @current-change="loadReviews"
+        @size-change="handlePageChange"
+        @current-change="handlePageChange"
         style="margin-top: 20px; justify-content: flex-end"
       />
     </el-card>
@@ -554,10 +554,62 @@ const loadProjects = async () => {
   }
 }
 
+const TASK_FILTERS_KEY = 'taskAssignmentFilters'
+
+const saveFilters = () => {
+  try {
+    const filterState = {
+      searchQuery: searchQuery.value,
+      projectFilter: projectFilter.value,
+      appFilter: appFilter.value,
+      prUserFilter: prUserFilter.value,
+      reviewerFilter: reviewerFilter.value,
+      scoredFilter: scoredFilter.value,
+      severityFilter: severityFilter.value,
+      statusFilter: statusFilter.value,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+      hideDone: hideDone.value,
+      currentPage: currentPage.value,
+    }
+    sessionStorage.setItem(TASK_FILTERS_KEY, JSON.stringify(filterState))
+  } catch { /* ignore quota errors */ }
+}
+
+const restoreFilters = () => {
+  try {
+    const stored = sessionStorage.getItem(TASK_FILTERS_KEY)
+    if (!stored) return
+    const parsed = JSON.parse(stored)
+    if (!parsed) return
+    searchQuery.value = parsed.searchQuery || ''
+    projectFilter.value = parsed.projectFilter || ''
+    // appFilter is managed by the appName route watcher and taskAssignmentApp storage
+    prUserFilter.value = parsed.prUserFilter || ''
+    reviewerFilter.value = parsed.reviewerFilter || ''
+    scoredFilter.value = parsed.scoredFilter || ''
+    severityFilter.value = parsed.severityFilter || ''
+    statusFilter.value = parsed.statusFilter || ''
+    dateFrom.value = parsed.dateFrom || ''
+    dateTo.value = parsed.dateTo || ''
+    hideDone.value = parsed.hideDone ?? true
+    currentPage.value = parsed.currentPage || 1
+  } catch { /* ignore parse errors */ }
+}
+
+const clearSavedFilters = () => {
+  sessionStorage.removeItem(TASK_FILTERS_KEY)
+  sessionStorage.removeItem('taskAssignmentApp')
+}
+
+const handlePageChange = () => {
+  saveFilters()
+  loadReviews()
+}
+
 const handleResetFilters = () => {
   searchQuery.value = ''
   appFilter.value = []
-  sessionStorage.removeItem('taskAssignmentApp')
   prUserFilter.value = ''
   reviewerFilter.value = ''
   scoredFilter.value = ''
@@ -566,6 +618,9 @@ const handleResetFilters = () => {
   projectFilter.value = ''
   dateFrom.value = ''
   dateTo.value = ''
+  hideDone.value = true
+  currentPage.value = 1
+  clearSavedFilters()
   loadReviews()
 }
 
@@ -1012,6 +1067,7 @@ watch(
     // Debounce the reload to avoid multiple rapid requests
     clearTimeout(filterChangeTimeout)
     filterChangeTimeout = setTimeout(() => {
+      saveFilters()
       loadReviews()
     }, 300)
   },
@@ -1020,11 +1076,15 @@ watch(
 
 // Watch hideDone — reload data from server with archive filter
 watch(hideDone, () => {
+  saveFilters()
   loadReviews()
 })
 
 // Watch route appName param — handle navigation between apps
-watch(() => route.params.appName, (newAppName) => {
+watch(() => route.params.appName, (newAppName, oldAppName) => {
+  // Skip the initial immediate run — onMounted handles initial load
+  if (oldAppName === undefined && newAppName === undefined) return
+
   if (newAppName) {
     // Set filter from route param and save to storage
     appFilter.value = [newAppName as string]
@@ -1039,6 +1099,7 @@ watch(() => route.params.appName, (newAppName) => {
     }
   }
   currentPage.value = 1
+  saveFilters()
   loadReviews()
 }, { immediate: true })
 
@@ -1047,10 +1108,9 @@ onBeforeRouteLeave((to) => {
   if (to.name === 'TaskAssignmentDetail') {
     return
   }
-  // Clear storage when navigating away from app routes
-  // (All Tasks, or leaving task assignment entirely)
-  if (!to.path.startsWith('/task-assignment/app/')) {
-    sessionStorage.removeItem('taskAssignmentApp')
+  // Clear storage when navigating away from task assignment entirely
+  if (!to.path.startsWith('/task-assignment')) {
+    clearSavedFilters()
   }
 })
 
@@ -1058,6 +1118,10 @@ let filterChangeTimeout: ReturnType<typeof setTimeout>
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+
+  // Restore saved filters before loading data
+  restoreFilters()
+
   loadProjects()
   loadReviews()
   loadAvailableApps()
