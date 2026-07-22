@@ -63,8 +63,8 @@ HEARTBEAT_INTERVAL = 30
 IDLE_TIMEOUT = 90  # 90 seconds
 
 # Redis pub/sub retry configuration
-REDIS_PUBSUB_MAX_RETRIES = 3
-REDIS_PUBSUB_RETRY_BASE_DELAY = 0.5  # seconds, doubles each attempt
+REDIS_PUBSUB_MAX_RETRIES = 5
+REDIS_PUBSUB_RETRY_BASE_DELAY = 1.0  # seconds, doubles each attempt
 
 CONNECTION_LIFETIME_WARNING = (
     "Connection limit reached — oldest connection pruned. "
@@ -76,6 +76,70 @@ _cleanup_task: asyncio.Task | None = None
 
 # Cleanup interval in seconds
 CLEANUP_INTERVAL = 30  # Run cleanup every 30 seconds
+
+
+async def _run_stale_connection_cleanup():
+    """Run a single pass of stale connection cleanup.
+
+    Returns a summary dict with counts for logging.
+    """
+    now = time.monotonic()
+    stale_count = 0
+    closed_pubsub_count = 0
+
+    for username, connections in list(_sse_connections.items()):
+        fresh_connections = []
+        for conn_id, start_time in connections:
+            age = now - start_time
+            if age > IDLE_TIMEOUT and not _sse_abort_flags.get(conn_id):
+                _sse_abort_flags[conn_id] = True
+                stale_count += 1
+                logger.info(
+                    "Stale SSE connection marked for cleanup",
+                    extra={
+                        "connection_id": conn_id,
+                        "username": username,
+                        "age_seconds": int(age),
+                    },
+                )
+
+                pubsub = _active_pubsubs.pop(conn_id, None)
+                if pubsub:
+                    try:
+                        await pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
+                        await pubsub.close()
+                        closed_pubsub_count += 1
+                        logger.debug(
+                            "Stale pubsub connection closed by cleanup",
+                            extra={"connection_id": conn_id},
+                        )
+                    except Exception as pubsub_err:
+                        logger.warning(f"Failed to close stale pubsub: {pubsub_err}")
+            else:
+                fresh_connections.append((conn_id, start_time))
+
+        if fresh_connections:
+            _sse_connections[username] = fresh_connections
+        elif username in _sse_connections:
+            del _sse_connections[username]
+
+    tracked_ids = {cid for conns in _sse_connections.values() for cid, _ in conns}
+    orphaned_ids = set(_active_pubsubs.keys()) - tracked_ids
+    for orphan_id in orphaned_ids:
+        pubsub = _active_pubsubs.pop(orphan_id, None)
+        if pubsub:
+            try:
+                await pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
+                await pubsub.close()
+                closed_pubsub_count += 1
+                logger.debug(
+                    "Orphaned pubsub connection cleaned up",
+                    extra={"connection_id": orphan_id},
+                )
+            except Exception as pubsub_err:
+                logger.warning(f"Failed to close orphaned pubsub: {pubsub_err}")
+
+    return stale_count, closed_pubsub_count
 
 
 async def _periodic_stale_connection_cleanup():
@@ -91,65 +155,7 @@ async def _periodic_stale_connection_cleanup():
     while True:
         await asyncio.sleep(CLEANUP_INTERVAL)
         try:
-            now = time.monotonic()
-            stale_count = 0
-            closed_pubsub_count = 0
-
-            for username, connections in list(_sse_connections.items()):
-                fresh_connections = []
-                for conn_id, start_time in connections:
-                    age = now - start_time
-                    if age > IDLE_TIMEOUT and not _sse_abort_flags.get(conn_id):
-                        # Mark stale connection for abort
-                        _sse_abort_flags[conn_id] = True
-                        stale_count += 1
-                        logger.info(
-                            "Stale SSE connection marked for cleanup",
-                            extra={
-                                "connection_id": conn_id,
-                                "username": username,
-                                "age_seconds": int(age),
-                            },
-                        )
-
-                        # Directly close the pubsub connection to release
-                        # the Redis connection back to the pool immediately
-                        pubsub = _active_pubsubs.pop(conn_id, None)
-                        if pubsub:
-                            try:
-                                await pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
-                                await pubsub.close()
-                                closed_pubsub_count += 1
-                                logger.debug(
-                                    "Stale pubsub connection closed by cleanup",
-                                    extra={"connection_id": conn_id},
-                                )
-                            except Exception as pubsub_err:
-                                logger.warning(f"Failed to close stale pubsub: {pubsub_err}")
-                    else:
-                        fresh_connections.append((conn_id, start_time))
-
-                if fresh_connections:
-                    _sse_connections[username] = fresh_connections
-                elif username in _sse_connections:
-                    del _sse_connections[username]
-
-            # Also clean up orphaned pubsub entries (no longer in connection tracking)
-            tracked_ids = {cid for conns in _sse_connections.values() for cid, _ in conns}
-            orphaned_ids = set(_active_pubsubs.keys()) - tracked_ids
-            for orphan_id in orphaned_ids:
-                pubsub = _active_pubsubs.pop(orphan_id, None)
-                if pubsub:
-                    try:
-                        await pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
-                        await pubsub.close()
-                        closed_pubsub_count += 1
-                        logger.debug(
-                            "Orphaned pubsub connection cleaned up",
-                            extra={"connection_id": orphan_id},
-                        )
-                    except Exception as pubsub_err:
-                        logger.warning(f"Failed to close orphaned pubsub: {pubsub_err}")
+            stale_count, closed_pubsub_count = await _run_stale_connection_cleanup()
 
             if stale_count > 0 or closed_pubsub_count > 0:
                 total = sum(len(c) for c in _sse_connections.values())
@@ -162,7 +168,6 @@ async def _periodic_stale_connection_cleanup():
                     },
                 )
 
-                # Update active connections gauge
                 metrics.sse_connections_active.set(total)
 
         except Exception:
@@ -552,7 +557,7 @@ async def stream_reviews(
             if attempt < REDIS_PUBSUB_MAX_RETRIES:
                 delay = REDIS_PUBSUB_RETRY_BASE_DELAY * (2 ** (attempt - 1))
                 logger.warning(
-                    "Redis pub/sub init failed, retrying",
+                    f"Redis pub/sub init failed, retrying — error: {exc}",
                     extra={
                         "attempt": attempt,
                         "max_retries": REDIS_PUBSUB_MAX_RETRIES,
@@ -561,12 +566,14 @@ async def stream_reviews(
                         "error": str(exc),
                     },
                 )
+                # Trigger cleanup to free zombie connections before retrying
+                await _run_stale_connection_cleanup()
                 await asyncio.sleep(delay)
             else:
                 logger.error(
-                    "Failed to initialise Redis pub/sub for SSE after all retries",
+                    f"Failed to initialise Redis pub/sub for SSE after all retries — error: {last_exc}",
                     extra={
-                        "error": str(exc),
+                        "error": str(last_exc),
                         "username": tracking_username,
                         "attempts": REDIS_PUBSUB_MAX_RETRIES,
                     },
