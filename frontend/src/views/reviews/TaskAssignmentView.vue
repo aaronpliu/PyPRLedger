@@ -272,7 +272,7 @@
 
         <el-table-column :label="t('task_assignment.actions')" min-width="150" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" link @click="viewDetail(row.id)">
+            <el-button size="small" type="primary" link @click="viewDetail(row)">
               {{ t('task_assignment.view_details') }}
             </el-button>
             <el-button size="small" type="success" link @click="handleAssignReviewer(row)">
@@ -405,12 +405,14 @@ import type { AppInfo } from '@/api/projectRegistry'
 import FilterPopover from '@/components/common/FilterPopover.vue'
 import { usePrUrl } from '@/composables/usePrUrl'
 import { useAuthStore } from '@/stores/auth'
+import { useTaskAssignmentNavigationStore } from '@/stores/taskAssignmentNavigation'
 import { useSse } from '@/composables/useSse'
 import { type SSEReviewCreatedEvent } from '@/utils/sse'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const taskAssignmentNavigationStore = useTaskAssignmentNavigationStore()
 const { t } = useI18n()
 const { getPrUrl } = usePrUrl()
 const { sseEnabled, toggleSse, connectSse, disconnectSse } = useSse()
@@ -737,8 +739,37 @@ const loadAvailableReviewers = async (review: ReviewV2) => {
 }
 
 // View detail
-const viewDetail = (id: number) => {
-  router.push(`/task-assignment/${id}`)
+const viewDetail = (review: ReviewV2) => {
+  // Save navigation context before navigating to detail page
+  const totalPages = Math.ceil(total.value / pageSize.value)
+  const hasMorePages = currentPage.value < totalPages
+
+  const filterParams: Record<string, any> = {}
+  if (projectFilter.value) filterParams.project_key = projectFilter.value
+  if (reviewerFilter.value) filterParams.reviewer = reviewerFilter.value
+  if (statusFilter.value) filterParams.status = statusFilter.value
+  if (appFilter.value && appFilter.value.length > 0) filterParams.app_names = appFilter.value.join(',')
+  if (prUserFilter.value) filterParams.pull_request_user = prUserFilter.value
+  if (severityFilter.value) filterParams.severity = severityFilter.value
+  if (dateFrom.value) filterParams.date_from = dateFrom.value
+  if (dateTo.value) filterParams.date_to = dateTo.value
+  filterParams.hide_archived = hideDone.value
+
+  taskAssignmentNavigationStore.setContext({
+    items: reviews.value.map(item => ({
+      id: item.id,
+      projectKey: item.project_key,
+      repositorySlug: item.repository_slug,
+      pullRequestId: item.pull_request_id,
+    })),
+    currentPage: currentPage.value,
+    pageSize: pageSize.value,
+    totalItems: total.value,
+    hasMorePages,
+    filters: filterParams,
+  })
+
+  router.push(`/task-assignment/${review.id}`)
 }
 
 // Handle assign reviewer

@@ -1,16 +1,36 @@
 <template>
   <div class="task-detail-container">
-    <el-card v-loading="loading">
-      <template #header>
-        <div class="card-header">
-          <el-button @click="goBack">
-            <el-icon><Back /></el-icon>
-            {{ t('task_assignment.detail.back') }}
+    <el-page-header @back="goBack" :title="t('task_assignment.detail.back')">
+      <template #content>
+        <span class="header-content-title">{{ t('task_assignment.detail.title') }}</span>
+      </template>
+      <template #extra>
+        <div class="detail-navigation-actions">
+          <span v-if="currentReviewIndex >= 0" class="detail-navigation-position">
+            {{ t('common.page') }} {{ taskAssignmentNavStore.currentPage }} · {{ currentReviewIndex + 1 }}/{{ taskAssignmentNavStore.items.length }}
+          </span>
+          <el-button
+            class="detail-navigation-button"
+            :disabled="!canGoToPreviousPage || navigatingPage"
+            @click="goToPreviousReview"
+          >
+            <el-icon><ArrowLeft /></el-icon>
+            {{ t('reviews.detail.previous') }}
           </el-button>
-          <span>{{ t('task_assignment.detail.title') }}</span>
-          <el-tag type="info">{{ t('task_assignment.detail.review_admin') }}</el-tag>
+
+          <el-button
+            class="detail-navigation-button"
+            :disabled="!canGoToNextPage || navigatingPage"
+            @click="goToNextReview"
+          >
+            {{ t('reviews.detail.next') }}
+            <el-icon><ArrowRight /></el-icon>
+          </el-button>
         </div>
       </template>
+    </el-page-header>
+
+    <el-card v-loading="loading" class="detail-card">
 
       <div v-if="review" class="detail-content">
         <!-- PR Information -->
@@ -205,6 +225,32 @@
       </div>
     </el-card>
 
+    <!-- Floating Navigation Buttons -->
+    <div
+      v-if="taskAssignmentNavStore.items.length > 1"
+      class="floating-navigation"
+    >
+      <transition name="fade-slide">
+        <div
+          v-if="canGoToPreviousPage && !navigatingPage"
+          class="floating-nav-btn floating-nav-prev"
+          @click="goToPreviousReview"
+        >
+          <el-icon :size="20"><ArrowLeft /></el-icon>
+        </div>
+      </transition>
+
+      <transition name="fade-slide">
+        <div
+          v-if="canGoToNextPage && !navigatingPage"
+          class="floating-nav-btn floating-nav-next"
+          @click="goToNextReview"
+        >
+          <el-icon :size="20"><ArrowRight /></el-icon>
+        </div>
+      </transition>
+    </div>
+
     <!-- Assign Reviewer Dialog -->
     <el-dialog v-model="assignDialogVisible" :title="t('task_assignment.detail.assign_reviewer_dialog.title')" width="640px">
       <el-form :model="assignForm" label-width="120px">
@@ -270,23 +316,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Back, ArrowDown, CopyDocument, Link } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowLeft, ArrowRight, CopyDocument, Link } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { taskAssignmentApi, type ReviewV2 } from '@/api/taskAssignment'
 import { usersApi, type ReviewerUser } from '@/api/users'
 import CodeDiffViewer from '@/components/review/CodeDiffViewer.vue'
 import { usePrUrl } from '@/composables/usePrUrl'
+import { useTaskAssignmentNavigationStore } from '@/stores/taskAssignmentNavigation'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { getPrUrl } = usePrUrl()
+const taskAssignmentNavStore = useTaskAssignmentNavigationStore()
 
 // State
 const loading = ref(false)
+const navigatingPage = ref(false)
 const review = ref<ReviewV2 | null>(null)
 const outputFormat = ref<'line-by-line' | 'side-by-side'>('line-by-line')
 
@@ -396,6 +445,165 @@ const getAssignmentStatusDescription = (status: string | undefined | null) => {
   return t(`reviews.assignment_status_descriptions.${status}`, status)
 }
 
+// Navigation computed properties
+const currentReviewIndex = computed(() => {
+  const routeId = Number(route.params.id)
+  return taskAssignmentNavStore.items.findIndex(item => item.id === routeId)
+})
+
+const nextReview = computed(() => {
+  if (currentReviewIndex.value < 0) return null
+  return taskAssignmentNavStore.items[currentReviewIndex.value + 1] || null
+})
+
+const previousReview = computed(() => {
+  if (currentReviewIndex.value <= 0) return null
+  return taskAssignmentNavStore.items[currentReviewIndex.value - 1] || null
+})
+
+const canGoToNextPage = computed(() => {
+  return taskAssignmentNavStore.hasMorePages || (currentReviewIndex.value < taskAssignmentNavStore.items.length - 1)
+})
+
+const canGoToPreviousPage = computed(() => {
+  return taskAssignmentNavStore.currentPage > 1 || currentReviewIndex.value > 0
+})
+
+// Navigation functions
+const goToNextReview = async () => {
+  if (nextReview.value) {
+    router.replace(`/task-assignment/${nextReview.value.id}`)
+    return
+  }
+
+  if (taskAssignmentNavStore.hasMorePages && currentReviewIndex.value === taskAssignmentNavStore.items.length - 1) {
+    await loadNextPage()
+  }
+}
+
+const goToPreviousReview = async () => {
+  if (previousReview.value) {
+    router.replace(`/task-assignment/${previousReview.value.id}`)
+    return
+  }
+
+  if (taskAssignmentNavStore.currentPage > 1 && currentReviewIndex.value === 0) {
+    await loadPreviousPage()
+  }
+}
+
+const loadNextPage = async () => {
+  if (!review.value || navigatingPage.value) return
+
+  navigatingPage.value = true
+  try {
+    const nextPage = taskAssignmentNavStore.currentPage + 1
+    const params: Record<string, any> = {
+      page: nextPage,
+      page_size: taskAssignmentNavStore.pageSize,
+    }
+
+    const storedFilters = taskAssignmentNavStore.filters || {}
+    if (storedFilters.project_key) params.project_key = storedFilters.project_key
+    if (storedFilters.reviewer) params.reviewer = storedFilters.reviewer
+    if (storedFilters.status) params.status = storedFilters.status
+    if (storedFilters.app_names) params.app_names = storedFilters.app_names
+    if (storedFilters.pull_request_user) params.pull_request_user = storedFilters.pull_request_user
+    if (storedFilters.severity) params.severity = storedFilters.severity
+    if (storedFilters.date_from) params.date_from = storedFilters.date_from
+    if (storedFilters.date_to) params.date_to = storedFilters.date_to
+    if (storedFilters.hide_archived !== undefined) params.hide_archived = storedFilters.hide_archived
+
+    const response = await taskAssignmentApi.getReviews(params)
+
+    if (response.items.length === 0) {
+      ElMessage.warning('No more reviews available')
+      return
+    }
+
+    const totalPages = Math.ceil(response.total / taskAssignmentNavStore.pageSize)
+    taskAssignmentNavStore.setContext({
+      items: response.items.map(item => ({
+        id: item.id,
+        projectKey: item.project_key,
+        repositorySlug: item.repository_slug,
+        pullRequestId: item.pull_request_id,
+      })),
+      currentPage: nextPage,
+      pageSize: taskAssignmentNavStore.pageSize,
+      totalItems: response.total,
+      hasMorePages: nextPage < totalPages,
+      filters: storedFilters,
+    })
+
+    const firstReview = response.items[0]
+    if (firstReview) {
+      router.replace(`/task-assignment/${firstReview.id}`)
+    }
+  } catch (error) {
+    console.error('Failed to load next page:', error)
+    ElMessage.error('Failed to load next page')
+  } finally {
+    navigatingPage.value = false
+  }
+}
+
+const loadPreviousPage = async () => {
+  if (!review.value || navigatingPage.value) return
+
+  navigatingPage.value = true
+  try {
+    const prevPage = taskAssignmentNavStore.currentPage - 1
+    const params: Record<string, any> = {
+      page: prevPage,
+      page_size: taskAssignmentNavStore.pageSize,
+    }
+
+    const storedFilters = taskAssignmentNavStore.filters || {}
+    if (storedFilters.project_key) params.project_key = storedFilters.project_key
+    if (storedFilters.reviewer) params.reviewer = storedFilters.reviewer
+    if (storedFilters.status) params.status = storedFilters.status
+    if (storedFilters.app_names) params.app_names = storedFilters.app_names
+    if (storedFilters.pull_request_user) params.pull_request_user = storedFilters.pull_request_user
+    if (storedFilters.severity) params.severity = storedFilters.severity
+    if (storedFilters.date_from) params.date_from = storedFilters.date_from
+    if (storedFilters.date_to) params.date_to = storedFilters.date_to
+    if (storedFilters.hide_archived !== undefined) params.hide_archived = storedFilters.hide_archived
+
+    const response = await taskAssignmentApi.getReviews(params)
+
+    if (response.items.length === 0) {
+      ElMessage.warning('No more reviews available')
+      return
+    }
+
+    const totalPages = Math.ceil(response.total / taskAssignmentNavStore.pageSize)
+    taskAssignmentNavStore.setContext({
+      items: response.items.map(item => ({
+        id: item.id,
+        projectKey: item.project_key,
+        repositorySlug: item.repository_slug,
+        pullRequestId: item.pull_request_id,
+      })),
+      currentPage: prevPage,
+      pageSize: taskAssignmentNavStore.pageSize,
+      totalItems: response.total,
+      hasMorePages: prevPage < totalPages,
+      filters: storedFilters,
+    })
+
+    const lastReview = response.items[response.items.length - 1]
+    if (lastReview) {
+      router.replace(`/task-assignment/${lastReview.id}`)
+    }
+  } catch (error) {
+    console.error('Failed to load previous page:', error)
+    ElMessage.error('Failed to load previous page')
+  } finally {
+    navigatingPage.value = false
+  }
+}
+
 // Go back
 const goBack = () => {
   router.push('/task-assignment')
@@ -476,6 +684,13 @@ const copyToClipboard = (text: string) => {
   })
 }
 
+watch(
+  () => route.fullPath,
+  () => {
+    loadReview()
+  }
+)
+
 onMounted(() => {
   loadReview()
 })
@@ -486,15 +701,48 @@ onMounted(() => {
   padding: 20px;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
+.header-content-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.detail-card {
+  margin-top: 20px;
 }
 
 .detail-content {
   width: 100%;
+}
+
+/* Navigation Styles */
+.detail-navigation-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.detail-navigation-button {
+  width: 104px;
+}
+
+.detail-navigation-position {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  min-width: 104px;
+  height: 32px;
+  padding: 0 16px;
+  text-align: center;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-lighter);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* Two-column row: Reviewers (left) + AI Suggestions (right) */
@@ -627,5 +875,110 @@ onMounted(() => {
 .view-toggle-buttons {
   display: flex;
   gap: 8px;
+}
+
+/* Floating Navigation Styles */
+.floating-navigation {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.floating-nav-btn {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--el-color-primary);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  pointer-events: auto;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.floating-nav-btn:hover {
+  background: var(--el-color-primary-light-3);
+  transform: translateY(-50%) scale(1.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.floating-nav-prev {
+  left: 5px;
+}
+
+.floating-nav-next {
+  right: 5px;
+}
+
+.task-detail-container:hover .floating-nav-prev,
+.floating-navigation:hover .floating-nav-prev {
+  opacity: 1;
+  visibility: visible;
+}
+
+.task-detail-container:hover .floating-nav-next,
+.floating-navigation:hover .floating-nav-next {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Transitions */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-50%) translateX(-10px);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-50%) translateX(-10px);
+}
+
+.floating-nav-next.fade-slide-enter-from,
+.floating-nav-next.fade-slide-leave-to {
+  transform: translateY(-50%) translateX(10px);
+}
+
+/* Dark theme adjustments */
+[data-theme='dark'] .floating-nav-btn {
+  background: var(--el-color-primary-dark-2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='dark'] .floating-nav-btn:hover {
+  background: var(--el-color-primary-light-5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .floating-nav-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .floating-nav-prev {
+    left: 8px;
+  }
+
+  .floating-nav-next {
+    right: 8px;
+  }
 }
 </style>
