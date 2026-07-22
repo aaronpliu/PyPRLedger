@@ -9,6 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from redis.asyncio.client import PubSub
 from sqlalchemy import select
 
 from src.core.database import get_db_context
@@ -40,6 +41,11 @@ _sse_connections: dict[str, list[tuple[str, float]]] = {}
 # Set to True when a connection should be gracefully shut down
 _sse_abort_flags: dict[str, bool] = {}
 
+# Active pubsub objects registry: {connection_id: PubSub}
+# Allows the cleanup task to directly close Redis pubsub connections
+# when the generator's finally block hasn't run (e.g., delayed disconnect detection)
+_active_pubsubs: dict[str, PubSub] = {}
+
 # Maximum connections per user
 # Admin users get higher limit since they may access multiple pages simultaneously
 MAX_CONNECTIONS_PER_USER = 3
@@ -53,7 +59,8 @@ HEARTBEAT_INTERVAL = 30
 
 # Idle timeout — close connection if no events are sent for this duration
 # Prevents zombie connections from occupying tracked slots forever
-IDLE_TIMEOUT = 300  # 5 minutes
+# Heartbeat is sent every 30s, so 90s gives 3 missed heartbeats of tolerance
+IDLE_TIMEOUT = 90  # 90 seconds
 
 # Redis pub/sub retry configuration
 REDIS_PUBSUB_MAX_RETRIES = 3
@@ -67,19 +74,26 @@ CONNECTION_LIFETIME_WARNING = (
 # Background cleanup task handle
 _cleanup_task: asyncio.Task | None = None
 
+# Cleanup interval in seconds
+CLEANUP_INTERVAL = 30  # Run cleanup every 30 seconds
+
 
 async def _periodic_stale_connection_cleanup():
     """Background task to clean up stale SSE connections.
 
-    Runs every 60 seconds and removes connection tracking entries
-    that have exceeded the idle timeout. This prevents zombie connections
-    from accumulating and exhausting the Redis pub/sub pool.
+    Runs every CLEANUP_INTERVAL seconds and:
+    1. Sets abort flags for connections exceeding idle timeout
+    2. Directly closes Redis pubsub objects for stale connections
+       (prevents pubsub pool exhaustion when generator finally blocks
+       haven't run yet due to delayed disconnect detection)
+    3. Removes stale entries from connection tracking and pubsub registry
     """
     while True:
-        await asyncio.sleep(60)
+        await asyncio.sleep(CLEANUP_INTERVAL)
         try:
             now = time.monotonic()
             stale_count = 0
+            closed_pubsub_count = 0
 
             for username, connections in list(_sse_connections.items()):
                 fresh_connections = []
@@ -97,6 +111,21 @@ async def _periodic_stale_connection_cleanup():
                                 "age_seconds": int(age),
                             },
                         )
+
+                        # Directly close the pubsub connection to release
+                        # the Redis connection back to the pool immediately
+                        pubsub = _active_pubsubs.pop(conn_id, None)
+                        if pubsub:
+                            try:
+                                await pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
+                                await pubsub.close()
+                                closed_pubsub_count += 1
+                                logger.debug(
+                                    "Stale pubsub connection closed by cleanup",
+                                    extra={"connection_id": conn_id},
+                                )
+                            except Exception as pubsub_err:
+                                logger.warning(f"Failed to close stale pubsub: {pubsub_err}")
                     else:
                         fresh_connections.append((conn_id, start_time))
 
@@ -105,12 +134,30 @@ async def _periodic_stale_connection_cleanup():
                 elif username in _sse_connections:
                     del _sse_connections[username]
 
-            if stale_count > 0:
+            # Also clean up orphaned pubsub entries (no longer in connection tracking)
+            tracked_ids = {cid for conns in _sse_connections.values() for cid, _ in conns}
+            orphaned_ids = set(_active_pubsubs.keys()) - tracked_ids
+            for orphan_id in orphaned_ids:
+                pubsub = _active_pubsubs.pop(orphan_id, None)
+                if pubsub:
+                    try:
+                        await pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
+                        await pubsub.close()
+                        closed_pubsub_count += 1
+                        logger.debug(
+                            "Orphaned pubsub connection cleaned up",
+                            extra={"connection_id": orphan_id},
+                        )
+                    except Exception as pubsub_err:
+                        logger.warning(f"Failed to close orphaned pubsub: {pubsub_err}")
+
+            if stale_count > 0 or closed_pubsub_count > 0:
                 total = sum(len(c) for c in _sse_connections.values())
                 logger.info(
                     "SSE stale connection cleanup complete",
                     extra={
                         "stale_pruned": stale_count,
+                        "pubsub_closed": closed_pubsub_count,
                         "total_remaining": total,
                     },
                 )
@@ -127,7 +174,7 @@ async def start_sse_cleanup_task():
     global _cleanup_task
     if _cleanup_task is None or _cleanup_task.done():
         _cleanup_task = asyncio.create_task(_periodic_stale_connection_cleanup())
-        logger.info("SSE stale connection cleanup task started (interval: 60s)")
+        logger.info(f"SSE stale connection cleanup task started (interval: {CLEANUP_INTERVAL}s)")
 
 
 async def stop_sse_cleanup_task():
@@ -294,8 +341,17 @@ async def _sse_event_generator(
             extra={"connection_id": connection_id},
         )
     finally:
-        await pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
-        await pubsub.close()
+        # Clean up pubsub from registry first to prevent double-close by cleanup task
+        _active_pubsubs.pop(connection_id, None)
+
+        try:
+            await pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
+            await pubsub.close()
+        except Exception as cleanup_err:
+            logger.debug(
+                f"Pubsub cleanup warning (may already be closed): {cleanup_err}",
+                extra={"connection_id": connection_id},
+            )
 
         # Clean up abort flag
         _sse_abort_flags.pop(connection_id, None)
@@ -483,6 +539,8 @@ async def stream_reviews(
         try:
             pubsub = redis_client.pubsub()
             await pubsub.subscribe(REVIEW_CREATED_CHANNEL)
+            # Register pubsub object so cleanup task can close it if connection goes stale
+            _active_pubsubs[connection_id] = pubsub
             break
         except Exception as exc:
             last_exc = exc
