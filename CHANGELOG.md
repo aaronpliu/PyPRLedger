@@ -5,6 +5,25 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.4] - 2026-07-23
+
+**Backend Version**: 1.20.4
+**Frontend Version**: 1.15.4
+
+### Added
+- Pagination for task assignment details page
+
+### Fixed
+- SSE connection stability improvements
+- Filter persistence: keep filter when navigating back, clear on explicit clear
+
+### Changed
+- [Refactor] SSE connection handling
+- [Refactor] Git user retrieval logic
+- Update banner behavior
+
+---
+
 ## [1.20.3] - 2026-07-16
 
 **Backend Version**: 1.20.3
