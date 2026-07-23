@@ -144,6 +144,60 @@ class ProjectRegistryService:
         result = await db.execute(query)
         return list(result.scalars().all())
 
+    async def list_projects_paginated(
+        self,
+        db: AsyncSession,
+        app_name: str | None = None,
+        search: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[ProjectRegistry], int]:
+        """
+        Get paginated list of registered projects with optional filters
+
+        Args:
+            db: Database session
+            app_name: Filter by application name (optional)
+            search: Search term for project_key, repository_slug, or description (optional)
+            page: Page number (1-indexed)
+            page_size: Number of items per page
+
+        Returns:
+            Tuple of (list of ProjectRegistry entries, total count)
+        """
+        query = select(ProjectRegistry)
+
+        if app_name:
+            query = query.where(ProjectRegistry.app_name == app_name)
+
+        if search:
+            search_pattern = f"%{search}%"
+            query = query.where(
+                or_(
+                    ProjectRegistry.project_key.ilike(search_pattern),
+                    ProjectRegistry.repository_slug.ilike(search_pattern),
+                    ProjectRegistry.description.ilike(search_pattern),
+                )
+            )
+
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        query = query.order_by(
+            ProjectRegistry.app_name,
+            ProjectRegistry.project_key,
+            ProjectRegistry.repository_slug,
+        )
+
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+
+        result = await db.execute(query)
+        items = list(result.scalars().all())
+
+        return items, total
+
     async def register_project(
         self,
         app_name: str,

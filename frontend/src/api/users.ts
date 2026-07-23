@@ -22,9 +22,9 @@ export interface ReviewerListResponse {
 
 export const usersApi = {
   /**
-   * Get all Bitbucket/Git users (for task assignment - includes all users, not just reviewers)
+   * Get all git users (for task assignment - includes all users, not just reviewers)
    */
-  async getAllBitbucketUsers(params?: {
+  async getGitUsers(params?: {
     limit?: number
     username?: string
     active?: boolean
@@ -70,7 +70,7 @@ export const usersApi = {
 
   /**
    * Get all active auth users (for delegation)
-   * Returns AuthUser records (system login users), not Bitbucket users
+   * Returns AuthUser records (system login users), not git users
    */
   async getAllUsers(limit: number = 500, active?: boolean, username?: string): Promise<User[]> {
     const params: any = { limit }

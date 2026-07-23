@@ -272,7 +272,7 @@
 
         <el-table-column :label="t('task_assignment.actions')" min-width="150" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" link @click="viewDetail(row.id)">
+            <el-button size="small" type="primary" link @click="viewDetail(row)">
               {{ t('task_assignment.view_details') }}
             </el-button>
             <el-button size="small" type="success" link @click="handleAssignReviewer(row)">
@@ -289,8 +289,8 @@
         :total="total"
         :page-sizes="[10, 20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
-        @size-change="loadReviews"
-        @current-change="loadReviews"
+        @size-change="handlePageChange"
+        @current-change="handlePageChange"
         style="margin-top: 20px; justify-content: flex-end"
       />
     </el-card>
@@ -405,12 +405,14 @@ import type { AppInfo } from '@/api/projectRegistry'
 import FilterPopover from '@/components/common/FilterPopover.vue'
 import { usePrUrl } from '@/composables/usePrUrl'
 import { useAuthStore } from '@/stores/auth'
+import { useTaskAssignmentNavigationStore } from '@/stores/taskAssignmentNavigation'
 import { useSse } from '@/composables/useSse'
 import { type SSEReviewCreatedEvent } from '@/utils/sse'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const taskAssignmentNavigationStore = useTaskAssignmentNavigationStore()
 const { t } = useI18n()
 const { getPrUrl } = usePrUrl()
 const { sseEnabled, toggleSse, connectSse, disconnectSse } = useSse()
@@ -552,10 +554,62 @@ const loadProjects = async () => {
   }
 }
 
+const TASK_FILTERS_KEY = 'taskAssignmentFilters'
+
+const saveFilters = () => {
+  try {
+    const filterState = {
+      searchQuery: searchQuery.value,
+      projectFilter: projectFilter.value,
+      appFilter: appFilter.value,
+      prUserFilter: prUserFilter.value,
+      reviewerFilter: reviewerFilter.value,
+      scoredFilter: scoredFilter.value,
+      severityFilter: severityFilter.value,
+      statusFilter: statusFilter.value,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+      hideDone: hideDone.value,
+      currentPage: currentPage.value,
+    }
+    sessionStorage.setItem(TASK_FILTERS_KEY, JSON.stringify(filterState))
+  } catch { /* ignore quota errors */ }
+}
+
+const restoreFilters = () => {
+  try {
+    const stored = sessionStorage.getItem(TASK_FILTERS_KEY)
+    if (!stored) return
+    const parsed = JSON.parse(stored)
+    if (!parsed) return
+    searchQuery.value = parsed.searchQuery || ''
+    projectFilter.value = parsed.projectFilter || ''
+    // appFilter is managed by the appName route watcher and taskAssignmentApp storage
+    prUserFilter.value = parsed.prUserFilter || ''
+    reviewerFilter.value = parsed.reviewerFilter || ''
+    scoredFilter.value = parsed.scoredFilter || ''
+    severityFilter.value = parsed.severityFilter || ''
+    statusFilter.value = parsed.statusFilter || ''
+    dateFrom.value = parsed.dateFrom || ''
+    dateTo.value = parsed.dateTo || ''
+    hideDone.value = parsed.hideDone ?? true
+    currentPage.value = parsed.currentPage || 1
+  } catch { /* ignore parse errors */ }
+}
+
+const clearSavedFilters = () => {
+  sessionStorage.removeItem(TASK_FILTERS_KEY)
+  sessionStorage.removeItem('taskAssignmentApp')
+}
+
+const handlePageChange = () => {
+  saveFilters()
+  loadReviews()
+}
+
 const handleResetFilters = () => {
   searchQuery.value = ''
   appFilter.value = []
-  sessionStorage.removeItem('taskAssignmentApp')
   prUserFilter.value = ''
   reviewerFilter.value = ''
   scoredFilter.value = ''
@@ -564,6 +618,9 @@ const handleResetFilters = () => {
   projectFilter.value = ''
   dateFrom.value = ''
   dateTo.value = ''
+  hideDone.value = true
+  currentPage.value = 1
+  clearSavedFilters()
   loadReviews()
 }
 
@@ -737,8 +794,37 @@ const loadAvailableReviewers = async (review: ReviewV2) => {
 }
 
 // View detail
-const viewDetail = (id: number) => {
-  router.push(`/task-assignment/${id}`)
+const viewDetail = (review: ReviewV2) => {
+  // Save navigation context before navigating to detail page
+  const totalPages = Math.ceil(total.value / pageSize.value)
+  const hasMorePages = currentPage.value < totalPages
+
+  const filterParams: Record<string, any> = {}
+  if (projectFilter.value) filterParams.project_key = projectFilter.value
+  if (reviewerFilter.value) filterParams.reviewer = reviewerFilter.value
+  if (statusFilter.value) filterParams.status = statusFilter.value
+  if (appFilter.value && appFilter.value.length > 0) filterParams.app_names = appFilter.value.join(',')
+  if (prUserFilter.value) filterParams.pull_request_user = prUserFilter.value
+  if (severityFilter.value) filterParams.severity = severityFilter.value
+  if (dateFrom.value) filterParams.date_from = dateFrom.value
+  if (dateTo.value) filterParams.date_to = dateTo.value
+  filterParams.hide_archived = hideDone.value
+
+  taskAssignmentNavigationStore.setContext({
+    items: reviews.value.map(item => ({
+      id: item.id,
+      projectKey: item.project_key,
+      repositorySlug: item.repository_slug,
+      pullRequestId: item.pull_request_id,
+    })),
+    currentPage: currentPage.value,
+    pageSize: pageSize.value,
+    totalItems: total.value,
+    hasMorePages,
+    filters: filterParams,
+  })
+
+  router.push(`/task-assignment/${review.id}`)
 }
 
 // Handle assign reviewer
@@ -883,18 +969,32 @@ const loadAvailableApps = async () => {
 }
 
 // Load all users for PR user filter dropdown (active users only)
-const loadPRUsers = async () => {
+const loadPRUsers = async (silent: boolean = false) => {
   try {
-    prUsersLoading.value = true
-    // Fetch all active users once - cache for client-side filtering
-    const users = await usersApi.getAllBitbucketUsers({ limit: 500 })
+    if (!silent) prUsersLoading.value = true
+    const users = await usersApi.getGitUsers({ limit: 500 })
     const activeUsers = users.filter(u => u.active !== false)
-    allPRUsers.value = activeUsers
-    availablePRUsers.value = activeUsers
+
+    if (silent && allPRUsers.value.length > 0) {
+      const existingUsernames = new Set(allPRUsers.value.map(u => u.username))
+      const newUsers = activeUsers.filter(u => !existingUsernames.has(u.username))
+      if (newUsers.length > 0) {
+        allPRUsers.value = [...allPRUsers.value, ...newUsers]
+        const query = prUserFilter.value?.trim()
+        if (query) {
+          searchPRUsers(query)
+        } else {
+          availablePRUsers.value = allPRUsers.value
+        }
+      }
+    } else {
+      allPRUsers.value = activeUsers
+      availablePRUsers.value = activeUsers
+    }
   } catch (error) {
     console.error('Failed to load PR users:', error)
   } finally {
-    prUsersLoading.value = false
+    if (!silent) prUsersLoading.value = false
   }
 }
 
@@ -915,18 +1015,32 @@ const searchPRUsers = (query: string) => {
 }
 
 // Load all reviewers for filter dropdown using dedicated endpoint
-const loadReviewers = async () => {
+const loadReviewers = async (silent: boolean = false) => {
   try {
-    reviewersLoading.value = true
-    // Use dedicated /users/reviewers endpoint - returns active reviewers only
+    if (!silent) reviewersLoading.value = true
     const response = await usersApi.getReviewers(500)
     const reviewers = response.items || []
-    allReviewers.value = reviewers
-    availableReviewers.value = reviewers
+
+    if (silent && allReviewers.value.length > 0) {
+      const existingUsernames = new Set(allReviewers.value.map(u => u.username))
+      const newReviewers = reviewers.filter(u => !existingUsernames.has(u.username))
+      if (newReviewers.length > 0) {
+        allReviewers.value = [...allReviewers.value, ...newReviewers]
+        const query = reviewerFilter.value?.trim()
+        if (query) {
+          searchReviewers(query)
+        } else {
+          availableReviewers.value = allReviewers.value
+        }
+      }
+    } else {
+      allReviewers.value = reviewers
+      availableReviewers.value = reviewers
+    }
   } catch (error) {
     console.error('Failed to load reviewers:', error)
   } finally {
-    reviewersLoading.value = false
+    if (!silent) reviewersLoading.value = false
   }
 }
 
@@ -953,6 +1067,7 @@ watch(
     // Debounce the reload to avoid multiple rapid requests
     clearTimeout(filterChangeTimeout)
     filterChangeTimeout = setTimeout(() => {
+      saveFilters()
       loadReviews()
     }, 300)
   },
@@ -961,11 +1076,15 @@ watch(
 
 // Watch hideDone — reload data from server with archive filter
 watch(hideDone, () => {
+  saveFilters()
   loadReviews()
 })
 
 // Watch route appName param — handle navigation between apps
-watch(() => route.params.appName, (newAppName) => {
+watch(() => route.params.appName, (newAppName, oldAppName) => {
+  // Skip the initial immediate run — onMounted handles initial load
+  if (oldAppName === undefined && newAppName === undefined) return
+
   if (newAppName) {
     // Set filter from route param and save to storage
     appFilter.value = [newAppName as string]
@@ -980,6 +1099,7 @@ watch(() => route.params.appName, (newAppName) => {
     }
   }
   currentPage.value = 1
+  saveFilters()
   loadReviews()
 }, { immediate: true })
 
@@ -988,10 +1108,9 @@ onBeforeRouteLeave((to) => {
   if (to.name === 'TaskAssignmentDetail') {
     return
   }
-  // Clear storage when navigating away from app routes
-  // (All Tasks, or leaving task assignment entirely)
-  if (!to.path.startsWith('/task-assignment/app/')) {
-    sessionStorage.removeItem('taskAssignmentApp')
+  // Clear storage when navigating away from task assignment entirely
+  if (!to.path.startsWith('/task-assignment')) {
+    clearSavedFilters()
   }
 })
 
@@ -999,6 +1118,10 @@ let filterChangeTimeout: ReturnType<typeof setTimeout>
 
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+
+  // Restore saved filters before loading data
+  restoreFilters()
+
   loadProjects()
   loadReviews()
   loadAvailableApps()
@@ -1033,6 +1156,8 @@ function handleSSEReviewCreated(_event: SSEReviewCreatedEvent) {
   sseRefreshTimeout = setTimeout(() => {
     console.log('[TaskAssignmentView] Refreshing data after debounce')
     loadReviews(false) // Don't show loading indicator for SSE updates
+    loadPRUsers(true) // Silent reload - only adds new users without flashing
+    loadReviewers(true) // Silent reload - only adds new reviewers without flashing
     sseRefreshTimeout = null
   }, 1000) // 1 second debounce
 }

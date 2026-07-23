@@ -535,8 +535,8 @@
           :total="total"
           :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadReviews"
-          @current-change="loadReviews"
+          @size-change="handlePageChange"
+          @current-change="handlePageChange"
         />
       </div>
     </el-card>
@@ -1196,6 +1196,58 @@ const fetchAllDataForExport = async (): Promise<Review[]> => {
   }
 }
 
+const REVIEW_FILTERS_KEY = 'reviewListFilters'
+
+const saveFilters = () => {
+  try {
+    const filterState = {
+      searchQuery: searchQuery.value,
+      statusFilter: statusFilter.value,
+      appFilter: appFilter.value,
+      prUserFilter: prUserFilter.value,
+      reviewerFilter: reviewerFilter.value,
+      scoredFilter: scoredFilter.value,
+      severityFilter: severityFilter.value,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+      hideArchived: hideArchived.value,
+      pinnedOnly: pinnedOnly.value,
+      currentPage: currentPage.value,
+    }
+    sessionStorage.setItem(REVIEW_FILTERS_KEY, JSON.stringify(filterState))
+  } catch { /* ignore quota errors */ }
+}
+
+const restoreFilters = () => {
+  try {
+    const stored = sessionStorage.getItem(REVIEW_FILTERS_KEY)
+    if (!stored) return
+    const parsed = JSON.parse(stored)
+    if (!parsed) return
+    searchQuery.value = parsed.searchQuery || ''
+    statusFilter.value = parsed.statusFilter || ''
+    appFilter.value = parsed.appFilter || []
+    prUserFilter.value = parsed.prUserFilter || ''
+    reviewerFilter.value = parsed.reviewerFilter || ''
+    scoredFilter.value = parsed.scoredFilter || ''
+    severityFilter.value = parsed.severityFilter || ''
+    dateFrom.value = parsed.dateFrom || ''
+    dateTo.value = parsed.dateTo || ''
+    hideArchived.value = parsed.hideArchived ?? true
+    pinnedOnly.value = parsed.pinnedOnly ?? false
+    currentPage.value = parsed.currentPage || 1
+  } catch { /* ignore parse errors */ }
+}
+
+const clearSavedFilters = () => {
+  sessionStorage.removeItem(REVIEW_FILTERS_KEY)
+}
+
+const handlePageChange = () => {
+  saveFilters()
+  loadReviews()
+}
+
 const handleResetFilters = () => {
   searchQuery.value = ''
   appFilter.value = []
@@ -1209,6 +1261,7 @@ const handleResetFilters = () => {
   hideArchived.value = true // Reset to default (hide scored reviews)
   pinnedOnly.value = false // Reset to show all reviews
   currentPage.value = 1 // Reset to first page
+  clearSavedFilters()
   loadReviews() // Reload from backend with reset filters
 }
 
@@ -1409,18 +1462,34 @@ const loadAvailableApps = async () => {
 }
 
 // Load all PR users for filter dropdown (active users only)
-const loadPRUsers = async () => {
+const loadPRUsers = async (silent: boolean = false) => {
   try {
-    prUsersLoading.value = true
-    // Fetch all active users once - cache for client-side filtering
-    const users = await usersApi.getAllBitbucketUsers({ limit: 500 })
+    if (!silent) prUsersLoading.value = true
+    const users = await usersApi.getGitUsers({ limit: 500 })
     const activeUsers = users.filter(u => u.active !== false)
-    allPRUsers.value = activeUsers
-    availablePRUsers.value = activeUsers
+
+    if (silent && allPRUsers.value.length > 0) {
+      // SSE background refresh: only add new users, preserve existing list and search filter
+      const existingUsernames = new Set(allPRUsers.value.map(u => u.username))
+      const newUsers = activeUsers.filter(u => !existingUsernames.has(u.username))
+      if (newUsers.length > 0) {
+        allPRUsers.value = [...allPRUsers.value, ...newUsers]
+        // Re-apply current search filter if active
+        const query = prUserFilter.value?.trim()
+        if (query) {
+          searchPRUsers(query)
+        } else {
+          availablePRUsers.value = allPRUsers.value
+        }
+      }
+    } else {
+      allPRUsers.value = activeUsers
+      availablePRUsers.value = activeUsers
+    }
   } catch (error) {
     console.error('Failed to load PR users:', error)
   } finally {
-    prUsersLoading.value = false
+    if (!silent) prUsersLoading.value = false
   }
 }
 
@@ -1441,18 +1510,34 @@ const searchPRUsers = (query: string) => {
 }
 
 // Load all reviewers for filter dropdown using dedicated endpoint
-const loadReviewers = async () => {
+const loadReviewers = async (silent: boolean = false) => {
   try {
-    reviewersLoading.value = true
-    // Use dedicated /users/reviewers endpoint - returns active reviewers only
+    if (!silent) reviewersLoading.value = true
     const response = await usersApi.getReviewers(500)
     const reviewers = response.items || []
-    allReviewers.value = reviewers
-    availableReviewers.value = reviewers
+
+    if (silent && allReviewers.value.length > 0) {
+      // SSE background refresh: only add new reviewers, preserve existing list and search filter
+      const existingUsernames = new Set(allReviewers.value.map(u => u.username))
+      const newReviewers = reviewers.filter(u => !existingUsernames.has(u.username))
+      if (newReviewers.length > 0) {
+        allReviewers.value = [...allReviewers.value, ...newReviewers]
+        // Re-apply current search filter if active
+        const query = reviewerFilter.value?.trim()
+        if (query) {
+          searchReviewers(query)
+        } else {
+          availableReviewers.value = allReviewers.value
+        }
+      }
+    } else {
+      allReviewers.value = reviewers
+      availableReviewers.value = reviewers
+    }
   } catch (error) {
     console.error('Failed to load reviewers:', error)
   } finally {
-    reviewersLoading.value = false
+    if (!silent) reviewersLoading.value = false
   }
 }
 
@@ -1480,6 +1565,7 @@ watch(
     clearTimeout(filterChangeTimeout)
     filterChangeTimeout = setTimeout(() => {
       currentPage.value = 1 // Reset to first page when filters change
+      saveFilters()
       loadReviews()
     }, 300)
   },
@@ -1491,6 +1577,9 @@ let filterChangeTimeout: ReturnType<typeof setTimeout>
 // Load reviews when component mounts
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+
+  // Restore saved filters before loading data
+  restoreFilters()
 
   // Check for query parameters from notification navigation
   const prId = route.query.pr_id as string | undefined
@@ -1537,6 +1626,8 @@ function handleSSEReviewCreated(event: SSEReviewCreatedEvent) {
   sseRefreshTimeout = setTimeout(() => {
     console.log('[ReviewListView] Refreshing data after debounce')
     loadReviews(false) // Don't show loading indicator for SSE updates
+    loadPRUsers(true) // Silent reload - only adds new users without flashing
+    loadReviewers(true) // Silent reload - only adds new reviewers without flashing
     sseRefreshTimeout = null
   }, 1000) // 1 second debounce
 }

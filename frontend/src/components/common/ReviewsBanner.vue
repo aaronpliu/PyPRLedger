@@ -78,9 +78,6 @@ onMounted(async () => {
 
 <style scoped>
 .reviews-banner {
-  position: sticky;
-  top: 0;
-  z-index: 10;
   flex-shrink: 0;
   height: 28px;
   background: linear-gradient(135deg, var(--el-color-primary), #6366f1);

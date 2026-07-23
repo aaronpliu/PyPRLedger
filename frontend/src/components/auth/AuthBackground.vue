@@ -7,16 +7,13 @@
         v-show="currentBgIndex === index"
         class="background-wrapper"
       >
-        <!-- Use img tag for crisp, high-quality rendering -->
         <img
-          v-if="!bg.isGradient"
           :src="bg.url"
           :alt="bg.title"
           class="background-image"
           loading="eager"
           decoding="async"
         />
-        <div v-else class="background-gradient"></div>
         <div class="background-overlay"></div>
       </div>
     </transition-group>
@@ -46,23 +43,13 @@ interface BackgroundImage {
   id: string
   url: string
   title: string
-  isGradient?: boolean
 }
 
 // Automatically load all images from /public/auth-bg/ directory
 // This uses Vite's import.meta.glob to discover images at build time
 const loadBackgroundImages = (): BackgroundImage[] => {
-  const backgrounds: BackgroundImage[] = [
-    {
-      id: 'abstract-gradient',
-      url: '',
-      title: 'Abstract Gradient',
-      isGradient: true,
-    },
-  ]
+  const backgrounds: BackgroundImage[] = []
 
-  // Import all image files from /public/auth-bg/ directory
-  // Supported formats: jpg, jpeg, png, gif, webp, svg
   const imageModules = import.meta.glob('/public/auth-bg/*.{jpg,jpeg,png,gif,webp,svg}')
   
   Object.keys(imageModules).forEach((path) => {
@@ -163,53 +150,22 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  /* Use object-fit for better quality than background-size */
   object-fit: cover;
   object-position: center;
-  /* CRITICAL: Force highest quality rendering */
   image-rendering: -webkit-optimize-contrast !important;
   image-rendering: crisp-edges !important;
   image-rendering: high-quality !important;
-  image-rendering: pixelated !important; /* Fallback */
-  /* Disable any browser smoothing/compression */
+  image-rendering: pixelated !important;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   transform: translateZ(0);
   will-change: transform;
   transition: transform 8s ease-out;
-  /* Ensure the image is rendered at full resolution */
   min-width: 100%;
   min-height: 100%;
 }
 
 .background-wrapper[style*="display: block"] .background-image {
-  transform: scale(1.05);
-}
-
-.background-gradient {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-  background-size: 400% 400%;
-  animation: gradient-shift 15s ease infinite;
-}
-
-@keyframes gradient-shift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.background-image[style*="display: block"] {
   transform: scale(1.05);
 }
 

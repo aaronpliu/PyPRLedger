@@ -9,9 +9,9 @@ export function useLanguage() {
   const availableLanguages = [
     { code: 'en', name: 'English', flag: '🇺🇸' },
     { code: 'zh-CN', name: '简体中文', flag: '🇨🇳' },
-    { code: 'zh-TW', name: '繁體中文', flag: '🇹🇼' },
+    { code: 'zh-TW', name: '繁體中文', flag: '🇨🇳' },
   ]
-
+ 
   const setLanguage = (lang: string) => {
     locale.value = lang
     localStorage.setItem('language', lang)
