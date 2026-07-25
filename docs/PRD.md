@@ -71,7 +71,7 @@ Organizations using multiple Git providers lack a unified view of code review ac
 | Multi-Reviewer System | Multiple reviewers per PR, independent assignment tracking |
 | Auto-Assignment Engine | Rule-based automatic reviewer assignment with conditions |
 | Review Scoring | File-level and PR-level scoring, analytics |
-| User Management | Git users (from providers) + Auth users (system login) |
+| User Management | Git users (from providers) + Auth users (system login) + auto-binding by username |
 | Project Management | Projects, repositories, project registry (virtual app grouping) |
 | RBAC | Role-based access control with delegation support |
 | Notifications | In-app notifications with preference management |
@@ -114,6 +114,7 @@ system_admin
 | Create auto-assignment rules | ❌ | ❌ | ✅ | ✅ |
 | Manage users (Git) | ❌ | ❌ | ❌ | ✅ |
 | Manage auth users | ❌ | ❌ | ❌ | ✅ |
+| Bind/unbind Git↔Auth users | ❌ | ❌ | ❌ | ✅ |
 | Manage roles & permissions | ❌ | ❌ | ❌ | ✅ |
 | Manage project registry | ❌ | ❌ | ❌ | ✅ |
 | Manage system settings | ❌ | ❌ | ❌ | ✅ |
@@ -354,7 +355,7 @@ Review Created (no reviewer)
 | ID | Requirement | Priority |
 |---|---|---|
 | FR-5.5.7 | Auth users are system login accounts with password authentication | P0 |
-| FR-5.5.8 | Optional link to Git user via `user_id` (auto-linked by username) | P0 |
+| FR-5.5.8 | Optional link to Git user via `user_id` FK on `auth_user` table | P0 |
 | FR-5.5.9 | JWT-based authentication with access + refresh tokens | P0 |
 | FR-5.5.10 | Access token expiry configurable (default 30 min) | P0 |
 | FR-5.5.11 | Refresh token idle timeout (default 120 min) | P0 |
@@ -362,6 +363,71 @@ Review Created (no reviewer)
 | FR-5.5.13 | Avatar upload support (JPEG, PNG, WebP, GIF; max 5MB) | P2 |
 | FR-5.5.14 | Admin can delete auth user (cascades to roles, audit, PATs; preserves Git user) | P1 |
 | FR-5.5.15 | Activate/deactivate auth user accounts | P0 |
+
+#### 5.5.3 Git User ↔ Auth User Auto-Binding
+
+**Description**: The system maintains a bidirectional link between Git users (external identities from Bitbucket/GitHub) and Auth users (system login accounts). Binding is based on **username matching** and can occur automatically or manually, regardless of which user type was created first.
+
+**Core Principle**: A Git user and an Auth user with the **same username** are always bound together, whether the binding happens at registration time, at review insert time, or via manual admin action.
+
+**Functional Requirements:**
+
+| ID | Requirement | Priority |
+|---|---|---|
+| FR-5.5.16 | **Auto-bind on Auth user registration**: When a new Auth user registers, the system SHALL check if a Git user with the same `username` already exists. If found, the Auth user's `user_id` FK SHALL be automatically set to that Git user's `id` | P0 |
+| FR-5.5.17 | **Auto-bind on Git user creation (review insert)**: When a new Git user is auto-created during review entity sync (incoming review from Git provider), the system SHALL check if an Auth user with the same `username` already exists. If found, the Auth user's `user_id` FK SHALL be automatically set to the new Git user's `id` | P0 |
+| FR-5.5.18 | **Idempotent binding**: If the Auth user already has a `user_id` set (already bound), the system SHALL NOT overwrite the existing binding — no silent re-binding | P0 |
+| FR-5.5.19 | **Username uniqueness across types**: The system SHALL enforce that at most one Git user and one Auth user share the same `username`. Binding always pairs these two | P0 |
+| FR-5.5.20 | **Manual bind by admin**: System admin SHALL be able to manually bind an unbound Auth user to an unbound Git user (or rebind if currently unbound) via a dedicated API endpoint | P0 |
+| FR-5.5.21 | **Manual unbind by admin**: System admin SHALL be able to remove the binding (set `auth_user.user_id = NULL`) without deleting either user | P1 |
+| FR-5.5.22 | **Binding visibility**: Both frontend admin views (Git user management, Auth user management) SHALL display the binding status (bound/unbound) and the linked counterpart's username | P1 |
+| FR-5.5.23 | **Cascade on Git user deletion**: When a bound Git user is deleted, the Auth user's `user_id` SHALL be set to NULL (unbound), but the Auth user account SHALL remain active | P0 |
+| FR-5.5.24 | **Cascade on Auth user deletion**: When a bound Auth user is deleted, the Git user SHALL remain intact (no effect on Git user) | P0 |
+| FR-5.5.25 | **No duplicate username conflict**: When registering an Auth user, if a Git user with the same username exists, registration SHALL succeed (not fail with duplicate username) — the existing Git user is auto-bound | P0 |
+| FR-5.5.26 | **No duplicate username conflict (reverse)**: When entity sync creates a Git user, if an Auth user with the same username exists, sync SHALL succeed (not fail) — the new Git user is auto-bound to the existing Auth user | P0 |
+
+**Auto-Binding Flow — Auth User Registration First:**
+```
+Auth User registers (username="jsmith")
+    → Check: does Git user with username="jsmith" exist?
+    → YES: Set auth_user.user_id = git_user.id  (auto-bound)
+    → NO:  auth_user.user_id remains NULL (unbound)
+           → Later: Git user "jsmith" created via review sync
+           → Check: does Auth user with username="jsmith" exist and unbound?
+           → YES: Set auth_user.user_id = git_user.id  (auto-bound retroactively)
+```
+
+**Auto-Binding Flow — Git User Created First:**
+```
+Review inserted → Entity sync creates Git user (username="jsmith")
+    → Check: does Auth user with username="jsmith" exist?
+    → YES and unbound: Set auth_user.user_id = git_user.id  (auto-bound)
+    → YES and already bound: Skip (idempotent, no overwrite)
+    → NO:  Git user exists unbound
+           → Later: Auth user "jsmith" registers
+           → Check: does Git user with username="jsmith" exist?
+           → YES: Set auth_user.user_id = git_user.id  (auto-bound retroactively)
+```
+
+**Manual Binding Flow (Admin):**
+```
+Admin POST /api/v1/users/binding/bind
+    { auth_user_id: 5, git_user_id: 12 }
+    → Validate: both users exist
+    → Validate: both users are currently unbound (user_id is NULL)
+    → Validate: both users share the same username
+    → Set auth_user.user_id = git_user.id
+    → Return 200 with updated auth user
+    → Log action in audit trail
+```
+
+**Business Rules:**
+- Binding is always 1:1 — one Auth user to one Git user
+- Binding is based solely on username match (case-sensitive)
+- Auto-binding never fails the parent operation (registration or sync succeeds even if binding fails)
+- Binding failures are logged as warnings but do not block user creation
+- Admin manual binding requires both users to have matching usernames
+- Unbinding (manual or cascade) does not delete either user account
 
 ### 5.6 Project & Repository Management
 
@@ -557,18 +623,24 @@ Request: GET /reviews?app_names=member,tv
 │             │     │  (RBAC + Delegation) │              │
 └──────┬──────┘     └──────────────────────┘              │
        │                                                   │
-┌──────┴──────┐     ┌──────────────────────┐              │
-│  User (Git) │>────│  Review Base         │──────────────┘
-│             │     │  (FK SET NULL)       │
-└─────────────┘     └──────────────────────┘
+       │  user_id (FK, auto-bind by username)              │
+       ├──────────────────────────────────────┐            │
+       │         (0..1 ↔ 0..1 binding)        │            │
+       │                                      │            │
+┌──────┴──────┐     ┌──────────────────────┐  │           │
+│  User (Git) │>────│  Review Base         │──┘           │
+│             │     │  (FK SET NULL)       │              │
+└─────────────┘     └──────────────────────┘              │
 ```
+
+**Binding Relationship**: `auth_user.user_id` → `user.id` (nullable FK). Auto-set on registration or entity sync when usernames match. Admin can bind/unbind manually.
 
 ### 6.2 Database Tables
 
 | Table | Purpose | Key Fields |
 |---|---|---|
 | `user` | Git users from providers | `id`, `user_id`, `username`, `display_name`, `email_address`, `active`, `is_reviewer` |
-| `auth_user` | System login users | `id`, `username`, `email`, `password_hash`, `user_id` (FK→user), `is_active`, `must_change_password`, `avatar_url` |
+| `auth_user` | System login users | `id`, `username`, `email`, `password_hash`, `user_id` (FK→user, auto-bind by username), `is_active`, `must_change_password`, `avatar_url` |
 | `project` | Code review projects | `id`, `project_id`, `project_name`, `project_key`, `project_url`, `git_provider` |
 | `repository` | Repos per project | `id`, `repository_id`, `project_key` (FK), `repository_name`, `repository_slug` |
 | `pull_request_review_base` | PR review records | `id`, `pull_request_id`, `project_key` (FK), `repository_slug` (FK), `source_filename`, `source_branch`, `target_branch`, `git_code_diff` (MEDIUMTEXT), `pull_request_status`, `pull_request_user` (FK→user, SET NULL), `ai_review_id` |
@@ -603,6 +675,8 @@ Request: GET /reviews?app_names=member,tv
 6. **MEDIUMTEXT for Diffs**: Code diff field uses MySQL MEDIUMTEXT (up to 16MB) to handle large pull request diffs.
 
 7. **Multi-Reviewer via Assignment Table**: Instead of a single reviewer column, a separate assignment table enables N reviewers per review with independent status tracking.
+
+8. **Auto-Binding of Git Users and Auth Users**: The `auth_user.user_id` FK to the `user` (Git user) table is auto-populated when usernames match — at Auth user registration or Git user entity sync time. This ensures seamless identity linkage regardless of creation order. Admins can also bind/unbind manually.
 
 ---
 
@@ -691,6 +765,14 @@ Request: GET /reviews?app_names=member,tv
 | DELETE | `/{id}` | Delete (preserves reviews) | system_admin |
 | GET | `/reviewers` | List active reviewers | JWT/PAT |
 | PATCH | `/{id}/toggle-reviewer` | Toggle reviewer flag | system_admin |
+
+#### User Binding (`/api/v1/users/binding`)
+
+| Method | Path | Description | Auth |
+|---|---|---|---|
+| POST | `/bind` | Manually bind Auth user ↔ Git user (by username match) | system_admin |
+| POST | `/unbind` | Remove binding (set `auth_user.user_id = NULL`) | system_admin |
+| GET | `/status` | Get binding status for a user (auth or git) | system_admin |
 
 #### RBAC (`/api/v1/roles`, `/api/v1/rbac`)
 
@@ -795,8 +877,8 @@ Request: GET /reviews?app_names=member,tv
 | `/notifications/preferences` | Notification preferences | Authenticated |
 | `/profile` | User profile | Authenticated |
 | `/myadmin/` | Admin dashboard | system_admin |
-| `/myadmin/system-users` | Auth user management | system_admin |
-| `/myadmin/git-users` | Git user management | system_admin |
+| `/myadmin/system-users` | Auth user management (with Git binding status) | system_admin |
+| `/myadmin/git-users` | Git user management (with Auth binding status) | system_admin |
 | `/myadmin/roles` | Role management | system_admin |
 | `/myadmin/delegations` | Delegation management | system_admin |
 | `/myadmin/audit` | Audit log viewer | system_admin |
@@ -995,6 +1077,7 @@ Standalone `monitoring/` directory with independent Docker Compose:
 | **Score** | A quality rating (0–10) given by a reviewer for a review or file |
 | **Git User** | A user identity synced from an external Git provider (Bitbucket/GitHub) |
 | **Auth User** | A system login account with password and JWT authentication |
+| **User Binding** | The 1:1 link between a Git user and an Auth user with the same username, established automatically or manually |
 | **Project** | A code project identified by `project_key` (e.g., "PROJ-A") |
 | **Repository** | A code repository within a project, identified by `repository_slug` |
 | **App Name** | A virtual grouping label resolved via project registry |
