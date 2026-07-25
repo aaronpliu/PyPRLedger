@@ -138,6 +138,7 @@ Role holders (review_admin, system_admin) can delegate their permissions to othe
 - Delegations can be scoped to specific resources
 - Delegations can be revoked before expiration
 - Delegation status lifecycle: `pending` → `active` → `expired` / `revoked`
+- Delegations can be listed (all or per-user) and cleaned up when expired
 
 ---
 
@@ -269,11 +270,16 @@ Redis PubSub → SSEBroker (singleton) → asyncio.Queue per client → SSE stre
 | FR-5.1.9 | System SHALL support `page_size=0` sentinel for full dataset retrieval (export) | P1 |
 | FR-5.1.10 | Code diff field supports MEDIUMTEXT (up to 16MB) for large diffs | P1 |
 | FR-5.1.11 | AI review ID tracking for associating AI-generated suggestions | P2 |
+| FR-5.1.12 | Trend endpoints: reviewer activity, score trends, good suggestions, project/repo activity | P2 |
+| FR-5.1.13 | Review by status filter endpoint (`/status/{review_status}`) | P1 |
+| FR-5.1.14 | Public ID (obfuscated) variants for get, pin, associate operations | P2 |
 
 **Business Rules:**
 - Reviews are never physically deleted (soft delete only)
 - Deleting a Git user sets `pull_request_user` to NULL (preserves review history)
 - Upsert matches on composite key `(pull_request_id, project_key, repository_slug, source_filename)`
+- Raw incoming payloads stored in `pull_request_review_raw` table for validation audit
+- Review validation: admin can view raw records, see validation summary, and retry failed records
 
 ### 5.2 Multi-Reviewer System
 
@@ -290,6 +296,7 @@ Redis PubSub → SSEBroker (singleton) → asyncio.Queue per client → SSE stre
 | FR-5.2.5 | Manual assignment by review_admin via task assignment endpoints | P0 |
 | FR-5.2.6 | Automatic assignment via auto-assignment engine when no reviewer specified | P1 |
 | FR-5.2.7 | Deleting a reviewer (Git user) sets assignment's reviewer to NULL | P1 |
+| FR-5.2.8 | `my-tasks` endpoint: users can view their own assigned reviews | P1 |
 
 ### 5.3 Auto-Assignment Engine
 
@@ -334,6 +341,9 @@ Review Created (no reviewer)
 | FR-5.4.6 | Scores support soft delete with `active` flag | P1 |
 | FR-5.4.7 | Deleting a reviewer sets score's reviewer to NULL (preserves data) | P1 |
 | FR-5.4.8 | Score trends endpoint for analytics over time | P2 |
+| FR-5.4.9 | Score summary endpoint (aggregated stats) | P1 |
+| FR-5.4.10 | Paginated score list with filters (`/scores/list`) | P1 |
+| FR-5.4.11 | Batch delete scores (`/scores/batch-delete`) | P1 |
 
 ### 5.5 User Management
 
@@ -440,6 +450,12 @@ Admin POST /api/v1/users/binding/bind
 | FR-5.6.3 | Project statistics endpoint (review counts, reviewer counts) | P1 |
 | FR-5.6.4 | Unpaginated project list for dropdown menus | P2 |
 | FR-5.6.5 | Entity sync auto-creates projects/repos from Git provider data | P1 |
+| FR-5.6.6 | Active projects filter endpoint | P1 |
+| FR-5.6.7 | Project search endpoint | P1 |
+| FR-5.6.8 | Top projects by review count and reviewer count | P2 |
+| FR-5.6.9 | Project activate/deactivate lifecycle | P1 |
+| FR-5.6.10 | Per-project counts: repositories, reviews, reviewers | P1 |
+| FR-5.6.11 | Lookup by name (`/name/{project_name}`) and internal ID (`/id/{project_id}`) | P1 |
 
 ### 5.7 Project Registry (Virtual App Grouping)
 
@@ -476,6 +492,12 @@ Request: GET /reviews?app_names=member,tv
 | FR-5.8.3 | Refresh token stored in Redis session store | P0 |
 | FR-5.8.4 | Token refresh endpoint rotates both tokens | P0 |
 | FR-5.8.5 | Expired/invalid tokens return 401 | P0 |
+| FR-5.8.5a | Logout revokes server-side refresh session | P0 |
+| FR-5.8.5b | Users can view and revoke their own active sessions | P1 |
+| FR-5.8.5c | Admins can list all sessions and revoke any session | P1 |
+| FR-5.8.5d | Password change endpoint (old + new password) | P0 |
+| FR-5.8.5e | Admin password reset with optional force-change-on-next-login | P1 |
+| FR-5.8.5f | GET `/auth/me` returns current user profile info | P0 |
 
 #### 5.8.2 Personal Access Tokens (PAT)
 
@@ -496,6 +518,7 @@ Request: GET /reviews?app_names=member,tv
 | FR-5.8.13 | Role assignments support resource scope (global/project/repository) | P0 |
 | FR-5.8.14 | Custom roles can be created by system_admin | P1 |
 | FR-5.8.15 | Permission checks at endpoint level via `Depends()` | P0 |
+| FR-5.8.16 | RBAC manages runtime settings: LLM config, registration toggle, reviews page banner | P1 |
 
 ### 5.9 Notifications
 
@@ -509,6 +532,11 @@ Request: GET /reviews?app_names=member,tv
 | FR-5.9.6 | Mark as read / mark all as read | P1 |
 | FR-5.9.7 | Notification retention with configurable expiry (default 30 days) | P2 |
 | FR-5.9.8 | Real-time delivery via SSE when client is connected | P1 |
+| FR-5.9.9 | Unread count endpoint for badge display | P1 |
+| FR-5.9.10 | Notification statistics (by priority, by type) | P1 |
+| FR-5.9.11 | Delete individual notifications | P1 |
+| FR-5.9.12 | Test notification endpoint for debugging | P2 |
+| FR-5.9.13 | Preferences updated per notification type (not bulk) | P1 |
 
 ### 5.10 Real-Time Events (SSE)
 
@@ -555,15 +583,18 @@ Request: GET /reviews?app_names=member,tv
 | FR-5.13.2 | Audit logs queryable with filters (user, action, date range) | P1 |
 | FR-5.13.3 | Audit logs exportable to CSV | P2 |
 | FR-5.13.4 | Only system_admin can access audit logs | P1 |
+| FR-5.13.5 | Audit log statistics endpoint (`/audit/stats`) | P1 |
+| FR-5.13.6 | Get specific audit log entry by ID (`/audit/logs/{log_id}`) | P1 |
 
 ### 5.14 LLM Proxy (PageAgent)
 
 | ID | Requirement | Priority |
 |---|---|---|
 | FR-5.14.1 | Backend proxy for AI-powered code review analysis | P2 |
-| FR-5.14.2 | Configuration via system_settings table (override env vars) | P2 |
+| FR-5.14.2 | Configuration via RBAC settings endpoints (backed by system_settings table) | P2 |
 | FR-5.14.3 | Streaming response support for LLM interactions | P2 |
 | FR-5.14.4 | API key secured in backend (never exposed to frontend) | P2 |
+| FR-5.14.5 | Generic proxy path (`/llm/proxy/{path}`) forwards to configured LLM provider | P2 |
 
 ### 5.15 ID Obfuscation
 
@@ -702,22 +733,43 @@ Request: GET /reviews?app_names=member,tv
 | Method | Path | Description | Auth |
 |---|---|---|---|
 | POST | `/` | Create/update review (upsert) | JWT/PAT |
+| POST | `/assign` | Create review with auto-assignment | JWT/PAT |
 | GET | `/` | List reviews with filters | JWT/PAT |
 | GET | `/{project_key}/{repo_slug}/{pr_id}` | Get reviews by composite key | JWT/PAT |
+| GET | `/{review_id}` | Get review by internal ID | JWT/PAT |
+| GET | `/by-public-id/{public_id}` | Get review by obfuscated public ID | JWT/PAT |
+| GET | `/project/{project_key}` | Reviews by project | JWT/PAT |
+| GET | `/reviewer/{username}` | Reviews by reviewer | JWT/PAT |
+| GET | `/status/{review_status}` | Reviews by status | JWT/PAT |
 | PUT | `/{project_key}/{repo_slug}/{pr_id}` | Update review | JWT/PAT |
 | PATCH | `/{project_key}/{repo_slug}/{pr_id}/status` | Update status | JWT/PAT |
 | DELETE | `/{project_key}/{repo_slug}/{pr_id}` | Soft delete | JWT/PAT |
+| GET | `/statistics` | Review statistics | JWT/PAT |
+| GET | `/ai-review/{ai_review_id}` | Get AI review by ID | JWT/PAT |
 | POST | `/{id}/pin` | Pin a review | JWT/PAT |
+| GET | `/{id}/pin` | Get pin status | JWT/PAT |
 | DELETE | `/{id}/pin` | Unpin a review | JWT/PAT |
+| POST | `/by-public-id/{public_id}/pin` | Pin by public ID | JWT/PAT |
+| GET | `/by-public-id/{public_id}/pin` | Get pin status by public ID | JWT/PAT |
+| DELETE | `/by-public-id/{public_id}/pin` | Unpin by public ID | JWT/PAT |
 | POST | `/{id}/associate/{target_id}` | Link reviews | JWT/PAT |
 | DELETE | `/{id}/associate/{target_id}` | Unlink reviews | JWT/PAT |
-| GET | `/statistics` | Review statistics | JWT/PAT |
-| GET | `/project/{project_key}` | Reviews by project | JWT/PAT |
-| GET | `/reviewer/{username}` | Reviews by reviewer | JWT/PAT |
+| POST | `/by-public-id/{public_id}/associate/{target_public_id}` | Link reviews by public IDs | JWT/PAT |
+| DELETE | `/by-public-id/{public_id}/associate/{target_public_id}` | Unlink reviews by public IDs | JWT/PAT |
+| PUT | `/score` | Upsert review score | JWT/PAT |
+| GET | `/scores` | List all scores | JWT/PAT |
+| GET | `/scores/summary` | Score summary (aggregated) | JWT/PAT |
+| GET | `/scores/list` | Paginated score list with filters | JWT/PAT |
+| GET | `/score/{reviewer}` | Get score by reviewer | JWT/PAT |
+| DELETE | `/score/{reviewer}` | Delete score by reviewer | JWT/PAT |
+| POST | `/scores/batch-delete` | Batch delete scores | JWT/PAT |
 | GET | `/trends/reviewer-activity` | Reviewer activity trends | JWT/PAT |
 | GET | `/trends/score-trends` | Score trends | JWT/PAT |
-| PUT | `/score` | Upsert review score | JWT/PAT |
-| DELETE | `/score/{reviewer}` | Delete score | JWT/PAT |
+| GET | `/trends/good-suggestions` | Good suggestions trends | JWT/PAT |
+| GET | `/trends/project-repo-activity` | Project/repo activity trends | JWT/PAT |
+| GET | `/validation/summary` | Review validation summary | review_admin |
+| GET | `/validation/raw/{raw_record_id}` | Get raw validation record | review_admin |
+| POST | `/validation/retry/{raw_record_id}` | Retry failed raw record | review_admin |
 
 #### Auto-Assignment Rules (`/api/v1/auto-task-assignment/rules`)
 
@@ -735,24 +787,40 @@ Request: GET /reviews?app_names=member,tv
 | Method | Path | Description | Auth |
 |---|---|---|---|
 | GET | `/` | List reviews with assignments | review_admin |
+| GET | `/my-tasks` | List current user's assigned tasks | JWT/PAT |
 | GET | `/{id}` | Get review with assignments | review_admin |
 | POST | `/{id}/assign` | Assign reviewer | review_admin |
 | DELETE | `/{id}/assign/{reviewer}` | Remove reviewer | review_admin |
+| DELETE | `/{id}` | Delete review assignment | review_admin |
 | PATCH | `/assignments/{id}/status` | Update assignment status | review_admin |
 
-#### Auth (`/api/v1/users/auth`)
+#### Authentication (`/api/v1/auth`)
 
 | Method | Path | Description | Auth |
 |---|---|---|---|
-| POST | `/register` | Register new user | Public |
 | POST | `/login` | Login (returns JWT) | Public |
+| POST | `/register` | Register new user | Public |
 | POST | `/refresh` | Refresh tokens | JWT |
+| GET | `/me` | Get current user info | JWT |
+| POST | `/change-password` | Change password | JWT |
+| POST | `/logout` | Logout (revoke session) | JWT |
+| GET | `/sessions/me` | List my active sessions | JWT |
+| DELETE | `/sessions/me/{session_id}` | Revoke one of my sessions | JWT |
+
+#### Auth User Management (`/api/v1/users/auth`)
+
+| Method | Path | Description | Auth |
+|---|---|---|---|
 | GET | `/` | List auth users | system_admin |
+| POST | `/create` | Create auth user | system_admin |
 | DELETE | `/{id}` | Delete auth user | system_admin |
 | PATCH | `/{id}/activate` | Activate user | system_admin |
 | PATCH | `/{id}/deactivate` | Deactivate user | system_admin |
 | POST | `/{username}/avatar` | Upload avatar | JWT |
 | DELETE | `/{username}/avatar` | Delete avatar | JWT |
+| POST | `/users/{auth_user_id}/reset-password` | Admin reset password | system_admin |
+| GET | `/sessions` | List all sessions (admin) | system_admin |
+| DELETE | `/sessions/{session_id}` | Revoke session (admin) | system_admin |
 
 #### Git Users (`/api/v1/users/git`)
 
@@ -760,10 +828,13 @@ Request: GET /reviews?app_names=member,tv
 |---|---|---|---|
 | POST | `/` | Create Git user | system_admin |
 | GET | `/` | List Git users | JWT/PAT |
+| GET | `/active` | List active Git users | JWT/PAT |
+| GET | `/reviewers` | List active reviewers | JWT/PAT |
+| GET | `/statistics` | Git user statistics | JWT/PAT |
 | GET | `/{id}` | Get by ID | JWT/PAT |
+| GET | `/username/{username}` | Get by username | JWT/PAT |
 | PUT | `/{id}` | Update | system_admin |
 | DELETE | `/{id}` | Delete (preserves reviews) | system_admin |
-| GET | `/reviewers` | List active reviewers | JWT/PAT |
 | PATCH | `/{id}/toggle-reviewer` | Toggle reviewer flag | system_admin |
 
 #### User Binding (`/api/v1/users/binding`)
@@ -774,37 +845,69 @@ Request: GET /reviews?app_names=member,tv
 | POST | `/unbind` | Remove binding (set `auth_user.user_id = NULL`) | system_admin |
 | GET | `/status` | Get binding status for a user (auth or git) | system_admin |
 
-#### RBAC (`/api/v1/roles`, `/api/v1/rbac`)
+#### RBAC (`/api/v1/rbac`)
 
 | Method | Path | Description | Auth |
 |---|---|---|---|
-| GET/POST | `/roles` | List/create roles | system_admin |
-| GET/PUT/DELETE | `/roles/{id}` | Get/update/delete role | system_admin |
-| POST | `/users/{id}/roles` | Assign role | system_admin |
-| DELETE | `/users/{id}/roles/{role_id}` | Revoke role | system_admin |
+| GET | `/roles` | List all roles | system_admin |
+| POST | `/roles` | Create role | system_admin |
+| GET | `/roles/{id}` | Get role | system_admin |
+| PUT | `/roles/{id}` | Update role | system_admin |
+| DELETE | `/roles/{id}` | Delete role | system_admin |
+| POST | `/users/{id}/roles` | Assign role to user | system_admin |
+| DELETE | `/users/{id}/roles/{role_id}` | Revoke role from user | system_admin |
 | GET | `/users/{id}/roles` | Get user roles | system_admin |
-| POST | `/rbac/delegations` | Delegate role | review_admin |
-| PATCH | `/rbac/delegations/{id}/revoke` | Revoke delegation | review_admin |
+| GET | `/settings/llm` | Get LLM proxy settings | system_admin |
+| PUT | `/settings/llm` | Update LLM proxy settings | system_admin |
+| GET | `/settings/registration-enabled` | Get registration toggle | system_admin |
+| PUT | `/settings/registration-enabled` | Set registration toggle | system_admin |
+| GET | `/settings/banner` | Get reviews page banner config | system_admin |
+| PUT | `/settings/banner` | Update reviews page banner config | system_admin |
+
+#### Role Delegations (`/api/v1/rbac/delegations`)
+
+| Method | Path | Description | Auth |
+|---|---|---|---|
+| POST | `/` | Create delegation | review_admin |
+| GET | `/` | List delegations | review_admin |
+| GET | `/users/{user_id}` | Get delegations for user | review_admin |
+| DELETE | `/{assignment_id}` | Revoke delegation | review_admin |
+| POST | `/cleanup-expired` | Clean up expired delegations | system_admin |
 
 #### Projects (`/api/v1/projects`)
 
 | Method | Path | Description | Auth |
 |---|---|---|---|
 | POST | `/` | Create project | system_admin |
-| GET | `/` | List projects | JWT/PAT |
+| GET | `/` | List projects (paginated) | JWT/PAT |
 | GET | `/all` | All projects (unpaginated) | JWT/PAT |
-| GET | `/key/{project_key}` | Get by key | JWT/PAT |
-| GET | `/key/{project_key}/repositories` | List repos | JWT/PAT |
-| PUT | `/{id}` | Update | system_admin |
-| DELETE | `/{id}` | Delete | system_admin |
+| GET | `/active` | Active projects only | JWT/PAT |
+| GET | `/search` | Search projects | JWT/PAT |
 | GET | `/statistics` | Project statistics | JWT/PAT |
+| GET | `/top/reviews` | Top projects by review count | JWT/PAT |
+| GET | `/top/reviewers` | Top projects by reviewer count | JWT/PAT |
+| GET | `/{project_id}` | Get project detail | JWT/PAT |
+| GET | `/id/{project_id}` | Get project by internal ID | JWT/PAT |
+| GET | `/key/{project_key}` | Get by key | JWT/PAT |
+| GET | `/name/{project_name}` | Get by name | JWT/PAT |
+| GET | `/key/{project_key}/repositories` | List repos | JWT/PAT |
+| GET | `/{project_id}/repositories/count` | Repository count | JWT/PAT |
+| GET | `/{project_id}/reviews/count` | Review count | JWT/PAT |
+| GET | `/{project_id}/reviewers/count` | Reviewer count | JWT/PAT |
+| PUT | `/{project_id}` | Update | system_admin |
+| PATCH | `/{project_id}/activate` | Activate project | system_admin |
+| PATCH | `/{project_id}/deactivate` | Deactivate project | system_admin |
+| DELETE | `/{project_id}` | Delete | system_admin |
 
-#### Project Registry (`/api/v1/apps`, `/api/v1/admin/registry`)
+#### Project Registry (`/api/v1/project-registry`)
 
 | Method | Path | Description | Auth |
 |---|---|---|---|
 | GET | `/apps` | List all apps | JWT/PAT |
+| GET | `/apps/registry/all` | Full registry listing | JWT/PAT |
 | GET | `/apps/{app_name}/projects` | Projects in app | JWT/PAT |
+| GET | `/projects/{project_key}/{repo_slug}/app-name` | Resolve app name for project/repo | JWT/PAT |
+| GET | `/admin/registry/projects` | List all registry entries (admin) | system_admin |
 | POST | `/admin/registry/register` | Register to app | system_admin |
 | PUT | `/admin/registry/update` | Move to different app | system_admin |
 | DELETE | `/admin/registry/unregister` | Remove from registry | system_admin |
@@ -814,18 +917,24 @@ Request: GET /reviews?app_names=member,tv
 | Method | Path | Description | Auth |
 |---|---|---|---|
 | GET | `/` | List for current user | JWT |
-| PATCH | `/{id}/read` | Mark as read | JWT |
+| GET | `/unread-count` | Unread notification count | JWT |
+| GET | `/stats` | Notification statistics | JWT |
+| GET | `/{id}` | Get single notification | JWT |
+| POST | `/{id}/read` | Mark as read | JWT |
 | POST | `/read-all` | Mark all as read | JWT |
+| DELETE | `/{id}` | Delete notification | JWT |
 | GET | `/preferences` | Get preferences | JWT |
-| PUT | `/preferences` | Update preferences | JWT |
+| PUT | `/preferences/{notification_type}` | Update preferences per type | JWT |
+| POST | `/test` | Send test notification | JWT |
 
-#### Personal Access Tokens (`/api/v1/pat`)
+#### Personal Access Tokens (`/api/v1/personal-access-tokens`)
 
 | Method | Path | Description | Auth |
 |---|---|---|---|
-| POST | `/create` | Create PAT | JWT |
 | GET | `/` | List user's PATs | JWT |
-| DELETE | `/{id}` | Revoke PAT | JWT |
+| POST | `/` | Create PAT | JWT |
+| GET | `/{token_id}` | Get token details | JWT |
+| DELETE | `/{token_id}` | Revoke PAT | JWT |
 
 #### Search & SSE & Audit & LLM
 
@@ -834,9 +943,11 @@ Request: GET /reviews?app_names=member,tv
 | GET | `/search/?q={query}` | Global search | JWT/PAT |
 | GET | `/sse/stream` | SSE event stream | JWT (query param) |
 | GET | `/audit/logs` | Query audit logs | system_admin |
+| GET | `/audit/logs/{log_id}` | Get specific audit log | system_admin |
+| GET | `/audit/stats` | Audit log statistics | system_admin |
 | GET | `/audit/export` | Export audit CSV | system_admin |
-| POST | `/llm/chat/completions` | LLM proxy (streaming) | JWT |
 | GET | `/llm/config` | Get LLM config | JWT |
+| POST | `/llm/proxy/{path}` | Proxy LLM API requests | JWT |
 
 ---
 
@@ -886,6 +997,8 @@ Request: GET /reviews?app_names=member,tv
 | `/myadmin/project-registry` | Project registry management | system_admin |
 | `/myadmin/settings` | System settings | system_admin |
 | `/myadmin/review-validation` | Raw review validation | review_admin+ |
+| `/403` | Forbidden error page | Public |
+| `/*` (catch-all) | Not found error page | Public |
 
 ### 8.3 Frontend Architecture
 
