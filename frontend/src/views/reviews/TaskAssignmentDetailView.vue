@@ -512,6 +512,7 @@ const loadNextPage = async () => {
     if (storedFilters.severity) params.severity = storedFilters.severity
     if (storedFilters.date_from) params.date_from = storedFilters.date_from
     if (storedFilters.date_to) params.date_to = storedFilters.date_to
+    if (storedFilters.search_query) params.search_query = storedFilters.search_query
     if (storedFilters.hide_archived !== undefined) params.hide_archived = storedFilters.hide_archived
 
     const response = await taskAssignmentApi.getReviews(params)
@@ -568,6 +569,7 @@ const loadPreviousPage = async () => {
     if (storedFilters.severity) params.severity = storedFilters.severity
     if (storedFilters.date_from) params.date_from = storedFilters.date_from
     if (storedFilters.date_to) params.date_to = storedFilters.date_to
+    if (storedFilters.search_query) params.search_query = storedFilters.search_query
     if (storedFilters.hide_archived !== undefined) params.hide_archived = storedFilters.hide_archived
 
     const response = await taskAssignmentApi.getReviews(params)

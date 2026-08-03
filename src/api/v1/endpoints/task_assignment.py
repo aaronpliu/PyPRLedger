@@ -63,6 +63,11 @@ async def list_reviews(
         False, description="Hide reviews where all assignees have completed scoring"
     ),
     pinned_only: bool = Query(False, description="Filter to reviews pinned by the current user"),
+    search_query: str | None = Query(
+        None,
+        max_length=256,
+        description="Search across PR ID, reviewer, project, repo",
+    ),
 ) -> ReviewListResponse:
     """
     Get list of reviews with their assignments (requires review_admin role)
@@ -78,6 +83,7 @@ async def list_reviews(
     - severity: Filter by AI issue severity (critical, high, medium, low)
     - date_from: Filter reviews created after this date
     - date_to: Filter reviews created before this date (inclusive)
+    - search_query: Search across PR ID, reviewer, project, repo
     """
     # TODO: Add permission check - must be review_admin or system_admin
 
@@ -102,6 +108,7 @@ async def list_reviews(
             hide_archived=hide_archived,
             pinned_only=pinned_only,
             current_user_id=current_user.id,
+            search_query=search_query,
         )
 
         return ReviewListResponse(

@@ -26,6 +26,7 @@ export interface TaskAssignmentNavigationContext {
     date_from?: string
     date_to?: string
     hide_archived?: boolean
+    search_query?: string
   }
 }
 

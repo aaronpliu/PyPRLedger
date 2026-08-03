@@ -521,6 +521,9 @@ const loadReviews = async (showLoading = true) => {
     if (dateTo.value) {
       params.date_to = dateTo.value
     }
+    if (searchQuery.value) {
+      params.search_query = searchQuery.value
+    }
 
     params.hide_archived = hideDone.value
 
@@ -528,7 +531,7 @@ const loadReviews = async (showLoading = true) => {
     allReviews.value = response.items
     total.value = response.total
     
-    // Apply client-side filters for unsupported fields (search, scored, unassigned)
+    // Apply client-side filters for unsupported backend filters
     applyFilters()
 
   } catch (error) {
@@ -627,19 +630,6 @@ const handleResetFilters = () => {
 // Apply client-side filters (same pattern as ReviewListView)
 const applyFilters = () => {
   let result = [...allReviews.value]
-  
-  // Apply search filter (text search not supported by backend)
-  if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    result = result.filter(review => {
-      return (
-        review.pull_request_id?.toLowerCase().includes(query) ||
-        review.project_key?.toLowerCase().includes(query) ||
-        review.repository_slug?.toLowerCase().includes(query) ||
-        review.reviewers?.some(r => r.reviewer?.toLowerCase().includes(query))
-      )
-    })
-  }
   
   // Apply reviewer filter for unassigned (not supported by backend)
   if (reviewerFilter.value === '__unassigned__') {
@@ -808,6 +798,7 @@ const viewDetail = (review: ReviewV2) => {
   if (severityFilter.value) filterParams.severity = severityFilter.value
   if (dateFrom.value) filterParams.date_from = dateFrom.value
   if (dateTo.value) filterParams.date_to = dateTo.value
+  if (searchQuery.value) filterParams.search_query = searchQuery.value
   filterParams.hide_archived = hideDone.value
 
   taskAssignmentNavigationStore.setContext({

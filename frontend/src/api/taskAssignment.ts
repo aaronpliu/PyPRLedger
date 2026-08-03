@@ -102,6 +102,7 @@ export const taskAssignmentApi = {
     date_to?: string
     hide_archived?: boolean
     pinned_only?: boolean
+    search_query?: string
   }): Promise<ReviewListResponse> {
     return request.get('/task-assignment/', { params })
   },
