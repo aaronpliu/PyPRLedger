@@ -156,13 +156,13 @@
                 </el-tag>
               </el-descriptions-item>
               <el-descriptions-item :label="t('reviews.detail.summary')" :span="3" label-align="right">
-                <div class="summary-text">{{ review.reviewer_comments || t('reviews.detail.no_summary') }}</div>
+                <div class="summary-text" :class="{ 'na-text': !review.reviewer_comments }">{{ review.reviewer_comments || t('reviews.detail.no_summary') }}</div>
               </el-descriptions-item>
               <el-descriptions-item :label="t('reviews.detail.pr_title')" :span="3" label-align="right">
-                {{ review?.metadata?.pull_request_title || 'N/A' }}
+                <span :class="{ 'na-text': !review?.metadata?.pull_request_title }">{{ review?.metadata?.pull_request_title || 'N/A' }}</span>
               </el-descriptions-item>
               <el-descriptions-item :label="t('reviews.detail.pr_description')" :span="3" label-align="right">
-                <div class="pr-description-text">{{ review?.metadata?.pull_request_description || 'N/A' }}</div>
+                <div class="pr-description-text" :class="{ 'na-text': !review?.metadata?.pull_request_description }">{{ review?.metadata?.pull_request_description || 'N/A' }}</div>
               </el-descriptions-item>
               <el-descriptions-item :label="t('reviews.detail.created')" label-align="right">
                 <el-icon><Clock /></el-icon> {{ formatDate(review.created_date || '') }}
@@ -1611,6 +1611,11 @@ watch(
   word-break: break-word;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.na-text {
+  font-style: italic;
+  color: var(--el-text-color-placeholder);
 }
 
 .actions-card {
