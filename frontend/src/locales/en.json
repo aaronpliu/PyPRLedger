@@ -293,6 +293,8 @@
       "pr_level": "📋 PR-Level",
       "summary": "Summary",
       "no_summary": "No summary provided",
+      "pr_title": "PR Title",
+      "pr_description": "PR Description",
       "created": "Created",
       "updated": "Updated",
       "code_changes": "📝 Code Changes",

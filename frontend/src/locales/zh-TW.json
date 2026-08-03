@@ -293,6 +293,8 @@
       "pr_level": "📋 PR級",
       "summary": "摘要",
       "no_summary": "未提供摘要",
+      "pr_title": "PR 標題",
+      "pr_description": "PR 描述",
       "created": "建立時間",
       "updated": "更新時間",
       "code_changes": "📝 程式碼變更",
