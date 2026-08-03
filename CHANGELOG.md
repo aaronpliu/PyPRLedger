@@ -5,6 +5,30 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.5] - 2026-07-23
+
+**Backend Version**: 1.20.5
+**Frontend Version**: 1.15.5
+
+### Added
+- Add `search_query` backend filter to Task Assignment page (search across PR ID, project, repo, reviewer)
+- Display PR title and description from metadata in Review Information table
+- Add `.github` project governance files (issue templates, PR template, CODEOWNERS, SECURITY.md, CONTRIBUTING.md, CI workflow)
+
+### Fixed
+- Fix session expiration: preserve remaining Redis TTL on token refresh to enforce 2-hour idle timeout
+- Fix CSS cascade ordering for consistent N/A italic styling in review details
+
+### Changed
+- Enhance N/A display with italic font style when PR metadata fields are missing
+- Update CI pipeline: add frontend vitest job, remove redundant type-check step, fix pytest command
+
+### Documentation
+- Enhance PRD.md with comprehensive endpoint audit and Git user auto-binding specification
+- Add update-prd skill for automated PRD maintenance
+
+---
+
 ## [1.20.4] - 2026-07-23
 
 **Backend Version**: 1.20.4

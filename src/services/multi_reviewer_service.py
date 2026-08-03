@@ -101,6 +101,7 @@ class MultiReviewerService:
         hide_archived: bool = False,
         pinned_only: bool = False,
         current_user_id: int | None = None,
+        search_query: str | None = None,
     ) -> tuple[list[ReviewWithAssignmentsResponse], int]:
         """
         Get list of reviews with their assignments
@@ -118,6 +119,7 @@ class MultiReviewerService:
             severity: Filter by AI issue severity (critical, high, medium, low)
             date_from: Filter reviews created after this date
             date_to: Filter reviews created before this date (inclusive)
+            search_query: Search across PR ID, reviewer, project, repo
 
         Returns:
             Tuple of (reviews, total_count)
@@ -236,6 +238,26 @@ class MultiReviewerService:
             )
             # Keep reviews with incomplete assignments OR with no assignments at all
             stmt = stmt.where(or_(has_incomplete, ~has_any_assignment))
+
+        # Apply search_query filter (search across PR ID, project, repo, reviewer)
+        if search_query:
+            search_term = f"%{search_query.lower()}%"
+            stmt = stmt.where(
+                or_(
+                    PullRequestReviewBase.pull_request_id.ilike(search_term),
+                    PullRequestReviewBase.project_key.ilike(search_term),
+                    PullRequestReviewBase.repository_slug.ilike(search_term),
+                    exists(
+                        select(1).where(
+                            and_(
+                                PullRequestReviewAssignment.review_base_id
+                                == PullRequestReviewBase.id,
+                                PullRequestReviewAssignment.reviewer.ilike(search_term),
+                            )
+                        )
+                    ),
+                )
+            )
 
         # Get total count
         count_stmt = select(func.count()).select_from(stmt.subquery())

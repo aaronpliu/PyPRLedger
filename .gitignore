@@ -137,3 +137,6 @@ logs/*
 
 # Ignore codegraph
 .codegraph/
+
+# Ignore qoder
+.qoder/

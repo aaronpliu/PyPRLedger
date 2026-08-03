@@ -1,0 +1,19 @@
+# Default owner for all files
+* @aaronliu00
+
+# Backend
+/src/ @aaronliu00
+
+# Frontend
+/frontend/ @aaronliu00
+
+# Database migrations
+/alembic/ @aaronliu00
+
+# Infrastructure
+/monitoring/ @aaronliu00
+Dockerfile @aaronliu00
+docker-compose.yml @aaronliu00
+
+# Documentation
+/docs/ @aaronliu00
