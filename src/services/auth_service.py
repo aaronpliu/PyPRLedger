@@ -433,8 +433,18 @@ class AuthService:
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> TokenResponse:
-        """Refresh access and refresh tokens using a valid refresh session."""
+        """Refresh access and refresh tokens using a valid refresh session.
+
+        The idle timeout is NOT extended by token refresh. The remaining
+        Redis TTL is preserved so the session expires after the configured
+        idle period regardless of how many times the access token is rotated.
+        """
         session_id = self._extract_session_id_from_refresh_token(refresh_token)
+        session_key = self._get_refresh_session_key(session_id)
+
+        # Capture remaining TTL BEFORE any writes — this is the idle deadline
+        remaining_ttl = await self.redis_client.ttl(session_key)
+
         session_data = await self._get_refresh_session(session_id)
         if not session_data:
             raise TokenExpiredException("Session expired due to inactivity")
@@ -447,13 +457,20 @@ class AuthService:
             raise InvalidTokenException("Invalid refresh token")
 
         auth_user = await self._get_auth_user_by_id(int(session_data["auth_user_id"]))
-        return await self._create_token_response(
+        response = await self._create_token_response(
             auth_user,
             session_id,
             created_at=session_data.get("created_at"),
             ip_address=session_data.get("ip_address") or ip_address,
             user_agent=session_data.get("user_agent") or user_agent,
         )
+
+        # Restore the original remaining TTL — refresh must NOT extend idle timeout.
+        # _create_token_response resets it to the full timeout; correct that here.
+        if remaining_ttl > 0:
+            await self.redis_client.expire(session_key, remaining_ttl)
+
+        return response
 
     async def logout(self, token: str | None = None, refresh_token: str | None = None) -> None:
         """Invalidate the refresh session for the current login session."""
