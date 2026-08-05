@@ -149,10 +149,14 @@ class ForbiddenException(AppException):
         message: str = "Access forbidden",
         message_key: str | None = None,
         message_params: dict[str, Any] | None = None,
+        detail: dict[str, Any] | None = None,
     ):
+        error_detail: dict[str, Any] = {"error": "forbidden", "message": message}
+        if detail:
+            error_detail.update(detail)
         super().__init__(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"error": "forbidden", "message": message},
+            detail=error_detail,
             message_key=message_key or "errors.access_forbidden",
             message_params=message_params,
         )
