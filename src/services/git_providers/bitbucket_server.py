@@ -27,12 +27,18 @@ class BitbucketServerProvider(BaseGitProvider):
         self._base_url = f"{base_url}/rest/api/latest"
         self._headers: dict[str, str] = {"Accept": "application/json"}
 
-        user = getattr(settings, "BITBUCKET_USER", None)
-        password = getattr(settings, "BITBUCKET_PASSWORD", None)
-        if user and password:
-            credentials = f"{user}:{password}"
-            encoded = base64.b64encode(credentials.encode()).decode()
-            self._headers["Authorization"] = f"Basic {encoded}"
+        # Prefer a Personal Access Token (Bitbucket Server/Data Center) as Bearer auth.
+        # Fall back to Basic auth (username + password/app password) when no token is set.
+        token = getattr(settings, "BITBUCKET_TOKEN", None)
+        if token:
+            self._headers["Authorization"] = f"Bearer {token}"
+        else:
+            user = getattr(settings, "BITBUCKET_USER", None)
+            password = getattr(settings, "BITBUCKET_PASSWORD", None)
+            if user and password:
+                credentials = f"{user}:{password}"
+                encoded = base64.b64encode(credentials.encode()).decode()
+                self._headers["Authorization"] = f"Basic {encoded}"
 
     @property
     def name(self) -> str:
