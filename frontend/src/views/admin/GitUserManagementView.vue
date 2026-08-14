@@ -279,8 +279,7 @@ const applyFilters = () => {
 const loadUsers = async () => {
   loading.value = true
   try {
-    const resp = await usersApi.getGitUsers({
-      limit: pageSize.value,
+    const resp = await usersApi.getGitUsersPaginated({
       page: currentPage.value,
       page_size: pageSize.value,
       active: statusFilter.value !== null ? statusFilter.value : undefined,

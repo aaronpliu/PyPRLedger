@@ -22,7 +22,8 @@ export interface ReviewerListResponse {
 
 export const usersApi = {
   /**
-   * Get git users with server-side pagination.
+   * Get git users (returns the user array). Kept for callers that only need the
+   * list (filter dropdowns, etc.). Supports server-side pagination params.
    */
   async getGitUsers(params?: {
     limit?: number
@@ -31,9 +32,31 @@ export const usersApi = {
     username?: string
     active?: boolean
     is_reviewer?: boolean
-  }): Promise<ReviewerListResponse> {
+  }): Promise<ReviewerUser[]> {
     const queryParams: any = {}
     if (params?.limit) queryParams.limit = params.limit
+    if (params?.page) queryParams.page = params.page
+    if (params?.page_size) queryParams.page_size = params.page_size
+    if (params?.username) queryParams.username = params.username
+    if (params?.active !== undefined) queryParams.active = params.active
+    if (params?.is_reviewer !== undefined) queryParams.is_reviewer = params.is_reviewer
+
+    const response: any = await request.get('/users/git', { params: queryParams })
+    return response.items || []
+  },
+
+  /**
+   * Get git users with full server-side pagination metadata (items + total).
+   * Use this when rendering a paginated grid that needs the true total count.
+   */
+  async getGitUsersPaginated(params?: {
+    page?: number
+    page_size?: number
+    username?: string
+    active?: boolean
+    is_reviewer?: boolean
+  }): Promise<ReviewerListResponse> {
+    const queryParams: any = {}
     if (params?.page) queryParams.page = params.page
     if (params?.page_size) queryParams.page_size = params.page_size
     if (params?.username) queryParams.username = params.username
