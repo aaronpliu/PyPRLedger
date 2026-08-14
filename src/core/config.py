@@ -132,10 +132,18 @@ class Settings(BaseSettings):
         default="http://localhost:7990", description="Bitbucket Server/Data Center base URL"
     )
     BITBUCKET_USER: str | None = Field(
-        default=None, description="Bitbucket username for authentication"
+        default=None, description="Bitbucket username for Basic authentication"
     )
     BITBUCKET_PASSWORD: str | None = Field(
-        default=None, description="Bitbucket password or app password for authentication"
+        default=None, description="Bitbucket password or app password for Basic authentication"
+    )
+    BITBUCKET_TOKEN: str | None = Field(
+        default=None,
+        description=(
+            "Bitbucket Server/Data Center Personal Access Token (PAT). When set, it is "
+            "preferred over BITBUCKET_USER/BITBUCKET_PASSWORD and sent as a Bearer token. "
+            "Only applicable to Bitbucket Server/Data Center (not Bitbucket Cloud)."
+        ),
     )
     BITBUCKET_DEFAULT_WORKSPACE: str = Field(
         default="default", description="Default workspace/project key for Bitbucket repositories"

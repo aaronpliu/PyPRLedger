@@ -256,7 +256,6 @@ import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { scoresApi } from '@/api/scores'
-import { reviewsApi } from '@/api/reviews'
 import { projectsApi } from '@/api/projects'
 import { projectRegistryApi } from '@/api/projectRegistry'
 import type { Score, ScoreStats } from '@/api/scores'
@@ -438,10 +437,8 @@ const loadScores = async () => {
     if (projectFilter.value) {
       statsParams.project_key = projectFilter.value
     }
-    
-    console.log('Loading stats with params:', statsParams)
+
     const statsData = await scoresApi.getStats(statsParams)
-    console.log('Stats loaded:', statsData)
     stats.value = statsData
 
     // Load scores using new efficient paginated endpoint
@@ -449,26 +446,21 @@ const loadScores = async () => {
       page: currentPage.value,
       page_size: pageSize.value,
     }
-    
+
     // Apply project filter if specified
     if (projectFilter.value) {
       scoresParams.project_key = projectFilter.value
     }
-    
+
     // Apply app name filter if specified
     if (appNameFilter.value) {
       scoresParams.app_names = appNameFilter.value
     }
-    
-    console.log('Loading scores with params:', scoresParams)
+
     const scoresResponse = await scoresApi.listScores(scoresParams)
-    
-    console.log('Scores response:', scoresResponse)
-    console.log(`Loaded ${scoresResponse.items?.length || 0} scores (total: ${scoresResponse.total})`)
-    
+
     // Safely check if scoresResponse and items exist
     if (!scoresResponse || !scoresResponse.items) {
-      console.warn('Scores response is invalid or has no items:', scoresResponse)
       scores.value = []
       totalScores.value = 0
       ElMessage.warning('No scores found')
@@ -477,49 +469,13 @@ const loadScores = async () => {
     
     // Update pagination info
     totalScores.value = scoresResponse.total
-    
-    // Enrich scores with review context (branch info, PR user, etc.)
-    const enrichedScores: Score[] = []
-    
-    for (const score of scoresResponse.items) {
-      try {
-        // Fetch review details to get branch info and PR user
-        const reviewsResponse = await reviewsApi.getReviews({
-          page: 1,
-          page_size: 1,
-          project_key: score.project_key,
-        })
-        
-        // Find matching review
-        const matchingReview = reviewsResponse.items?.find(
-          r => r.pull_request_id === score.pull_request_id
-        )
-        
-        if (matchingReview) {
-          // Enrich score with review context
-          enrichedScores.push({
-            ...score,
-            project_name: matchingReview.project?.project_name || score.project_key,
-            project_url: matchingReview.project?.project_url,
-            git_provider: matchingReview.project?.git_provider,
-            repository_slug: score.repository_slug || matchingReview.repository_slug,
-            pull_request_commit_id: score.pull_request_commit_id || matchingReview.pull_request_commit_id || undefined,
-            pull_request_user: matchingReview.pull_request_user,
-            pull_request_user_info: matchingReview.pull_request_user_info,
-            source_branch: matchingReview.source_branch,
-            target_branch: matchingReview.target_branch,
-            updated_date: matchingReview.updated_date,
-          })
-        } else {
-          // If review not found, use score data as-is
-          enrichedScores.push(score)
-        }
-      } catch (error) {
-        console.warn(`Failed to enrich score ${score.id}:`, error)
-        // Still include the score even if enrichment fails
-        enrichedScores.push(score)
-      }
-    }
+
+    // The listScores endpoint already enriches every score with PR context
+    // (project_name, project_url, git_provider, repository_slug, pull_request_user,
+    // pull_request_user_info, source_branch, target_branch, updated_date), so no
+    // per-row /reviews lookup is needed — using the items directly avoids the
+    // previous N+1 request storm (one GET /reviews per row).
+    const enrichedScores: Score[] = scoresResponse.items
     
     // Apply level filter if specified
     let filteredScores = enrichedScores

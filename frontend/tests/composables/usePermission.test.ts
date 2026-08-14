@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { usePermission } from '@/composables/usePermission'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
@@ -6,52 +6,103 @@ import { useAuthStore } from '@/stores/auth'
 describe('usePermission Composable', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    // Mock auth store
+  })
+
+  it('should return false when not authenticated', () => {
+    const authStore = useAuthStore()
+    authStore.user = null
+
+    const { hasPermission } = usePermission()
+    expect(hasPermission('read', 'review')).toBe(false)
+  })
+
+  it('should return true for admin user', () => {
     const authStore = useAuthStore()
     authStore.user = {
       id: 1,
-      username: 'testuser',
-      email: 'test@example.com',
+      username: 'admin',
+      email: 'admin@example.com',
+      roles: ['admin'],
+    } as any
+    ;(authStore as any).accessToken = 'test-token'
+
+    const { hasPermission } = usePermission()
+    expect(hasPermission('read', 'review')).toBe(true)
+    expect(hasPermission('delete', 'user')).toBe(true)
+  })
+
+  it('should check review_admin role for review resources', () => {
+    const authStore = useAuthStore()
+    authStore.user = {
+      id: 2,
+      username: 'reviewer',
+      email: 'reviewer@example.com',
+      roles: ['review_admin'],
+    } as any
+    ;(authStore as any).accessToken = 'test-token'
+
+    const { hasPermission } = usePermission()
+    expect(hasPermission('read', 'review')).toBe(true)
+    expect(hasPermission('read', 'reviews')).toBe(true)
+    expect(hasPermission('read', 'user')).toBe(false)
+  })
+
+  it('should return false for regular user without special roles', () => {
+    const authStore = useAuthStore()
+    authStore.user = {
+      id: 3,
+      username: 'regular',
+      email: 'regular@example.com',
       roles: ['reviewer'],
     } as any
+    ;(authStore as any).accessToken = 'test-token'
+
+    const { hasPermission } = usePermission()
+    expect(hasPermission('read', 'review')).toBe(false)
   })
 
-  it('should check if user has role', () => {
-    const { hasRole } = usePermission()
-    expect(hasRole('reviewer')).toBe(true)
-    expect(hasRole('admin')).toBe(false)
-  })
-
-  it('should check if user has any role', () => {
-    const { hasAnyRole } = usePermission()
-    expect(hasAnyRole(['admin', 'reviewer'])).toBe(true)
-    expect(hasAnyRole(['admin', 'manager'])).toBe(false)
-  })
-
-  it('should check if user has all roles', () => {
-    const { hasAllRoles } = usePermission()
-    expect(hasAllRoles(['reviewer'])).toBe(true)
-    expect(hasAllRoles(['reviewer', 'admin'])).toBe(false)
-  })
-
-  it('should check if user is admin', () => {
-    const { isAdmin } = usePermission()
-    expect(isAdmin()).toBe(false)
-    
-    // Set admin role
+  it('should check isAdmin computed property', () => {
     const authStore = useAuthStore()
-    authStore.user!.roles = ['admin']
-    expect(isAdmin()).toBe(true)
+    authStore.user = {
+      id: 1,
+      username: 'admin',
+      email: 'admin@example.com',
+      roles: ['admin'],
+    } as any
+    ;(authStore as any).accessToken = 'test-token'
+
+    const { isAdmin } = usePermission()
+    expect(isAdmin.value).toBe(true)
   })
 
-  it('should check if user can perform action', () => {
-    const { can } = usePermission()
-    // This would need actual permission data from backend
-    expect(can).toBeDefined()
+  it('should return false for isAdmin when user is not admin', () => {
+    const authStore = useAuthStore()
+    authStore.user = {
+      id: 2,
+      username: 'reviewer',
+      email: 'reviewer@example.com',
+      roles: ['reviewer'],
+    } as any
+    ;(authStore as any).accessToken = 'test-token'
+
+    const { isAdmin } = usePermission()
+    expect(isAdmin.value).toBe(false)
   })
 
-  it('should check if user cannot perform action', () => {
-    const { cannot } = usePermission()
-    expect(cannot).toBeDefined()
+  it('should provide convenience methods', () => {
+    const authStore = useAuthStore()
+    authStore.user = {
+      id: 1,
+      username: 'admin',
+      email: 'admin@example.com',
+      roles: ['admin'],
+    } as any
+    ;(authStore as any).accessToken = 'test-token'
+
+    const { canView, canEdit, canDelete, canCreate } = usePermission()
+    expect(canView('review')).toBe(true)
+    expect(canEdit('review')).toBe(true)
+    expect(canDelete('review')).toBe(true)
+    expect(canCreate('review')).toBe(true)
   })
 })

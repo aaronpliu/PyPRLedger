@@ -59,7 +59,7 @@ async def test_roles(db: AsyncSession) -> dict[str, Role]:
 @pytest.fixture
 async def test_users(db: AsyncSession) -> dict[str, AuthUser]:
     """Create test users"""
-    from src.utils.auth import hash_password
+    from src.utils.password import hash_password
 
     users_data = [
         {"username": "admin_user", "email": "admin@test.com"},
@@ -467,6 +467,12 @@ class TestRoleDelegation:
 
         # Now test manual pending -> active transition
         # Create a delegation and manually set it to pending
+        await rbac_service.assign_role(
+            auth_user_id=admin_user.id,
+            role_id=reviewer_role.id,
+            resource_type="project",
+            resource_id="TEST-PROJ",
+        )
         future_start = datetime.now(UTC) + timedelta(days=1)
         delegation2 = await rbac_service.delegate_role(
             delegator_id=admin_user.id,

@@ -24,6 +24,31 @@ repos:
         always_run: true
 
   # --------------------------------------------
+  # Unit tests: run on every commit
+  # --------------------------------------------
+  - repo: local
+    hooks:
+      - id: backend-tests
+        name: Backend unit tests
+        description: Run the full backend pytest suite
+        entry: uv run pytest
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
+        verbose: true
+
+      - id: frontend-tests
+        name: Frontend unit tests
+        description: Run the full frontend Vitest suite
+        entry: bash -c "cd frontend && npm run test:run"
+        language: system
+        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
+        verbose: true
+
+  # --------------------------------------------
   # Simple commit message validation (local script)
   # --------------------------------------------
   - repo: local
