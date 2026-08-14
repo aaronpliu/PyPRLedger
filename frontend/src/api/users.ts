@@ -22,22 +22,31 @@ export interface ReviewerListResponse {
 
 export const usersApi = {
   /**
-   * Get all git users (for task assignment - includes all users, not just reviewers)
+   * Get git users with server-side pagination.
    */
   async getGitUsers(params?: {
     limit?: number
+    page?: number
+    page_size?: number
     username?: string
     active?: boolean
     is_reviewer?: boolean
-  }): Promise<ReviewerUser[]> {
+  }): Promise<ReviewerListResponse> {
     const queryParams: any = {}
     if (params?.limit) queryParams.limit = params.limit
+    if (params?.page) queryParams.page = params.page
+    if (params?.page_size) queryParams.page_size = params.page_size
     if (params?.username) queryParams.username = params.username
     if (params?.active !== undefined) queryParams.active = params.active
     if (params?.is_reviewer !== undefined) queryParams.is_reviewer = params.is_reviewer
 
     const response: any = await request.get('/users/git', { params: queryParams })
-    return response.items || []
+    return {
+      items: response.items || [],
+      total: response.total || 0,
+      page: response.page || params?.page || 1,
+      page_size: response.page_size || params?.page_size || response.items?.length || 0,
+    }
   },
 
   /**

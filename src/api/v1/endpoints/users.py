@@ -99,10 +99,11 @@ async def list_users(
     active: bool | None = Query(None, description="Filter by active status"),
     is_reviewer: bool | None = Query(None, description="Filter by reviewer status"),
     username: str | None = Query(None, description="Filter by username (partial match)"),
-    limit: int = Query(500, ge=1, le=1000, description="Maximum number of users to return"),
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(20, ge=1, le=1000, description="Number of users per page"),
 ) -> UserListResponse:
     """
-    List users with filtering (requires authentication)
+    List users with filtering and server-side pagination (requires authentication)
 
     All authenticated users can view the user list.
 
@@ -110,7 +111,8 @@ async def list_users(
         active: Filter by active status
         is_reviewer: Filter by reviewer status
         username: Filter by username (partial match)
-        limit: Maximum number of users to return
+        page: Page number (1-based)
+        page_size: Number of users per page
         db: Database session
         user_service: User service instance
         current_user: Authenticated user
@@ -119,13 +121,12 @@ async def list_users(
         UserListResponse: List of users with pagination info
     """
     try:
-        # Use page_size=limit and page=1 to get up to 'limit' users
         users, total = await user_service.list_users(
             active=active,
             is_reviewer=is_reviewer,
             username=username,
-            page=1,
-            page_size=limit,
+            page=page,
+            page_size=page_size,
             db=db,
         )
 
@@ -146,8 +147,8 @@ async def list_users(
         return UserListResponse(
             items=items,
             total=total,
-            page=1,
-            page_size=limit,
+            page=page,
+            page_size=page_size,
         )
     except Exception as e:
         error_traceback = traceback.format_exc()

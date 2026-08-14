@@ -20,10 +20,10 @@
             clearable
             style="width: 280px"
             @clear="handleSearchClear"
-            @keyup.enter="loadUsers"
+            @keyup.enter="applyFilters"
           >
             <template #append>
-              <el-button @click="loadUsers">
+              <el-button @click="applyFilters">
                 <el-icon><Search /></el-icon>
               </el-button>
             </template>
@@ -31,14 +31,14 @@
         </el-form-item>
 
         <el-form-item label="Status">
-          <el-select v-model="statusFilter" placeholder="All" clearable style="width: 130px" @change="loadUsers">
+          <el-select v-model="statusFilter" placeholder="All" clearable style="width: 130px" @change="applyFilters">
             <el-option label="Active" :value="true" />
             <el-option label="Inactive" :value="false" />
           </el-select>
         </el-form-item>
 
         <el-form-item label="Reviewer">
-          <el-select v-model="reviewerFilter" placeholder="All" clearable style="width: 130px" @change="loadUsers">
+          <el-select v-model="reviewerFilter" placeholder="All" clearable style="width: 130px" @change="applyFilters">
             <el-option label="Reviewer" :value="true" />
             <el-option label="Not Reviewer" :value="false" />
           </el-select>
@@ -265,23 +265,33 @@ const formatDate = (dateStr: string) => {
 
 const handleSearchClear = () => {
   searchQuery.value = ''
+  currentPage.value = 1
+  loadUsers()
+}
+
+// Reset to the first page whenever filters/search change so the newest user
+// (sorted first by created_date) is visible and results aren't stranded on a later page.
+const applyFilters = () => {
+  currentPage.value = 1
   loadUsers()
 }
 
 const loadUsers = async () => {
   loading.value = true
   try {
-    const items = await usersApi.getGitUsers({
-      limit: 500,
+    const resp = await usersApi.getGitUsers({
+      limit: pageSize.value,
+      page: currentPage.value,
+      page_size: pageSize.value,
       active: statusFilter.value !== null ? statusFilter.value : undefined,
       is_reviewer: reviewerFilter.value !== null ? reviewerFilter.value : undefined,
       username: searchQuery.value || undefined,
     })
 
-    total.value = items.length
-    const start = (currentPage.value - 1) * pageSize.value
-    const end = start + pageSize.value
-    users.value = items.slice(start, end)
+    // Use the server's true total (not the truncated page length) so the
+    // unfiltered list paginates over ALL users instead of being capped at 500.
+    users.value = resp.items
+    total.value = resp.total
   } catch (error) {
     console.error('Failed to load git users:', error)
     ElMessage.error('Failed to load git users')
@@ -312,6 +322,9 @@ const handleCreate = async () => {
       createForm.display_name = ''
       createForm.email_address = ''
       createForm.is_reviewer = false
+      // New users sort first (created_date desc); jump back to page 1 so the
+      // newly created user is actually visible instead of staying on a later page.
+      currentPage.value = 1
       loadUsers()
     } catch (error: any) {
       ElMessage.error(error.response?.data?.detail?.message || 'Failed to create git user')
