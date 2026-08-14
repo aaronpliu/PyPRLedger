@@ -21,13 +21,17 @@
     "noFallthroughCasesInSwitch": true,
 
     /* Suppress baseUrl deprecation warning (TS 6.0+) - will migrate before TS 7.0 */
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
 
     /* Path aliases */
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"]
-    }
+    },
+
+    /* Ambient types for the whole project (incl. test files type-checked above).
+       vitest/globals provides beforeEach/vi/etc; @types/node provides `global`. */
+    "types": ["node", "vitest/globals", "vite/client"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue", "tests/**/*.ts"]
 }

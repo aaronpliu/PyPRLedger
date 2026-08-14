@@ -5,6 +5,22 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.6] - 2026-08-14
+
+**Backend Version**: 1.20.6
+**Frontend Version**: 1.15.6
+
+### Added
+- Support Bitbucket token access for git operations (configurable via env)
+- Add unit-test-backend and unit-test-frontend skills for automated test generation
+- Enhance git user query with flexible matching (username/display name/email)
+
+### Fixed
+- Update ScoreListView: simplify score display and remove redundant logic
+- Fix frontend unit tests for language switcher, language composable, permission composable, and notification store
+
+---
+
 ## [1.20.5] - 2026-07-23
 
 **Backend Version**: 1.20.5
