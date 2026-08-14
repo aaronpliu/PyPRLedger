@@ -3,9 +3,10 @@
 | Field | Value |
 |---|---|
 | **Product Name** | PRLedger (Pull Request Ledger) |
-| **Document Version** | 1.0 |
-| **Status** | Released |
+| **Document Version** | 1.1 |
+| **Status** | Updated |
 | **Classification** | Internal — All Teams |
+| **Last Updated** | 2026-08-14 |
 
 ---
 
@@ -235,6 +236,7 @@ BaseGitProvider (Abstract)
 - Provider resolution: `get_git_provider(project)` returns the correct adapter
 - Hybrid resolution: registry → payload hint → project config → default
 - Each provider implements: fetch PRs, fetch diffs, sync entities
+- Bitbucket Server/Data Center authentication: Bearer token (PAT) preferred over Basic auth (username + password/app password). When `BITBUCKET_TOKEN` is set, requests use `Authorization: Bearer <token>`; otherwise fall back to Basic auth.
 
 ### 4.5 SSE Architecture
 
@@ -273,6 +275,7 @@ Redis PubSub → SSEBroker (singleton) → asyncio.Queue per client → SSE stre
 | FR-5.1.12 | Trend endpoints: reviewer activity, score trends, good suggestions, project/repo activity | P2 |
 | FR-5.1.13 | Review by status filter endpoint (`/status/{review_status}`) | P1 |
 | FR-5.1.14 | Public ID (obfuscated) variants for get, pin, associate operations | P2 |
+| FR-5.1.15 | Review detail SHALL display PR title and description from review metadata (styled N/A when missing) | P1 |
 
 **Business Rules:**
 - Reviews are never physically deleted (soft delete only)
@@ -297,6 +300,7 @@ Redis PubSub → SSEBroker (singleton) → asyncio.Queue per client → SSE stre
 | FR-5.2.6 | Automatic assignment via auto-assignment engine when no reviewer specified | P1 |
 | FR-5.2.7 | Deleting a reviewer (Git user) sets assignment's reviewer to NULL | P1 |
 | FR-5.2.8 | `my-tasks` endpoint: users can view their own assigned reviews | P1 |
+| FR-5.2.9 | Task assignment list supports `search_query` filter across PR ID, project key, repository slug, and reviewer username | P1 |
 
 ### 5.3 Auto-Assignment Engine
 
@@ -359,6 +363,7 @@ Review Created (no reviewer)
 | FR-5.5.4 | Toggle reviewer status endpoint | P0 |
 | FR-5.5.5 | Deleting a Git user preserves reviews (FK SET NULL) | P0 |
 | FR-5.5.6 | Entity sync service auto-creates/updates Git users from provider data | P1 |
+| FR-5.5.6a | Git user list supports server-side pagination (`page`, `page_size`) with filters (active, is_reviewer, username partial match) | P1 |
 
 #### 5.5.2 Auth Users
 
@@ -491,6 +496,7 @@ Request: GET /reviews?app_names=member,tv
 | FR-5.8.2 | Access token sent as Bearer header | P0 |
 | FR-5.8.3 | Refresh token stored in Redis session store | P0 |
 | FR-5.8.4 | Token refresh endpoint rotates both tokens | P0 |
+| FR-5.8.4a | Token refresh SHALL NOT extend the idle timeout — remaining Redis session TTL is preserved on rotation so the session expires after the configured idle period | P0 |
 | FR-5.8.5 | Expired/invalid tokens return 401 | P0 |
 | FR-5.8.5a | Logout revokes server-side refresh session | P0 |
 | FR-5.8.5b | Users can view and revoke their own active sessions | P1 |
@@ -786,7 +792,7 @@ Request: GET /reviews?app_names=member,tv
 
 | Method | Path | Description | Auth |
 |---|---|---|---|
-| GET | `/` | List reviews with assignments | review_admin |
+| GET | `/` | List reviews with assignments (filters incl. `search_query` across PR ID, project, repo, reviewer) | review_admin |
 | GET | `/my-tasks` | List current user's assigned tasks | JWT/PAT |
 | GET | `/{id}` | Get review with assignments | review_admin |
 | POST | `/{id}/assign` | Assign reviewer | review_admin |
@@ -827,7 +833,7 @@ Request: GET /reviews?app_names=member,tv
 | Method | Path | Description | Auth |
 |---|---|---|---|
 | POST | `/` | Create Git user | system_admin |
-| GET | `/` | List Git users | JWT/PAT |
+| GET | `/` | List Git users (server-side pagination: `page`, `page_size`; filters: `active`, `is_reviewer`, `username`) | JWT/PAT |
 | GET | `/active` | List active Git users | JWT/PAT |
 | GET | `/reviewers` | List active reviewers | JWT/PAT |
 | GET | `/statistics` | Git user statistics | JWT/PAT |
@@ -976,7 +982,7 @@ Request: GET /reviews?app_names=member,tv
 | `/force-password-change` | Force password change | Authenticated |
 | `/` | Dashboard (trends, recent reviews) | Authenticated |
 | `/reviews` | Review list (filtering, export, pinning) | Authenticated |
-| `/reviews/:id` | Review detail (code diff, AI review, scores) | Authenticated |
+| `/reviews/:id` | Review detail (code diff, AI review, scores, PR title & description from metadata) | Authenticated |
 | `/task-assignment` | Task assignment management | review_admin+ |
 | `/task-assignment/analytics` | Assignment analytics dashboard | review_admin+ |
 | `/task-assignment/rules` | Auto-assignment rule management | review_admin+ |
@@ -989,7 +995,7 @@ Request: GET /reviews?app_names=member,tv
 | `/profile` | User profile | Authenticated |
 | `/myadmin/` | Admin dashboard | system_admin |
 | `/myadmin/system-users` | Auth user management (with Git binding status) | system_admin |
-| `/myadmin/git-users` | Git user management (with Auth binding status) | system_admin |
+| `/myadmin/git-users` | Git user management (server-side pagination, with Auth binding status) | system_admin |
 | `/myadmin/roles` | Role management | system_admin |
 | `/myadmin/delegations` | Delegation management | system_admin |
 | `/myadmin/audit` | Audit log viewer | system_admin |
@@ -1041,7 +1047,7 @@ src/
 
 | Feature | Description |
 |---|---|
-| **JWT Auth Flow** | Login → store tokens → Axios interceptor → auto-redirect on 401 |
+| **JWT Auth Flow** | Login → store tokens → Axios interceptor → auto-redirect on 401; refresh rotation preserves idle timeout |
 | **RBAC Navigation** | Route guards check roles; forbidden → 403 page |
 | **Password Enforcement** | `must_change_password` → force redirect to change page |
 | **SSE Real-Time** | Auto-reconnect with exponential backoff, tab visibility recovery |
@@ -1050,6 +1056,8 @@ src/
 | **Theme** | Dark/light mode toggle |
 | **Keyboard Shortcuts** | Global shortcuts for common actions |
 | **PageAgent** | AI-powered code review assistant (via LLM proxy) |
+| **PR Metadata Display** | Review detail shows PR title & description from review metadata (N/A styled when missing) |
+| **Server-Side Pagination** | Git user management and task assignment lists paginate server-side with filter-aware resets |
 
 ---
 
@@ -1154,7 +1162,7 @@ Key environment variable groups:
 - `DATABASE_*`: MySQL connection (host, port, user, password, name)
 - `REDIS_*`: Redis connection (host, port, password, db)
 - `SECRET_KEY`: JWT signing key
-- `BITBUCKET_*`: Bitbucket Server (URL, user, password, workspace)
+- `BITBUCKET_*`: Bitbucket Server (URL, user, password, token/PAT, workspace)
 - `GITHUB_ENTERPRISE_*`: GitHub Enterprise (URL, token)
 - `PROMETHEUS_ENABLED`: Toggle metrics
 - `RATE_LIMIT_*`: Rate limiting config
@@ -1198,6 +1206,8 @@ Standalone `monitoring/` directory with independent Docker Compose:
 | **RBAC** | Role-Based Access Control |
 | **Delegation** | Temporary transfer of permissions from one user to another |
 | **PAT** | Personal Access Token — a long-lived API authentication token |
+| **Bitbucket PAT** | Personal Access Token for Bitbucket Server/Data Center used as Bearer auth (`BITBUCKET_TOKEN`), preferred over Basic auth |
+| **Idle Timeout** | Maximum session inactivity period (default 120 min); token refresh does not extend it |
 | **SSE** | Server-Sent Events — a unidirectional real-time push technology |
 | **SSEBroker** | Singleton service that multiplexes 1 Redis pubsub across all SSE clients |
 | **Auto-Assignment Rule** | A priority-ordered rule for automatically assigning reviewers |
