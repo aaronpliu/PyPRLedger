@@ -439,12 +439,14 @@
             <!-- Visual Score Bar -->
             <div class="score-visual-bar">
               <div class="score-track"></div>
-              <div 
-                class="score-indicator" 
-                :style="{ left: `${(scoreForm.score / 10) * 100}%` }"
-                :class="getScoreColorClass(scoreForm.score)"
-              >
-                {{ scoreForm.score.toFixed(1) }}
+              <div class="score-indicator-range">
+                <div 
+                  class="score-indicator" 
+                  :style="{ left: `${(scoreForm.score / 10) * 100}%` }"
+                  :class="getScoreColorClass(scoreForm.score)"
+                >
+                  {{ scoreForm.score.toFixed(1) }}
+                </div>
               </div>
               <div class="score-labels">
                 <span>0</span>
@@ -474,6 +476,26 @@
           </div>
         </el-form-item>
         
+        <el-form-item :label="t('reviews.detail.comment_template')">
+          <el-select
+            v-model="selectedTemplate"
+            :placeholder="t('reviews.detail.comment_template_placeholder')"
+            clearable
+            style="width: 100%"
+            @change="handleTemplateSelect"
+          >
+            <el-option
+              v-for="tpl in availableTemplates"
+              :key="tpl.id"
+              :label="t(`reviews.detail.tpl_${tpl.id}`)"
+              :value="tpl.id"
+            />
+          </el-select>
+          <div class="form-item-hint">
+            {{ t('reviews.detail.comment_template_hint') }}
+          </div>
+        </el-form-item>
+
         <el-form-item :label="t('reviews.detail.comments')">
           <MdEditor
             v-model="scoreForm.reviewer_comments"
@@ -1354,6 +1376,46 @@ const handleQuickScoreSelect = (value: number) => {
   scoreForm.score = value
 }
 
+interface CommentTemplate {
+  id: string
+  min: number
+  max: number
+}
+
+const commentTemplates: CommentTemplate[] = [
+  { id: 'excellent', min: 9.0, max: 10 },
+  { id: 'good', min: 7.5, max: 8.5 },
+  { id: 'average', min: 6.0, max: 7.0 },
+  { id: 'needs_changes', min: 4.5, max: 5.5 },
+  { id: 'major_changes', min: 0, max: 4.0 },
+]
+
+const selectedTemplate = ref('')
+
+const availableTemplates = computed(() => {
+  const score = scoreForm.score
+  if (score <= 0) return commentTemplates
+  return commentTemplates.filter((tpl) => score >= tpl.min && score <= tpl.max)
+})
+
+const handleTemplateSelect = (templateId: string | undefined) => {
+  if (!templateId) return
+  const content = t(`reviews.detail.tpl_${templateId}_content`)
+  if (content) {
+    scoreForm.reviewer_comments = content
+  }
+}
+
+// Keep the template selection in sync with the current score
+watch(
+  () => scoreForm.score,
+  (score) => {
+    if (score > 0 && selectedTemplate.value && !availableTemplates.value.some((tpl) => tpl.id === selectedTemplate.value)) {
+      selectedTemplate.value = ''
+    }
+  }
+)
+
 const toggleInfoCollapse = () => {
   isInfoExpanded.value = !isInfoExpanded.value
 }
@@ -1368,6 +1430,7 @@ const handleCloseDialog = () => {
   // Reset form
   scoreForm.score = 0
   scoreForm.reviewer_comments = undefined
+  selectedTemplate.value = ''
 }
 
 // Watch for dialog open to set reviewer
@@ -1397,6 +1460,9 @@ watch(showScoreDialog, (isOpen) => {
       scoreForm.score = 0
       scoreForm.reviewer_comments = ''
     }
+    selectedTemplate.value = ''
+  } else {
+    selectedTemplate.value = ''
   }
 })
 
@@ -1814,76 +1880,6 @@ watch(
   width: 100%;
 }
 
-/* Visual Score Bar Styles */
-.score-visual-bar {
-  position: relative;
-  height: 40px;
-  margin-bottom: 16px;
-  user-select: none;
-}
-
-.score-track {
-  position: absolute;
-  top: 50%;
-  left: 10px;
-  right: 10px;
-  height: 8px;
-  background: linear-gradient(to right, 
-    #ef4444 0%, 
-    #ef4444 25%,
-    #f97316 30%, 
-    #f59e0b 45%,
-    #3b82f6 65%, 
-    #10b981 85%,
-    #10b981 100%
-  );
-  border-radius: 4px;
-  transform: translateY(-50%);
-  opacity: 0.6;
-}
-
-.score-indicator {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: white;
-  border: 2px solid currentColor;
-  font-weight: bold;
-  font-size: 0.9rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: left 0.3s ease, color 0.3s ease, border-color 0.3s ease;
-  z-index: 1;
-}
-
-[data-theme='dark'] .score-indicator {
-  background: #1e293b;
-  color: white;
-}
-
-.score-indicator.score-excellent { color: #10b981; border-color: #10b981; }
-.score-indicator.score-good { color: #3b82f6; border-color: #3b82f6; }
-.score-indicator.score-acceptable { color: #f59e0b; border-color: #f59e0b; }
-.score-indicator.score-needs-improvement { color: #f97316; border-color: #f97316; }
-.score-indicator.score-poor { color: #ef4444; border-color: #ef4444; }
-
-.score-labels {
-  position: absolute;
-  top: 24px;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.75rem;
-  color: var(--el-text-color-secondary);
-  padding: 0 2px;
-}
-
 /* AI Review ID Styles */
 .ai-review-header {
   display: flex;
@@ -2002,17 +1998,17 @@ watch(
   position: relative;
   height: 60px;
   margin-bottom: 16px;
-  padding: 0 10px;
   background: rgba(0, 0, 0, 0.02);
   border-radius: 8px;
   overflow: visible;
+  user-select: none;
 }
 
 .score-track {
   position: absolute;
   top: 50%;
-  left: 10px;
-  right: 10px;
+  left: 30px;
+  right: 30px;
   height: 8px;
   background: linear-gradient(to right, 
     #ef4444 0%, 
@@ -2028,20 +2024,30 @@ watch(
   opacity: 0.6;
 }
 
+/* Positioning range for the sliding indicator - matches the track span */
+.score-indicator-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 30px;
+  right: 30px;
+  z-index: 10;
+}
+
 .score-indicator {
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 48px;
   height: 32px;
-  line-height: 32px;
-  text-align: center;
   font-weight: 700;
   font-size: 0.9rem;
   border-radius: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   transition: left 0.3s ease;
-  z-index: 10;
   padding: 0 8px;
   white-space: nowrap;
 }
@@ -2075,13 +2081,12 @@ watch(
 .score-labels {
   position: absolute;
   bottom: 0;
-  left: 0;
-  right: 0;
+  left: 30px;
+  right: 30px;
   display: flex;
   justify-content: space-between;
   font-size: 0.75rem;
   color: var(--el-text-color-secondary);
-  padding: 0 5px;
 }
 
 /* Score input wrapper */
