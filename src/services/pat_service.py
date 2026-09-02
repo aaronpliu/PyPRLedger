@@ -246,20 +246,22 @@ class PATService:
 
         return True
 
-    async def cleanup_expired_tokens(self) -> int:
+    async def cleanup_expired_tokens(self, older_than_days: int = 30) -> int:
         """
-        Delete tokens that expired more than 3 months ago
+        Delete tokens whose expiration date passed more than ``older_than_days`` days ago.
+
+        Expired tokens are unusable (``validate_token`` rejects them regardless of
+        ``is_active``), so they are physically removed after a 30-day grace period
+        by default to keep the table from growing unboundedly.
 
         Returns:
             Number of deleted tokens
         """
         now = get_current_time()
-        three_months_ago = now - timedelta(days=90)
+        cutoff = now - timedelta(days=older_than_days)
 
         result = await self.db.execute(
-            select(PersonalAccessToken)
-            .where(PersonalAccessToken.expires_at < three_months_ago)
-            .where(PersonalAccessToken.is_active == False)
+            select(PersonalAccessToken).where(PersonalAccessToken.expires_at < cutoff)
         )
         expired_tokens = result.scalars().all()
 
@@ -270,7 +272,10 @@ class PATService:
         await self.db.commit()
 
         if count > 0:
-            logger.info("Cleaned up expired PATs", extra={"count": count})
+            logger.info(
+                "Cleaned up expired PATs",
+                extra={"count": count, "older_than_days": older_than_days},
+            )
 
         return count
 
