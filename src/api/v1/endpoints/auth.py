@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
@@ -106,6 +106,49 @@ async def refresh_tokens(
         ip_address=ip_address,
         user_agent=user_agent,
     )
+
+
+@router.post(
+    "/heartbeat",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Extend session idle deadline on user activity",
+    description="Resets the idle deadline of the current JWT session. Called by the "
+    "frontend only when real user input is detected — background polling never "
+    "triggers this, so sessions still expire after the configured idle timeout.",
+)
+async def heartbeat(
+    request: Request,
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+) -> Response:
+    """Heartbeat endpoint — slide the idle timeout for an active user."""
+    authorization = request.headers.get("Authorization")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization.split(" ")[1]
+
+    # Personal Access Tokens have no idle timeout — nothing to extend.
+    if token.startswith("pat_"):
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    try:
+        await auth_service.touch_session(token)
+        ip_address, user_agent = get_request_client_context(request)
+        await auth_service.sync_session_client_context(
+            token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from e
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(

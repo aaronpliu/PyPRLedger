@@ -534,6 +534,39 @@ class AuthService:
         if updated:
             await self._write_refresh_session_data(session_id, session_data, expires_in_seconds)
 
+    async def touch_session(self, token: str) -> None:
+        """Extend the idle deadline for an active JWT session.
+
+        Called by the frontend activity heartbeat when real user input is
+        detected. Resets the Redis TTL to the full idle timeout so active
+        users are never force-logged-out, while sessions with no user
+        activity still expire after ``REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES``.
+
+        This is the ONLY path that extends the idle deadline — token refresh
+        and ordinary API traffic intentionally do NOT touch the TTL, so
+        background polling (e.g. notification stats, SSE-triggered reloads)
+        cannot keep an idle session alive.
+
+        Args:
+            token: JWT access token of the active session.
+
+        Raises:
+            TokenExpiredException: If the refresh session no longer exists
+                (the user was idle past the configured timeout).
+            InvalidTokenException: If the token is not a valid access token.
+        """
+        session_id = await self.get_session_id_from_token(token)
+        session_data = await self._get_refresh_session(session_id)
+        if not session_data:
+            raise TokenExpiredException("Session expired due to inactivity")
+
+        session_data["last_activity_at"] = get_current_time().isoformat()
+        await self._write_refresh_session_data(
+            session_id,
+            session_data,
+            self._get_refresh_expires_in_seconds(),
+        )
+
     async def list_sessions(
         self,
         auth_user_id: int | None = None,

@@ -15,6 +15,7 @@ import { watch } from 'vue'
 import PWAInstallPrompt from '@/components/common/PWAInstallPrompt.vue'
 import PageAgentLauncher from '@/components/common/PageAgentLauncher.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useIdleSessionHeartbeat } from '@/composables/useIdleSessionHeartbeat'
 import { usePageAgent } from '@/composables/usePageAgent'
 
 // Theme is now managed globally by useTheme composable
@@ -29,6 +30,9 @@ const {
   initialized: pageAgentInitialized,
 } = usePageAgent()
 const authStore = useAuthStore()
+
+// Slide the idle session deadline on real user activity (never on background polling)
+useIdleSessionHeartbeat()
 
 // Auto-init PageAgent when user logs in, destroy on logout
 watch(

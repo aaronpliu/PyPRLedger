@@ -33,6 +33,13 @@ export const authApi = {
     return request.post('/auth/refresh', { refresh_token: refreshToken })
   },
 
+  // Activity heartbeat — slides the idle deadline of the JWT session.
+  // Called only on real user input; 401 here means the idle timeout hit and
+  // the request interceptor redirects to the login page.
+  heartbeat(): Promise<void> {
+    return request.post('/auth/heartbeat', {}, { _suppressGlobalError: true } as any)
+  },
+
   // List current user's active sessions
   getMySessions(): Promise<AuthSession[]> {
     return request.get('/auth/sessions/me')
