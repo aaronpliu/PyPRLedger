@@ -5,6 +5,24 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.0] - 2026-09-02
+
+**Backend Version**: 1.21.0
+**Frontend Version**: 1.16.0
+
+### Added
+- Add user comment template
+- Add comments template for score review
+- Purge expired tokens older than 30 days automatically
+
+### Changed
+- Enhance analytics data retrieval and reduce the number of API requests
+- Extend `.gitignore` to support more agent tooling
+- Update `tsconfig.json` to fix CI issues
+- Update GitHub CI workflow and fix git user info
+
+---
+
 ## [1.20.6] - 2026-08-14
 
 **Backend Version**: 1.20.6
