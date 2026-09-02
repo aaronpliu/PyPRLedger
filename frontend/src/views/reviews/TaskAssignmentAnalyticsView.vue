@@ -800,42 +800,57 @@ const loadAnalytics = async () => {
       baseParams.date_to = dayjs(dateRange.value[1]).format('YYYY-MM-DD')
     }
 
-    // Fetch all reviews by paginating (max 100 per request)
+    // Fetch via the lightweight analytics endpoint (slim records, no heavy
+    // diff/AI payloads) with a large page size, and load the remaining pages
+    // in parallel (bounded concurrency) so huge datasets spanning many pages
+    // complete in only a few request waves instead of serial round trips.
+    const pageSize = 1000
     const allReviews: any[] = []
-    let currentPage = 1
-    const pageSize = 100 // Backend max limit
-    let hasMore = true
     let totalRecords = 0
 
-    while (hasMore) {
-      loadingProgress.value = `Loading page ${currentPage}...`
-      
-      const params = {
-        ...baseParams,
-        page: currentPage,
-        page_size: pageSize,
+    // First request also reveals the total / number of pages
+    const firstPage = await taskAssignmentApi.getAnalyticsData({
+      ...baseParams,
+      page: 1,
+      page_size: pageSize,
+    })
+
+    if (firstPage.items && firstPage.items.length > 0) {
+      allReviews.push(...firstPage.items)
+      totalRecords = firstPage.total
+    }
+
+    const totalPages = Math.ceil(totalRecords / pageSize)
+    if (totalPages > 1) {
+      const loadedCount = { value: allReviews.length }
+      let nextPage = 2
+      let failed = false
+
+      const fetchWorker = async () => {
+        while (!failed && nextPage <= totalPages) {
+          const page = nextPage
+          nextPage++
+          try {
+            const response = await taskAssignmentApi.getAnalyticsData({
+              ...baseParams,
+              page,
+              page_size: pageSize,
+            })
+            if (response.items && response.items.length > 0) {
+              allReviews.push(...response.items)
+              loadedCount.value += response.items.length
+              loadingProgress.value = `Loaded ${loadedCount.value} of ${totalRecords} reviews...`
+            }
+          } catch (error) {
+            failed = true
+            throw error
+          }
+        }
       }
 
-      const response = await taskAssignmentApi.getReviewsForAnalytics(params)
-      
-      if (response.items && response.items.length > 0) {
-        allReviews.push(...response.items)
-        totalRecords = response.total
-        
-        // Update progress
-        const loadedCount = allReviews.length
-        loadingProgress.value = `Loaded ${loadedCount} of ${totalRecords} reviews...`
-        
-        // Check if there are more pages
-        const totalPages = Math.ceil(response.total / pageSize)
-        if (currentPage >= totalPages || response.items.length < pageSize) {
-          hasMore = false
-        } else {
-          currentPage++
-        }
-      } else {
-        hasMore = false
-      }
+      const concurrency = Math.min(6, totalPages - 1)
+      const workers = Array.from({ length: concurrency }, () => fetchWorker())
+      await Promise.all(workers)
     }
 
     loadingProgress.value = 'Processing data...'

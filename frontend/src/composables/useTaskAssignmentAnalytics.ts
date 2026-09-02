@@ -263,7 +263,14 @@ export function useTaskAssignmentAnalytics() {
     const grouped: Record<string, Record<IssueSeverity, number>> = {}
 
     reviews.value.forEach((review) => {
-      if (!review.ai_suggestions?.issues) return
+      // Prefer the lightweight pre-extracted severities; fall back to parsing
+      // the full ai_suggestions payload when present (legacy data shape).
+      const severities: string[] = review.issue_severities && review.issue_severities.length > 0
+        ? review.issue_severities
+        : (review.ai_suggestions?.issues as Array<{ severity: string }> | undefined)
+            ?.map((issue) => issue.severity) || []
+
+      if (severities.length === 0) return
 
       const date = dayjs(review.created_date)
       let key: string
@@ -286,9 +293,8 @@ export function useTaskAssignmentAnalytics() {
         grouped[key] = { low: 0, medium: 0, high: 0, critical: 0 }
       }
 
-      const issues = review.ai_suggestions.issues as Array<{ severity: string }>
-      issues.forEach((issue) => {
-        const sev = issue.severity?.toLowerCase() as IssueSeverity
+      severities.forEach((severity) => {
+        const sev = (severity || '').toLowerCase() as IssueSeverity
         if (grouped[key][sev] !== undefined) {
           grouped[key][sev]++
         }

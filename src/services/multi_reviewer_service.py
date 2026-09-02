@@ -20,8 +20,11 @@ from src.models.pull_request import (
     PullRequestScore,
     UserPinnedReview,
 )
+from src.models.user import User
 from src.schemas.notification import NotificationCreate
 from src.schemas.review import (
+    AnalyticsReviewerItem,
+    AnalyticsReviewItem,
     AssignReviewerRequest,
     ReviewBaseResponse,
     ReviewWithAssignmentsResponse,
@@ -413,6 +416,209 @@ class MultiReviewerService:
             reviews.append(review_response)
 
         return reviews, total
+
+    async def get_analytics_reviews(
+        self,
+        db: AsyncSession,
+        page: int = 1,
+        page_size: int = 1000,
+        project_key: str | None = None,
+        reviewer: str | None = None,
+        app_names: list[str] | None = None,
+        pull_request_user: str | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+    ) -> tuple[list[AnalyticsReviewItem], int]:
+        """Fetch slim review records for analytics aggregation.
+
+        Returns the same filtered dataset as get_reviews(), but only the
+        columns needed for chart aggregation — excluding heavy fields such as
+        git_code_diff, the full ai_suggestions JSON and metadata — so that
+        large result sets can be transferred in far fewer, larger pages.
+        """
+        # Project only the columns required for analytics aggregation
+        stmt = select(
+            PullRequestReviewBase.id,
+            PullRequestReviewBase.pull_request_id,
+            PullRequestReviewBase.project_key,
+            PullRequestReviewBase.repository_slug,
+            PullRequestReviewBase.source_branch,
+            PullRequestReviewBase.target_branch,
+            PullRequestReviewBase.pull_request_status,
+            PullRequestReviewBase.pull_request_user,
+            PullRequestReviewBase.created_date,
+            PullRequestReviewBase.ai_suggestions,
+        )
+
+        # Handle app_name filtering via registry lookup (mirrors get_reviews)
+        if app_names:
+            registry_query = select(
+                ProjectRegistry.project_key,
+                ProjectRegistry.repository_slug,
+            ).where(ProjectRegistry.app_name.in_(app_names))
+            registry_result = await db.execute(registry_query)
+            project_repo_pairs = registry_result.all()
+
+            if project_repo_pairs:
+                app_conditions = [
+                    and_(
+                        PullRequestReviewBase.project_key == pk,
+                        PullRequestReviewBase.repository_slug == rs,
+                    )
+                    for pk, rs in project_repo_pairs
+                ]
+                stmt = stmt.where(or_(*app_conditions))
+            else:
+                return [], 0
+
+        # Apply filters (mirrors get_reviews)
+        if project_key:
+            stmt = stmt.where(PullRequestReviewBase.project_key == project_key)
+        if pull_request_user:
+            stmt = stmt.where(PullRequestReviewBase.pull_request_user == pull_request_user)
+        if reviewer:
+            if reviewer == "__unassigned__":
+                stmt = stmt.where(
+                    ~exists(
+                        select(1).where(
+                            PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id
+                        )
+                    )
+                )
+            else:
+                stmt = stmt.join(PullRequestReviewBase.assignments).where(
+                    PullRequestReviewAssignment.reviewer == reviewer
+                )
+        if date_from:
+            stmt = stmt.where(PullRequestReviewBase.created_date >= date_from)
+        if date_to:
+            stmt = stmt.where(PullRequestReviewBase.created_date < date_to + timedelta(days=1))
+
+        # Total count
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = (await db.execute(count_stmt)).scalar() or 0
+
+        # Stable ordering for pagination (id tiebreaker keeps pages consistent)
+        stmt = stmt.order_by(
+            desc(PullRequestReviewBase.created_date),
+            desc(PullRequestReviewBase.id),
+        )
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+
+        rows = (await db.execute(stmt)).all()
+        if not rows:
+            return [], total
+
+        review_base_ids = [row.id for row in rows]
+
+        # Batch load assignments (reviewer + display name + status only)
+        assign_stmt = (
+            select(
+                PullRequestReviewAssignment.review_base_id,
+                PullRequestReviewAssignment.reviewer,
+                PullRequestReviewAssignment.assignment_status,
+                User.username.label("user_username"),
+                User.display_name.label("user_display_name"),
+            )
+            .outerjoin(User, User.username == PullRequestReviewAssignment.reviewer)
+            .where(PullRequestReviewAssignment.review_base_id.in_(review_base_ids))
+        )
+        assign_rows = (await db.execute(assign_stmt)).all()
+
+        assignments_by_base: dict[int, list[AnalyticsReviewerItem]] = {}
+        for assign_row in assign_rows:
+            base_id = assign_row.review_base_id
+            reviewer_name = assign_row.reviewer
+            reviewer_info = None
+            if reviewer_name:
+                reviewer_info = {
+                    "username": reviewer_name,
+                    "display_name": assign_row.user_display_name,
+                }
+            assignments_by_base.setdefault(base_id, []).append(
+                AnalyticsReviewerItem(
+                    reviewer=reviewer_name,
+                    reviewer_info=reviewer_info,
+                    assignment_status=assign_row.assignment_status or "pending",
+                )
+            )
+
+        # Batch resolve app names
+        project_repo_pairs = [(row.project_key, row.repository_slug) for row in rows]
+        registry_service = ProjectRegistryService()
+        app_name_mapping = await registry_service.get_app_names_batch(project_repo_pairs, db)
+
+        # Batch check which reviews have active scores
+        review_keys = {(row.pull_request_id, row.project_key, row.repository_slug) for row in rows}
+        scored_keys: set[tuple[str, str, str]] = set()
+        if review_keys:
+            score_stmt = (
+                select(
+                    PullRequestScore.pull_request_id,
+                    PullRequestScore.project_key,
+                    PullRequestScore.repository_slug,
+                )
+                .where(PullRequestScore.active == True)  # noqa: E712
+                .where(
+                    or_(
+                        *(
+                            and_(
+                                PullRequestScore.pull_request_id == pid,
+                                PullRequestScore.project_key == pk,
+                                PullRequestScore.repository_slug == rs,
+                            )
+                            for pid, pk, rs in review_keys
+                        )
+                    )
+                )
+                .distinct()
+            )
+            score_result = await db.execute(score_stmt)
+            scored_keys = {(row[0], row[1], row[2]) for row in score_result.all()}
+
+        # Assemble slim items
+        items: list[AnalyticsReviewItem] = []
+        for row in rows:
+            pair_key = (row.project_key, row.repository_slug)
+            review_key = (row.pull_request_id, row.project_key, row.repository_slug)
+            items.append(
+                AnalyticsReviewItem(
+                    id=row.id,
+                    pull_request_id=row.pull_request_id,
+                    project_key=row.project_key,
+                    repository_slug=row.repository_slug,
+                    app_name=app_name_mapping.get(pair_key, "Unknown"),
+                    pull_request_user=row.pull_request_user,
+                    source_branch=row.source_branch,
+                    target_branch=row.target_branch,
+                    pull_request_status=row.pull_request_status,
+                    created_date=row.created_date,
+                    has_scores=review_key in scored_keys,
+                    issue_severities=self._extract_issue_severities(row.ai_suggestions),
+                    reviewers=assignments_by_base.get(row.id, []),
+                )
+            )
+
+        return items, total
+
+    @staticmethod
+    def _extract_issue_severities(ai_suggestions: dict[str, Any] | None) -> list[str]:
+        """Extract issue severity strings from AI suggestions (keeps payload slim)"""
+        if not ai_suggestions:
+            return []
+
+        issues = ai_suggestions.get("issues")
+        if not isinstance(issues, list):
+            return []
+
+        severities: list[str] = []
+        for issue in issues:
+            if not isinstance(issue, dict):
+                continue
+            severity = str(issue.get("severity") or "").lower()
+            if severity:
+                severities.append(severity)
+        return severities
 
     async def get_review_by_id(
         self, db: AsyncSession, review_id: int

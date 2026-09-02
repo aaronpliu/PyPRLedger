@@ -13,6 +13,7 @@ from src.models.auth_user import AuthUser
 from src.models.pull_request import PullRequestReviewAssignment
 from src.models.user import User
 from src.schemas.review import (
+    AnalyticsReviewListResponse,
     AssignReviewerRequest,
     ReviewListResponse,
     ReviewWithAssignmentsResponse,
@@ -109,6 +110,101 @@ async def list_reviews(
             pinned_only=pinned_only,
             current_user_id=current_user.id,
             search_query=search_query,
+        )
+
+        return ReviewListResponse(
+            items=reviews,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": str(e)},
+        )
+
+
+@router.get("/analytics-data", response_model=AnalyticsReviewListResponse)
+async def get_analytics_data(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[MultiReviewerService, Depends(get_multi_reviewer_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(1000, ge=1, le=5000, description="Items per page"),
+    project_key: str | None = Query(None, description="Filter by project key"),
+    reviewer: str | None = Query(None, description="Filter by reviewer username"),
+    app_names: str | None = Query(
+        None,
+        description="Filter by application names (comma-separated for multiple apps, e.g., 'member,tv,football')",
+    ),
+    pull_request_user: str | None = Query(
+        None, min_length=1, max_length=64, description="Filter by pull request user username"
+    ),
+    date_from: datetime | None = Query(
+        None,
+        description="Filter reviews created after this date",
+    ),
+    date_to: datetime | None = Query(
+        None,
+        description="Filter reviews created before this date (inclusive)",
+    ),
+) -> AnalyticsReviewListResponse:
+    """Get lightweight review data for analytics aggregation.
+
+    Returns only the fields needed for chart aggregation (no git_code_diff,
+    full ai_suggestions or metadata), so large datasets can be fetched with
+    far fewer, larger pages. Supports the same filters as the main list.
+    """
+    try:
+        app_names_list = None
+        if app_names:
+            app_names_list = [name.strip() for name in app_names.split(",") if name.strip()]
+
+        items, total = await service.get_analytics_reviews(
+            db=db,
+            page=page,
+            page_size=page_size,
+            project_key=project_key,
+            reviewer=reviewer,
+            app_names=app_names_list,
+            pull_request_user=pull_request_user,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+        return AnalyticsReviewListResponse(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": str(e)},
+        )
+
+
+@router.get("/my-tasks", response_model=ReviewListResponse)
+async def get_my_tasks(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[MultiReviewerService, Depends(get_multi_reviewer_service)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+) -> ReviewListResponse:
+    """Get reviews assigned to current user"""
+    try:
+        git_username = await _get_git_username(current_user.id, db)
+        if not git_username:
+            return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
+
+        reviews, total = await service.get_reviews(
+            db=db,
+            page=page,
+            page_size=page_size,
+            visible_to_username=git_username,
         )
 
         return ReviewListResponse(
@@ -323,40 +419,6 @@ async def delete_review(
         return {"message": "Review deleted successfully"}
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "INTERNAL_SERVER_ERROR", "message": str(e)},
-        )
-
-
-@router.get("/my-tasks", response_model=ReviewListResponse)
-async def get_my_tasks(
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-    service: Annotated[MultiReviewerService, Depends(get_multi_reviewer_service)],
-    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-) -> ReviewListResponse:
-    """Get reviews assigned to current user"""
-    try:
-        git_username = await _get_git_username(current_user.id, db)
-        if not git_username:
-            return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
-
-        reviews, total = await service.get_reviews(
-            db=db,
-            page=page,
-            page_size=page_size,
-            visible_to_username=git_username,
-        )
-
-        return ReviewListResponse(
-            items=reviews,
-            total=total,
-            page=page,
-            page_size=page_size,
-        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
