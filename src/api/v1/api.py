@@ -16,6 +16,7 @@ from src.api.v1.endpoints import (
     search,  # Global search endpoint
     sse,  # SSE streaming endpoint for real-time review notifications
     task_assignment,  # Task assignment endpoints for review_admin
+    user_comment_templates,
     users,
 )
 
@@ -55,6 +56,9 @@ api_router.include_router(notifications.router, tags=["notifications"])
 
 # Personal Access Token management endpoints
 api_router.include_router(personal_access_tokens.router, tags=["personal-access-tokens"])
+
+# Personalized user comment template endpoints
+api_router.include_router(user_comment_templates.router, tags=["user-comment-templates"])
 
 # Global search endpoint
 api_router.include_router(search.router, prefix="/search", tags=["search"])

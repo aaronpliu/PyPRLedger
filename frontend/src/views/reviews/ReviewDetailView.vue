@@ -477,20 +477,50 @@
         </el-form-item>
         
         <el-form-item :label="t('reviews.detail.comment_template')">
-          <el-select
-            v-model="selectedTemplate"
-            :placeholder="t('reviews.detail.comment_template_placeholder')"
-            clearable
-            style="width: 100%"
-            @change="handleTemplateSelect"
-          >
-            <el-option
-              v-for="tpl in availableTemplates"
-              :key="tpl.id"
-              :label="t(`reviews.detail.tpl_${tpl.id}`)"
-              :value="tpl.id"
-            />
-          </el-select>
+          <div class="template-picker-row">
+            <el-select
+              v-model="selectedTemplate"
+              :placeholder="t('reviews.detail.comment_template_placeholder')"
+              clearable
+              class="template-select"
+              @change="handleTemplateSelect"
+            >
+              <el-option-group
+                v-if="availableTemplates.length"
+                :label="t('reviews.detail.tpl_group_recommended')"
+              >
+                <el-option
+                  v-for="tpl in availableTemplates"
+                  :key="tpl.id"
+                  :label="t(`reviews.detail.tpl_${tpl.id}`)"
+                  :value="tpl.id"
+                />
+              </el-option-group>
+              <el-option-group
+                v-if="canManagePersonalTemplates && personalTemplates.length"
+                :label="t('reviews.detail.tpl_group_personal')"
+              >
+                <el-option
+                  v-for="tpl in personalTemplates"
+                  :key="`personal-${tpl.id}`"
+                  :label="tpl.name"
+                  :value="`personal:${tpl.id}`"
+                />
+              </el-option-group>
+            </el-select>
+            <el-tooltip
+              v-if="canManagePersonalTemplates"
+              :content="t('reviews.detail.save_template_tooltip')"
+              placement="top"
+            >
+              <el-button
+                :icon="Plus"
+                circle
+                :disabled="!scoreForm.reviewer_comments"
+                @click="handleSaveAsPersonalTemplate"
+              />
+            </el-tooltip>
+          </div>
           <div class="form-item-hint">
             {{ t('reviews.detail.comment_template_hint') }}
           </div>
@@ -560,6 +590,10 @@ import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
 import { scoresApi } from '@/api/scores'
 import { taskAssignmentApi } from '@/api/taskAssignment'
+import {
+  userCommentTemplatesApi,
+  type UserCommentTemplate,
+} from '@/api/userCommentTemplates'
 import type { Review } from '@/api/reviews'
 import type { Score, ScoreCreate } from '@/api/scores'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1392,25 +1426,99 @@ const commentTemplates: CommentTemplate[] = [
 
 const selectedTemplate = ref('')
 
+// Personal comment templates saved by the current auth user
+const personalTemplates = ref<UserCommentTemplate[]>([])
+const savingPersonalTemplate = ref(false)
+
+const canManagePersonalTemplates = computed(() => authStore.isAuthenticated)
+
+const loadPersonalTemplates = async () => {
+  if (!authStore.isAuthenticated) {
+    personalTemplates.value = []
+    return
+  }
+  try {
+    const response = await userCommentTemplatesApi.listTemplates()
+    personalTemplates.value = response.items
+  } catch (error) {
+    console.warn('Failed to load personal comment templates', error)
+    personalTemplates.value = []
+  }
+}
+
 const availableTemplates = computed(() => {
   const score = scoreForm.score
   if (score <= 0) return commentTemplates
   return commentTemplates.filter((tpl) => score >= tpl.min && score <= tpl.max)
 })
 
-const handleTemplateSelect = (templateId: string | undefined) => {
-  if (!templateId) return
-  const content = t(`reviews.detail.tpl_${templateId}_content`)
+const handleTemplateSelect = (value: string | undefined) => {
+  if (!value) return
+  if (value.startsWith('personal:')) {
+    const templateId = Number(value.slice('personal:'.length))
+    const template = personalTemplates.value.find((item) => item.id === templateId)
+    if (template) {
+      scoreForm.reviewer_comments = template.content
+    }
+    return
+  }
+  const content = t(`reviews.detail.tpl_${value}_content`)
   if (content) {
     scoreForm.reviewer_comments = content
   }
 }
 
+// Save the current comment as a reusable personal template
+const handleSaveAsPersonalTemplate = async () => {
+  const content = (scoreForm.reviewer_comments || '').trim()
+  if (!content) {
+    ElMessage.warning(t('reviews.detail.save_template_empty'))
+    return
+  }
+
+  try {
+    const { value } = await ElMessageBox.prompt(
+      t('reviews.detail.save_template_message'),
+      t('reviews.detail.save_template_title'),
+      {
+        confirmButtonText: t('common.save'),
+        cancelButtonText: t('common.cancel'),
+        inputPlaceholder: t('reviews.detail.save_template_name_placeholder'),
+        inputValidator: (input: string) => {
+          const name = (input || '').trim()
+          if (!name) return t('reviews.detail.save_template_name_required')
+          if (name.length > 100) return t('reviews.detail.save_template_name_too_long')
+          return true
+        },
+      }
+    )
+
+    const name = String(value || '').trim()
+    if (!name) return
+
+    savingPersonalTemplate.value = true
+    await userCommentTemplatesApi.createTemplate({ name, content })
+    ElMessage.success(t('reviews.detail.save_template_success'))
+    await loadPersonalTemplates()
+  } catch (error: any) {
+    if (error === 'cancel' || error?.action === 'cancel') return
+    ElMessage.error(t('reviews.detail.save_template_failed'))
+  } finally {
+    savingPersonalTemplate.value = false
+  }
+}
+
 // Keep the template selection in sync with the current score
+// (personal templates are never filtered out, only built-in ones are)
 watch(
   () => scoreForm.score,
   (score) => {
-    if (score > 0 && selectedTemplate.value && !availableTemplates.value.some((tpl) => tpl.id === selectedTemplate.value)) {
+    if (
+      score > 0 &&
+      selectedTemplate.value &&
+      !selectedTemplate.value.startsWith('personal:') &&
+      !availableTemplates.value.some((tpl) => tpl.id === selectedTemplate.value)
+    ) {
       selectedTemplate.value = ''
     }
   }
@@ -1486,6 +1594,7 @@ watch(isDarkTheme, () => {
 
 onMounted(() => {
   loadReview()
+  loadPersonalTemplates()
 })
 
 watch(
@@ -1522,6 +1631,19 @@ watch(
   font-size: 0.8rem;
   color: var(--el-text-color-secondary);
   margin-top: 4px;
+}
+
+/* Template picker row (select + quick save button) */
+.template-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.template-picker-row .template-select {
+  flex: 1;
+  min-width: 0;
 }
 
 .score-md-editor {
