@@ -62,9 +62,44 @@ export interface ReviewV2 {
   
   // Score tracking
   has_scores: boolean
+
+  // Pre-extracted AI issue severities (lightweight analytics payload only)
+  issue_severities?: string[]
   
   // Pin/Flag feature
   is_pinned_by_me?: boolean
+}
+
+export interface AnalyticsReviewerItem {
+  reviewer: string | null
+  reviewer_info?: {
+    username: string
+    display_name: string
+  } | null
+  assignment_status: string
+}
+
+export interface AnalyticsReviewItem {
+  id: number
+  pull_request_id: string
+  project_key: string
+  repository_slug: string
+  app_name?: string | null
+  pull_request_user?: string | null
+  source_branch: string
+  target_branch: string
+  pull_request_status: string
+  created_date: string
+  has_scores: boolean
+  issue_severities: string[]
+  reviewers: AnalyticsReviewerItem[]
+}
+
+export interface AnalyticsReviewListResponse {
+  items: AnalyticsReviewItem[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export interface ReviewListResponse {
@@ -172,6 +207,26 @@ export const taskAssignmentApi = {
     date_to?: string
   }): Promise<ReviewListResponse> {
     return request.get('/task-assignment/', { params })
+  },
+
+  /**
+   * Get lightweight review data for analytics aggregation.
+   *
+   * Returns only the fields needed for chart aggregation (no git_code_diff or
+   * full ai_suggestions), and supports page_size up to 5000 so the analytics
+   * page can fetch huge datasets in just a few parallel requests.
+   */
+  getAnalyticsData(params: {
+    page?: number
+    page_size?: number
+    project_key?: string
+    reviewer?: string
+    app_names?: string
+    pull_request_user?: string
+    date_from?: string
+    date_to?: string
+  }): Promise<AnalyticsReviewListResponse> {
+    return request.get('/task-assignment/analytics-data', { params })
   },
 
   /**

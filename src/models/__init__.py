@@ -21,6 +21,7 @@ from src.models.repository import Repository
 from src.models.role import Role
 from src.models.system_setting import SystemSetting
 from src.models.user import User
+from src.models.user_comment_template import UserCommentTemplate
 
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "Notification",
     "NotificationPreference",
     "PersonalAccessToken",
+    "UserCommentTemplate",
 ]

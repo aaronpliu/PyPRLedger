@@ -20,8 +20,10 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
 
-    /* Suppress baseUrl deprecation warning (TS 6.0+) - will migrate before TS 7.0 */
-    "ignoreDeprecations": "5.0",
+    /* Suppress baseUrl deprecation (TS 6.0 wave). The installed compiler is
+       typescript@~6.0, which requires exactly "6.0" to accept this option.
+       Will migrate before TS 7.0 (drop baseUrl, keep paths under bundler resolution). */
+    "ignoreDeprecations": "6.0",
 
     /* Path aliases */
     "baseUrl": ".",

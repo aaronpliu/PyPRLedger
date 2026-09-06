@@ -363,6 +363,13 @@
             <PATManagement />
           </div>
         </el-tab-pane>
+
+        <!-- My Comment Templates Tab -->
+        <el-tab-pane label="My Comment Templates" name="comment-templates">
+          <div class="tab-content">
+            <CommentTemplateManagement />
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
 
@@ -398,6 +405,7 @@ import dayjs from 'dayjs'
 import DelegationForm from '@/components/delegation/DelegationForm.vue'
 import AvatarUpload from '@/components/user/AvatarUpload.vue'
 import PATManagement from '@/components/auth/PATManagement.vue'
+import CommentTemplateManagement from '@/components/review/CommentTemplateManagement.vue'
 import type { AuthSession } from '@/types'
 import { getSessionDeviceDetails } from '@/utils/device'
 

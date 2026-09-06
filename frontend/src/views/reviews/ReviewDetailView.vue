@@ -439,12 +439,14 @@
             <!-- Visual Score Bar -->
             <div class="score-visual-bar">
               <div class="score-track"></div>
-              <div 
-                class="score-indicator" 
-                :style="{ left: `${(scoreForm.score / 10) * 100}%` }"
-                :class="getScoreColorClass(scoreForm.score)"
-              >
-                {{ scoreForm.score.toFixed(1) }}
+              <div class="score-indicator-range">
+                <div 
+                  class="score-indicator" 
+                  :style="{ left: `${(scoreForm.score / 10) * 100}%` }"
+                  :class="getScoreColorClass(scoreForm.score)"
+                >
+                  {{ scoreForm.score.toFixed(1) }}
+                </div>
               </div>
               <div class="score-labels">
                 <span>0</span>
@@ -474,6 +476,56 @@
           </div>
         </el-form-item>
         
+        <el-form-item :label="t('reviews.detail.comment_template')">
+          <div class="template-picker-row">
+            <el-select
+              v-model="selectedTemplate"
+              :placeholder="t('reviews.detail.comment_template_placeholder')"
+              clearable
+              class="template-select"
+              @change="handleTemplateSelect"
+            >
+              <el-option-group
+                v-if="availableTemplates.length"
+                :label="t('reviews.detail.tpl_group_recommended')"
+              >
+                <el-option
+                  v-for="tpl in availableTemplates"
+                  :key="tpl.id"
+                  :label="t(`reviews.detail.tpl_${tpl.id}`)"
+                  :value="tpl.id"
+                />
+              </el-option-group>
+              <el-option-group
+                v-if="canManagePersonalTemplates && personalTemplates.length"
+                :label="t('reviews.detail.tpl_group_personal')"
+              >
+                <el-option
+                  v-for="tpl in personalTemplates"
+                  :key="`personal-${tpl.id}`"
+                  :label="tpl.name"
+                  :value="`personal:${tpl.id}`"
+                />
+              </el-option-group>
+            </el-select>
+            <el-tooltip
+              v-if="canManagePersonalTemplates"
+              :content="t('reviews.detail.save_template_tooltip')"
+              placement="top"
+            >
+              <el-button
+                :icon="Plus"
+                circle
+                :disabled="!scoreForm.reviewer_comments"
+                @click="handleSaveAsPersonalTemplate"
+              />
+            </el-tooltip>
+          </div>
+          <div class="form-item-hint">
+            {{ t('reviews.detail.comment_template_hint') }}
+          </div>
+        </el-form-item>
+
         <el-form-item :label="t('reviews.detail.comments')">
           <MdEditor
             v-model="scoreForm.reviewer_comments"
@@ -538,6 +590,10 @@ import 'md-editor-v3/lib/style.css'
 import { reviewsApi } from '@/api/reviews'
 import { scoresApi } from '@/api/scores'
 import { taskAssignmentApi } from '@/api/taskAssignment'
+import {
+  userCommentTemplatesApi,
+  type UserCommentTemplate,
+} from '@/api/userCommentTemplates'
 import type { Review } from '@/api/reviews'
 import type { Score, ScoreCreate } from '@/api/scores'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -1354,6 +1410,120 @@ const handleQuickScoreSelect = (value: number) => {
   scoreForm.score = value
 }
 
+interface CommentTemplate {
+  id: string
+  min: number
+  max: number
+}
+
+const commentTemplates: CommentTemplate[] = [
+  { id: 'excellent', min: 9.0, max: 10 },
+  { id: 'good', min: 7.5, max: 8.5 },
+  { id: 'average', min: 6.0, max: 7.0 },
+  { id: 'needs_changes', min: 4.5, max: 5.5 },
+  { id: 'major_changes', min: 0, max: 4.0 },
+]
+
+const selectedTemplate = ref('')
+
+// Personal comment templates saved by the current auth user
+const personalTemplates = ref<UserCommentTemplate[]>([])
+const savingPersonalTemplate = ref(false)
+
+const canManagePersonalTemplates = computed(() => authStore.isAuthenticated)
+
+const loadPersonalTemplates = async () => {
+  if (!authStore.isAuthenticated) {
+    personalTemplates.value = []
+    return
+  }
+  try {
+    const response = await userCommentTemplatesApi.listTemplates()
+    personalTemplates.value = response.items
+  } catch (error) {
+    console.warn('Failed to load personal comment templates', error)
+    personalTemplates.value = []
+  }
+}
+
+const availableTemplates = computed(() => {
+  const score = scoreForm.score
+  if (score <= 0) return commentTemplates
+  return commentTemplates.filter((tpl) => score >= tpl.min && score <= tpl.max)
+})
+
+const handleTemplateSelect = (value: string | undefined) => {
+  if (!value) return
+  if (value.startsWith('personal:')) {
+    const templateId = Number(value.slice('personal:'.length))
+    const template = personalTemplates.value.find((item) => item.id === templateId)
+    if (template) {
+      scoreForm.reviewer_comments = template.content
+    }
+    return
+  }
+  const content = t(`reviews.detail.tpl_${value}_content`)
+  if (content) {
+    scoreForm.reviewer_comments = content
+  }
+}
+
+// Save the current comment as a reusable personal template
+const handleSaveAsPersonalTemplate = async () => {
+  const content = (scoreForm.reviewer_comments || '').trim()
+  if (!content) {
+    ElMessage.warning(t('reviews.detail.save_template_empty'))
+    return
+  }
+
+  try {
+    const { value } = await ElMessageBox.prompt(
+      t('reviews.detail.save_template_message'),
+      t('reviews.detail.save_template_title'),
+      {
+        confirmButtonText: t('common.save'),
+        cancelButtonText: t('common.cancel'),
+        inputPlaceholder: t('reviews.detail.save_template_name_placeholder'),
+        inputValidator: (input: string) => {
+          const name = (input || '').trim()
+          if (!name) return t('reviews.detail.save_template_name_required')
+          if (name.length > 100) return t('reviews.detail.save_template_name_too_long')
+          return true
+        },
+      }
+    )
+
+    const name = String(value || '').trim()
+    if (!name) return
+
+    savingPersonalTemplate.value = true
+    await userCommentTemplatesApi.createTemplate({ name, content })
+    ElMessage.success(t('reviews.detail.save_template_success'))
+    await loadPersonalTemplates()
+  } catch (error: any) {
+    if (error === 'cancel' || error?.action === 'cancel') return
+    ElMessage.error(t('reviews.detail.save_template_failed'))
+  } finally {
+    savingPersonalTemplate.value = false
+  }
+}
+
+// Keep the template selection in sync with the current score
+// (personal templates are never filtered out, only built-in ones are)
+watch(
+  () => scoreForm.score,
+  (score) => {
+    if (
+      score > 0 &&
+      selectedTemplate.value &&
+      !selectedTemplate.value.startsWith('personal:') &&
+      !availableTemplates.value.some((tpl) => tpl.id === selectedTemplate.value)
+    ) {
+      selectedTemplate.value = ''
+    }
+  }
+)
+
 const toggleInfoCollapse = () => {
   isInfoExpanded.value = !isInfoExpanded.value
 }
@@ -1368,6 +1538,7 @@ const handleCloseDialog = () => {
   // Reset form
   scoreForm.score = 0
   scoreForm.reviewer_comments = undefined
+  selectedTemplate.value = ''
 }
 
 // Watch for dialog open to set reviewer
@@ -1397,6 +1568,9 @@ watch(showScoreDialog, (isOpen) => {
       scoreForm.score = 0
       scoreForm.reviewer_comments = ''
     }
+    selectedTemplate.value = ''
+  } else {
+    selectedTemplate.value = ''
   }
 })
 
@@ -1420,6 +1594,7 @@ watch(isDarkTheme, () => {
 
 onMounted(() => {
   loadReview()
+  loadPersonalTemplates()
 })
 
 watch(
@@ -1456,6 +1631,19 @@ watch(
   font-size: 0.8rem;
   color: var(--el-text-color-secondary);
   margin-top: 4px;
+}
+
+/* Template picker row (select + quick save button) */
+.template-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.template-picker-row .template-select {
+  flex: 1;
+  min-width: 0;
 }
 
 .score-md-editor {
@@ -1814,76 +2002,6 @@ watch(
   width: 100%;
 }
 
-/* Visual Score Bar Styles */
-.score-visual-bar {
-  position: relative;
-  height: 40px;
-  margin-bottom: 16px;
-  user-select: none;
-}
-
-.score-track {
-  position: absolute;
-  top: 50%;
-  left: 10px;
-  right: 10px;
-  height: 8px;
-  background: linear-gradient(to right, 
-    #ef4444 0%, 
-    #ef4444 25%,
-    #f97316 30%, 
-    #f59e0b 45%,
-    #3b82f6 65%, 
-    #10b981 85%,
-    #10b981 100%
-  );
-  border-radius: 4px;
-  transform: translateY(-50%);
-  opacity: 0.6;
-}
-
-.score-indicator {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: white;
-  border: 2px solid currentColor;
-  font-weight: bold;
-  font-size: 0.9rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: left 0.3s ease, color 0.3s ease, border-color 0.3s ease;
-  z-index: 1;
-}
-
-[data-theme='dark'] .score-indicator {
-  background: #1e293b;
-  color: white;
-}
-
-.score-indicator.score-excellent { color: #10b981; border-color: #10b981; }
-.score-indicator.score-good { color: #3b82f6; border-color: #3b82f6; }
-.score-indicator.score-acceptable { color: #f59e0b; border-color: #f59e0b; }
-.score-indicator.score-needs-improvement { color: #f97316; border-color: #f97316; }
-.score-indicator.score-poor { color: #ef4444; border-color: #ef4444; }
-
-.score-labels {
-  position: absolute;
-  top: 24px;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.75rem;
-  color: var(--el-text-color-secondary);
-  padding: 0 2px;
-}
-
 /* AI Review ID Styles */
 .ai-review-header {
   display: flex;
@@ -2002,17 +2120,17 @@ watch(
   position: relative;
   height: 60px;
   margin-bottom: 16px;
-  padding: 0 10px;
   background: rgba(0, 0, 0, 0.02);
   border-radius: 8px;
   overflow: visible;
+  user-select: none;
 }
 
 .score-track {
   position: absolute;
   top: 50%;
-  left: 10px;
-  right: 10px;
+  left: 30px;
+  right: 30px;
   height: 8px;
   background: linear-gradient(to right, 
     #ef4444 0%, 
@@ -2028,20 +2146,30 @@ watch(
   opacity: 0.6;
 }
 
+/* Positioning range for the sliding indicator - matches the track span */
+.score-indicator-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 30px;
+  right: 30px;
+  z-index: 10;
+}
+
 .score-indicator {
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 48px;
   height: 32px;
-  line-height: 32px;
-  text-align: center;
   font-weight: 700;
   font-size: 0.9rem;
   border-radius: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   transition: left 0.3s ease;
-  z-index: 10;
   padding: 0 8px;
   white-space: nowrap;
 }
@@ -2075,13 +2203,12 @@ watch(
 .score-labels {
   position: absolute;
   bottom: 0;
-  left: 0;
-  right: 0;
+  left: 30px;
+  right: 30px;
   display: flex;
   justify-content: space-between;
   font-size: 0.75rem;
   color: var(--el-text-color-secondary);
-  padding: 0 5px;
 }
 
 /* Score input wrapper */

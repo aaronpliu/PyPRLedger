@@ -24,6 +24,7 @@ from src.core.middleware import (
     LoggingMiddleware,
     RateLimitMiddleware,
 )
+from src.services.pat_service import PATService
 from src.services.project_service import ProjectService
 from src.services.rbac_service import RBACService
 from src.services.sse_broker import get_sse_broker
@@ -82,6 +83,27 @@ async def delegation_status_cleanup_task():
                 logger.error(f"Error in delegation status cleanup task: {e}", exc_info=True)
 
         # Wait before next check
+        await asyncio.sleep(cleanup_interval)
+
+
+async def pat_cleanup_task():
+    """Background task to periodically delete expired personal access tokens.
+
+    Removes tokens whose expiration date passed more than 30 days ago so the
+    personal_access_token table does not grow unboundedly. Runs every 1 hour.
+    """
+    cleanup_interval = 3600  # 1 hour
+
+    while True:
+        try:
+            async with get_db_context() as db:
+                pat_service = PATService(db)
+                deleted = await pat_service.cleanup_expired_tokens(older_than_days=30)
+                if deleted > 0:
+                    logger.info(f"Cleaned up {deleted} expired personal access tokens")
+        except Exception as e:
+            logger.error(f"Error in PAT cleanup task: {e}", exc_info=True)
+
         await asyncio.sleep(cleanup_interval)
 
 
@@ -150,6 +172,9 @@ async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
     system_metrics = asyncio.create_task(system_metrics_collection_task())
     background_tasks.append(system_metrics)
     logger.info("System metrics collection task started (interval: 60 seconds)")
+    pat_cleanup = asyncio.create_task(pat_cleanup_task())
+    background_tasks.append(pat_cleanup)
+    logger.info("PAT cleanup task started (interval: 1 hour)")
 
     logger.info("Application started successfully")
 

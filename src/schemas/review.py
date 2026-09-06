@@ -50,6 +50,50 @@ class ReviewerAssignmentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AnalyticsReviewerItem(BaseModel):
+    """Slim reviewer assignment info used for analytics aggregation"""
+
+    reviewer: str | None = None
+    reviewer_info: dict[str, Any] | None = None
+    assignment_status: str = "pending"
+
+    model_config = {"from_attributes": True}
+
+
+class AnalyticsReviewItem(BaseModel):
+    """Slim review record used for analytics aggregation.
+
+    Deliberately excludes heavy fields (git_code_diff, full ai_suggestions,
+    metadata, reviewer comments) that are not needed for chart aggregation,
+    so many records can be transferred in a single response.
+    """
+
+    id: int
+    pull_request_id: str
+    project_key: str
+    repository_slug: str
+    app_name: str | None = None
+    pull_request_user: str | None = None
+    source_branch: str
+    target_branch: str
+    pull_request_status: str
+    created_date: datetime
+    has_scores: bool = False
+    issue_severities: list[str] = []
+    reviewers: list[AnalyticsReviewerItem] = []
+
+    model_config = {"from_attributes": True}
+
+
+class AnalyticsReviewListResponse(BaseModel):
+    """Response for the lightweight analytics data endpoint"""
+
+    items: list[AnalyticsReviewItem]
+    total: int
+    page: int
+    page_size: int
+
+
 class ReviewWithAssignmentsResponse(ReviewBaseResponse):
     """Complete review with all reviewer assignments"""
 
