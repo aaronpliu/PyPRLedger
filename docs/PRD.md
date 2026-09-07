@@ -373,7 +373,7 @@ Review Created (no reviewer)
 | FR-5.5.8 | Optional link to Git user via `user_id` FK on `auth_user` table | P0 |
 | FR-5.5.9 | JWT-based authentication with access + refresh tokens | P0 |
 | FR-5.5.10 | Access token expiry configurable (default 30 min) | P0 |
-| FR-5.5.11 | Refresh token idle timeout (default 120 min) | P0 |
+| FR-5.5.11 | Refresh token idle timeout (default 60 min) | P0 |
 | FR-5.5.12 | `must_change_password` flag forces password change on next login | P1 |
 | FR-5.5.13 | Avatar upload support (JPEG, PNG, WebP, GIF; max 5MB) | P2 |
 | FR-5.5.14 | Admin can delete auth user (cascades to roles, audit, PATs; preserves Git user) | P1 |
@@ -1207,7 +1207,7 @@ Standalone `monitoring/` directory with independent Docker Compose:
 | **Delegation** | Temporary transfer of permissions from one user to another |
 | **PAT** | Personal Access Token — a long-lived API authentication token |
 | **Bitbucket PAT** | Personal Access Token for Bitbucket Server/Data Center used as Bearer auth (`BITBUCKET_TOKEN`), preferred over Basic auth |
-| **Idle Timeout** | Maximum session inactivity period (default 120 min); token refresh does not extend it |
+| **Idle Timeout** | Maximum session inactivity period (default 60 min); token refresh does not extend it |
 | **SSE** | Server-Sent Events — a unidirectional real-time push technology |
 | **SSEBroker** | Singleton service that multiplexes 1 Redis pubsub across all SSE clients |
 | **Auto-Assignment Rule** | A priority-ordered rule for automatically assigning reviewers |
