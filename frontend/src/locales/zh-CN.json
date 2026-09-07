@@ -529,6 +529,7 @@
       "source_branch": "源分支",
       "target_branch": "目标分支",
       "pr_status": "PR状态",
+      "pr_user": "PR用户",
       "created": "创建时间",
       "reviewers": "审查者",
       "assign_reviewer": "+ 分配审查者",

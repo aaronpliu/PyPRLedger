@@ -529,6 +529,7 @@
       "source_branch": "Source Branch",
       "target_branch": "Target Branch",
       "pr_status": "PR Status",
+      "pr_user": "PR User",
       "created": "Created",
       "reviewers": "Reviewers",
       "assign_reviewer": "+ Assign Reviewer",

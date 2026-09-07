@@ -62,6 +62,17 @@
               {{ review.pull_request_status }}
             </el-tag>
           </el-descriptions-item>
+          <el-descriptions-item :label="t('task_assignment.detail.pr_user')">
+            <div class="pr-user-cell">
+              <span>{{ review.pull_request_user_info?.display_name || review.pull_request_user || t('reviews.detail.na') }}</span>
+              <span
+                v-if="review.pull_request_user_info?.username && review.pull_request_user_info?.username !== review.pull_request_user_info?.display_name"
+                class="pr-user-username"
+              >
+                @{{ review.pull_request_user_info?.username }}
+              </span>
+            </div>
+          </el-descriptions-item>
           <el-descriptions-item :label="t('task_assignment.detail.created')">
             {{ formatDate(review.created_date) }}
           </el-descriptions-item>
@@ -805,6 +816,17 @@ onMounted(() => {
 .pr-link:hover {
   opacity: 0.7;
   text-decoration: underline;
+}
+
+.pr-user-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pr-user-username {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 .current-reviewers {
