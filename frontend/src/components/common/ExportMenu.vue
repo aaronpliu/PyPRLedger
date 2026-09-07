@@ -3,26 +3,26 @@
     <el-dropdown @command="handleExportCommand" trigger="click">
       <el-button :size="size" :type="type">
         <el-icon><Download /></el-icon>
-        Export
+        {{ t('export.button') }}
         <el-icon class="el-icon--right"><ArrowDown /></el-icon>
       </el-button>
       <template #dropdown>
         <el-dropdown-menu>
           <el-dropdown-item command="pdf">
             <el-icon><Document /></el-icon>
-            Export as PDF
+            {{ t('export.as_pdf') }}
           </el-dropdown-item>
           <el-dropdown-item command="excel">
             <el-icon><Grid /></el-icon>
-            Export as Excel
+            {{ t('export.as_excel') }}
           </el-dropdown-item>
           <el-dropdown-item command="csv">
             <el-icon><Tickets /></el-icon>
-            Export as CSV
+            {{ t('export.as_csv') }}
           </el-dropdown-item>
           <el-dropdown-item command="json">
             <el-icon><Files /></el-icon>
-            Export as JSON
+            {{ t('export.as_json') }}
           </el-dropdown-item>
         </el-dropdown-menu>
       </template>
@@ -31,26 +31,26 @@
     <!-- Export Scope Dialog -->
     <el-dialog
       v-model="showExportDialog"
-      title="Export Scope"
+      :title="t('export.scope_title')"
       width="500px"
       :close-on-click-modal="false"
       @close="handleDialogClose"
     >
       <div class="export-scope-content">
-        <p class="export-scope-label">Select which data to export:</p>
+        <p class="export-scope-label">{{ t('export.scope_label') }}</p>
         <el-radio-group v-model="selectedScope" class="export-scope-options">
           <el-radio value="current" border size="large" class="export-scope-option">
-            Current Page Only ({{ props.data.length }} items)
+            {{ t('export.current_page_only', { count: props.data.length }) }}
           </el-radio>
           <el-radio value="all" border size="large" class="export-scope-option">
-            All Filtered Data (across all pages)
+            {{ t('export.all_filtered_data') }}
           </el-radio>
         </el-radio-group>
       </div>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="handleCancel">Cancel</el-button>
-          <el-button type="primary" @click="handleConfirm">Confirm</el-button>
+          <el-button @click="handleCancel">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" @click="handleConfirm">{{ t('common.confirm') }}</el-button>
         </span>
       </template>
     </el-dialog>
@@ -59,6 +59,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Download, ArrowDown, Document, Grid, Tickets, Files } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { Review } from '@/api/reviews'
@@ -80,13 +81,15 @@ const props = withDefaults(defineProps<Props>(), {
   fetchAllData: undefined,
 })
 
+const { t } = useI18n()
+
 const showExportDialog = ref(false)
 const selectedScope = ref<'current' | 'all'>('current')
 let pendingFormat: 'pdf' | 'excel' | 'csv' | 'json' | null = null
 
 const handleExportCommand = async (format: 'pdf' | 'excel' | 'csv' | 'json') => {
   if (props.data.length === 0) {
-    ElMessage.warning('No data to export')
+    ElMessage.warning(t('export.no_data'))
     return
   }
 
@@ -124,7 +127,7 @@ const executeExport = async (format: 'pdf' | 'excel' | 'csv' | 'json', scope: 'c
     let dataToExport = props.data
     
     if (scope === 'all' && props.fetchAllData) {
-      ElMessage.info('Fetching all data for export...')
+      ElMessage.info(t('export.fetching_all'))
       dataToExport = await props.fetchAllData()
     } else if (props.selectedIds && props.selectedIds.length > 0) {
       // Filter by selected IDs if provided
@@ -132,7 +135,7 @@ const executeExport = async (format: 'pdf' | 'excel' | 'csv' | 'json', scope: 'c
     }
     
     if (dataToExport.length === 0) {
-      ElMessage.warning('No data to export')
+      ElMessage.warning(t('export.no_data'))
       return
     }
 
@@ -145,10 +148,10 @@ const executeExport = async (format: 'pdf' | 'excel' | 'csv' | 'json', scope: 'c
       json: 'JSON',
     }
     
-    ElMessage.success(`Exported ${dataToExport.length} reviews to ${formatNames[format]}`)
+    ElMessage.success(t('export.success_message', { count: dataToExport.length, format: formatNames[format] }))
   } catch (error) {
     console.error('Export failed:', error)
-    ElMessage.error('Failed to export data')
+    ElMessage.error(t('export.failed_message'))
   }
 }
 </script>
