@@ -13,7 +13,7 @@
     <el-card class="filters-card">
       <el-form :inline="true" class="filter-form">
         <el-form-item :label="t('task_assignment.analytics.filters.time_period')">
-          <el-radio-group v-model="selectedPeriod" @change="loadAnalytics">
+          <el-radio-group v-model="selectedPeriod">
             <el-radio-button value="daily">{{ t('task_assignment.analytics.period.daily') }}</el-radio-button>
             <el-radio-button value="weekly">{{ t('task_assignment.analytics.period.weekly') }}</el-radio-button>
             <el-radio-button value="monthly">{{ t('task_assignment.analytics.period.monthly') }}</el-radio-button>
