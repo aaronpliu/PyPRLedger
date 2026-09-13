@@ -22,6 +22,7 @@ services:
       - DEBUG=False
       - LOG_LEVEL=INFO
       - SECRET_KEY=${SECRET_KEY:-your-production-secret-key-change-this}
+      - REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES=${REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES:-60}
     depends_on:
       mysql:
         condition: service_healthy

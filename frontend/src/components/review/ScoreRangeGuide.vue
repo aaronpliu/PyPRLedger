@@ -4,6 +4,12 @@
       <el-icon><InfoFilled /></el-icon>
       AI Review Evaluation Guidelines
     </h4>
+    <p class="score-guide-intro">
+      This score evaluates the <strong>AI code review output</strong> for this PR, not the PR's
+      code quality. As a human reviewer, double-check the AI findings — whether it surfaced real
+      issues worth fixing with accurate, actionable suggestions and avoided hallucination/noise —
+      then pick the grade that best describes the review's value.
+    </p>
     <div class="score-ranges">
       <div
         v-for="range in scoreRanges"
@@ -24,49 +30,35 @@
 
 <script setup lang="ts">
 import { InfoFilled } from '@element-plus/icons-vue'
+import { SCORE_GRADES } from '@/constants/scoreGuide'
 
-const scoreRanges = [
-  {
-    min: 9,
-    max: 10,
-    label: 'Excellent',
-    description: 'Outstanding insight with zero errors. The review is exceptionally accurate and insightful, identifying critical issues or optimizations without any hallucinations or noise.',
-    className: 'excellent',
-    icon: '🟢',
-  },
-  {
-    min: 7,
-    max: 8.9,
-    label: 'Good',
-    description: 'Helpful and accurate with minor nitpicks. The review is reliable and valuable, providing correct feedback that may only lack depth in complex areas or include trivial stylistic suggestions.',
-    className: 'good',
-    icon: '🔵',
-  },
-  {
-    min: 5,
-    max: 6.9,
-    label: 'Acceptable',
-    description: 'Basic validity mixed with generic advice. The review correctly identifies obvious surface-level issues but lacks depth, offering generic suggestions that provide limited value.',
-    className: 'acceptable',
-    icon: '🟠',
-  },
-  {
-    min: 3,
-    max: 4.9,
-    label: 'Needs Improvement',
-    description: 'Significant noise or missed critical context. The review contains noticeable inaccuracies, misunderstandings of logic, or irrelevant comments that require the developer to filter out significant noise.',
-    className: 'needs-improvement',
-    icon: '🔴',
-  },
-  {
-    min: 0,
-    max: 2.9,
-    label: 'Poor',
-    description: 'Fundamentally broken or misleading output. The review is completely incorrect, hallucinates issues, or provides dangerous advice that could harm the codebase.',
-    className: 'poor',
-    icon: '⛔',
-  },
-]
+const rangeDescriptions: Record<string, string> = {
+  excellent:
+    'Outstanding insight with zero errors. The review surfaces genuine issues worth fixing — even critical bugs — with accurate, actionable fix suggestions. Human double-check confirms each finding; no hallucinations or noise.',
+  good: 'Helpful and accurate with minor nitpicks. The review reliably finds real issues and practical, worth-applying suggestions; only a slight lack of depth or trivial stylistic noise holds it back.',
+  acceptable:
+    'Basic validity mixed with generic advice. The review catches obvious, surface-level issues but lacks depth, and much of its advice is generic with limited added value.',
+  'needs-improvement':
+    'Significant noise or missed critical context. The review contains inaccuracies, misunderstands logic, or adds irrelevant comments, forcing the reviewer to filter significant noise and re-verify important areas.',
+  poor: 'Fundamentally broken or misleading output. The review hallucinates issues, misses what matters, or gives advice that could harm the codebase; its output should be discarded or the review redone.',
+}
+
+const rangeIcons: Record<string, string> = {
+  excellent: '🟢',
+  good: '🔵',
+  acceptable: '🟠',
+  'needs-improvement': '🔴',
+  poor: '⛔',
+}
+
+const scoreRanges = SCORE_GRADES.map((grade) => ({
+  min: grade.min,
+  max: grade.max,
+  label: grade.label,
+  description: rangeDescriptions[grade.className] || '',
+  className: grade.className,
+  icon: rangeIcons[grade.className] || '•',
+}))
 </script>
 
 <style scoped>
@@ -82,13 +74,20 @@ const scoreRanges = [
 }
 
 .score-range-guide h4 {
-  margin: 0 0 12px 0;
+  margin: 0 0 8px 0;
   font-size: 0.95rem;
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--el-text-color-primary);
   font-weight: 700;
+}
+
+.score-guide-intro {
+  margin: 0 0 12px 0;
+  font-size: 0.8rem;
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
 }
 
 .score-ranges {

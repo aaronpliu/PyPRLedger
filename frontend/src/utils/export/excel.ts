@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs'
 import type { Review } from '@/api/reviews'
 import dayjs from 'dayjs'
+import { buildReviewExportRow, REVIEW_EXPORT_COLUMNS, tExport } from './shared'
 
 export interface ExcelExportOptions {
   filename?: string
@@ -51,7 +52,7 @@ export async function exportReviewsToExcel(
 ) {
   const {
     filename = `reviews_${dayjs().format('YYYY-MM-DD_HH-mm-ss')}.xlsx`,
-    sheetName = 'Reviews',
+    sheetName = tExport('export.excel_sheet_reviews'),
     includeHeaders = true,
   } = options
 
@@ -63,37 +64,30 @@ export async function exportReviewsToExcel(
   // Add Reviews worksheet
   const reviewWorksheet = workbook.addWorksheet(sheetName)
 
-  // Define columns
-  const columns = [
-    { header: 'Seq#', key: 'seq', width: 8 },
-    { header: 'PR ID', key: 'prId', width: 35 },
-    { header: 'Project/Repo', key: 'projectRepo', width: 35 },
-    { header: 'PR User', key: 'prUser', width: 25 },
-    { header: 'Reviewer', key: 'reviewer', width: 25 },
-    { header: 'PR Status', key: 'status', width: 15 },
-    { header: 'Scores', key: 'scores', width: 18 },
-    { header: 'Comments', key: 'comments', width: 50 },
-    { header: 'Created', key: 'created', width: 20 },
-    { header: 'Updated', key: 'updated', width: 20 },
-  ]
+  // Localized headers. Rows are built by the shared builder, which fills the
+  // Reviewer / Comments cells from nested score data for scored records.
+  const labels = REVIEW_EXPORT_COLUMNS.map((col) => tExport(col.labelKey))
+  const widthByKey: Record<string, number> = {
+    seq: 8,
+    prId: 35,
+    projectRepo: 35,
+    prUser: 25,
+    reviewer: 25,
+    status: 15,
+    scores: 18,
+    comments: 50,
+    created: 20,
+    updated: 20,
+  }
 
-  reviewWorksheet.columns = columns
+  reviewWorksheet.columns = REVIEW_EXPORT_COLUMNS.map((col, index) => ({
+    header: labels[index],
+    key: col.key,
+    width: widthByKey[col.key] || 20,
+  }))
 
   // Prepare data
-  const data = reviews.map((review, index) => ({
-    seq: index + 1,
-    prId: review.pull_request_id,
-    projectRepo: `${review.project_key} / ${review.repository_slug}`,
-    prUser: review.pull_request_user_info?.display_name || review.pull_request_user,
-    reviewer: review.reviewer_info?.display_name || review.reviewer,
-    status: review.pull_request_status,
-    scores: review.score_summary && review.score_summary.total_scores > 0
-      ? `${review.score_summary.average_score?.toFixed(1)} (${review.score_summary.total_scores})`
-      : 'No scores',
-    comments: review.reviewer_comments || '',
-    created: dayjs(review.created_date).format('YYYY-MM-DD HH:mm:ss'),
-    updated: dayjs(review.updated_date).format('YYYY-MM-DD HH:mm:ss'),
-  }))
+  const data = reviews.map((review, index) => buildReviewExportRow(review, index))
 
   // Add rows
   data.forEach(item => {
@@ -106,7 +100,7 @@ export async function exportReviewsToExcel(
   }
 
   // Add Summary worksheet
-  const summaryWorksheet = workbook.addWorksheet('Summary')
+  const summaryWorksheet = workbook.addWorksheet(tExport('export.excel_sheet_summary'))
   summaryWorksheet.columns = [
     { header: '', key: 'label', width: 25 },
     { header: '', key: 'value', width: 15 },
@@ -119,11 +113,11 @@ export async function exportReviewsToExcel(
   }, {} as Record<string, number>)
 
   summaryWorksheet.addRows([
-    { label: 'Review Export Summary', value: '' },
-    { label: 'Generated At', value: dayjs().format('YYYY-MM-DD HH:mm:ss') },
-    { label: 'Total Reviews', value: reviews.length },
+    { label: tExport('export.summary_title'), value: '' },
+    { label: tExport('export.generated_at'), value: dayjs().format('YYYY-MM-DD HH:mm:ss') },
+    { label: tExport('export.total_reviews'), value: reviews.length },
     { label: '', value: '' },
-    { label: 'Status Breakdown', value: '' },
+    { label: tExport('export.status_breakdown'), value: '' },
   ])
 
   Object.entries(statusCounts).forEach(([status, count]) => {

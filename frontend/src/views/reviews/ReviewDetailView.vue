@@ -604,6 +604,7 @@ import CodeDiffViewer from '@/components/review/CodeDiffViewer.vue'
 import QuickScoreButtons from '@/components/review/QuickScoreButtons.vue'
 import ScoreRangeGuide from '@/components/review/ScoreRangeGuide.vue'
 import AIReviewResults from '@/components/review/AIReviewResults.vue'
+import { SCORE_GRADES, getScoreGrade } from '@/constants/scoreGuide'
 import { useAuthStore } from '@/stores/auth'
 import { useReviewNavigationStore, type ReviewNavigationItem } from '@/stores/reviewNavigation'
 import { usePrUrl } from '@/composables/usePrUrl'
@@ -890,13 +891,10 @@ const formatPublicId = (publicId: string): string => {
   return `REV-${hash}`
 }
 
-// Get score color class based on score value
+// Get score color class based on score value (aligned with constants/scoreGuide.ts)
 const getScoreColorClass = (score: number): string => {
-  if (score >= 9) return 'score-excellent'
-  if (score >= 7) return 'score-good'
-  if (score >= 5) return 'score-acceptable'
-  if (score >= 3) return 'score-needs-improvement'
-  return 'score-poor'
+  const grade = getScoreGrade(score)
+  return grade ? `score-${grade.className}` : 'score-poor'
 }
 
 const copyToClipboard = (text: string) => {
@@ -1416,13 +1414,14 @@ interface CommentTemplate {
   max: number
 }
 
-const commentTemplates: CommentTemplate[] = [
-  { id: 'excellent', min: 9.0, max: 10 },
-  { id: 'good', min: 7.5, max: 8.5 },
-  { id: 'average', min: 6.0, max: 7.0 },
-  { id: 'needs_changes', min: 4.5, max: 5.5 },
-  { id: 'major_changes', min: 0, max: 4.0 },
-]
+// Built-in comment templates are aligned 1:1 with the AI-review grades defined
+// in constants/scoreGuide.ts (see ScoreRangeGuide), so the recommended template
+// always matches the selected grade.
+const commentTemplates: CommentTemplate[] = SCORE_GRADES.map((grade) => ({
+  id: grade.id,
+  min: grade.min,
+  max: grade.max,
+}))
 
 const selectedTemplate = ref('')
 

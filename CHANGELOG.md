@@ -5,6 +5,24 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.1] - 2026-09-07
+
+**Backend Version**: 1.21.1
+**Frontend Version**: 1.16.1
+
+### Added
+- Add session idle heartbeat and enhance backend idle-session expiration handling
+- Show PR author user info on Task Assignment detail view
+
+### Fixed
+- Fix PDF/Excel export: support Chinese fonts (i18n) and include missing PR metadata in exported files
+
+### Changed
+- Enhance score comments template used by quick score buttons and score range guide
+- Improve user session management to keep idle timeout consistent
+
+---
+
 ## [1.21.0] - 2026-09-02
 
 **Backend Version**: 1.21.0
