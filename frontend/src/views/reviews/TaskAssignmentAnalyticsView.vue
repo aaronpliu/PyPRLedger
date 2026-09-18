@@ -13,7 +13,7 @@
     <el-card class="filters-card">
       <el-form :inline="true" class="filter-form">
         <el-form-item :label="t('task_assignment.analytics.filters.time_period')">
-          <el-radio-group v-model="selectedPeriod" @change="loadAnalytics">
+          <el-radio-group v-model="selectedPeriod">
             <el-radio-button value="daily">{{ t('task_assignment.analytics.period.daily') }}</el-radio-button>
             <el-radio-button value="weekly">{{ t('task_assignment.analytics.period.weekly') }}</el-radio-button>
             <el-radio-button value="monthly">{{ t('task_assignment.analytics.period.monthly') }}</el-radio-button>
@@ -776,8 +776,11 @@ const loadFilterOptions = async () => {
   }
 }
 
+let loadSequence = 0
+
 // Load analytics data
 const loadAnalytics = async () => {
+  const sequence = ++loadSequence
   loading.value = true
   try {
     // Build query params
@@ -815,6 +818,8 @@ const loadAnalytics = async () => {
       page_size: pageSize,
     })
 
+    if (sequence !== loadSequence) return
+
     if (firstPage.items && firstPage.items.length > 0) {
       allReviews.push(...firstPage.items)
       totalRecords = firstPage.total
@@ -828,6 +833,7 @@ const loadAnalytics = async () => {
 
       const fetchWorker = async () => {
         while (!failed && nextPage <= totalPages) {
+          if (sequence !== loadSequence) return
           const page = nextPage
           nextPage++
           try {
@@ -836,6 +842,7 @@ const loadAnalytics = async () => {
               page,
               page_size: pageSize,
             })
+            if (sequence !== loadSequence) return
             if (response.items && response.items.length > 0) {
               allReviews.push(...response.items)
               loadedCount.value += response.items.length
@@ -853,6 +860,8 @@ const loadAnalytics = async () => {
       await Promise.all(workers)
     }
 
+    if (sequence !== loadSequence) return
+
     loadingProgress.value = 'Processing data...'
 
     // Set data in composable for aggregation
@@ -862,11 +871,14 @@ const loadAnalytics = async () => {
       ElMessage.info(t('task_assignment.analytics.messages.no_data'))
     }
   } catch (error) {
+    if (sequence !== loadSequence) return
     console.error('Failed to load analytics data:', error)
     ElMessage.error(t('task_assignment.analytics.messages.load_failed'))
   } finally {
-    loading.value = false
-    loadingProgress.value = ''
+    if (sequence === loadSequence) {
+      loading.value = false
+      loadingProgress.value = ''
+    }
   }
 }
 
