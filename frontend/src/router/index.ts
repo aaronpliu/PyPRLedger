@@ -102,6 +102,12 @@ const routes: RouteRecordRaw[] = [
         name: 'NotificationPreferences',
         component: () => import('@/views/notifications/NotificationPreferenceView.vue'),
       },
+      // Release diff (standalone page)
+      {
+        path: 'release-diff',
+        name: 'ReleaseDiff',
+        component: () => import('@/views/releases/ReleaseDiffView.vue'),
+      },
     ],
   },
 

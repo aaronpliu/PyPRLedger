@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from src.core.config import settings
+from src.core.exceptions import GitServiceException, NotFoundException
 from src.core.git_provider import GitProvider
 from src.services.git_providers.base import BaseGitProvider
 
@@ -127,3 +128,69 @@ class GitHubEnterpriseProvider(BaseGitProvider):
             "email_address": api_response.get("email") or f"{username}@github.local",
             "active": True,
         }
+
+    async def _request(self, url: str, params: dict[str, Any]) -> Any:
+        """Make a GET request, raising typed exceptions on failure."""
+        try:
+            async with httpx.AsyncClient(verify=False) as client:
+                response = await client.get(url, headers=self.headers, params=params, timeout=30.0)
+        except httpx.HTTPError as e:
+            logger.error(f"GitHub API request failed: {url} - {e}")
+            raise GitServiceException(f"GitHub Enterprise request failed: {e}") from e
+
+        if response.status_code == 404:
+            raise NotFoundException(f"GitHub resource not found: {url}")
+        if response.status_code >= 400:
+            raise GitServiceException(
+                f"GitHub Enterprise returned {response.status_code} for {url}"
+            )
+
+        return response.json()
+
+    async def compare_commits(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Fetch commits reachable from ``to_ref`` but not from ``from_ref``.
+
+        Maps to GET /api/v3/repos/{owner}/{repo}/compare/{from}...{to}
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/compare/{from_ref}...{to_ref}"
+        logger.info(f"Comparing commits on GitHub: {project_key}/{repository_slug}")
+
+        payload = await self._request(url, {"per_page": min(limit, 100)})
+        commits = payload.get("commits") or []
+        return commits[:limit]
+
+    async def list_commits_until(
+        self,
+        project_key: str,
+        repository_slug: str,
+        until_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Fetch commits reachable from ``until_ref`` (newest first).
+
+        Maps to GET /api/v3/repos/{owner}/{repo}/commits?sha={ref}
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/commits"
+        logger.info(f"Listing commits on GitHub: {project_key}/{repository_slug}")
+
+        commits: list[dict[str, Any]] = []
+        page = 1
+        while len(commits) < limit:
+            payload = await self._request(
+                url, {"sha": until_ref, "per_page": min(100, limit - len(commits)), "page": page}
+            )
+            if not payload:
+                break
+            commits.extend(payload)
+            if len(payload) < min(100, limit - len(commits) + len(payload)):
+                break
+            page += 1
+
+        return commits[:limit]

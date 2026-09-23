@@ -57,3 +57,51 @@ class BaseGitProvider(ABC):
             Dict with keys: user_id, username, display_name, email_address
             None if not found.
         """
+
+    async def compare_commits(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Return raw commits reachable from ``to_ref`` but not from ``from_ref``.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            from_ref: Base ref (exclusive)
+            to_ref: Target ref (inclusive)
+            limit: Maximum number of commits to return
+
+        Returns:
+            List of provider-specific raw commit dicts.
+
+        Raises:
+            NotImplementedError: When the provider does not expose a compare API.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement compare_commits()")
+
+    async def list_commits_until(
+        self,
+        project_key: str,
+        repository_slug: str,
+        until_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Return raw commits reachable from ``until_ref`` (newest first).
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            until_ref: Ref to walk from (inclusive)
+            limit: Maximum number of commits to return
+
+        Returns:
+            List of provider-specific raw commit dicts.
+
+        Raises:
+            NotImplementedError: When the provider does not expose a commit listing API.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement list_commits_until()")

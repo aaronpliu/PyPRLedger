@@ -6,6 +6,7 @@ export interface ProjectSummary {
   project_name: string
   project_key: string
   project_url: string
+  git_provider?: string | null
   created_date: string
   updated_date: string
 }

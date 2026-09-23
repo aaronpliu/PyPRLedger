@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 
 from src.core.config import settings
+from src.core.exceptions import GitServiceException, NotFoundException
 from src.core.git_provider import GitProvider
 from src.services.git_providers.base import BaseGitProvider
 
@@ -24,7 +25,8 @@ class BitbucketServerProvider(BaseGitProvider):
 
     def __init__(self) -> None:
         base_url = getattr(settings, "BITBUCKET_SERVER_URL", "http://localhost:7990")
-        self._base_url = f"{base_url}/rest/api/latest"
+        self._server_url = base_url.rstrip("/")
+        self._base_url = f"{self._server_url}/rest/api/latest"
         self._headers: dict[str, str] = {"Accept": "application/json"}
 
         # Prefer a Personal Access Token (Bitbucket Server/Data Center) as Bearer auth.
@@ -154,3 +156,106 @@ class BitbucketServerProvider(BaseGitProvider):
             "email_address": api_response.get("emailAddress", f"{username}@example.com"),
             "active": api_response.get("active", True),
         }
+
+    async def _request_page(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Make a paginated GET request, raising typed exceptions on failure."""
+        try:
+            async with httpx.AsyncClient(verify=False) as client:
+                response = await client.get(url, headers=self._headers, params=params, timeout=30.0)
+        except httpx.HTTPError as e:
+            logger.error(f"Bitbucket API request failed: {url} - {e}")
+            raise GitServiceException(f"Bitbucket Server request failed: {e}") from e
+
+        if response.status_code == 404:
+            raise NotFoundException(f"Bitbucket resource not found: {url}")
+        if response.status_code >= 400:
+            raise GitServiceException(f"Bitbucket Server returned {response.status_code} for {url}")
+
+        return response.json()
+
+    async def _fetch_paged_commits(
+        self, url: str, params: dict[str, Any], limit: int
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Follow ``nextPageStart`` until ``limit`` commits are collected.
+
+        Returns:
+            Tuple of (commits, truncated)
+        """
+        page_size = max(1, min(limit, 500))
+        commits: list[dict[str, Any]] = []
+        start = 0
+        truncated = False
+
+        while len(commits) < limit:
+            remaining = limit - len(commits)
+            page_params = {**params, "limit": min(page_size, remaining), "start": start}
+            payload = await self._request_page(url, page_params)
+            values = payload.get("values") or []
+
+            commits.extend(values[:remaining])
+            if len(values) > remaining:
+                truncated = True
+                break
+
+            if payload.get("isLastPage", True) or not values:
+                break
+
+            next_start = payload.get("nextPageStart")
+            if next_start is None:
+                break
+            start = next_start
+
+        return commits, truncated
+
+    async def compare_commits(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Fetch commits reachable from ``to_ref`` but not from ``from_ref``.
+
+        Maps to GET /rest/api/latest/projects/{key}/repos/{slug}/compare/commits
+        """
+        url = f"{self._base_url}/projects/{project_key}/repos/{repository_slug}/compare/commits"
+        logger.info(
+            f"Comparing commits on Bitbucket Server: {project_key}/{repository_slug} "
+            f"({from_ref} -> {to_ref})"
+        )
+        commits, _ = await self._fetch_paged_commits(url, {"from": from_ref, "to": to_ref}, limit)
+        return self._with_commit_urls(commits, project_key, repository_slug)
+
+    async def list_commits_until(
+        self,
+        project_key: str,
+        repository_slug: str,
+        until_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Fetch commits reachable from ``until_ref`` (newest first).
+
+        Maps to GET /rest/api/latest/projects/{key}/repos/{slug}/commits?until={ref}
+        """
+        url = f"{self._base_url}/projects/{project_key}/repos/{repository_slug}/commits"
+        logger.info(
+            f"Listing commits on Bitbucket Server: {project_key}/{repository_slug} "
+            f"(until {until_ref})"
+        )
+        commits, _ = await self._fetch_paged_commits(url, {"until": until_ref}, limit)
+        return self._with_commit_urls(commits, project_key, repository_slug)
+
+    def _with_commit_urls(
+        self, commits: list[dict[str, Any]], project_key: str, repository_slug: str
+    ) -> list[dict[str, Any]]:
+        """Attach browseable commit URLs to raw Bitbucket commit payloads."""
+        for commit in commits:
+            commit.setdefault(
+                "url",
+                (
+                    f"{self._server_url}/projects/{project_key}/repos/{repository_slug}"
+                    f"/commits/{commit.get('id', '')}"
+                ),
+            )
+        return commits

@@ -1,0 +1,641 @@
+<template>
+  <div class="release-diff-container">
+    <el-card shadow="never" class="header-card">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <h2>{{ t('releaseDiff.title') }}</h2>
+            <p class="subtitle">{{ t('releaseDiff.subtitle') }}</p>
+          </div>
+        </div>
+      </template>
+
+      <!-- Repository coordinates shared by both modes -->
+      <el-form :model="repo" label-width="150px" class="repo-form">
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12" :md="6">
+            <el-form-item :label="t('releaseDiff.project_key')" required>
+              <el-select
+                v-model="repo.project_key"
+                filterable
+                clearable
+                allow-create
+                :loading="projectsLoading"
+                :placeholder="t('releaseDiff.select_project')"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="project in projects"
+                  :key="project.project_key"
+                  :label="`${project.project_key} - ${project.project_name}`"
+                  :value="project.project_key"
+                >
+                  <span class="option-key">{{ project.project_key }}</span>
+                  <span class="option-name">{{ project.project_name }}</span>
+                </el-option>
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12" :md="6">
+            <el-form-item :label="t('releaseDiff.repository_slug')" required>
+              <el-select
+                v-model="repo.repository_slug"
+                filterable
+                clearable
+                allow-create
+                :disabled="!repo.project_key"
+                :loading="repositoriesLoading"
+                :placeholder="t('releaseDiff.select_repository')"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="repository in repositories"
+                  :key="repository.repository_slug"
+                  :label="repository.repository_slug"
+                  :value="repository.repository_slug"
+                >
+                  <span class="option-key">{{ repository.repository_slug }}</span>
+                  <span class="option-name">{{ repository.repository_name }}</span>
+                </el-option>
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12" :md="6">
+            <el-form-item :label="t('releaseDiff.git_provider')">
+              <el-select
+                v-model="repo.git_provider"
+                clearable
+                :placeholder="t('releaseDiff.git_provider_placeholder')"
+                style="width: 100%"
+              >
+                <el-option label="bitbucket_server" value="bitbucket_server" />
+                <el-option label="bitbucket_cloud" value="bitbucket_cloud" />
+                <el-option label="github_enterprise" value="github_enterprise" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12" :md="6">
+            <el-form-item :label="t('releaseDiff.max_commits')">
+              <el-input-number v-model="maxCommits" :min="1" :max="5000" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <el-tabs v-model="activeTab" class="mode-tabs">
+        <!-- ================= Compare two releases ================= -->
+        <el-tab-pane :label="t('releaseDiff.tab_compare')" name="compare">
+          <el-form :model="compareForm" label-width="180px">
+            <el-row :gutter="16">
+              <el-col :xs="24" :md="12">
+                <el-form-item :label="t('releaseDiff.old_release_ref')" required>
+                  <el-input
+                    v-model="compareForm.old_release_ref"
+                    :placeholder="t('releaseDiff.ref_placeholder')"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item :label="t('releaseDiff.new_release_ref')" required>
+                  <el-input
+                    v-model="compareForm.new_release_ref"
+                    :placeholder="t('releaseDiff.ref_placeholder')"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item :label="t('releaseDiff.old_release_base_ref')">
+                  <el-input
+                    v-model="compareForm.old_release_base_ref"
+                    :placeholder="t('releaseDiff.base_ref_placeholder')"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item :label="t('releaseDiff.new_release_base_ref')">
+                  <el-input
+                    v-model="compareForm.new_release_base_ref"
+                    :placeholder="t('releaseDiff.base_ref_placeholder')"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <div class="actions">
+              <el-checkbox v-model="includeCommits">
+                {{ t('releaseDiff.include_commits') }}
+              </el-checkbox>
+              <el-button type="primary" :loading="compareLoading" @click="runCompare">
+                {{ t('releaseDiff.run_compare') }}
+              </el-button>
+            </div>
+          </el-form>
+
+          <div v-if="compareResult" class="result-block">
+            <el-alert
+              :type="compareAlertType"
+              :title="compareStatusText"
+              :closable="false"
+              show-icon
+              class="status-alert"
+            />
+            <el-alert
+              v-if="compareResult.truncated"
+              type="warning"
+              :title="t('releaseDiff.truncated_warning')"
+              :closable="false"
+              class="status-alert"
+            />
+
+            <el-row :gutter="16" class="stat-row">
+              <el-col :xs="12" :md="6">
+                <div class="stat-card">
+                  <span class="stat-value">{{ compareResult.summary.old_commit_count ?? 0 }}</span>
+                  <span class="stat-label">{{ t('releaseDiff.old_commit_count') }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="12" :md="6">
+                <div class="stat-card">
+                  <span class="stat-value">{{ compareResult.summary.new_commit_count ?? 0 }}</span>
+                  <span class="stat-label">{{ t('releaseDiff.new_commit_count') }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="12" :md="4">
+                <div class="stat-card danger">
+                  <span class="stat-value">{{ compareResult.summary.missing_count ?? 0 }}</span>
+                  <span class="stat-label">{{ t('releaseDiff.missing_count') }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="12" :md="4">
+                <div class="stat-card success">
+                  <span class="stat-value">{{ compareResult.summary.added_count ?? 0 }}</span>
+                  <span class="stat-label">{{ t('releaseDiff.added_count') }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="12" :md="4">
+                <div class="stat-card">
+                  <span class="stat-value">{{ compareResult.summary.common_count ?? 0 }}</span>
+                  <span class="stat-label">{{ t('releaseDiff.common_count') }}</span>
+                </div>
+              </el-col>
+            </el-row>
+
+            <el-collapse v-model="openSections">
+              <el-collapse-item
+                :title="`${t('releaseDiff.missing_commits_title')} (${compareResult.missing_commits.length})`"
+                name="missing"
+              >
+                <commit-table :commits="compareResult.missing_commits" />
+              </el-collapse-item>
+              <el-collapse-item
+                :title="`${t('releaseDiff.added_commits_title')} (${compareResult.added_commits.length})`"
+                name="added"
+              >
+                <commit-table :commits="compareResult.added_commits" />
+              </el-collapse-item>
+              <el-collapse-item
+                :title="`${t('releaseDiff.old_release_commits_title')} (${compareResult.old_release_commits.length})`"
+                name="old"
+              >
+                <commit-table :commits="compareResult.old_release_commits" />
+              </el-collapse-item>
+              <el-collapse-item
+                :title="`${t('releaseDiff.new_release_commits_title')} (${compareResult.new_release_commits.length})`"
+                name="new"
+              >
+                <commit-table :commits="compareResult.new_release_commits" />
+              </el-collapse-item>
+            </el-collapse>
+          </div>
+
+          <el-empty v-else :description="t('releaseDiff.empty_result')" />
+        </el-tab-pane>
+
+        <!-- ================= Check commits ================= -->
+        <el-tab-pane :label="t('releaseDiff.tab_check')" name="check">
+          <el-form :model="checkForm" label-width="180px">
+            <el-row :gutter="16">
+              <el-col :xs="24" :md="12">
+                <el-form-item :label="t('releaseDiff.target_release_ref')" required>
+                  <el-input
+                    v-model="checkForm.target_release_ref"
+                    :placeholder="t('releaseDiff.ref_placeholder')"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="12">
+                <el-form-item :label="t('releaseDiff.target_release_base_ref')">
+                  <el-input
+                    v-model="checkForm.target_release_base_ref"
+                    :placeholder="t('releaseDiff.base_ref_placeholder')"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-form-item :label="t('releaseDiff.commits_input')" required>
+              <el-input
+                v-model="commitsInput"
+                type="textarea"
+                :rows="6"
+                :placeholder="t('releaseDiff.commits_placeholder')"
+              />
+            </el-form-item>
+
+            <div class="actions">
+              <el-button type="primary" :loading="checkLoading" @click="runCheck">
+                {{ t('releaseDiff.run_check') }}
+              </el-button>
+            </div>
+          </el-form>
+
+          <div v-if="checkResult" class="result-block">
+            <el-alert
+              :type="checkResult.all_included ? 'success' : 'warning'"
+              :title="
+                checkResult.all_included
+                  ? t('releaseDiff.status_included')
+                  : t('releaseDiff.status_missing')
+              "
+              :closable="false"
+              show-icon
+              class="status-alert"
+            />
+            <el-alert
+              v-if="checkResult.truncated"
+              type="warning"
+              :title="t('releaseDiff.truncated_warning')"
+              :closable="false"
+              class="status-alert"
+            />
+
+            <el-row :gutter="16" class="stat-row">
+              <el-col :xs="12" :md="6">
+                <div class="stat-card">
+                  <span class="stat-value">{{ checkResult.summary.requested ?? 0 }}</span>
+                  <span class="stat-label">{{ t('releaseDiff.requested') }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="12" :md="6">
+                <div class="stat-card success">
+                  <span class="stat-value">{{ checkResult.summary.included_count ?? 0 }}</span>
+                  <span class="stat-label">{{ t('releaseDiff.included_count') }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="12" :md="6">
+                <div class="stat-card danger">
+                  <span class="stat-value">{{ checkResult.summary.missing_count ?? 0 }}</span>
+                  <span class="stat-label">{{ t('releaseDiff.missing_count') }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="12" :md="6">
+                <div class="stat-card">
+                  <span class="stat-value">{{ checkResult.summary.release_commit_count ?? 0 }}</span>
+                  <span class="stat-label">{{ t('releaseDiff.release_commit_count') }}</span>
+                </div>
+              </el-col>
+            </el-row>
+
+            <el-table :data="checkResult.results" stripe style="width: 100%">
+              <el-table-column :label="t('releaseDiff.col_commit')" min-width="220">
+                <template #default="{ row }">
+                  <span class="commit-sha" @click="copySha(row.matched_id || row.commit)">
+                    {{ row.matched_id || row.commit }}
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('releaseDiff.col_status')" width="140">
+                <template #default="{ row }">
+                  <el-tag :type="row.included ? 'success' : 'danger'" size="small">
+                    {{
+                      row.included ? t('releaseDiff.result_included') : t('releaseDiff.result_missing')
+                    }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('releaseDiff.col_author')" width="180">
+                <template #default="{ row }">
+                  {{ row.commit_info?.author_name || '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('releaseDiff.col_date')" width="180">
+                <template #default="{ row }">
+                  {{ formatTimestamp(row.commit_info?.author_timestamp) }}
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('releaseDiff.col_message')" min-width="260">
+                <template #default="{ row }">
+                  {{ firstLine(row.commit_info?.message) }}
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <el-empty v-else :description="t('releaseDiff.empty_result')" />
+        </el-tab-pane>
+      </el-tabs>
+    </el-card>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
+import dayjs from 'dayjs'
+import CommitTable from '@/components/release/CommitTable.vue'
+import { projectsApi } from '@/api/projects'
+import type { ProjectSummary, RepositorySummary } from '@/api/projects'
+import {
+  releaseDiffApi,
+  type ReleaseCommitCheckResponse,
+  type ReleaseCompareResponse,
+} from '@/api/releaseDiff'
+
+const { t } = useI18n()
+
+const projects = ref<ProjectSummary[]>([])
+const repositories = ref<RepositorySummary[]>([])
+const projectsLoading = ref(false)
+const repositoriesLoading = ref(false)
+
+const activeTab = ref<'compare' | 'check'>('compare')
+const compareLoading = ref(false)
+const checkLoading = ref(false)
+const includeCommits = ref(true)
+const maxCommits = ref(1000)
+const openSections = ref<string[]>(['missing', 'added'])
+
+const repo = ref({
+  project_key: '' as string,
+  repository_slug: '' as string,
+  git_provider: null as string | null,
+})
+
+const compareForm = ref({
+  old_release_ref: '',
+  new_release_ref: '',
+  old_release_base_ref: '',
+  new_release_base_ref: '',
+})
+
+const checkForm = ref({
+  target_release_ref: '',
+  target_release_base_ref: '',
+})
+
+const commitsInput = ref('')
+const compareResult = ref<ReleaseCompareResponse | null>(null)
+const checkResult = ref<ReleaseCommitCheckResponse | null>(null)
+
+const compareAlertType = computed<'success' | 'warning' | 'info'>(() => {
+  if (!compareResult.value) return 'info'
+  if (compareResult.value.status === 'identical') return 'info'
+  return compareResult.value.old_commits_included ? 'success' : 'warning'
+})
+
+const compareStatusText = computed(() => {
+  if (!compareResult.value) return ''
+  if (compareResult.value.status === 'identical') return t('releaseDiff.status_identical')
+  return compareResult.value.old_commits_included
+    ? t('releaseDiff.status_included')
+    : t('releaseDiff.status_missing')
+})
+
+// el-select emits undefined when cleared - always work with trimmed strings
+const selectedProjectKey = computed(() => (repo.value.project_key ?? '').trim())
+const selectedRepositorySlug = computed(() => (repo.value.repository_slug ?? '').trim())
+
+async function loadProjects() {
+  projectsLoading.value = true
+  try {
+    projects.value = await projectsApi.getAllProjects()
+  } catch {
+    ElMessage.error(t('releaseDiff.load_projects_failed'))
+  } finally {
+    projectsLoading.value = false
+  }
+}
+
+async function loadRepositories(projectKey: string) {
+  repositories.value = []
+  if (!projectKey) {
+    return
+  }
+
+  repositoriesLoading.value = true
+  try {
+    repositories.value = await projectsApi.getProjectRepositories(projectKey)
+  } catch {
+    ElMessage.error(t('releaseDiff.load_repositories_failed'))
+  } finally {
+    repositoriesLoading.value = false
+  }
+}
+
+watch(
+  () => repo.value.project_key,
+  (projectKey) => {
+    const key = (projectKey || '').trim()
+    const project = projects.value.find((item) => item.project_key === key)
+
+    repo.value.repository_slug = ''
+    repo.value.git_provider = project?.git_provider || null
+
+    // Unknown project keys (typed manually) have no local repository catalog
+    repositories.value = []
+    if (project) {
+      void loadRepositories(key)
+    }
+  },
+)
+
+onMounted(loadProjects)
+
+function basePayload() {
+  return {
+    project_key: selectedProjectKey.value,
+    repository_slug: selectedRepositorySlug.value,
+    git_provider: repo.value.git_provider || undefined,
+  }
+}
+
+function optionalRef(value: string): string | undefined {
+  const trimmed = value.trim()
+  return trimmed || undefined
+}
+
+async function runCompare() {
+  if (
+    !selectedProjectKey.value ||
+    !selectedRepositorySlug.value ||
+    !compareForm.value.old_release_ref.trim() ||
+    !compareForm.value.new_release_ref.trim()
+  ) {
+    ElMessage.warning(t('releaseDiff.validation_required'))
+    return
+  }
+
+  compareLoading.value = true
+  try {
+    compareResult.value = await releaseDiffApi.compare({
+      ...basePayload(),
+      old_release_ref: compareForm.value.old_release_ref.trim(),
+      new_release_ref: compareForm.value.new_release_ref.trim(),
+      old_release_base_ref: optionalRef(compareForm.value.old_release_base_ref),
+      new_release_base_ref: optionalRef(compareForm.value.new_release_base_ref),
+      include_commits: includeCommits.value,
+      max_commits: maxCommits.value,
+    })
+  } catch {
+    ElMessage.error(t('releaseDiff.compare_failed'))
+  } finally {
+    compareLoading.value = false
+  }
+}
+
+async function runCheck() {
+  const commits = commitsInput.value
+    .split(/[\n,\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  if (
+    !selectedProjectKey.value ||
+    !selectedRepositorySlug.value ||
+    !checkForm.value.target_release_ref.trim() ||
+    commits.length === 0
+  ) {
+    ElMessage.warning(t('releaseDiff.validation_commits_required'))
+    return
+  }
+
+  checkLoading.value = true
+  try {
+    checkResult.value = await releaseDiffApi.check({
+      ...basePayload(),
+      target_release_ref: checkForm.value.target_release_ref.trim(),
+      target_release_base_ref: optionalRef(checkForm.value.target_release_base_ref),
+      commits,
+      max_commits: maxCommits.value,
+    })
+  } catch {
+    ElMessage.error(t('releaseDiff.check_failed'))
+  } finally {
+    checkLoading.value = false
+  }
+}
+
+function formatTimestamp(value?: number | null): string {
+  if (!value) return '-'
+  return dayjs(value).format('YYYY-MM-DD HH:mm')
+}
+
+function firstLine(message?: string | null): string {
+  if (!message) return '-'
+  return message.split('\n')[0]
+}
+
+async function copySha(value: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    ElMessage.success(t('releaseDiff.copied'))
+  } catch {
+    ElMessage.info(value)
+  }
+}
+
+</script>
+
+<style scoped>
+.release-diff-container {
+  padding: 4px;
+}
+
+.card-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.repo-form {
+  margin-bottom: 8px;
+}
+
+.mode-tabs {
+  margin-top: 8px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.result-block {
+  margin-top: 20px;
+}
+
+.status-alert {
+  margin-bottom: 12px;
+}
+
+.stat-row {
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter);
+}
+
+.stat-card.success {
+  border-color: var(--el-color-success-light-5);
+  background: var(--el-color-success-light-9);
+}
+
+.stat-card.danger {
+  border-color: var(--el-color-danger-light-5);
+  background: var(--el-color-danger-light-9);
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.commit-sha {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  color: var(--el-color-primary);
+  cursor: pointer;
+}
+
+:deep(.el-select-dropdown__item) .option-key {
+  font-weight: 600;
+}
+
+:deep(.el-select-dropdown__item) .option-name {
+  margin-left: 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+</style>

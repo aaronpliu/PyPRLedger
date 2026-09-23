@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     CACHE_TTL_PROJECTS: int = Field(default=21600)
     CACHE_TTL_USERS: int = Field(default=43200)
     CACHE_TTL_STATS: int = Field(default=3600)
+    CACHE_TTL_RELEASE_DIFF: int = Field(
+        default=300, description="Cache TTL (seconds) for release diff / commit check results"
+    )
 
     # Security configuration
     SECRET_KEY: str = Field(default="development-secret-key-change-in-production")
