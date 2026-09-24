@@ -4,6 +4,8 @@ import ElementPlus from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ReleaseDiffView from '@/views/releases/ReleaseDiffView.vue'
 import { projectsApi } from '@/api/projects'
+import type { RepositorySummary } from '@/api/projects'
+import { releaseDiffApi } from '@/api/releaseDiff'
 import enMessages from '@/locales/en.json'
 
 vi.mock('@/api/projects', () => ({
@@ -43,7 +45,7 @@ const PROJECTS = [
   },
 ]
 
-const REPOSITORIES_BY_PROJECT: Record<string, Array<Record<string, unknown>>> = {
+const REPOSITORIES_BY_PROJECT: Record<string, RepositorySummary[]> = {
   ALPHA: [
     {
       id: 11,
@@ -78,6 +80,18 @@ const REPOSITORIES_BY_PROJECT: Record<string, Array<Record<string, unknown>>> = 
       updated_date: '2024-01-02T00:00:00',
     },
   ],
+}
+
+const BASE_REF_PLACEHOLDER = enMessages.releaseDiff.base_ref_placeholder
+const REF_PLACEHOLDER = enMessages.releaseDiff.ref_placeholder
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type AnyWrapper = any
+
+function inputsByPlaceholder(wrapper: AnyWrapper, placeholder: string) {
+  return wrapper
+    .findAllComponents({ name: 'ElInput' })
+    .filter((input: AnyWrapper) => input.props('placeholder') === placeholder)
 }
 
 function mountView() {
@@ -175,5 +189,127 @@ describe('ReleaseDiffView', () => {
     await flushPromises()
 
     expect(selects[2].props('modelValue')).toBe('github_enterprise')
+  })
+
+  it('hides the base ref inputs until the release scope toggle is enabled', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(inputsByPlaceholder(wrapper, BASE_REF_PLACEHOLDER)).toHaveLength(0)
+
+    await wrapper.findAllComponents({ name: 'ElSwitch' })[0].vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    expect(inputsByPlaceholder(wrapper, BASE_REF_PLACEHOLDER)).toHaveLength(2)
+  })
+
+  it('renders the effective scope of each release', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.findAllComponents({ name: 'ElSwitch' })[0].vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    await releaseInputs[0].find('input').setValue('v1.2.0')
+    await releaseInputs[1].find('input').setValue('v1.3.0')
+
+    const baseInputs = inputsByPlaceholder(wrapper, BASE_REF_PLACEHOLDER)
+    // no base ref yet -> the whole history reachable from the release ref
+    expect(wrapper.text()).toContain('full history of v1.2.0')
+    expect(wrapper.text()).toContain('full history of v1.3.0')
+
+    await baseInputs[0].find('input').setValue('v1.1.0')
+    await baseInputs[1].find('input').setValue('v1.2.0')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('v1.1.0..v1.2.0')
+    expect(wrapper.text()).toContain('v1.2.0..v1.3.0')
+  })
+
+  it('fills the new release base with the old release ref on demand', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.findAllComponents({ name: 'ElSwitch' })[0].vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    await inputsByPlaceholder(wrapper, REF_PLACEHOLDER)[0].find('input').setValue('v1.2.0')
+    await flushPromises()
+
+    const quickFill = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.scope_use_old_as_new_base)
+    expect(quickFill).toBeDefined()
+
+    await quickFill!.trigger('click')
+    await flushPromises()
+
+    const baseInputs = inputsByPlaceholder(wrapper, BASE_REF_PLACEHOLDER)
+    expect((baseInputs[1].find('input').element as HTMLInputElement).value).toBe('v1.2.0')
+  })
+
+  it('only sends base refs when the release scope is enabled', async () => {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue({
+      project_key: 'ALPHA',
+      repository_slug: 'alpha-api',
+      git_provider: 'bitbucket_server',
+      old_release_ref: 'v1.2.0',
+      new_release_ref: 'v1.3.0',
+      old_commits_included: true,
+      status: 'included',
+      summary: {},
+      missing_commits: [],
+      added_commits: [],
+      old_release_commits: [],
+      new_release_commits: [],
+      truncated: false,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'ALPHA')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'alpha-api')
+    await flushPromises()
+
+    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    await releaseInputs[0].find('input').setValue('v1.2.0')
+    await releaseInputs[1].find('input').setValue('v1.3.0')
+
+    const compareButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.run_compare)
+    await compareButton!.trigger('click')
+    await flushPromises()
+
+    expect(releaseDiffApi.compare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_key: 'ALPHA',
+        repository_slug: 'alpha-api',
+        old_release_ref: 'v1.2.0',
+        new_release_ref: 'v1.3.0',
+        old_release_base_ref: undefined,
+        new_release_base_ref: undefined,
+      }),
+    )
+
+    await wrapper.findAllComponents({ name: 'ElSwitch' })[0].vm.$emit('update:modelValue', true)
+    await flushPromises()
+    const baseInputs = inputsByPlaceholder(wrapper, BASE_REF_PLACEHOLDER)
+    await baseInputs[0].find('input').setValue('v1.1.0')
+    await baseInputs[1].find('input').setValue('v1.2.0')
+
+    await compareButton!.trigger('click')
+    await flushPromises()
+
+    expect(releaseDiffApi.compare).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        old_release_base_ref: 'v1.1.0',
+        new_release_base_ref: 'v1.2.0',
+      }),
+    )
   })
 })

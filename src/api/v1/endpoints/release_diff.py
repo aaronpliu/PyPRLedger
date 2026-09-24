@@ -48,7 +48,20 @@ def get_release_diff_service() -> ReleaseDiffService:
         "Compare an old release ref against a new release ref and report whether every "
         "old release commit is reachable from the new release. Uses the Bitbucket Server "
         "`/rest/api/latest/projects/{projectKey}/repos/{repositorySlug}/compare/commits` "
-        "endpoint under the hood."
+        "endpoint under the hood.\n\n"
+        "`old_release_ref` / `new_release_ref` answer the containment question "
+        "(is the old release fully included in the new one).\n\n"
+        "`old_release_base_ref` / `new_release_base_ref` are optional and only narrow the "
+        "commit set that counts as *belonging to* each release: with a base ref the release "
+        "scope is `base_ref..release_ref`, without it every commit reachable from the "
+        "release ref is used (capped by `max_commits`). Example - consecutive releases "
+        "v1.1.0 -> v1.2.0 -> v1.3.0:\n"
+        "```json\n"
+        "{\n"
+        '  "old_release_ref": "v1.2.0", "old_release_base_ref": "v1.1.0",\n'
+        '  "new_release_ref": "v1.3.0", "new_release_base_ref": "v1.2.0"\n'
+        "}\n"
+        "```"
     ),
 )
 async def compare_releases(

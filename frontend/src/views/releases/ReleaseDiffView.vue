@@ -103,21 +103,54 @@
                   />
                 </el-form-item>
               </el-col>
-              <el-col :xs="24" :md="12">
+            </el-row>
+
+            <div class="scope-block">
+              <el-switch
+                v-model="compareScopeEnabled"
+                size="small"
+                @change="onCompareScopeToggle"
+              />
+              <span class="scope-title">{{ t('releaseDiff.scope_toggle') }}</span>
+              <el-tooltip :content="t('releaseDiff.scope_help')" placement="top" :show-after="100">
+                <el-icon class="help-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </div>
+
+            <el-row v-if="compareScopeEnabled" :gutter="16">
+              <el-col :xs="24" :md="10">
                 <el-form-item :label="t('releaseDiff.old_release_base_ref')">
                   <el-input
                     v-model="compareForm.old_release_base_ref"
                     :placeholder="t('releaseDiff.base_ref_placeholder')"
                   />
                 </el-form-item>
+                <div class="scope-preview">
+                  {{ t('releaseDiff.scope_of') }} {{ t('releaseDiff.old_release_ref') }}:
+                  <code>{{ scopeText(compareForm.old_release_base_ref, compareForm.old_release_ref) }}</code>
+                </div>
               </el-col>
-              <el-col :xs="24" :md="12">
+              <el-col :xs="24" :md="10">
                 <el-form-item :label="t('releaseDiff.new_release_base_ref')">
                   <el-input
                     v-model="compareForm.new_release_base_ref"
                     :placeholder="t('releaseDiff.base_ref_placeholder')"
                   />
                 </el-form-item>
+                <div class="scope-preview">
+                  {{ t('releaseDiff.scope_of') }} {{ t('releaseDiff.new_release_ref') }}:
+                  <code>{{ scopeText(compareForm.new_release_base_ref, compareForm.new_release_ref) }}</code>
+                </div>
+              </el-col>
+              <el-col :xs="24" :md="4">
+                <el-button
+                  link
+                  type="primary"
+                  :disabled="!compareForm.old_release_ref.trim()"
+                  @click="useOldAsNewBase"
+                >
+                  {{ t('releaseDiff.scope_use_old_as_new_base') }}
+                </el-button>
               </el-col>
             </el-row>
 
@@ -146,6 +179,17 @@
               :closable="false"
               class="status-alert"
             />
+
+            <div class="scope-used">
+              <el-tag size="small" type="info">
+                {{ t('releaseDiff.old_release_ref') }}:
+                {{ scopeText(compareResult.old_release_base_ref, compareResult.old_release_ref) }}
+              </el-tag>
+              <el-tag size="small" type="info">
+                {{ t('releaseDiff.new_release_ref') }}:
+                {{ scopeText(compareResult.new_release_base_ref, compareResult.new_release_ref) }}
+              </el-tag>
+            </div>
 
             <el-row :gutter="16" class="stat-row">
               <el-col :xs="12" :md="6">
@@ -223,6 +267,17 @@
                   />
                 </el-form-item>
               </el-col>
+            </el-row>
+
+            <div class="scope-block">
+              <el-switch v-model="checkScopeEnabled" size="small" @change="onCheckScopeToggle" />
+              <span class="scope-title">{{ t('releaseDiff.scope_toggle') }}</span>
+              <el-tooltip :content="t('releaseDiff.scope_help')" placement="top" :show-after="100">
+                <el-icon class="help-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </div>
+
+            <el-row v-if="checkScopeEnabled" :gutter="16">
               <el-col :xs="24" :md="12">
                 <el-form-item :label="t('releaseDiff.target_release_base_ref')">
                   <el-input
@@ -230,6 +285,10 @@
                     :placeholder="t('releaseDiff.base_ref_placeholder')"
                   />
                 </el-form-item>
+                <div class="scope-preview">
+                  {{ t('releaseDiff.scope_of') }} {{ t('releaseDiff.target_release_ref') }}:
+                  <code>{{ scopeText(checkForm.target_release_base_ref, checkForm.target_release_ref) }}</code>
+                </div>
               </el-col>
             </el-row>
 
@@ -342,6 +401,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { QuestionFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
 import { projectsApi } from '@/api/projects'
@@ -362,6 +422,8 @@ const repositoriesLoading = ref(false)
 const activeTab = ref<'compare' | 'check'>('compare')
 const compareLoading = ref(false)
 const checkLoading = ref(false)
+const compareScopeEnabled = ref(false)
+const checkScopeEnabled = ref(false)
 const includeCommits = ref(true)
 const maxCommits = ref(1000)
 const openSections = ref<string[]>(['missing', 'added'])
@@ -465,6 +527,32 @@ function optionalRef(value: string): string | undefined {
   return trimmed || undefined
 }
 
+// A base ref is the exclusive lower bound of a release: only commits
+// reachable from the release ref but not from the base ref count as
+// "belonging to that release". Without it the whole history is used.
+function scopeText(baseRef: string | null | undefined, releaseRef: string): string {
+  const base = (baseRef ?? '').trim()
+  const release = (releaseRef ?? '').trim() || '?'
+  return base ? `${base}..${release}` : t('releaseDiff.scope_full_history', { ref: release })
+}
+
+function onCompareScopeToggle(enabled: boolean) {
+  if (!enabled) {
+    compareForm.value.old_release_base_ref = ''
+    compareForm.value.new_release_base_ref = ''
+  }
+}
+
+function onCheckScopeToggle(enabled: boolean) {
+  if (!enabled) {
+    checkForm.value.target_release_base_ref = ''
+  }
+}
+
+function useOldAsNewBase() {
+  compareForm.value.new_release_base_ref = compareForm.value.old_release_ref.trim()
+}
+
 async function runCompare() {
   if (
     !selectedProjectKey.value ||
@@ -482,8 +570,12 @@ async function runCompare() {
       ...basePayload(),
       old_release_ref: compareForm.value.old_release_ref.trim(),
       new_release_ref: compareForm.value.new_release_ref.trim(),
-      old_release_base_ref: optionalRef(compareForm.value.old_release_base_ref),
-      new_release_base_ref: optionalRef(compareForm.value.new_release_base_ref),
+      old_release_base_ref: compareScopeEnabled.value
+        ? optionalRef(compareForm.value.old_release_base_ref)
+        : undefined,
+      new_release_base_ref: compareScopeEnabled.value
+        ? optionalRef(compareForm.value.new_release_base_ref)
+        : undefined,
       include_commits: includeCommits.value,
       max_commits: maxCommits.value,
     })
@@ -515,7 +607,9 @@ async function runCheck() {
     checkResult.value = await releaseDiffApi.check({
       ...basePayload(),
       target_release_ref: checkForm.value.target_release_ref.trim(),
-      target_release_base_ref: optionalRef(checkForm.value.target_release_base_ref),
+      target_release_base_ref: checkScopeEnabled.value
+        ? optionalRef(checkForm.value.target_release_base_ref)
+        : undefined,
       commits,
       max_commits: maxCommits.value,
     })
@@ -637,5 +731,41 @@ async function copySha(value: string) {
   margin-left: 8px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+.scope-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.scope-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-regular);
+}
+
+.help-icon {
+  color: var(--el-text-color-secondary);
+  cursor: help;
+}
+
+.scope-preview {
+  margin: -6px 0 12px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.scope-preview code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  color: var(--el-color-primary);
+}
+
+.scope-used {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 </style>
