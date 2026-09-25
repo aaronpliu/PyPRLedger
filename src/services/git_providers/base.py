@@ -106,6 +106,69 @@ class BaseGitProvider(ABC):
         """
         raise NotImplementedError(f"Provider '{self.name}' does not implement list_commits_until()")
 
+    @property
+    def supports_releases(self) -> bool:
+        """Whether the provider exposes a release API (GitHub Enterprise does)."""
+        return False
+
+    async def list_releases(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return the provider releases of a repository.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            limit: Maximum number of releases returned
+
+        Returns:
+            List of dicts with ``id``, ``tag_name``, ``name``, ``body``, ``draft``,
+            ``prerelease``, ``html_url``, ``published_at`` and ``author``.
+
+        Raises:
+            NotImplementedError: When the provider has no release API.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement list_releases()")
+
+    async def create_release(
+        self,
+        project_key: str,
+        repository_slug: str,
+        *,
+        tag_name: str,
+        name: str,
+        body: str = "",
+        target_commitish: str | None = None,
+        draft: bool = False,
+        prerelease: bool = False,
+    ) -> dict[str, Any]:
+        """Publish a release on the provider.
+
+        Raises:
+            NotImplementedError: When the provider has no release API.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement create_release()")
+
+    async def update_release(
+        self,
+        project_key: str,
+        repository_slug: str,
+        release_id: str,
+        *,
+        name: str | None = None,
+        body: str | None = None,
+        prerelease: bool | None = None,
+    ) -> dict[str, Any]:
+        """Update an existing provider release.
+
+        Raises:
+            NotImplementedError: When the provider has no release API.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement update_release()")
+
     async def list_workspaces(self) -> list[dict[str, Any]]:
         """Return the workspaces (Bitbucket Cloud) reachable with the credentials.
 

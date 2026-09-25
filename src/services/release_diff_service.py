@@ -39,6 +39,36 @@ logger = get_logger(__name__)
 SHORT_SHA_LENGTH = 7
 
 
+def resolve_remote_project_key(
+    project_key: str,
+    provider_name: str,
+    workspace_slug: str | None = None,
+) -> str:
+    """Resolve the identifier used to address the project/repository remotely.
+
+    Bitbucket Cloud addresses repositories by workspace, while Bitbucket Server
+    and GitHub Enterprise use the project key / organization.
+    """
+    if provider_name != GitProvider.BITBUCKET_CLOUD.value:
+        return project_key
+    workspace = (workspace_slug or "").strip()
+    if not workspace or workspace == project_key:
+        return project_key
+    return workspace
+
+
+def resolve_provider_name(git_provider: str | None) -> str:
+    """Resolve a provider name from a request value or the configured default."""
+    if git_provider:
+        if not GitProvider.is_valid(git_provider):
+            raise ValueError(
+                f"Unknown git provider '{git_provider}'. "
+                f"Valid providers: {', '.join(sorted(GitProvider.values()))}"
+            )
+        return git_provider
+    return GitProvider.default().value
+
+
 class ReleaseDiffService:
     """Business logic for release comparison and commit membership checks."""
 
@@ -317,6 +347,51 @@ class ReleaseDiffService:
 
         return response
 
+    async def list_release_commits(
+        self,
+        *,
+        project_key: str,
+        repository_slug: str,
+        ref: str,
+        git_provider: str | None = None,
+        workspace_slug: str | None = None,
+        limit: int = 500,
+    ) -> tuple[list[CommitInfo], bool]:
+        """Return every commit reachable from ``ref`` (newest first).
+
+        Used to draft release notes for a version that has no previous version to
+        compare against.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            ref: Tag, branch or commit the release is built from
+            git_provider: Optional provider override
+            workspace_slug: Optional Bitbucket Cloud workspace
+            limit: Maximum number of commits returned
+
+        Returns:
+            Tuple of normalized commits and whether the result was truncated.
+        """
+        provider_name = self._resolve_provider_name(git_provider)
+        provider = self._provider_factory(provider_name)
+        request = ReleaseDiffRepository(
+            project_key=project_key,
+            repository_slug=repository_slug,
+            git_provider=git_provider,
+            workspace_slug=workspace_slug,
+        )
+        remote_key = self._remote_project_key(request, provider_name)
+
+        return await self._fetch_release_commits(
+            provider=provider,
+            project_key=remote_key,
+            repository_slug=repository_slug,
+            release_ref=ref,
+            base_ref=None,
+            max_commits=limit,
+        )
+
     # ------------------------------------------------------------------ #
     # Helpers
     # ------------------------------------------------------------------ #
@@ -325,29 +400,17 @@ class ReleaseDiffService:
     def _remote_project_key(request: ReleaseDiffRepository, provider_name: str) -> str:
         """Resolve the identifier used to address the repository remotely.
 
-        Bitbucket Cloud addresses repositories by workspace, while Bitbucket
-        Server and GitHub Enterprise use the project key / organization. When the
-        request carries a ``workspace_slug`` and the provider is Cloud, the
-        workspace is used for the remote calls and ``project_key`` stays the
+        When the request carries a ``workspace_slug`` and the provider is Cloud,
+        the workspace is used for the remote calls while ``project_key`` stays the
         business key echoed back in the response.
         """
-        if provider_name != GitProvider.BITBUCKET_CLOUD.value:
-            return request.project_key
-        workspace = (request.workspace_slug or "").strip()
-        if not workspace or workspace == request.project_key:
-            return request.project_key
-        return workspace
+        return resolve_remote_project_key(
+            request.project_key, provider_name, request.workspace_slug
+        )
 
     def _resolve_provider_name(self, git_provider: str | None) -> str:
         """Resolve provider name from request or fall back to configured default."""
-        if git_provider:
-            if not GitProvider.is_valid(git_provider):
-                raise ValueError(
-                    f"Unknown git provider '{git_provider}'. "
-                    f"Valid providers: {', '.join(sorted(GitProvider.values()))}"
-                )
-            return git_provider
-        return GitProvider.default().value
+        return resolve_provider_name(git_provider)
 
     async def _fetch_release_commits(
         self,

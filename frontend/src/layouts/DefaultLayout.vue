@@ -21,6 +21,7 @@
               <el-sub-menu index="/releases">
                 <template #title>{{ t('menu.releases') }}</template>
                 <el-menu-item index="/releases">{{ t('menu.releaseComparison') }}</el-menu-item>
+                <el-menu-item index="/releases/notes">{{ t('menu.releaseNotes') }}</el-menu-item>
               </el-sub-menu>
               <el-sub-menu v-if="isAdmin" index="/task-assignment">
                 <template #title>{{ t('menu.taskAssignment') }}</template>

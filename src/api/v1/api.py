@@ -13,6 +13,7 @@ from src.api.v1.endpoints import (
     projects,
     rbac,
     release_diff,
+    release_notes,
     reviews,
     search,  # Global search endpoint
     sse,  # SSE streaming endpoint for real-time review notifications
@@ -66,6 +67,9 @@ api_router.include_router(search.router, prefix="/search", tags=["search"])
 
 # Release diff endpoints (compare / check releases against git provider)
 api_router.include_router(release_diff.router, tags=["release-diff"])
+
+# Release notes (version releases with their notes, GitHub Releases style)
+api_router.include_router(release_notes.router, tags=["release-notes"])
 
 # LLM Proxy endpoint (for PageAgent AI assistant)
 api_router.include_router(llm_proxy.router, tags=["llm-proxy"])

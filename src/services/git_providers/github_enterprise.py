@@ -131,9 +131,27 @@ class GitHubEnterpriseProvider(BaseGitProvider):
 
     async def _request(self, url: str, params: dict[str, Any]) -> Any:
         """Make a GET request, raising typed exceptions on failure."""
+        return await self._request_json(url, params=params)
+
+    async def _request_json(
+        self,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        method: str = "GET",
+        payload: dict[str, Any] | None = None,
+    ) -> Any:
+        """Execute a GitHub API call, raising typed exceptions on failure."""
         try:
             async with httpx.AsyncClient(verify=False) as client:
-                response = await client.get(url, headers=self.headers, params=params, timeout=30.0)
+                response = await client.request(
+                    method,
+                    url,
+                    headers=self.headers,
+                    params=params or {},
+                    json=payload,
+                    timeout=30.0,
+                )
         except httpx.HTTPError as e:
             logger.error(f"GitHub API request failed: {url} - {e}")
             raise GitServiceException(f"GitHub Enterprise request failed: {e}") from e
@@ -142,10 +160,114 @@ class GitHubEnterpriseProvider(BaseGitProvider):
             raise NotFoundException(f"GitHub resource not found: {url}")
         if response.status_code >= 400:
             raise GitServiceException(
-                f"GitHub Enterprise returned {response.status_code} for {url}"
+                f"GitHub Enterprise returned {response.status_code} for {url}: "
+                f"{response.text[:300]}"
             )
 
+        if response.status_code == 204 or not response.content:
+            return None
         return response.json()
+
+    # ------------------------------------------------------------------ #
+    # Releases (GitHub Releases API)
+    # ------------------------------------------------------------------ #
+
+    @property
+    def supports_releases(self) -> bool:
+        return True
+
+    async def list_releases(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Fetch the releases of a repository.
+
+        Maps to GET /api/v3/repos/{owner}/{repo}/releases
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/releases"
+        logger.info(f"Listing releases on GitHub: {project_key}/{repository_slug}")
+
+        payload = await self._fetch_paged_values(url, limit)
+        return [self._normalize_release(release) for release in payload]
+
+    async def create_release(
+        self,
+        project_key: str,
+        repository_slug: str,
+        *,
+        tag_name: str,
+        name: str,
+        body: str = "",
+        target_commitish: str | None = None,
+        draft: bool = False,
+        prerelease: bool = False,
+    ) -> dict[str, Any]:
+        """Publish a release.
+
+        Maps to POST /api/v3/repos/{owner}/{repo}/releases
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/releases"
+        logger.info(f"Creating release on GitHub: {project_key}/{repository_slug} {tag_name}")
+
+        payload: dict[str, Any] = {
+            "tag_name": tag_name,
+            "name": name,
+            "body": body or "",
+            "draft": draft,
+            "prerelease": prerelease,
+        }
+        if target_commitish:
+            payload["target_commitish"] = target_commitish
+
+        created = await self._request_json(url, method="POST", payload=payload)
+        return self._normalize_release(created or {})
+
+    async def update_release(
+        self,
+        project_key: str,
+        repository_slug: str,
+        release_id: str,
+        *,
+        name: str | None = None,
+        body: str | None = None,
+        prerelease: bool | None = None,
+    ) -> dict[str, Any]:
+        """Update an existing release.
+
+        Maps to PATCH /api/v3/repos/{owner}/{repo}/releases/{release_id}
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/releases/{release_id}"
+        logger.info(f"Updating release {release_id} on GitHub: {project_key}/{repository_slug}")
+
+        payload: dict[str, Any] = {}
+        if name is not None:
+            payload["name"] = name
+        if body is not None:
+            payload["body"] = body
+        if prerelease is not None:
+            payload["prerelease"] = prerelease
+
+        updated = await self._request_json(url, method="PATCH", payload=payload)
+        return self._normalize_release(updated or {})
+
+    @staticmethod
+    def _normalize_release(release: dict[str, Any]) -> dict[str, Any]:
+        """Map a GitHub release payload onto the provider independent shape."""
+        author = release.get("author") or {}
+        return {
+            "id": str(release.get("id") or ""),
+            "tag_name": release.get("tag_name") or "",
+            "name": release.get("name") or release.get("tag_name") or "",
+            "body": release.get("body") or "",
+            "draft": bool(release.get("draft")),
+            "prerelease": bool(release.get("prerelease")),
+            "html_url": release.get("html_url") or "",
+            "published_at": release.get("published_at") or release.get("created_at"),
+            "created_at": release.get("created_at"),
+            "author": author.get("login"),
+        }
 
     async def _fetch_paged_values(self, url: str, limit: int) -> list[dict[str, Any]]:
         """Page through a GitHub list endpoint until ``limit`` values are collected."""

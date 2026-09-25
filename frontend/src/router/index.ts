@@ -108,6 +108,12 @@ const routes: RouteRecordRaw[] = [
         name: 'Releases',
         component: () => import('@/views/releases/ReleasesView.vue'),
       },
+      // Release notes (version releases with their notes)
+      {
+        path: 'releases/notes',
+        name: 'ReleaseNotes',
+        component: () => import('@/views/releases/ReleaseNotesView.vue'),
+      },
       // Legacy path kept so old bookmarks keep working
       {
         path: 'release-diff',
