@@ -207,6 +207,58 @@ class BitbucketServerProvider(BaseGitProvider):
 
         return commits, truncated
 
+    async def _fetch_paged_values(self, url: str, limit: int) -> list[dict[str, Any]]:
+        """Follow ``nextPageStart`` until ``limit`` values are collected."""
+        values: list[dict[str, Any]] = []
+        start = 0
+
+        while len(values) < limit:
+            remaining = limit - len(values)
+            payload = await self._request_page(url, {"limit": remaining, "start": start})
+            page_values = payload.get("values") or []
+
+            values.extend(page_values)
+            if payload.get("isLastPage", True) or not page_values:
+                break
+
+            next_start = payload.get("nextPageStart")
+            if next_start is None:
+                break
+            start = next_start
+
+        return values[:limit]
+
+    async def list_refs(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 100,
+    ) -> dict[str, list[str]]:
+        """Fetch tags and branches of a repository.
+
+        Maps to GET /rest/api/latest/projects/{key}/repos/{slug}/tags and /branches
+        """
+        base = f"{self._base_url}/projects/{project_key}/repos/{repository_slug}"
+        logger.info(f"Listing refs on Bitbucket Server: {project_key}/{repository_slug}")
+
+        tags = await self._fetch_paged_values(f"{base}/tags", limit)
+        branches = await self._fetch_paged_values(f"{base}/branches", limit)
+
+        return {
+            "tags": self._ref_names(tags),
+            "branches": self._ref_names(branches),
+        }
+
+    @staticmethod
+    def _ref_names(values: list[dict[str, Any]]) -> list[str]:
+        """Extract ref names from Bitbucket tag / branch payloads."""
+        names: list[str] = []
+        for value in values:
+            name = str(value.get("displayId") or value.get("name") or value.get("id") or "").strip()
+            if name:
+                names.append(name)
+        return names
+
     async def compare_commits(
         self,
         project_key: str,

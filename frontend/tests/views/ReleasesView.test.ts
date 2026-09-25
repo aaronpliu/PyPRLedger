@@ -19,6 +19,7 @@ vi.mock('@/api/releaseDiff', () => ({
   releaseDiffApi: {
     compare: vi.fn(),
     check: vi.fn(),
+    listRefs: vi.fn(),
   },
 }))
 
@@ -82,6 +83,14 @@ const REPOSITORIES_BY_PROJECT: Record<string, RepositorySummary[]> = {
   ],
 }
 
+const REFS = {
+  project_key: 'ALPHA',
+  repository_slug: 'alpha-api',
+  git_provider: 'bitbucket_server',
+  tags: ['v1.0.0', 'v1.1.0'],
+  branches: ['main', 'release/1.0'],
+}
+
 const BASE_REF_PLACEHOLDER = enMessages.releaseDiff.base_ref_placeholder
 const REF_PLACEHOLDER = enMessages.releaseDiff.ref_placeholder
 
@@ -90,7 +99,7 @@ type AnyWrapper = any
 
 function inputsByPlaceholder(wrapper: AnyWrapper, placeholder: string) {
   return wrapper
-    .findAllComponents({ name: 'ElInput' })
+    .findAllComponents({ name: 'ElAutocomplete' })
     .filter((input: AnyWrapper) => input.props('placeholder') === placeholder)
 }
 
@@ -112,6 +121,9 @@ describe('ReleasesView', () => {
   beforeEach(() => {
     vi.mocked(projectsApi.getAllProjects).mockReset()
     vi.mocked(projectsApi.getProjectRepositories).mockReset()
+    vi.mocked(releaseDiffApi.listRefs).mockReset()
+    vi.mocked(releaseDiffApi.compare).mockReset()
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue(REFS)
     vi.mocked(projectsApi.getAllProjects).mockResolvedValue(PROJECTS)
     vi.mocked(projectsApi.getProjectRepositories).mockImplementation((projectKey: string) =>
       Promise.resolve(REPOSITORIES_BY_PROJECT[projectKey] ?? []),
@@ -438,5 +450,82 @@ describe('ReleasesView', () => {
         .value,
     ).toBe('')
     expect(selects[1].props('modelValue')).toBe('alpha-api')
+  })
+
+  it('loads tag and branch suggestions of the selected repository', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'ALPHA')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'alpha-api')
+    await flushPromises()
+
+    const refreshButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.refresh_refs)
+    await refreshButton!.trigger('click')
+    await flushPromises()
+
+    expect(releaseDiffApi.listRefs).toHaveBeenCalledWith(
+      expect.objectContaining({ project_key: 'ALPHA', repository_slug: 'alpha-api' }),
+    )
+    expect(wrapper.text()).toContain('2 tag(s) / 2 branch(es) loaded')
+  })
+
+  it('suggests the loaded refs and still accepts a manually typed ref', async () => {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue({
+      project_key: 'ALPHA',
+      repository_slug: 'alpha-api',
+      git_provider: 'bitbucket_server',
+      old_release_ref: 'deadbeef',
+      new_release_ref: 'v1.1.0',
+      old_commits_included: true,
+      status: 'included',
+      summary: {},
+      missing_commits: [],
+      added_commits: [],
+      old_release_commits: [],
+      new_release_commits: [],
+      truncated: false,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'ALPHA')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'alpha-api')
+    await flushPromises()
+
+    const refreshButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.refresh_refs)
+    await refreshButton!.trigger('click')
+    await flushPromises()
+
+    const releaseFields = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    const fetchSuggestions = releaseFields[0].props('fetchSuggestions') as (
+      query: string,
+      cb: (items: { value: string }[]) => void,
+    ) => void
+    const suggestions: { value: string }[] = []
+    fetchSuggestions('v1.1', (items) => suggestions.push(...items))
+    expect(suggestions.map((item) => item.value)).toEqual(['v1.1.0'])
+
+    await releaseFields[0].find('input').setValue('deadbeef')
+    await releaseFields[1].find('input').setValue('v1.1.0')
+
+    const compareButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.run_compare)
+    await compareButton!.trigger('click')
+    await flushPromises()
+
+    expect(releaseDiffApi.compare).toHaveBeenCalledWith(
+      expect.objectContaining({ old_release_ref: 'deadbeef', new_release_ref: 'v1.1.0' }),
+    )
   })
 })

@@ -147,6 +147,55 @@ class GitHubEnterpriseProvider(BaseGitProvider):
 
         return response.json()
 
+    async def _fetch_paged_values(self, url: str, limit: int) -> list[dict[str, Any]]:
+        """Page through a GitHub list endpoint until ``limit`` values are collected."""
+        values: list[dict[str, Any]] = []
+        page = 1
+
+        while len(values) < limit:
+            page_size = min(100, limit - len(values))
+            payload = await self._request(url, {"per_page": page_size, "page": page})
+            if not payload:
+                break
+
+            values.extend(payload)
+            if len(payload) < page_size:
+                break
+            page += 1
+
+        return values[:limit]
+
+    async def list_refs(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 100,
+    ) -> dict[str, list[str]]:
+        """Fetch tags and branches of a repository.
+
+        Maps to GET /api/v3/repos/{owner}/{repo}/tags and /branches
+        """
+        base = f"{self.api_url}/repos/{project_key}/{repository_slug}"
+        logger.info(f"Listing refs on GitHub: {project_key}/{repository_slug}")
+
+        tags = await self._fetch_paged_values(f"{base}/tags", limit)
+        branches = await self._fetch_paged_values(f"{base}/branches", limit)
+
+        return {
+            "tags": self._ref_names(tags),
+            "branches": self._ref_names(branches),
+        }
+
+    @staticmethod
+    def _ref_names(values: list[dict[str, Any]]) -> list[str]:
+        """Extract ref names from GitHub tag / branch payloads."""
+        names: list[str] = []
+        for value in values:
+            name = str(value.get("name") or value.get("ref") or "").strip()
+            if name:
+                names.append(name)
+        return names
+
     async def compare_commits(
         self,
         project_key: str,

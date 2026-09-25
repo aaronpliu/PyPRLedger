@@ -105,3 +105,24 @@ class BaseGitProvider(ABC):
             NotImplementedError: When the provider does not expose a commit listing API.
         """
         raise NotImplementedError(f"Provider '{self.name}' does not implement list_commits_until()")
+
+    async def list_refs(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 100,
+    ) -> dict[str, list[str]]:
+        """Return the tags and branches of a repository.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            limit: Maximum number of names returned per ref type
+
+        Returns:
+            Dict with ``tags`` and ``branches`` keys, each holding ref names.
+
+        Raises:
+            NotImplementedError: When the provider does not expose ref listing.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement list_refs()")

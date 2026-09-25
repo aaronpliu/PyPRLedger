@@ -89,6 +89,30 @@
         </el-row>
       </el-form>
 
+      <div class="refs-hint">
+        <span v-if="refsLoading">{{ t('releaseDiff.ref_loading') }}</span>
+        <span v-else-if="refsFailed" class="refs-hint-warning">
+          {{ t('releaseDiff.ref_suggestions_failed') }}
+        </span>
+        <span v-else-if="refCount">
+          {{
+            t('releaseDiff.ref_suggestions_loaded', {
+              tags: refs.tags.length,
+              branches: refs.branches.length,
+            })
+          }}
+        </span>
+        <span v-else>{{ t('releaseDiff.ref_suggestions_hint') }}</span>
+        <el-button
+          link
+          type="primary"
+          :loading="refsLoading"
+          :disabled="!selectedProjectKey || !selectedRepositorySlug"
+          @click="loadRefs"
+        >
+          {{ t('releaseDiff.refresh_refs') }}
+        </el-button>
+      </div>
     </el-card>
 
     <!-- ================= Compare two releases ================= -->
@@ -110,18 +134,44 @@
           <el-row :gutter="16">
             <el-col :xs="24" :md="12">
               <el-form-item :label="t('releaseDiff.old_release_ref')" required>
-                <el-input
+                <el-autocomplete
                   v-model="compareForm.old_release_ref"
+                  :fetch-suggestions="queryRefs"
                   :placeholder="t('releaseDiff.ref_placeholder')"
-                />
+                  clearable
+                  trigger-on-focus
+                  style="width: 100%"
+                >
+                  <template #default="{ item }">
+                    <div class="ref-option">
+                      <span>{{ item.value }}</span>
+                      <el-tag size="small" effect="plain" type="info">
+                        {{ refTypeLabel(item.type) }}
+                      </el-tag>
+                    </div>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
             </el-col>
             <el-col :xs="24" :md="12">
               <el-form-item :label="t('releaseDiff.new_release_ref')" required>
-                <el-input
+                <el-autocomplete
                   v-model="compareForm.new_release_ref"
+                  :fetch-suggestions="queryRefs"
                   :placeholder="t('releaseDiff.ref_placeholder')"
-                />
+                  clearable
+                  trigger-on-focus
+                  style="width: 100%"
+                >
+                  <template #default="{ item }">
+                    <div class="ref-option">
+                      <span>{{ item.value }}</span>
+                      <el-tag size="small" effect="plain" type="info">
+                        {{ refTypeLabel(item.type) }}
+                      </el-tag>
+                    </div>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
             </el-col>
           </el-row>
@@ -141,10 +191,23 @@
           <el-row v-if="compareScopeEnabled" :gutter="16">
             <el-col :xs="24" :md="10">
               <el-form-item :label="t('releaseDiff.old_release_base_ref')">
-                <el-input
+                <el-autocomplete
                   v-model="compareForm.old_release_base_ref"
+                  :fetch-suggestions="queryRefs"
                   :placeholder="t('releaseDiff.base_ref_placeholder')"
-                />
+                  clearable
+                  trigger-on-focus
+                  style="width: 100%"
+                >
+                  <template #default="{ item }">
+                    <div class="ref-option">
+                      <span>{{ item.value }}</span>
+                      <el-tag size="small" effect="plain" type="info">
+                        {{ refTypeLabel(item.type) }}
+                      </el-tag>
+                    </div>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
               <div class="scope-preview">
                 {{ t('releaseDiff.scope_of') }} {{ t('releaseDiff.old_release_ref') }}:
@@ -153,10 +216,23 @@
             </el-col>
             <el-col :xs="24" :md="10">
               <el-form-item :label="t('releaseDiff.new_release_base_ref')">
-                <el-input
+                <el-autocomplete
                   v-model="compareForm.new_release_base_ref"
+                  :fetch-suggestions="queryRefs"
                   :placeholder="t('releaseDiff.base_ref_placeholder')"
-                />
+                  clearable
+                  trigger-on-focus
+                  style="width: 100%"
+                >
+                  <template #default="{ item }">
+                    <div class="ref-option">
+                      <span>{{ item.value }}</span>
+                      <el-tag size="small" effect="plain" type="info">
+                        {{ refTypeLabel(item.type) }}
+                      </el-tag>
+                    </div>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
               <div class="scope-preview">
                 {{ t('releaseDiff.scope_of') }} {{ t('releaseDiff.new_release_ref') }}:
@@ -303,10 +379,23 @@
           <el-row :gutter="16">
             <el-col :xs="24" :md="12">
               <el-form-item :label="t('releaseDiff.target_release_ref')" required>
-                <el-input
+                <el-autocomplete
                   v-model="checkForm.target_release_ref"
+                  :fetch-suggestions="queryRefs"
                   :placeholder="t('releaseDiff.ref_placeholder')"
-                />
+                  clearable
+                  trigger-on-focus
+                  style="width: 100%"
+                >
+                  <template #default="{ item }">
+                    <div class="ref-option">
+                      <span>{{ item.value }}</span>
+                      <el-tag size="small" effect="plain" type="info">
+                        {{ refTypeLabel(item.type) }}
+                      </el-tag>
+                    </div>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
             </el-col>
           </el-row>
@@ -322,10 +411,23 @@
           <el-row v-if="checkScopeEnabled" :gutter="16">
             <el-col :xs="24" :md="12">
               <el-form-item :label="t('releaseDiff.target_release_base_ref')">
-                <el-input
+                <el-autocomplete
                   v-model="checkForm.target_release_base_ref"
+                  :fetch-suggestions="queryRefs"
                   :placeholder="t('releaseDiff.base_ref_placeholder')"
-                />
+                  clearable
+                  trigger-on-focus
+                  style="width: 100%"
+                >
+                  <template #default="{ item }">
+                    <div class="ref-option">
+                      <span>{{ item.value }}</span>
+                      <el-tag size="small" effect="plain" type="info">
+                        {{ refTypeLabel(item.type) }}
+                      </el-tag>
+                    </div>
+                  </template>
+                </el-autocomplete>
               </el-form-item>
               <div class="scope-preview">
                 {{ t('releaseDiff.scope_of') }} {{ t('releaseDiff.target_release_ref') }}:
@@ -456,10 +558,23 @@ import {
 
 const { t } = useI18n()
 
+const REFS_FETCH_LIMIT = 200
+const REF_SUGGESTION_LIMIT = 50
+const REFS_DEBOUNCE_MS = 400
+
+interface RefSuggestion {
+  value: string
+  type: 'tag' | 'branch'
+}
+
 const projects = ref<ProjectSummary[]>([])
 const repositories = ref<RepositorySummary[]>([])
 const projectsLoading = ref(false)
 const repositoriesLoading = ref(false)
+
+const refs = ref<{ tags: string[]; branches: string[] }>({ tags: [], branches: [] })
+const refsLoading = ref(false)
+const refsFailed = ref(false)
 
 const compareSection = ref<HTMLElement | null>(null)
 const checkSection = ref<HTMLElement | null>(null)
@@ -518,6 +633,27 @@ function secondaryName(value: string, name?: string | null): string | undefined 
   return trimmed && trimmed !== value ? trimmed : undefined
 }
 
+// Release refs are suggested from the repository tags / branches, but any ref
+// (tag, branch or commit sha) can still be typed manually.
+const refOptions = computed<RefSuggestion[]>(() => [
+  ...refs.value.tags.map((name) => ({ value: name, type: 'tag' as const })),
+  ...refs.value.branches.map((name) => ({ value: name, type: 'branch' as const })),
+])
+
+const refCount = computed(() => refs.value.tags.length + refs.value.branches.length)
+
+function refTypeLabel(type: string): string {
+  return type === 'tag' ? t('releaseDiff.ref_type_tag') : t('releaseDiff.ref_type_branch')
+}
+
+function queryRefs(query: string, cb: (suggestions: RefSuggestion[]) => void) {
+  const keyword = (query ?? '').trim().toLowerCase()
+  const matched = keyword
+    ? refOptions.value.filter((option) => option.value.toLowerCase().includes(keyword))
+    : refOptions.value
+  cb(matched.slice(0, REF_SUGGESTION_LIMIT))
+}
+
 async function loadProjects() {
   projectsLoading.value = true
   try {
@@ -544,6 +680,44 @@ async function loadRepositories(projectKey: string) {
     repositoriesLoading.value = false
   }
 }
+
+async function loadRefs() {
+  if (!selectedProjectKey.value || !selectedRepositorySlug.value) {
+    refs.value = { tags: [], branches: [] }
+    refsFailed.value = false
+    return
+  }
+
+  refsLoading.value = true
+  try {
+    const response = await releaseDiffApi.listRefs({
+      ...basePayload(),
+      limit: REFS_FETCH_LIMIT,
+    })
+    refs.value = {
+      tags: response.tags ?? [],
+      branches: response.branches ?? [],
+    }
+    refsFailed.value = false
+  } catch {
+    refs.value = { tags: [], branches: [] }
+    refsFailed.value = true
+  } finally {
+    refsLoading.value = false
+  }
+}
+
+let refsTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(
+  () => [selectedProjectKey.value, selectedRepositorySlug.value, repo.value.git_provider],
+  () => {
+    refs.value = { tags: [], branches: [] }
+    refsFailed.value = false
+    clearTimeout(refsTimer)
+    refsTimer = setTimeout(() => void loadRefs(), REFS_DEBOUNCE_MS)
+  },
+)
 
 watch(
   () => repo.value.project_key,
@@ -763,6 +937,25 @@ async function copySha(value: string) {
 
 .repo-form {
   margin-bottom: 8px;
+}
+
+.refs-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.refs-hint-warning {
+  color: var(--el-color-warning);
+}
+
+.ref-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .result-actions {

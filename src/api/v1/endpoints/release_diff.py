@@ -1,14 +1,16 @@
 """Release diff endpoints.
 
-Exposes two read-only operations over the git provider compare API:
+Exposes read-only operations over the git provider compare API:
 
 * ``POST /release/diff/compare`` - compare two release refs and report whether
   every commit of the old release is contained in the new release.
 * ``POST /release/diff/check``   - check whether one or more commits belong to
   a target release.
+* ``POST /release/diff/refs``    - list tags / branches of a repository so the UI
+  can suggest release refs (arbitrary refs can still be typed manually).
 
-Both endpoints are backed by the Bitbucket Server ``compare/commits`` REST API
-(or the GitHub Enterprise equivalent) through the provider abstraction.
+All endpoints are backed by the Bitbucket Server REST API (or the GitHub
+Enterprise equivalent) through the provider abstraction.
 """
 
 from __future__ import annotations
@@ -25,6 +27,8 @@ from src.schemas.release_diff import (
     ReleaseCommitCheckResponse,
     ReleaseCompareRequest,
     ReleaseCompareResponse,
+    ReleaseRefsRequest,
+    ReleaseRefsResponse,
 )
 from src.services.release_diff_service import ReleaseDiffService
 from src.utils.log import get_logger
@@ -75,6 +79,48 @@ async def compare_releases(
     except GitServiceException as e:
         logger.error(
             "Git provider failed while comparing releases",
+            extra={
+                "project_key": payload.project_key,
+                "repository_slug": payload.repository_slug,
+                "user_id": current_user.id,
+                "error": str(e),
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "error": "git_service_error",
+                "message": str(e.detail) if isinstance(e.detail, dict) else str(e),
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "bad_request", "message": str(e)},
+        )
+
+
+@router.post(
+    "/refs",
+    response_model=ReleaseRefsResponse,
+    summary="List tags and branches of a repository",
+    description=(
+        "Return the tag and branch names of a repository so the UI can suggest release "
+        "refs. The list is only a suggestion - any ref (tag, branch or commit sha) can "
+        "still be used for compare / check requests."
+    ),
+)
+async def list_release_refs(
+    payload: ReleaseRefsRequest,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    service: Annotated[ReleaseDiffService, Depends(get_release_diff_service)],
+) -> ReleaseRefsResponse:
+    """List tags and branches for ref suggestions."""
+    try:
+        return await service.list_refs(payload)
+    except GitServiceException as e:
+        logger.error(
+            "Git provider failed while listing release refs",
             extra={
                 "project_key": payload.project_key,
                 "repository_slug": payload.repository_slug,

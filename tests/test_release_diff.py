@@ -19,6 +19,7 @@ from src.models.auth_user import AuthUser
 from src.schemas.release_diff import (
     ReleaseCommitCheckRequest,
     ReleaseCompareRequest,
+    ReleaseRefsRequest,
 )
 from src.services.git_providers.base import BaseGitProvider
 from src.services.release_diff_service import ReleaseDiffService
@@ -61,6 +62,11 @@ REF_COMMITS: dict[str, list[str]] = {
     "v1.0.0": [C1, C2, C3],
     "v1.1.0": [C1, C2, C3, C4],
     "v2.0.0": [C1, C2, C4],
+}
+
+REF_NAMES: dict[str, list[str]] = {
+    "tags": ["v0.9.0", "v1.0.0", "v1.1.0", "v2.0.0"],
+    "branches": ["main", "release/1.0"],
 }
 
 
@@ -106,6 +112,15 @@ class FakeGitProvider(BaseGitProvider):
         self.calls.append(("list", "", until_ref))
         return [COMMITS[sha] for sha in self._resolve(until_ref)][:limit]
 
+    async def list_refs(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 100,
+    ) -> dict[str, list[str]]:
+        self.calls.append(("refs", "", repository_slug))
+        return {key: list(value) for key, value in REF_NAMES.items()}
+
     async def get_project_info(self, project_key: str) -> dict[str, Any] | None:
         return None
 
@@ -141,6 +156,15 @@ def check_payload(**overrides: Any) -> ReleaseCommitCheckRequest:
     }
     payload.update(overrides)
     return ReleaseCommitCheckRequest(**payload)
+
+
+def refs_payload(**overrides: Any) -> ReleaseRefsRequest:
+    payload: dict[str, Any] = {
+        "project_key": "PROJ",
+        "repository_slug": "my-repo",
+    }
+    payload.update(overrides)
+    return ReleaseRefsRequest(**payload)
 
 
 # --------------------------------------------------------------------------- #
@@ -313,6 +337,46 @@ async def test_check_commits_strips_empty_entries() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Service: refs
+# --------------------------------------------------------------------------- #
+
+
+async def test_list_refs_returns_tags_and_branches() -> None:
+    service = build_service(FakeGitProvider())
+
+    result = await service.list_refs(refs_payload())
+
+    assert result.tags == REF_NAMES["tags"]
+    assert result.branches == REF_NAMES["branches"]
+    assert result.git_provider == "bitbucket_server"
+
+
+async def test_list_refs_trims_and_deduplicates_names() -> None:
+    class MessyProvider(FakeGitProvider):
+        async def list_refs(
+            self,
+            project_key: str,
+            repository_slug: str,
+            limit: int = 100,
+        ) -> dict[str, list[str]]:
+            return {"tags": [" v1.0.0 ", "v1.1.0", "v1.0.0", "  "], "branches": []}
+
+    service = build_service(MessyProvider())
+
+    result = await service.list_refs(refs_payload())
+
+    assert result.tags == ["v1.0.0", "v1.1.0"]
+    assert result.branches == []
+
+
+async def test_list_refs_rejects_unknown_provider() -> None:
+    service = build_service(FakeGitProvider())
+
+    with pytest.raises(ValueError):
+        await service.list_refs(refs_payload(git_provider="gitlab"))
+
+
+# --------------------------------------------------------------------------- #
 # Provider HTTP layer (Bitbucket compare/commits)
 # --------------------------------------------------------------------------- #
 
@@ -350,6 +414,37 @@ async def test_bitbucket_provider_compare_commits_paginates(monkeypatch) -> None
     assert [commit["id"] for commit in commits] == [C1, C2]
     assert any("compare/commits" in url for url in requested_urls)
     assert commits[0]["url"].endswith(f"/commits/{C1}")
+
+
+async def test_bitbucket_provider_lists_tags_and_branches(monkeypatch) -> None:
+    from src.services.git_providers import bitbucket_server
+
+    requested_urls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_urls.append(str(request.url))
+        if request.url.path.endswith("/tags"):
+            return httpx.Response(
+                200, json={"values": [{"displayId": "v1.0.0"}], "size": 1, "isLastPage": True}
+            )
+        return httpx.Response(
+            200, json={"values": [{"displayId": "main"}], "size": 1, "isLastPage": True}
+        )
+
+    real_client = httpx.AsyncClient
+
+    def client_factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        kwargs.pop("verify", None)
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(bitbucket_server.httpx, "AsyncClient", client_factory)
+
+    provider = bitbucket_server.BitbucketServerProvider()
+    refs = await provider.list_refs("PROJ", "my-repo", limit=50)
+
+    assert refs == {"tags": ["v1.0.0"], "branches": ["main"]}
+    assert any("/tags" in url for url in requested_urls)
+    assert any("/branches" in url for url in requested_urls)
 
 
 async def test_bitbucket_provider_raises_on_http_error(monkeypatch) -> None:
@@ -412,6 +507,62 @@ async def test_endpoint_compare(async_client, authenticated_client) -> None:
     assert body["old_commits_included"] is False
     assert body["summary"]["missing_count"] == 1
     assert body["missing_commits"][0]["id"] == C3
+
+
+async def test_endpoint_refs(async_client, authenticated_client) -> None:
+    response = await async_client.post(
+        "/api/v1/release/diff/refs",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tags"] == REF_NAMES["tags"]
+    assert body["branches"] == REF_NAMES["branches"]
+    assert body["git_provider"] == "bitbucket_server"
+
+
+async def test_endpoint_refs_rejects_limit_above_maximum(
+    async_client, authenticated_client
+) -> None:
+    response = await async_client.post(
+        "/api/v1/release/diff/refs",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "limit": 5000,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+async def test_endpoint_refs_returns_502_on_git_failure(async_client) -> None:
+    class FailingProvider(FakeGitProvider):
+        async def list_refs(self, *args: Any, **kwargs: Any) -> dict[str, list[str]]:
+            raise GitServiceException("Bitbucket is unreachable")
+
+    async def _current_user() -> AuthUser:
+        return AuthUser(id=1, username="tester", email="tester@example.com")
+
+    app.dependency_overrides[get_current_user_with_token] = _current_user
+    app.dependency_overrides[get_release_diff_service] = lambda: build_service(FailingProvider())
+    try:
+        response = await async_client.post(
+            "/api/v1/release/diff/refs",
+            json={
+                "project_key": "PROJ",
+                "repository_slug": "my-repo",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_current_user_with_token, None)
+        app.dependency_overrides.pop(get_release_diff_service, None)
+
+    assert response.status_code == 502
 
 
 async def test_endpoint_check(async_client, authenticated_client) -> None:
@@ -511,6 +662,12 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
             until_ref = query["until"][0]
             return page([COMMITS[sha] for sha in REF_COMMITS[until_ref]], 0)
 
+        if parsed.path.endswith("/tags"):
+            return page([{"displayId": name} for name in REF_NAMES["tags"]], 0)
+
+        if parsed.path.endswith("/branches"):
+            return page([{"displayId": name} for name in REF_NAMES["branches"]], 0)
+
         return httpx.Response(404, json={"errors": []})
 
     real_client = httpx.AsyncClient
@@ -545,6 +702,13 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
                 "commits": [C2, C3],
             },
         )
+        refs_response = await async_client.post(
+            "/api/v1/release/diff/refs",
+            json={
+                "project_key": "PROJ",
+                "repository_slug": "my-repo",
+            },
+        )
     finally:
         app.dependency_overrides.pop(get_current_user_with_token, None)
         app.dependency_overrides.pop(get_release_diff_service, None)
@@ -560,6 +724,11 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
     check_body = check_response.json()
     assert check_body["all_included"] is False
     assert [item["included"] for item in check_body["results"]] == [True, False]
+
+    assert refs_response.status_code == 200
+    refs_body = refs_response.json()
+    assert refs_body["tags"] == REF_NAMES["tags"]
+    assert refs_body["branches"] == REF_NAMES["branches"]
 
 
 async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider) -> None:

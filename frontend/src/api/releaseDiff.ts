@@ -10,6 +10,21 @@ export interface CommitInfo {
   url?: string | null
 }
 
+export interface ReleaseRefsRequest {
+  project_key: string
+  repository_slug: string
+  git_provider?: string | null
+  limit?: number
+}
+
+export interface ReleaseRefsResponse {
+  project_key: string
+  repository_slug: string
+  git_provider: string
+  tags: string[]
+  branches: string[]
+}
+
 export interface ReleaseCompareRequest {
   project_key: string
   repository_slug: string
@@ -82,6 +97,11 @@ export interface ReleaseCommitCheckResponse {
 }
 
 export const releaseDiffApi = {
+  /** List tags / branches of a repository - used as ref suggestions (any ref stays typeable). */
+  listRefs(payload: ReleaseRefsRequest): Promise<ReleaseRefsResponse> {
+    return request.post('/release/diff/refs', payload)
+  },
+
   /** Compare two releases and report whether the old release is contained in the new one. */
   compare(payload: ReleaseCompareRequest): Promise<ReleaseCompareResponse> {
     return request.post('/release/diff/compare', payload)

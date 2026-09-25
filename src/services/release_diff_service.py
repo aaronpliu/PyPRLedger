@@ -23,6 +23,8 @@ from src.schemas.release_diff import (
     ReleaseCommitCheckResponse,
     ReleaseCompareRequest,
     ReleaseCompareResponse,
+    ReleaseRefsRequest,
+    ReleaseRefsResponse,
 )
 from src.services.git_providers import BaseGitProvider, get_git_provider
 from src.utils.log import get_logger
@@ -176,6 +178,62 @@ class ReleaseDiffService:
 
         return self._apply_include_commits(response, bool(request.include_commits))
 
+    async def list_refs(self, request: ReleaseRefsRequest) -> ReleaseRefsResponse:
+        """List the tags and branches of a repository.
+
+        Used by the UI to suggest release refs - users can still type any ref
+        (tag, branch or commit sha) that is not part of the list.
+
+        Args:
+            request: Ref listing payload
+
+        Returns:
+            ReleaseRefsResponse with tag and branch names
+        """
+        provider_name = self._resolve_provider_name(request.git_provider)
+        provider = self._provider_factory(provider_name)
+
+        cache_key = self._build_cache_key(
+            "refs",
+            provider_name,
+            request.project_key,
+            request.repository_slug,
+            request.limit,
+        )
+        cached = await self._read_cache(cache_key)
+        if cached is not None:
+            self.metrics.increment_cache_hit("release_diff")
+            self.metrics.increment_release_diff("refs", provider_name, "cache_hit")
+            return ReleaseRefsResponse(**cached)
+
+        raw_refs = await provider.list_refs(
+            project_key=request.project_key,
+            repository_slug=request.repository_slug,
+            limit=request.limit,
+        )
+
+        response = ReleaseRefsResponse(
+            project_key=request.project_key,
+            repository_slug=request.repository_slug,
+            git_provider=provider_name,
+            tags=self._clean_refs(raw_refs.get("tags")),
+            branches=self._clean_refs(raw_refs.get("branches")),
+        )
+
+        await self._write_cache(cache_key, response.model_dump(mode="json"))
+        self.metrics.increment_release_diff("refs", provider_name, "success")
+        logger.info(
+            "Release refs listed",
+            extra={
+                "project_key": request.project_key,
+                "repository_slug": request.repository_slug,
+                "tag_count": len(response.tags),
+                "branch_count": len(response.branches),
+            },
+        )
+
+        return response
+
     async def check_commits(self, request: ReleaseCommitCheckRequest) -> ReleaseCommitCheckResponse:
         """Check whether the given commits belong to the target release.
 
@@ -327,6 +385,18 @@ class ReleaseDiffService:
         )
         ids = {self._normalize_commit(raw).id for raw in raw_commits}
         return ids, len(raw_commits) >= max_commits
+
+    @staticmethod
+    def _clean_refs(values: list[str] | None) -> list[str]:
+        """Trim ref names and drop duplicates while preserving provider order."""
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for value in values or []:
+            name = str(value).strip()
+            if name and name not in seen:
+                seen.add(name)
+                cleaned.append(name)
+        return cleaned
 
     @staticmethod
     def _normalize_commit(raw: dict[str, Any]) -> CommitInfo:

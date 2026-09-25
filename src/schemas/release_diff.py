@@ -44,6 +44,26 @@ class ReleaseDiffRepository(BaseModel):
     )
 
 
+class ReleaseRefsRequest(ReleaseDiffRepository):
+    """Request payload for POST /release/diff/refs."""
+
+    limit: int = Field(
+        default=100, ge=1, le=500, description="Maximum number of tags / branches returned"
+    )
+
+
+class ReleaseRefsResponse(BaseModel):
+    """Response payload for POST /release/diff/refs."""
+
+    project_key: str
+    repository_slug: str
+    git_provider: str
+    tags: list[str] = Field(
+        default_factory=list, description="Tag names of the repository (newest first)"
+    )
+    branches: list[str] = Field(default_factory=list, description="Branch names of the repository")
+
+
 class ReleaseCompareRequest(ReleaseDiffRepository):
     """Request payload for POST /release/diff/compare."""
 
