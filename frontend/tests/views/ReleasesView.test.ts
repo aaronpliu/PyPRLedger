@@ -132,6 +132,39 @@ describe('ReleasesView', () => {
     expect(projectOptions[1].props('value')).toBe('BETA')
   })
 
+  it('shows the project key only once when the project name equals the key', async () => {
+    vi.mocked(projectsApi.getAllProjects).mockResolvedValue([
+      {
+        ...PROJECTS[0],
+        project_key: 'FOO',
+        project_name: 'FOO',
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const option = wrapper
+      .findAllComponents({ name: 'ElSelect' })[0]
+      .findAllComponents({ name: 'ElOption' })[0]
+
+    expect(option.props('label')).toBe('FOO')
+    expect(option.text()).toBe('FOO')
+  })
+
+  it('shows the project name as secondary text when it differs from the key', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const option = wrapper
+      .findAllComponents({ name: 'ElSelect' })[0]
+      .findAllComponents({ name: 'ElOption' })[0]
+
+    expect(option.props('label')).toBe('ALPHA')
+    expect(option.text()).toContain('ALPHA')
+    expect(option.text()).toContain('Alpha Platform')
+  })
+
   it('keeps the repository dropdown disabled until a project is selected', async () => {
     const wrapper = mountView()
     await flushPromises()

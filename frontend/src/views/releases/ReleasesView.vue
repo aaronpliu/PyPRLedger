@@ -27,11 +27,13 @@
                 <el-option
                   v-for="project in projects"
                   :key="project.project_key"
-                  :label="`${project.project_key} - ${project.project_name}`"
+                  :label="project.project_key"
                   :value="project.project_key"
                 >
                   <span class="option-key">{{ project.project_key }}</span>
-                  <span class="option-name">{{ project.project_name }}</span>
+                  <span v-if="secondaryName(project.project_key, project.project_name)" class="option-name">
+                    {{ project.project_name }}
+                  </span>
                 </el-option>
               </el-select>
             </el-form-item>
@@ -55,7 +57,12 @@
                   :value="repository.repository_slug"
                 >
                   <span class="option-key">{{ repository.repository_slug }}</span>
-                  <span class="option-name">{{ repository.repository_name }}</span>
+                  <span
+                    v-if="secondaryName(repository.repository_slug, repository.repository_name)"
+                    class="option-name"
+                  >
+                    {{ repository.repository_name }}
+                  </span>
                 </el-option>
               </el-select>
             </el-form-item>
@@ -503,6 +510,13 @@ const compareStatusText = computed(() => {
 // el-select emits undefined when cleared - always work with trimmed strings
 const selectedProjectKey = computed(() => (repo.value.project_key ?? '').trim())
 const selectedRepositorySlug = computed(() => (repo.value.repository_slug ?? '').trim())
+
+// Bitbucket projects often use the same string for key and name - only show the
+// name as secondary text when it actually adds information.
+function secondaryName(value: string, name?: string | null): string | undefined {
+  const trimmed = (name ?? '').trim()
+  return trimmed && trimmed !== value ? trimmed : undefined
+}
 
 async function loadProjects() {
   projectsLoading.value = true
