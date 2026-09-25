@@ -986,6 +986,26 @@
     "compare_failed": "Failed to compare releases",
     "check_failed": "Failed to check commits",
     "copied": "Commit sha copied",
-    "empty_result": "Run a comparison to see the result"
+    "empty_result": "Run a comparison to see the result",
+    "report_generated_at": "Generated at",
+    "report_no_commits": "No commits",
+    "report_export_html": "Export HTML",
+    "report_export_both": "Export Both (HTML)",
+    "report_exported": "HTML report downloaded",
+    "report_failed": "Failed to build the report",
+    "report_needs_result": "Run a comparison or a commit check first",
+    "screenshot": "Screenshot",
+    "screenshot_both": "Screenshot Both",
+    "screenshot_download": "Download PNG",
+    "screenshot_copy": "Copy image",
+    "screenshot_share": "Share",
+    "screenshot_downloaded": "Screenshot downloaded",
+    "screenshot_copied": "Screenshot copied to clipboard",
+    "screenshot_shared": "Screenshot shared",
+    "screenshot_failed": "Failed to capture the screenshot",
+    "col_url": "URL",
+    "report_scope": "Scope",
+    "report_project_url": "Project URL",
+    "report_repository_url": "Repository URL"
   }
 }

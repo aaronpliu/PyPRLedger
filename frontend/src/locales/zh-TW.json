@@ -987,6 +987,26 @@
     "compare_failed": "版本比較失敗",
     "check_failed": "提交校驗失敗",
     "copied": "已複製 commit sha",
-    "empty_result": "執行比較後查看結果"
+    "empty_result": "執行比較後查看結果",
+    "report_generated_at": "產生時間",
+    "report_no_commits": "無提交記錄",
+    "report_export_html": "匯出 HTML",
+    "report_export_both": "匯出完整報告 (HTML)",
+    "report_exported": "HTML 報告已下載",
+    "report_failed": "產生報告失敗",
+    "report_needs_result": "請先執行版本比較或提交檢查",
+    "screenshot": "截圖",
+    "screenshot_both": "截圖（左右兩張）",
+    "screenshot_download": "下載 PNG",
+    "screenshot_copy": "複製圖片",
+    "screenshot_share": "分享",
+    "screenshot_downloaded": "截圖已下載",
+    "screenshot_copied": "截圖已複製到剪貼簿",
+    "screenshot_shared": "截圖已分享",
+    "screenshot_failed": "截圖失敗",
+    "col_url": "連結",
+    "report_scope": "範圍",
+    "report_project_url": "專案 URL",
+    "report_repository_url": "倉庫 URL"
   }
 }

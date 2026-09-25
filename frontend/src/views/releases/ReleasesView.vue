@@ -150,6 +150,40 @@
       </div>
     </el-card>
 
+    <!-- ================= Report actions for both tools ================= -->
+    <div class="report-toolbar">
+      <el-button
+        size="small"
+        :icon="Download"
+        :disabled="!hasAnyResult"
+        @click="exportReport('both')"
+      >
+        {{ t('releaseDiff.report_export_both') }}
+      </el-button>
+      <el-dropdown
+        trigger="click"
+        :disabled="!hasAnyResult"
+        @command="(command: string) => captureReport(bothSections, 'release-report', command)"
+      >
+        <el-button size="small" :icon="Camera" :disabled="!hasAnyResult">
+          {{ t('releaseDiff.screenshot_both') }}
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="download">
+              {{ t('releaseDiff.screenshot_download') }}
+            </el-dropdown-item>
+            <el-dropdown-item command="copy">
+              {{ t('releaseDiff.screenshot_copy') }}
+            </el-dropdown-item>
+            <el-dropdown-item v-if="shareSupported" command="share">
+              {{ t('releaseDiff.screenshot_share') }}
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+    </div>
+
     <!-- ================= Tools (left: compare, right: check) ================= -->
     <el-row :gutter="16" class="tool-sections">
     <el-col :xs="24" :lg="12">
@@ -315,6 +349,30 @@
             :closable="false"
             class="status-alert"
           />
+
+          <div class="report-actions">
+            <el-button size="small" :icon="Download" @click="exportReport('compare')">
+              {{ t('releaseDiff.report_export_html') }}
+            </el-button>
+            <el-dropdown trigger="click" @command="(command: string) => captureReport(compareSection, 'release-compare', command)">
+              <el-button size="small" :icon="Camera">
+                {{ t('releaseDiff.screenshot') }}
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="download">
+                    {{ t('releaseDiff.screenshot_download') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item command="copy">
+                    {{ t('releaseDiff.screenshot_copy') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="shareSupported" command="share">
+                    {{ t('releaseDiff.screenshot_share') }}
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
 
           <div v-if="compareResult.missing_commits.length" class="result-actions">
             <el-button size="small" type="warning" plain @click="sendMissingToCheck">
@@ -513,6 +571,30 @@
             class="status-alert"
           />
 
+          <div class="report-actions">
+            <el-button size="small" :icon="Download" @click="exportReport('check')">
+              {{ t('releaseDiff.report_export_html') }}
+            </el-button>
+            <el-dropdown trigger="click" @command="(command: string) => captureReport(checkSection, 'release-check', command)">
+              <el-button size="small" :icon="Camera">
+                {{ t('releaseDiff.screenshot') }}
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="download">
+                    {{ t('releaseDiff.screenshot_download') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item command="copy">
+                    {{ t('releaseDiff.screenshot_copy') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="shareSupported" command="share">
+                    {{ t('releaseDiff.screenshot_share') }}
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+
           <el-row :gutter="16" class="stat-row">
             <el-col :xs="12" :md="6">
               <div class="stat-card">
@@ -587,11 +669,25 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { QuestionFilled } from '@element-plus/icons-vue'
+import { Camera, Download, QuestionFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
 import { projectsApi } from '@/api/projects'
 import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/api/projects'
+import {
+  buildReleaseReportHtml,
+  downloadReleaseReport,
+  releaseReportFilename,
+  type ReleaseReportKind,
+} from '@/utils/export/releaseReport'
+import {
+  canShareImage,
+  captureElementToPng,
+  copyPngToClipboard,
+  downloadDataUrl,
+  screenshotFilename,
+  sharePng,
+} from '@/utils/screenshot'
 import {
   releaseDiffApi,
   type ReleaseCommitCheckResponse,
@@ -655,6 +751,19 @@ const commitsInput = ref('')
 const compareResult = ref<ReleaseCompareResponse | null>(null)
 const checkResult = ref<ReleaseCommitCheckResponse | null>(null)
 
+// Report / screenshot sharing
+const shareSupported = canShareImage()
+const hasAnyResult = computed(() => Boolean(compareResult.value || checkResult.value))
+const reportContext = computed(() => ({
+  project_key: selectedProjectKey.value,
+  repository_slug: selectedRepositorySlug.value,
+  git_provider: repo.value.git_provider || undefined,
+  workspace_slug: selectedWorkspaceSlug.value || undefined,
+  project_url: selectedProjectUrl.value,
+  repository_url: selectedRepositoryUrl.value,
+}))
+const bothSections = computed(() => document.querySelector<HTMLElement>('.tool-sections'))
+
 const compareAlertType = computed<'success' | 'warning' | 'info'>(() => {
   if (!compareResult.value) return 'info'
   if (compareResult.value.status === 'identical') return 'info'
@@ -677,6 +786,18 @@ const selectedRepositorySlug = computed(() => (repo.value.repository_slug ?? '')
 const isCloudProvider = computed(() => repo.value.git_provider === 'bitbucket_cloud')
 const selectedWorkspaceSlug = computed(() =>
   isCloudProvider.value ? (repo.value.workspace_slug ?? '').trim() : '',
+)
+
+// URLs of the selected coordinates - emitted in the exported HTML report
+const selectedProjectUrl = computed(
+  () =>
+    projects.value.find((project) => project.project_key === selectedProjectKey.value)
+      ?.project_url || undefined,
+)
+const selectedRepositoryUrl = computed(
+  () =>
+    repositories.value.find((item) => item.repository_slug === selectedRepositorySlug.value)
+      ?.repository_url || undefined,
 )
 
 // Projects often use the same string for key and name - only show the name as
@@ -913,6 +1034,73 @@ async function sendMissingToCheck() {
   await scrollTo(checkSection.value)
 }
 
+// ------------------------------------------------------------------ #
+// Reporting: standalone HTML report + screenshot sharing
+// ------------------------------------------------------------------ #
+
+function exportReport(kind: ReleaseReportKind) {
+  const compare = kind === 'check' ? null : compareResult.value
+  const check = kind === 'compare' ? null : checkResult.value
+
+  if (!compare && !check) {
+    ElMessage.warning(t('releaseDiff.report_needs_result'))
+    return
+  }
+
+  try {
+    const html = buildReleaseReportHtml({ context: reportContext.value, compare, check })
+    downloadReleaseReport(html, releaseReportFilename(kind, reportContext.value))
+    ElMessage.success(t('releaseDiff.report_exported'))
+  } catch {
+    ElMessage.error(t('releaseDiff.report_failed'))
+  }
+}
+
+async function captureReport(
+  target: HTMLElement | null,
+  filenamePrefix: string,
+  command: string,
+) {
+  let action = command
+
+  try {
+    const dataUrl = await captureElementToPng(target)
+    if (!dataUrl) {
+      ElMessage.warning(t('releaseDiff.screenshot_failed'))
+      return
+    }
+
+    if (action === 'share') {
+      // A cancelled share sheet must not fall through to a download
+      const shared = await sharePng(
+        dataUrl,
+        screenshotFilename(filenamePrefix),
+        t('releaseDiff.title'),
+      )
+      if (shared) {
+        ElMessage.success(t('releaseDiff.screenshot_shared'))
+        return
+      }
+      action = 'copy'
+    }
+
+    if (action === 'copy') {
+      try {
+        await copyPngToClipboard(dataUrl)
+        ElMessage.success(t('releaseDiff.screenshot_copied'))
+        return
+      } catch {
+        action = 'download'
+      }
+    }
+
+    downloadDataUrl(dataUrl, screenshotFilename(filenamePrefix))
+    ElMessage.success(t('releaseDiff.screenshot_downloaded'))
+  } catch {
+    ElMessage.error(t('releaseDiff.screenshot_failed'))
+  }
+}
+
 async function runCompare() {
   if (
     !selectedProjectKey.value ||
@@ -1068,6 +1256,21 @@ async function copySha(value: string) {
 }
 
 .result-actions {
+  margin-bottom: 12px;
+}
+
+.report-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 12px;
 }
 

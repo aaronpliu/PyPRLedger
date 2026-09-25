@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createI18n } from 'vue-i18n'
@@ -6,6 +6,18 @@ import ReleasesView from '@/views/releases/ReleasesView.vue'
 import { projectsApi } from '@/api/projects'
 import type { RepositorySummary } from '@/api/projects'
 import { releaseDiffApi } from '@/api/releaseDiff'
+import {
+  buildReleaseReportHtml,
+  downloadReleaseReport,
+  releaseReportFilename,
+} from '@/utils/export/releaseReport'
+import {
+  canShareImage,
+  captureElementToPng,
+  copyPngToClipboard,
+  downloadDataUrl,
+  sharePng,
+} from '@/utils/screenshot'
 import enMessages from '@/locales/en.json'
 
 vi.mock('@/api/projects', () => ({
@@ -22,6 +34,21 @@ vi.mock('@/api/releaseDiff', () => ({
     check: vi.fn(),
     listRefs: vi.fn(),
   },
+}))
+
+vi.mock('@/utils/export/releaseReport', () => ({
+  buildReleaseReportHtml: vi.fn(() => '<html>report</html>'),
+  downloadReleaseReport: vi.fn(),
+  releaseReportFilename: vi.fn(() => 'release-report.html'),
+}))
+
+vi.mock('@/utils/screenshot', () => ({
+  canShareImage: vi.fn(() => false),
+  captureElementToPng: vi.fn(async () => 'data:image/png;base64,AAA'),
+  copyPngToClipboard: vi.fn(async () => undefined),
+  downloadDataUrl: vi.fn(),
+  screenshotFilename: vi.fn((prefix: string) => `${prefix}.png`),
+  sharePng: vi.fn(async () => true),
 }))
 
 const PROJECTS = [
@@ -122,6 +149,14 @@ function workspaceSelect(wrapper: AnyWrapper) {
     .find((select: AnyWrapper) => select.props('placeholder') === WORKSPACE_PLACEHOLDER)
 }
 
+// Mounting this view is heavy: unmount every wrapper so the DOM of previous
+// tests does not pile up and slow the whole file down.
+const mountedWrappers: AnyWrapper[] = []
+
+afterEach(() => {
+  mountedWrappers.splice(0).forEach((wrapper) => wrapper.unmount())
+})
+
 function mountView() {
   const i18n = createI18n({
     legacy: false,
@@ -129,11 +164,13 @@ function mountView() {
     messages: { en: enMessages },
   })
 
-  return mount(ReleasesView, {
+  const wrapper = mount(ReleasesView, {
     global: {
       plugins: [ElementPlus, i18n],
     },
   })
+  mountedWrappers.push(wrapper)
+  return wrapper
 }
 
 describe('ReleasesView', () => {
@@ -143,6 +180,20 @@ describe('ReleasesView', () => {
     vi.mocked(projectsApi.getCloudWorkspaces).mockReset()
     vi.mocked(releaseDiffApi.listRefs).mockReset()
     vi.mocked(releaseDiffApi.compare).mockReset()
+    vi.mocked(releaseDiffApi.check).mockReset()
+    vi.mocked(buildReleaseReportHtml).mockClear()
+    vi.mocked(downloadReleaseReport).mockClear()
+    vi.mocked(releaseReportFilename).mockClear()
+    vi.mocked(releaseReportFilename).mockReturnValue('release-report.html')
+    vi.mocked(canShareImage).mockReset()
+    vi.mocked(canShareImage).mockReturnValue(false)
+    vi.mocked(captureElementToPng).mockClear()
+    vi.mocked(captureElementToPng).mockResolvedValue('data:image/png;base64,AAA')
+    vi.mocked(copyPngToClipboard).mockClear()
+    vi.mocked(copyPngToClipboard).mockResolvedValue(undefined)
+    vi.mocked(downloadDataUrl).mockClear()
+    vi.mocked(sharePng).mockClear()
+    vi.mocked(sharePng).mockResolvedValue(true)
     vi.mocked(projectsApi.getCloudWorkspaces).mockResolvedValue([])
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue(REFS)
     vi.mocked(projectsApi.getAllProjects).mockResolvedValue(PROJECTS)
@@ -763,5 +814,175 @@ describe('ReleasesView', () => {
         workspace_slug: 'aaronpliu',
       }),
     )
+  }, 30000)
+})
+
+describe('ReleasesView reports and screenshots', () => {
+  const COMPARE_RESULT = {
+    project_key: 'ALPHA',
+    repository_slug: 'alpha-api',
+    git_provider: 'bitbucket_server',
+    old_release_ref: 'v1.2.0',
+    new_release_ref: 'v1.3.0',
+    old_commits_included: false,
+    status: 'missing_commits' as const,
+    summary: { missing_count: 1 },
+    missing_commits: [{ id: 'aaa1111', display_id: 'aaa111' }],
+    added_commits: [],
+    old_release_commits: [],
+    new_release_commits: [],
+    truncated: false,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(projectsApi.getAllProjects).mockResolvedValue(PROJECTS)
+    vi.mocked(projectsApi.getProjectRepositories).mockImplementation((projectKey: string) =>
+      Promise.resolve(REPOSITORIES_BY_PROJECT[projectKey] ?? []),
+    )
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue(REFS)
+    vi.mocked(canShareImage).mockReturnValue(false)
+    vi.mocked(captureElementToPng).mockResolvedValue('data:image/png;base64,AAA')
+    vi.mocked(copyPngToClipboard).mockResolvedValue(undefined)
+    vi.mocked(sharePng).mockResolvedValue(true)
+    vi.mocked(buildReleaseReportHtml).mockReturnValue('<html>report</html>')
+    vi.mocked(releaseReportFilename).mockReturnValue('release-report.html')
   })
+
+  async function mountWithCompareResult() {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue(COMPARE_RESULT)
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'ALPHA')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'alpha-api')
+    await flushPromises()
+
+    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    await releaseInputs[0].find('input').setValue('v1.2.0')
+    await releaseInputs[1].find('input').setValue('v1.3.0')
+
+    const compareButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.run_compare)
+    await compareButton!.trigger('click')
+    await flushPromises()
+
+    return wrapper
+  }
+
+  function buttonsByLabel(wrapper: AnyWrapper, label: string) {
+    return wrapper.findAll('button').filter((button: AnyWrapper) => button.text() === label)
+  }
+
+  it('offers report actions for the comparison result', async () => {
+    const wrapper = await mountWithCompareResult()
+
+    // one per tool that has a result, plus the shared toolbar above the columns
+    expect(buttonsByLabel(wrapper, enMessages.releaseDiff.report_export_html)).toHaveLength(1)
+    expect(buttonsByLabel(wrapper, enMessages.releaseDiff.screenshot)).toHaveLength(1)
+    expect(buttonsByLabel(wrapper, enMessages.releaseDiff.report_export_both)).toHaveLength(1)
+    expect(buttonsByLabel(wrapper, enMessages.releaseDiff.screenshot_both)).toHaveLength(1)
+  }, 30000)
+
+  it('exports the comparison result as an HTML report', async () => {
+    const wrapper = await mountWithCompareResult()
+
+    await buttonsByLabel(wrapper, enMessages.releaseDiff.report_export_html)[0].trigger('click')
+    await flushPromises()
+
+    expect(buildReleaseReportHtml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          project_key: 'ALPHA',
+          repository_slug: 'alpha-api',
+          // urls of the selected coordinates are forwarded to the report
+          project_url: 'http://git.local/projects/ALPHA',
+          repository_url: 'http://git.local/projects/ALPHA/repos/alpha-api',
+        }),
+        compare: expect.objectContaining({ old_release_ref: 'v1.2.0' }),
+        check: null,
+      }),
+    )
+    expect(downloadReleaseReport).toHaveBeenCalledWith(
+      '<html>report</html>',
+      'release-report.html',
+    )
+  }, 30000)
+
+  it('exports both tools into one report from the toolbar', async () => {
+    const wrapper = await mountWithCompareResult()
+
+    await buttonsByLabel(wrapper, enMessages.releaseDiff.report_export_both)[0].trigger('click')
+    await flushPromises()
+
+    expect(buildReleaseReportHtml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        compare: expect.objectContaining({ status: 'missing_commits' }),
+        check: null,
+      }),
+    )
+    expect(downloadReleaseReport).toHaveBeenCalledTimes(1)
+  }, 30000)
+
+  it('does not export before a result exists', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const toolbarButtons = buttonsByLabel(wrapper, enMessages.releaseDiff.report_export_both)
+    expect(toolbarButtons[0].attributes('disabled')).toBeDefined()
+    expect(downloadReleaseReport).not.toHaveBeenCalled()
+  })
+
+  it('downloads a PNG screenshot of both columns', async () => {
+    const wrapper = await mountWithCompareResult()
+
+    // dropdown order: shared toolbar, compare card, check card
+    const dropdowns = wrapper.findAllComponents({ name: 'ElDropdown' })
+    dropdowns[0].vm.$emit('command', 'download')
+    await flushPromises()
+
+    expect(captureElementToPng).toHaveBeenCalledTimes(1)
+    expect(downloadDataUrl).toHaveBeenCalledWith('data:image/png;base64,AAA', 'release-report.png')
+  }, 30000)
+
+  it('copies the screenshot of a single tool to the clipboard', async () => {
+    const wrapper = await mountWithCompareResult()
+
+    const dropdowns = wrapper.findAllComponents({ name: 'ElDropdown' })
+    dropdowns[1].vm.$emit('command', 'copy')
+    await flushPromises()
+
+    expect(copyPngToClipboard).toHaveBeenCalledWith('data:image/png;base64,AAA')
+    expect(downloadDataUrl).not.toHaveBeenCalled()
+  }, 30000)
+
+  it('shares the screenshot through the OS share sheet when available', async () => {
+    vi.mocked(canShareImage).mockReturnValue(true)
+    vi.mocked(sharePng).mockResolvedValue(true)
+
+    const wrapper = await mountWithCompareResult()
+
+    const dropdowns = wrapper.findAllComponents({ name: 'ElDropdown' })
+    dropdowns[0].vm.$emit('command', 'share')
+    await flushPromises()
+
+    expect(sharePng).toHaveBeenCalledWith('data:image/png;base64,AAA', 'release-report.png', 'Releases')
+    expect(downloadDataUrl).not.toHaveBeenCalled()
+  }, 30000)
+
+  it('falls back to the clipboard when sharing is unavailable', async () => {
+    vi.mocked(sharePng).mockResolvedValue(false)
+
+    const wrapper = await mountWithCompareResult()
+
+    const dropdowns = wrapper.findAllComponents({ name: 'ElDropdown' })
+    dropdowns[0].vm.$emit('command', 'share')
+    await flushPromises()
+
+    expect(copyPngToClipboard).toHaveBeenCalledWith('data:image/png;base64,AAA')
+  }, 30000)
 })
