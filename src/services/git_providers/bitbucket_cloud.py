@@ -140,7 +140,11 @@ class BitbucketCloudProvider(BaseGitProvider):
         """Fetch a resource, returning None when it is missing or unreachable."""
         try:
             return await self._request(url, params)
-        except NotFoundException:
+        except NotFoundException as e:
+            logger.warning(
+                f"Bitbucket Cloud resource not found - wrong workspace/slug or the account "
+                f"has no access: {url} - {e}"
+            )
             return None
         except GitServiceException as e:
             logger.error(f"Bitbucket Cloud lookup failed: {url} - {e}")

@@ -166,7 +166,10 @@ class EntitySyncService:
         repo_info = await provider.get_repository_info(project.project_key, repository_slug)
 
         if not repo_info:
-            raise ValueError(f"Failed to fetch repository info for {repository_slug}")
+            raise ValueError(
+                f"Failed to fetch repository info for {project.project_key}/{repository_slug} "
+                f"from {provider.name}"
+            )
 
         repository = Repository(
             repository_id=repo_info["repository_id"],
