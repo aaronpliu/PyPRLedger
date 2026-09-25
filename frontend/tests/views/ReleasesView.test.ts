@@ -412,6 +412,20 @@ describe('ReleasesView', () => {
     expect(text).toContain(enMessages.releaseDiff.check_help)
   })
 
+  it('lays the compare and check tools out in two columns', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const columns = wrapper.findAll('.tool-sections > .el-col')
+    expect(columns).toHaveLength(2)
+    expect(columns[0].text()).toContain(enMessages.releaseDiff.tab_compare)
+    expect(columns[1].text()).toContain(enMessages.releaseDiff.tab_check)
+    // half width on large screens, stacked on small ones
+    expect(columns[0].classes()).toContain('el-col-lg-12')
+    expect(columns[0].classes()).toContain('el-col-24')
+    expect(columns[1].classes()).toContain('el-col-lg-12')
+  })
+
   it('sends the missing SHAs of a comparison to the commit check', async () => {
     vi.mocked(releaseDiffApi.compare).mockResolvedValue({
       project_key: 'ALPHA',

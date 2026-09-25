@@ -150,6 +150,9 @@
       </div>
     </el-card>
 
+    <!-- ================= Tools (left: compare, right: check) ================= -->
+    <el-row :gutter="16" class="tool-sections">
+    <el-col :xs="24" :lg="12">
     <!-- ================= Compare two releases ================= -->
     <div ref="compareSection" class="tool-section">
       <el-card shadow="never">
@@ -167,7 +170,7 @@
 
         <el-form :model="compareForm" label-width="180px">
           <el-row :gutter="16">
-            <el-col :xs="24" :md="12">
+            <el-col :xs="24">
               <el-form-item :label="t('releaseDiff.old_release_ref')" required>
                 <el-autocomplete
                   v-model="compareForm.old_release_ref"
@@ -188,7 +191,7 @@
                 </el-autocomplete>
               </el-form-item>
             </el-col>
-            <el-col :xs="24" :md="12">
+            <el-col :xs="24">
               <el-form-item :label="t('releaseDiff.new_release_ref')" required>
                 <el-autocomplete
                   v-model="compareForm.new_release_ref"
@@ -224,7 +227,7 @@
           </div>
 
           <el-row v-if="compareScopeEnabled" :gutter="16">
-            <el-col :xs="24" :md="10">
+            <el-col :xs="24">
               <el-form-item :label="t('releaseDiff.old_release_base_ref')">
                 <el-autocomplete
                   v-model="compareForm.old_release_base_ref"
@@ -249,7 +252,7 @@
                 <code>{{ scopeText(compareForm.old_release_base_ref, compareForm.old_release_ref) }}</code>
               </div>
             </el-col>
-            <el-col :xs="24" :md="10">
+            <el-col :xs="24">
               <el-form-item :label="t('releaseDiff.new_release_base_ref')">
                 <el-autocomplete
                   v-model="compareForm.new_release_base_ref"
@@ -274,7 +277,7 @@
                 <code>{{ scopeText(compareForm.new_release_base_ref, compareForm.new_release_ref) }}</code>
               </div>
             </el-col>
-            <el-col :xs="24" :md="4">
+            <el-col :xs="24">
               <el-button
                 link
                 type="primary"
@@ -394,7 +397,9 @@
         <el-empty v-else :description="t('releaseDiff.empty_result')" />
         </el-card>
       </div>
+    </el-col>
 
+    <el-col :xs="24" :lg="12">
     <!-- ================= Check commits ================= -->
     <div ref="checkSection" class="tool-section">
       <el-card shadow="never">
@@ -412,7 +417,7 @@
 
         <el-form :model="checkForm" label-width="180px">
           <el-row :gutter="16">
-            <el-col :xs="24" :md="12">
+            <el-col :xs="24">
               <el-form-item :label="t('releaseDiff.target_release_ref')" required>
                 <el-autocomplete
                   v-model="checkForm.target_release_ref"
@@ -444,7 +449,7 @@
           </div>
 
           <el-row v-if="checkScopeEnabled" :gutter="16">
-            <el-col :xs="24" :md="12">
+            <el-col :xs="24">
               <el-form-item :label="t('releaseDiff.target_release_base_ref')">
                 <el-autocomplete
                   v-model="checkForm.target_release_base_ref"
@@ -573,6 +578,8 @@
         <el-empty v-else :description="t('releaseDiff.empty_result')" />
       </el-card>
     </div>
+    </el-col>
+    </el-row>
   </div>
 </template>
 
@@ -1002,8 +1009,18 @@ async function copySha(value: string) {
   padding: 4px;
 }
 
+/* Compare (left) and check (right) share a row on wide screens, stack below 1200px */
+.tool-sections {
+  align-items: stretch;
+}
+
 .tool-section {
+  height: 100%;
   scroll-margin-top: 16px;
+}
+
+.tool-section :deep(.el-card) {
+  height: 100%;
 }
 
 .section-header h3 {
