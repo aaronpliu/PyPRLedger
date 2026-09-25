@@ -148,6 +148,32 @@ class Settings(BaseSettings):
             "Only applicable to Bitbucket Server/Data Center (not Bitbucket Cloud)."
         ),
     )
+    BITBUCKET_CLOUD_API_URL: str = Field(
+        default="https://api.bitbucket.org/2.0",
+        description="Bitbucket Cloud (bitbucket.org) REST API 2.0 base URL",
+    )
+    BITBUCKET_CLOUD_TOKEN: str | None = Field(
+        default=None,
+        description=(
+            "Bitbucket Cloud access token (OAuth2 / workspace access token). When set it "
+            "is sent as a Bearer token, otherwise BITBUCKET_CLOUD_USER + app password "
+            "(Basic auth) is used."
+        ),
+    )
+    BITBUCKET_CLOUD_USER: str | None = Field(
+        default=None,
+        description=(
+            "Bitbucket Cloud username (Atlassian account). Falls back to BITBUCKET_USER "
+            "when unset - set it explicitly to use Server and Cloud side by side."
+        ),
+    )
+    BITBUCKET_CLOUD_APP_PASSWORD: str | None = Field(
+        default=None,
+        description=(
+            "Bitbucket Cloud app password. Falls back to BITBUCKET_PASSWORD when unset - "
+            "set it explicitly to use Server and Cloud side by side."
+        ),
+    )
     BITBUCKET_DEFAULT_WORKSPACE: str = Field(
         default="default", description="Default workspace/project key for Bitbucket repositories"
     )
