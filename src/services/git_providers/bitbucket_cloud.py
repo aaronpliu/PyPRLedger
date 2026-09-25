@@ -98,6 +98,16 @@ class BitbucketCloudProvider(BaseGitProvider):
                 encoded = base64.b64encode(credentials.encode()).decode()
                 self._headers["Authorization"] = f"Basic {encoded}"
 
+        if "Authorization" not in self._headers:
+            logger.warning(
+                "Bitbucket Cloud credentials are not configured - set BITBUCKET_CLOUD_TOKEN "
+                "or BITBUCKET_CLOUD_USER + BITBUCKET_CLOUD_APP_PASSWORD, otherwise API calls "
+                "fail with 401"
+            )
+        else:
+            mode = "bearer_token" if token else f"basic(user={user})"
+            logger.info(f"Bitbucket Cloud provider initialized: auth={mode}, api={self._base_url}")
+
     @property
     def name(self) -> str:
         return GitProvider.BITBUCKET_CLOUD.value
@@ -115,7 +125,11 @@ class BitbucketCloudProvider(BaseGitProvider):
             raise NotFoundException(f"Bitbucket Cloud resource not found: {url}")
         if response.status_code in (401, 403):
             raise GitServiceException(
-                f"Bitbucket Cloud authentication failed ({response.status_code}) for {url}"
+                f"Bitbucket Cloud authentication failed ({response.status_code}) for {url}. "
+                "Check BITBUCKET_CLOUD_TOKEN (Bearer) or BITBUCKET_CLOUD_USER + "
+                "BITBUCKET_CLOUD_APP_PASSWORD (Atlassian username, not email), the app "
+                "password scopes and the workspace membership - Cloud returns 401 both for "
+                "invalid credentials and for a workspace the account cannot see."
             )
         if response.status_code >= 400:
             raise GitServiceException(f"Bitbucket Cloud returned {response.status_code} for {url}")

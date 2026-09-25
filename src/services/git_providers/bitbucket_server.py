@@ -42,6 +42,15 @@ class BitbucketServerProvider(BaseGitProvider):
                 encoded = base64.b64encode(credentials.encode()).decode()
                 self._headers["Authorization"] = f"Basic {encoded}"
 
+        if "Authorization" not in self._headers:
+            logger.warning(
+                "Bitbucket Server credentials are not configured - set BITBUCKET_TOKEN or "
+                "BITBUCKET_USER + BITBUCKET_PASSWORD, otherwise API calls fail with 401"
+            )
+        else:
+            mode = "bearer_token" if token else f"basic(user={user})"
+            logger.info(f"Bitbucket Server provider initialized: auth={mode}, api={self._base_url}")
+
     @property
     def name(self) -> str:
         return GitProvider.BITBUCKET_SERVER.value
