@@ -102,11 +102,16 @@ const routes: RouteRecordRaw[] = [
         name: 'NotificationPreferences',
         component: () => import('@/views/notifications/NotificationPreferenceView.vue'),
       },
-      // Release diff (standalone page)
+      // Releases (compare releases / check commits against a release)
+      {
+        path: 'releases',
+        name: 'Releases',
+        component: () => import('@/views/releases/ReleasesView.vue'),
+      },
+      // Legacy path kept so old bookmarks keep working
       {
         path: 'release-diff',
-        name: 'ReleaseDiff',
-        component: () => import('@/views/releases/ReleaseDiffView.vue'),
+        redirect: { name: 'Releases' },
       },
     ],
   },

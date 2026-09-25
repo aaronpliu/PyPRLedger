@@ -99,7 +99,7 @@
     "projectRegistry": "项目注册表",
     "reviewValidation": "审查验证",
     "systemSettings": "系统设置",
-    "releaseDiff": "版本对比"
+    "releases": "版本"
   },
   "auth": {
     "login_title": "登录到 PR Ledger",
@@ -912,10 +912,14 @@
     "validation_length": "名称长度必须在 1 到 100 个字符之间"
   },
   "releaseDiff": {
-    "title": "版本对比",
-    "subtitle": "通过 Git 平台 compare 接口比较版本、校验提交是否属于目标版本",
+    "title": "版本",
+    "subtitle": "先选择仓库，下面的两个工具都会复用它 —— 既可以比较两个版本，也可以校验提交是否属于某个版本",
     "tab_compare": "版本比较",
     "tab_check": "提交校验",
+    "compare_help": "比较两个版本 ref：旧版本的提交是否全部包含在新版本中？",
+    "check_help": "校验指定提交（完整或短 SHA）是否属于目标版本。",
+    "send_missing_to_check": "把缺失的 SHA 填入提交校验",
+    "sent_missing_to_check": "已把 {count} 个提交填入提交校验",
     "project_key": "项目 Key",
     "repository_slug": "仓库 Slug",
     "select_project": "选择或输入项目 Key",

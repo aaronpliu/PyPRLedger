@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createI18n } from 'vue-i18n'
-import ReleaseDiffView from '@/views/releases/ReleaseDiffView.vue'
+import ReleasesView from '@/views/releases/ReleasesView.vue'
 import { projectsApi } from '@/api/projects'
 import type { RepositorySummary } from '@/api/projects'
 import { releaseDiffApi } from '@/api/releaseDiff'
@@ -101,14 +101,14 @@ function mountView() {
     messages: { en: enMessages },
   })
 
-  return mount(ReleaseDiffView, {
+  return mount(ReleasesView, {
     global: {
       plugins: [ElementPlus, i18n],
     },
   })
 }
 
-describe('ReleaseDiffView', () => {
+describe('ReleasesView', () => {
   beforeEach(() => {
     vi.mocked(projectsApi.getAllProjects).mockReset()
     vi.mocked(projectsApi.getProjectRepositories).mockReset()
@@ -311,5 +311,99 @@ describe('ReleaseDiffView', () => {
         new_release_base_ref: 'v1.2.0',
       }),
     )
+  })
+
+  it('shows both tools at once instead of hiding them behind tabs', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.findAllComponents({ name: 'ElTabs' })).toHaveLength(0)
+
+    const text = wrapper.text()
+    expect(text).toContain(enMessages.releaseDiff.tab_compare)
+    expect(text).toContain(enMessages.releaseDiff.tab_check)
+    expect(text).toContain(enMessages.releaseDiff.compare_help)
+    expect(text).toContain(enMessages.releaseDiff.check_help)
+  })
+
+  it('sends the missing SHAs of a comparison to the commit check', async () => {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue({
+      project_key: 'ALPHA',
+      repository_slug: 'alpha-api',
+      git_provider: 'bitbucket_server',
+      old_release_ref: 'v1.2.0',
+      new_release_ref: 'v1.3.0',
+      old_commits_included: false,
+      status: 'missing_commits',
+      summary: { missing_count: 2 },
+      missing_commits: [
+        { id: 'aaa1111', display_id: 'aaa111' },
+        { id: 'bbb2222', display_id: 'bbb222' },
+      ],
+      added_commits: [],
+      old_release_commits: [],
+      new_release_commits: [],
+      truncated: false,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'ALPHA')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'alpha-api')
+    await flushPromises()
+
+    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    await releaseInputs[0].find('input').setValue('v1.2.0')
+    await releaseInputs[1].find('input').setValue('v1.3.0')
+
+    const compareButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.run_compare)
+    await compareButton!.trigger('click')
+    await flushPromises()
+
+    const sendButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.send_missing_to_check)
+    expect(sendButton).toBeDefined()
+
+    await sendButton!.trigger('click')
+    await flushPromises()
+
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe(
+      'aaa1111\nbbb2222',
+    )
+  })
+
+  it('resets a tool without touching the shared repository context', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'ALPHA')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'alpha-api')
+    await flushPromises()
+
+    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    await releaseInputs[0].find('input').setValue('v1.2.0')
+    await releaseInputs[1].find('input').setValue('v1.3.0')
+
+    const resetButtons = wrapper
+      .findAll('button')
+      .filter((button) => button.text() === enMessages.releaseDiff.reset)
+    expect(resetButtons).toHaveLength(2)
+
+    await resetButtons[0].trigger('click')
+    await flushPromises()
+
+    expect(
+      (inputsByPlaceholder(wrapper, REF_PLACEHOLDER)[0].find('input').element as HTMLInputElement)
+        .value,
+    ).toBe('')
+    expect(selects[1].props('modelValue')).toBe('alpha-api')
   })
 })

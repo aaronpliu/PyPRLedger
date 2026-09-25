@@ -99,7 +99,7 @@
     "projectRegistry": "Project Registry",
     "reviewValidation": "Review Validation",
     "systemSettings": "System Settings",
-    "releaseDiff": "Release Diff"
+    "releases": "Releases"
   },
   "auth": {
     "login_title": "Login to PR Ledger",
@@ -911,10 +911,14 @@
     "validation_length": "Name must be between 1 and 100 characters"
   },
   "releaseDiff": {
-    "title": "Release Diff",
-    "subtitle": "Compare releases and verify commit membership via the git provider compare API",
+    "title": "Releases",
+    "subtitle": "Pick a repository below and both tools will use it - compare two releases, or verify commits against a release",
     "tab_compare": "Compare Releases",
     "tab_check": "Check Commits",
+    "compare_help": "Compare two release refs: is every commit of the old release contained in the new one?",
+    "check_help": "Verify whether specific commits (full or short SHA) belong to a target release.",
+    "send_missing_to_check": "Send missing SHAs to Check Commits",
+    "sent_missing_to_check": "{count} commit(s) copied to Check Commits",
     "project_key": "Project Key",
     "repository_slug": "Repository Slug",
     "select_project": "Select or type a project key",

@@ -99,7 +99,7 @@
     "projectRegistry": "專案註冊表",
     "reviewValidation": "審查驗證",
     "systemSettings": "系統設定",
-    "releaseDiff": "版本對比"
+    "releases": "版本"
   },
   "auth": {
     "login_title": "登入到 PR Ledger",
@@ -912,10 +912,14 @@
     "validation_length": "名稱長度必須在 1 到 100 個字元之間"
   },
   "releaseDiff": {
-    "title": "版本對比",
-    "subtitle": "透過 Git 平台 compare 介面比較版本、校驗提交是否屬於目標版本",
+    "title": "版本",
+    "subtitle": "先選擇儲存庫，下面的兩個工具都會重複使用它 —— 既可比較兩個版本，也可校驗提交是否屬於某個版本",
     "tab_compare": "版本比較",
     "tab_check": "提交校驗",
+    "compare_help": "比較兩個版本 ref：舊版本的提交是否全部包含在新版本中？",
+    "check_help": "校驗指定提交（完整或短 SHA）是否屬於目標版本。",
+    "send_missing_to_check": "把缺失的 SHA 填入提交校驗",
+    "sent_missing_to_check": "已把 {count} 個提交填入提交校驗",
     "project_key": "專案 Key",
     "repository_slug": "儲存庫 Slug",
     "select_project": "選擇或輸入專案 Key",
