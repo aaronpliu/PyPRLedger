@@ -91,8 +91,20 @@ const REFS = {
   branches: ['main', 'release/1.0'],
 }
 
+const CLOUD_PROJECT = {
+  id: 3,
+  project_id: 103,
+  project_name: 'AI',
+  project_key: 'AI',
+  project_url: 'https://bitbucket.org/aaronpliu',
+  git_provider: 'bitbucket_cloud',
+  created_date: '2024-01-03T00:00:00',
+  updated_date: '2024-01-03T00:00:00',
+}
+
 const BASE_REF_PLACEHOLDER = enMessages.releaseDiff.base_ref_placeholder
 const REF_PLACEHOLDER = enMessages.releaseDiff.ref_placeholder
+const WORKSPACE_PLACEHOLDER = enMessages.releaseDiff.workspace_slug_placeholder
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type AnyWrapper = any
@@ -101,6 +113,12 @@ function inputsByPlaceholder(wrapper: AnyWrapper, placeholder: string) {
   return wrapper
     .findAllComponents({ name: 'ElAutocomplete' })
     .filter((input: AnyWrapper) => input.props('placeholder') === placeholder)
+}
+
+function workspaceInputs(wrapper: AnyWrapper) {
+  return wrapper
+    .findAllComponents({ name: 'ElInput' })
+    .filter((input: AnyWrapper) => input.props('placeholder') === WORKSPACE_PLACEHOLDER)
 }
 
 function mountView() {
@@ -526,6 +544,73 @@ describe('ReleasesView', () => {
 
     expect(releaseDiffApi.compare).toHaveBeenCalledWith(
       expect.objectContaining({ old_release_ref: 'deadbeef', new_release_ref: 'v1.1.0' }),
+    )
+  })
+
+  it('hides the Cloud workspace input for non-Cloud providers', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(workspaceInputs(wrapper)).toHaveLength(0)
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'ALPHA')
+    await flushPromises()
+
+    expect(workspaceInputs(wrapper)).toHaveLength(0)
+  })
+
+  it('sends the Cloud workspace along with the business project key', async () => {
+    vi.mocked(projectsApi.getAllProjects).mockResolvedValue([CLOUD_PROJECT])
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue({
+      project_key: 'AI',
+      repository_slug: 'pylang',
+      git_provider: 'bitbucket_cloud',
+      old_release_ref: 'v1.0.0',
+      new_release_ref: 'v1.1.0',
+      old_commits_included: true,
+      status: 'included',
+      summary: {},
+      missing_commits: [],
+      added_commits: [],
+      old_release_commits: [],
+      new_release_commits: [],
+      truncated: false,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'AI')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'pylang')
+    await flushPromises()
+
+    expect(selects[2].props('modelValue')).toBe('bitbucket_cloud')
+
+    const cloudWorkspaceInputs = workspaceInputs(wrapper)
+    expect(cloudWorkspaceInputs).toHaveLength(1)
+    await cloudWorkspaceInputs[0].find('input').setValue('aaronpliu')
+    await flushPromises()
+
+    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    await releaseInputs[0].find('input').setValue('v1.0.0')
+    await releaseInputs[1].find('input').setValue('v1.1.0')
+
+    const compareButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.run_compare)
+    await compareButton!.trigger('click')
+    await flushPromises()
+
+    expect(releaseDiffApi.compare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_key: 'AI',
+        repository_slug: 'pylang',
+        git_provider: 'bitbucket_cloud',
+        workspace_slug: 'aaronpliu',
+      }),
     )
   })
 })

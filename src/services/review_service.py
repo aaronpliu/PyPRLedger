@@ -487,7 +487,11 @@ class ReviewService:
             ReviewResponse: The created review
         """
         # Initialize entity sync service with optional provider hint
-        entity_sync_service = EntitySyncService(db, git_provider=review_data.git_provider)
+        entity_sync_service = EntitySyncService(
+            db,
+            git_provider=review_data.git_provider,
+            workspace_slug=review_data.workspace_slug,
+        )
 
         # Sync all related entities using business keys only
         # This will query DB first, then fetch from Git provider API if not exists
@@ -638,7 +642,11 @@ class ReviewService:
         try:
             # Step 2: Process review (existing logic)
             # Initialize entity sync service with optional provider hint
-            entity_sync_service = EntitySyncService(db, git_provider=review_data.git_provider)
+            entity_sync_service = EntitySyncService(
+                db,
+                git_provider=review_data.git_provider,
+                workspace_slug=review_data.workspace_slug,
+            )
 
             # Sync all related entities using business keys only
             project: Project = await entity_sync_service.sync_project(review_data.project_key)

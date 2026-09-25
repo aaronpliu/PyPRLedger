@@ -14,6 +14,8 @@ export interface ReleaseRefsRequest {
   project_key: string
   repository_slug: string
   git_provider?: string | null
+  /** Bitbucket Cloud only: workspace holding the repository (falls back to project_key). */
+  workspace_slug?: string | null
   limit?: number
 }
 
@@ -29,6 +31,8 @@ export interface ReleaseCompareRequest {
   project_key: string
   repository_slug: string
   git_provider?: string | null
+  /** Bitbucket Cloud only: workspace holding the repository (falls back to project_key). */
+  workspace_slug?: string | null
   old_release_ref: string
   new_release_ref: string
   old_release_base_ref?: string | null
@@ -65,6 +69,8 @@ export interface ReleaseCommitCheckRequest {
   project_key: string
   repository_slug: string
   git_provider?: string | null
+  /** Bitbucket Cloud only: workspace holding the repository (falls back to project_key). */
+  workspace_slug?: string | null
   target_release_ref: string
   target_release_base_ref?: string | null
   commits: string[]

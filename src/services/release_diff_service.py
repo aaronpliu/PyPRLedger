@@ -23,6 +23,7 @@ from src.schemas.release_diff import (
     ReleaseCommitCheckResponse,
     ReleaseCompareRequest,
     ReleaseCompareResponse,
+    ReleaseDiffRepository,
     ReleaseRefsRequest,
     ReleaseRefsResponse,
 )
@@ -66,11 +67,12 @@ class ReleaseDiffService:
         """
         provider_name = self._resolve_provider_name(request.git_provider)
         provider = self._provider_factory(provider_name)
+        remote_key = self._remote_project_key(request, provider_name)
 
         cache_key = self._build_cache_key(
             "compare",
             provider_name,
-            request.project_key,
+            remote_key,
             request.repository_slug,
             request.old_release_ref,
             request.new_release_ref,
@@ -88,7 +90,7 @@ class ReleaseDiffService:
 
         old_commits, old_truncated = await self._fetch_release_commits(
             provider=provider,
-            project_key=request.project_key,
+            project_key=remote_key,
             repository_slug=request.repository_slug,
             release_ref=request.old_release_ref,
             base_ref=request.old_release_base_ref,
@@ -96,7 +98,7 @@ class ReleaseDiffService:
         )
         new_commits, new_truncated = await self._fetch_release_commits(
             provider=provider,
-            project_key=request.project_key,
+            project_key=remote_key,
             repository_slug=request.repository_slug,
             release_ref=request.new_release_ref,
             base_ref=request.new_release_base_ref,
@@ -105,7 +107,7 @@ class ReleaseDiffService:
 
         behind_ids, behind_truncated = await self._fetch_compare_ids(
             provider=provider,
-            project_key=request.project_key,
+            project_key=remote_key,
             repository_slug=request.repository_slug,
             from_ref=request.new_release_ref,
             to_ref=request.old_release_ref,
@@ -113,7 +115,7 @@ class ReleaseDiffService:
         )
         ahead_ids, ahead_truncated = await self._fetch_compare_ids(
             provider=provider,
-            project_key=request.project_key,
+            project_key=remote_key,
             repository_slug=request.repository_slug,
             from_ref=request.old_release_ref,
             to_ref=request.new_release_ref,
@@ -192,11 +194,12 @@ class ReleaseDiffService:
         """
         provider_name = self._resolve_provider_name(request.git_provider)
         provider = self._provider_factory(provider_name)
+        remote_key = self._remote_project_key(request, provider_name)
 
         cache_key = self._build_cache_key(
             "refs",
             provider_name,
-            request.project_key,
+            remote_key,
             request.repository_slug,
             request.limit,
         )
@@ -207,7 +210,7 @@ class ReleaseDiffService:
             return ReleaseRefsResponse(**cached)
 
         raw_refs = await provider.list_refs(
-            project_key=request.project_key,
+            project_key=remote_key,
             repository_slug=request.repository_slug,
             limit=request.limit,
         )
@@ -245,10 +248,11 @@ class ReleaseDiffService:
         """
         provider_name = self._resolve_provider_name(request.git_provider)
         provider = self._provider_factory(provider_name)
+        remote_key = self._remote_project_key(request, provider_name)
 
         release_commits, truncated = await self._fetch_release_commits(
             provider=provider,
-            project_key=request.project_key,
+            project_key=remote_key,
             repository_slug=request.repository_slug,
             release_ref=request.target_release_ref,
             base_ref=request.target_release_base_ref,
@@ -316,6 +320,23 @@ class ReleaseDiffService:
     # ------------------------------------------------------------------ #
     # Helpers
     # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _remote_project_key(request: ReleaseDiffRepository, provider_name: str) -> str:
+        """Resolve the identifier used to address the repository remotely.
+
+        Bitbucket Cloud addresses repositories by workspace, while Bitbucket
+        Server and GitHub Enterprise use the project key / organization. When the
+        request carries a ``workspace_slug`` and the provider is Cloud, the
+        workspace is used for the remote calls and ``project_key`` stays the
+        business key echoed back in the response.
+        """
+        if provider_name != GitProvider.BITBUCKET_CLOUD.value:
+            return request.project_key
+        workspace = (request.workspace_slug or "").strip()
+        if not workspace or workspace == request.project_key:
+            return request.project_key
+        return workspace
 
     def _resolve_provider_name(self, git_provider: str | None) -> str:
         """Resolve provider name from request or fall back to configured default."""

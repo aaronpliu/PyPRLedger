@@ -32,12 +32,35 @@ class EntitySyncService:
     3. Default to bitbucket_server (preserves existing behavior)
     """
 
-    def __init__(self, db: AsyncSession, git_provider: str | GitProvider | None = None):
+    def __init__(
+        self,
+        db: AsyncSession,
+        git_provider: str | GitProvider | None = None,
+        workspace_slug: str | None = None,
+    ):
         self.db = db
         self._provider: BaseGitProvider | None = None
+        self._workspace_slug = workspace_slug
         self._payload_hint: str | None = (
             git_provider.value if isinstance(git_provider, GitProvider) else git_provider
         )
+
+    def _remote_project_key(self, project_key: str, provider: BaseGitProvider) -> str:
+        """Resolve the identifier used to address the project/repository remotely.
+
+        Bitbucket Server and GitHub Enterprise address repositories with the
+        project key (or organization), while Bitbucket Cloud addresses them with
+        the workspace slug. A payload may therefore carry an explicit
+        ``workspace_slug`` so the business ``project_key`` (used by the database
+        and the project registry) can differ from the Cloud workspace.
+        """
+        if provider.name != GitProvider.BITBUCKET_CLOUD.value:
+            return project_key
+        workspace = (self._workspace_slug or "").strip()
+        if not workspace or workspace == project_key:
+            return project_key
+        logger.debug(f"Using Cloud workspace '{workspace}' for project '{project_key}'")
+        return workspace
 
     async def _resolve_provider(self) -> BaseGitProvider:
         """Lazy-resolve provider on first use, then memoize for the session."""
@@ -109,16 +132,19 @@ class EntitySyncService:
             return project
 
         provider = await self._resolve_provider()
-        logger.info(f"Project not found, fetching from {provider.name}: {project_key}")
-        project_info = await provider.get_project_info(project_key)
+        remote_key = self._remote_project_key(project_key, provider)
+        logger.info(f"Project not found, fetching from {provider.name}: {remote_key}")
+        project_info = await provider.get_project_info(remote_key)
 
         if not project_info:
-            raise ValueError(f"Failed to fetch project info for {project_key}")
+            raise ValueError(f"Failed to fetch project info for {remote_key} from {provider.name}")
 
+        # Keep the caller's project key as the business key so it stays consistent
+        # with pull_request_review.project_key and project_registry.
         project = Project(
             project_id=project_info["project_id"],
             project_name=project_info["project_name"],
-            project_key=project_info["project_key"],
+            project_key=project_key,
             project_url=project_info["project_url"],
             git_provider=provider.name,
         )
@@ -159,15 +185,15 @@ class EntitySyncService:
 
         await self._try_resolve_provider_from_registry(project.project_key, repository_slug)
         provider = await self._resolve_provider()
+        remote_key = self._remote_project_key(project.project_key, provider)
         logger.info(
-            f"Repository not found, fetching from {provider.name}: "
-            f"{project.project_key}/{repository_slug}"
+            f"Repository not found, fetching from {provider.name}: {remote_key}/{repository_slug}"
         )
-        repo_info = await provider.get_repository_info(project.project_key, repository_slug)
+        repo_info = await provider.get_repository_info(remote_key, repository_slug)
 
         if not repo_info:
             raise ValueError(
-                f"Failed to fetch repository info for {project.project_key}/{repository_slug} "
+                f"Failed to fetch repository info for {remote_key}/{repository_slug} "
                 f"from {provider.name}"
             )
 

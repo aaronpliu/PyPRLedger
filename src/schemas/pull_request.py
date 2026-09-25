@@ -87,6 +87,14 @@ class ReviewCreate(ReviewBase):
         description=f"Git provider hint ({', '.join(sorted(GitProvider.values()))}). "
         "Used for auto-registration on first review submission.",
     )
+    workspace_slug: str | None = Field(
+        None,
+        min_length=1,
+        max_length=128,
+        description="Bitbucket Cloud workspace slug holding the repository. Only used when "
+        "git_provider is bitbucket_cloud: the workspace addresses the repository remotely "
+        "while project_key remains the business key. Ignored by other providers.",
+    )
 
     @field_validator("pull_request_status")
     def validate_status(cls, v):

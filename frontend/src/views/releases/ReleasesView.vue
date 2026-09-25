@@ -81,6 +81,22 @@
               </el-select>
             </el-form-item>
           </el-col>
+          <el-col v-if="isCloudProvider" :xs="24" :sm="12" :md="6">
+            <el-form-item :label="t('releaseDiff.workspace_slug')">
+              <el-tooltip
+                :content="t('releaseDiff.workspace_slug_help')"
+                placement="top"
+                :show-after="100"
+              >
+                <el-input
+                  v-model="repo.workspace_slug"
+                  clearable
+                  :placeholder="t('releaseDiff.workspace_slug_placeholder')"
+                  style="width: 100%"
+                />
+              </el-tooltip>
+            </el-form-item>
+          </el-col>
           <el-col :xs="24" :sm="12" :md="6">
             <el-form-item :label="t('releaseDiff.max_commits')">
               <el-input-number v-model="maxCommits" :min="1" :max="5000" style="width: 100%" />
@@ -590,6 +606,8 @@ const repo = ref({
   project_key: '' as string,
   repository_slug: '' as string,
   git_provider: null as string | null,
+  // Bitbucket Cloud only: workspace holding the repository
+  workspace_slug: '' as string,
 })
 
 const compareForm = ref({
@@ -625,6 +643,12 @@ const compareStatusText = computed(() => {
 // el-select emits undefined when cleared - always work with trimmed strings
 const selectedProjectKey = computed(() => (repo.value.project_key ?? '').trim())
 const selectedRepositorySlug = computed(() => (repo.value.repository_slug ?? '').trim())
+
+// Bitbucket Cloud addresses repositories by workspace; other providers use the project key.
+const isCloudProvider = computed(() => repo.value.git_provider === 'bitbucket_cloud')
+const selectedWorkspaceSlug = computed(() =>
+  isCloudProvider.value ? (repo.value.workspace_slug ?? '').trim() : '',
+)
 
 // Bitbucket projects often use the same string for key and name - only show the
 // name as secondary text when it actually adds information.
@@ -710,7 +734,12 @@ async function loadRefs() {
 let refsTimer: ReturnType<typeof setTimeout> | undefined
 
 watch(
-  () => [selectedProjectKey.value, selectedRepositorySlug.value, repo.value.git_provider],
+  () => [
+    selectedProjectKey.value,
+    selectedRepositorySlug.value,
+    repo.value.git_provider,
+    selectedWorkspaceSlug.value,
+  ],
   () => {
     refs.value = { tags: [], branches: [] }
     refsFailed.value = false
@@ -743,6 +772,7 @@ function basePayload() {
     project_key: selectedProjectKey.value,
     repository_slug: selectedRepositorySlug.value,
     git_provider: repo.value.git_provider || undefined,
+    workspace_slug: selectedWorkspaceSlug.value || undefined,
   }
 }
 

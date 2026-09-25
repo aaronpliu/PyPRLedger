@@ -42,6 +42,16 @@ class ReleaseDiffRepository(BaseModel):
             "(bitbucket_server / bitbucket_cloud / github_enterprise)."
         ),
     )
+    workspace_slug: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        description=(
+            "Bitbucket Cloud workspace slug holding the repository. Only used when "
+            "git_provider is bitbucket_cloud: the workspace addresses the repository "
+            "remotely while project_key stays the business key. Ignored by other providers."
+        ),
+    )
 
 
 class ReleaseRefsRequest(ReleaseDiffRepository):

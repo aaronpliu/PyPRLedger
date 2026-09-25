@@ -756,3 +756,120 @@ async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider) 
         app.dependency_overrides.pop(get_release_diff_service, None)
 
     assert response.status_code == 502
+
+
+# --------------------------------------------------------------------------- #
+# Service: Bitbucket Cloud workspace routing
+# --------------------------------------------------------------------------- #
+
+
+class WorkspaceRecordingProvider(FakeGitProvider):
+    """Cloud provider stub recording the identifier used for remote calls."""
+
+    def __init__(self, name: str = "bitbucket_cloud") -> None:
+        super().__init__(name=name)
+        self.project_keys: list[str] = []
+
+    async def compare_commits(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        self.project_keys.append(project_key)
+        return await super().compare_commits(project_key, repository_slug, from_ref, to_ref, limit)
+
+    async def list_commits_until(
+        self,
+        project_key: str,
+        repository_slug: str,
+        until_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        self.project_keys.append(project_key)
+        return await super().list_commits_until(project_key, repository_slug, until_ref, limit)
+
+    async def list_refs(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 100,
+    ) -> dict[str, list[str]]:
+        self.project_keys.append(project_key)
+        return await super().list_refs(project_key, repository_slug, limit)
+
+
+async def test_refs_use_cloud_workspace_slug() -> None:
+    fake = WorkspaceRecordingProvider()
+    service = build_service(fake)
+
+    result = await service.list_refs(
+        refs_payload(
+            project_key="AI",
+            git_provider="bitbucket_cloud",
+            workspace_slug="aaronpliu",
+        )
+    )
+
+    assert fake.project_keys == ["aaronpliu"]
+    # The business key is echoed back, the workspace is only used remotely
+    assert result.project_key == "AI"
+
+
+async def test_compare_uses_cloud_workspace_slug() -> None:
+    fake = WorkspaceRecordingProvider()
+    service = build_service(fake)
+
+    await service.compare_releases(
+        compare_payload(
+            project_key="AI",
+            git_provider="bitbucket_cloud",
+            workspace_slug="aaronpliu",
+        )
+    )
+
+    assert set(fake.project_keys) == {"aaronpliu"}
+
+
+async def test_check_uses_cloud_workspace_slug() -> None:
+    fake = WorkspaceRecordingProvider()
+    service = build_service(fake)
+
+    await service.check_commits(
+        check_payload(
+            project_key="AI",
+            git_provider="bitbucket_cloud",
+            workspace_slug="aaronpliu",
+        )
+    )
+
+    assert set(fake.project_keys) == {"aaronpliu"}
+
+
+async def test_workspace_slug_is_ignored_for_server_and_github() -> None:
+    server = WorkspaceRecordingProvider(name="bitbucket_server")
+    github = WorkspaceRecordingProvider(name="github_enterprise")
+
+    await build_service(server).list_refs(
+        refs_payload(project_key="AI", git_provider="bitbucket_server", workspace_slug="aaronpliu")
+    )
+    await build_service(github).list_refs(
+        refs_payload(
+            project_key="acme", git_provider="github_enterprise", workspace_slug="aaronpliu"
+        )
+    )
+
+    assert server.project_keys == ["AI"]
+    assert github.project_keys == ["acme"]
+
+
+async def test_cloud_without_workspace_slug_falls_back_to_project_key() -> None:
+    fake = WorkspaceRecordingProvider()
+
+    await build_service(fake).list_refs(
+        refs_payload(project_key="aaronpliu", git_provider="bitbucket_cloud")
+    )
+
+    assert fake.project_keys == ["aaronpliu"]
