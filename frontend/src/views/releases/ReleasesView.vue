@@ -88,12 +88,31 @@
                 placement="top"
                 :show-after="100"
               >
-                <el-input
+                <el-select
                   v-model="repo.workspace_slug"
+                  filterable
                   clearable
+                  allow-create
+                  default-first-option
+                  :loading="workspacesLoading"
                   :placeholder="t('releaseDiff.workspace_slug_placeholder')"
                   style="width: 100%"
-                />
+                >
+                  <el-option
+                    v-for="workspace in cloudWorkspaces"
+                    :key="workspace.slug"
+                    :label="workspace.slug"
+                    :value="workspace.slug"
+                  >
+                    <span class="option-key">{{ workspace.slug }}</span>
+                    <span
+                      v-if="secondaryName(workspace.slug, workspace.name)"
+                      class="option-name"
+                    >
+                      {{ workspace.name }}
+                    </span>
+                  </el-option>
+                </el-select>
               </el-tooltip>
             </el-form-item>
           </el-col>
@@ -565,7 +584,7 @@ import { QuestionFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
 import { projectsApi } from '@/api/projects'
-import type { ProjectSummary, RepositorySummary } from '@/api/projects'
+import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/api/projects'
 import {
   releaseDiffApi,
   type ReleaseCommitCheckResponse,
@@ -587,6 +606,9 @@ const projects = ref<ProjectSummary[]>([])
 const repositories = ref<RepositorySummary[]>([])
 const projectsLoading = ref(false)
 const repositoriesLoading = ref(false)
+const cloudWorkspaces = ref<CloudWorkspaceOption[]>([])
+const workspacesLoading = ref(false)
+const workspacesLoaded = ref(false)
 
 const refs = ref<{ tags: string[]; branches: string[] }>({ tags: [], branches: [] })
 const refsLoading = ref(false)
@@ -693,6 +715,31 @@ async function loadProjects() {
   }
 }
 
+// Workspace suggestions come from the backend (BITBUCKET_CLOUD_WORKSPACES, the Cloud
+// API and the workspaces already synced locally). Any other slug stays typeable.
+async function loadCloudWorkspaces() {
+  workspacesLoading.value = true
+  try {
+    cloudWorkspaces.value = await projectsApi.getCloudWorkspaces()
+  } catch {
+    cloudWorkspaces.value = []
+  } finally {
+    workspacesLoading.value = false
+    workspacesLoaded.value = true
+  }
+}
+
+// Bitbucket Cloud needs a workspace to address the repository: offer the known
+// ones, and pre-select it when there is exactly one candidate.
+async function ensureWorkspaceSuggestions() {
+  if (!workspacesLoaded.value) {
+    await loadCloudWorkspaces()
+  }
+  if (!repo.value.workspace_slug && cloudWorkspaces.value.length === 1) {
+    repo.value.workspace_slug = cloudWorkspaces.value[0].slug
+  }
+}
+
 async function loadRepositories(projectKey: string) {
   repositories.value = []
   if (!projectKey) {
@@ -754,7 +801,7 @@ watch(
 
 watch(
   () => repo.value.project_key,
-  (projectKey) => {
+  async (projectKey) => {
     const key = (projectKey || '').trim()
     const project = projects.value.find((item) => item.project_key === key)
 
@@ -764,10 +811,21 @@ watch(
     // Unknown project keys (typed manually) have no local repository catalog
     repositories.value = []
     if (project) {
-      void loadRepositories(key)
+      await loadRepositories(key)
+    }
+    if (isCloudProvider.value) {
+      void ensureWorkspaceSuggestions()
     }
   },
 )
+
+// Switching the provider by hand (instead of via the project catalog) must offer
+// the Cloud workspaces too.
+watch(isCloudProvider, (isCloud) => {
+  if (isCloud) {
+    void ensureWorkspaceSuggestions()
+  }
+})
 
 onMounted(loadProjects)
 

@@ -11,6 +11,7 @@ from src.core.exceptions import (
     ProjectNotFoundException,
     ResourceAlreadyExistsException,
 )
+from src.schemas.cloud_workspace import CloudWorkspaceListResponse
 from src.schemas.project import (
     ProjectCreate,
     ProjectDetailResponse,
@@ -20,6 +21,7 @@ from src.schemas.project import (
     ProjectStats,
     ProjectUpdate,
 )
+from src.services.cloud_workspace_service import CloudWorkspaceService
 from src.services.project_service import ProjectService
 from src.utils.metrics import metrics
 
@@ -33,6 +35,11 @@ router = APIRouter()
 def get_project_service() -> ProjectService:
     """Get a project service instance"""
     return ProjectService(metrics_collector=metrics)
+
+
+def get_cloud_workspace_service() -> CloudWorkspaceService:
+    """Get a Bitbucket Cloud workspace suggestion service"""
+    return CloudWorkspaceService()
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -356,6 +363,41 @@ async def get_projects_with_most_active_reviewers(
             detail={
                 "error": "INTERNAL_SERVER_ERROR",
                 "message": "Failed to get top projects by reviewers",
+            },
+        )
+
+
+@router.get("/cloud-workspaces", response_model=CloudWorkspaceListResponse)
+async def list_cloud_workspaces(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    workspace_service: Annotated[CloudWorkspaceService, Depends(get_cloud_workspace_service)],
+) -> CloudWorkspaceListResponse:
+    """
+    List the Bitbucket Cloud workspaces offered for selection.
+
+    Suggestions are merged from ``BITBUCKET_CLOUD_WORKSPACES``, the Cloud API
+    (when the credentials allow account level calls) and the workspaces already
+    stored locally. Any other workspace slug can still be typed manually.
+
+    Args:
+        db: Database session
+        workspace_service: Cloud workspace service instance
+
+    Returns:
+        CloudWorkspaceListResponse with the merged suggestions
+    """
+    try:
+        workspaces = await workspace_service.list_workspaces(db)
+        return CloudWorkspaceListResponse(workspaces=workspaces)
+    except Exception:
+        metrics.increment_error(
+            error_type="INTERNAL_SERVER_ERROR", endpoint="GET /api/v1/projects/cloud-workspaces"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": "Failed to list Bitbucket Cloud workspaces",
             },
         )
 

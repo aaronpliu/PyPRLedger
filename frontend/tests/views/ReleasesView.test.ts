@@ -12,6 +12,7 @@ vi.mock('@/api/projects', () => ({
   projectsApi: {
     getAllProjects: vi.fn(),
     getProjectRepositories: vi.fn(),
+    getCloudWorkspaces: vi.fn(),
   },
 }))
 
@@ -115,10 +116,10 @@ function inputsByPlaceholder(wrapper: AnyWrapper, placeholder: string) {
     .filter((input: AnyWrapper) => input.props('placeholder') === placeholder)
 }
 
-function workspaceInputs(wrapper: AnyWrapper) {
+function workspaceSelect(wrapper: AnyWrapper) {
   return wrapper
-    .findAllComponents({ name: 'ElInput' })
-    .filter((input: AnyWrapper) => input.props('placeholder') === WORKSPACE_PLACEHOLDER)
+    .findAllComponents({ name: 'ElSelect' })
+    .find((select: AnyWrapper) => select.props('placeholder') === WORKSPACE_PLACEHOLDER)
 }
 
 function mountView() {
@@ -139,8 +140,10 @@ describe('ReleasesView', () => {
   beforeEach(() => {
     vi.mocked(projectsApi.getAllProjects).mockReset()
     vi.mocked(projectsApi.getProjectRepositories).mockReset()
+    vi.mocked(projectsApi.getCloudWorkspaces).mockReset()
     vi.mocked(releaseDiffApi.listRefs).mockReset()
     vi.mocked(releaseDiffApi.compare).mockReset()
+    vi.mocked(projectsApi.getCloudWorkspaces).mockResolvedValue([])
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue(REFS)
     vi.mocked(projectsApi.getAllProjects).mockResolvedValue(PROJECTS)
     vi.mocked(projectsApi.getProjectRepositories).mockImplementation((projectKey: string) =>
@@ -567,17 +570,131 @@ describe('ReleasesView', () => {
     )
   })
 
-  it('hides the Cloud workspace input for non-Cloud providers', async () => {
+  it('hides the Cloud workspace field for non-Cloud providers', async () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(workspaceInputs(wrapper)).toHaveLength(0)
+    expect(workspaceSelect(wrapper)).toBeUndefined()
 
     const selects = wrapper.findAllComponents({ name: 'ElSelect' })
     await selects[0].vm.$emit('update:modelValue', 'ALPHA')
     await flushPromises()
 
-    expect(workspaceInputs(wrapper)).toHaveLength(0)
+    expect(workspaceSelect(wrapper)).toBeUndefined()
+  })
+
+  it('offers the Cloud workspaces and pre-selects a single suggestion', async () => {
+    vi.mocked(projectsApi.getAllProjects).mockResolvedValue([CLOUD_PROJECT])
+    vi.mocked(projectsApi.getCloudWorkspaces).mockResolvedValue([
+      { slug: 'aaronpliu', name: 'Aaron Liu', source: 'database' },
+    ])
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue({
+      project_key: 'AI',
+      repository_slug: 'pylang',
+      git_provider: 'bitbucket_cloud',
+      old_release_ref: 'v1.0.0',
+      new_release_ref: 'v1.1.0',
+      old_commits_included: true,
+      status: 'included',
+      summary: {},
+      missing_commits: [],
+      added_commits: [],
+      old_release_commits: [],
+      new_release_commits: [],
+      truncated: false,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'AI')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'pylang')
+    await flushPromises()
+
+    expect(projectsApi.getCloudWorkspaces).toHaveBeenCalledTimes(1)
+
+    const select = workspaceSelect(wrapper)
+    expect(select).toBeDefined()
+    // the only known workspace is offered and applied automatically
+    expect(select.props('modelValue')).toBe('aaronpliu')
+    expect(
+      select.findAllComponents({ name: 'ElOption' }).map((option: AnyWrapper) => option.props('value')),
+    ).toEqual(['aaronpliu'])
+
+    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    await releaseInputs[0].find('input').setValue('v1.0.0')
+    await releaseInputs[1].find('input').setValue('v1.1.0')
+
+    const compareButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.run_compare)
+    await compareButton!.trigger('click')
+    await flushPromises()
+
+    expect(releaseDiffApi.compare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_key: 'AI',
+        repository_slug: 'pylang',
+        git_provider: 'bitbucket_cloud',
+        workspace_slug: 'aaronpliu',
+      }),
+    )
+  })
+
+  it('keeps an arbitrary Cloud workspace typeable when nothing matches', async () => {
+    vi.mocked(projectsApi.getAllProjects).mockResolvedValue([CLOUD_PROJECT])
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      project_key: 'AI',
+      repository_slug: 'pylang',
+      git_provider: 'bitbucket_cloud',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'AI')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'pylang')
+    await flushPromises()
+
+    const select = workspaceSelect(wrapper)
+    expect(select.props('allowCreate')).toBe(true)
+    expect(select.props('filterable')).toBe(true)
+    // no suggestion available -> nothing is forced into the field
+    expect(select.props('modelValue')).toBe('')
+
+    await select.vm.$emit('update:modelValue', 'typo-workspace')
+    await flushPromises()
+
+    const refreshButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.refresh_refs)
+    await refreshButton!.trigger('click')
+    await flushPromises()
+
+    expect(releaseDiffApi.listRefs).toHaveBeenCalledWith(
+      expect.objectContaining({ workspace_slug: 'typo-workspace' }),
+    )
+  })
+
+  it('loads the Cloud workspaces when the provider is picked by hand', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(projectsApi.getCloudWorkspaces).not.toHaveBeenCalled()
+
+    const providerSelect = wrapper
+      .findAllComponents({ name: 'ElSelect' })
+      .find((select: AnyWrapper) => select.props('placeholder') === enMessages.releaseDiff.git_provider_placeholder)
+    await providerSelect!.vm.$emit('update:modelValue', 'bitbucket_cloud')
+    await flushPromises()
+
+    expect(projectsApi.getCloudWorkspaces).toHaveBeenCalledTimes(1)
+    expect(workspaceSelect(wrapper)).toBeDefined()
   })
 
   it('sends the Cloud workspace along with the business project key', async () => {
@@ -609,9 +726,9 @@ describe('ReleasesView', () => {
 
     expect(selects[2].props('modelValue')).toBe('bitbucket_cloud')
 
-    const cloudWorkspaceInputs = workspaceInputs(wrapper)
-    expect(cloudWorkspaceInputs).toHaveLength(1)
-    await cloudWorkspaceInputs[0].find('input').setValue('aaronpliu')
+    const cloudWorkspaceSelect = workspaceSelect(wrapper)
+    expect(cloudWorkspaceSelect).toBeDefined()
+    await cloudWorkspaceSelect.vm.$emit('update:modelValue', 'aaronpliu')
     await flushPromises()
 
     const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)

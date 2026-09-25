@@ -177,6 +177,14 @@ class Settings(BaseSettings):
     BITBUCKET_DEFAULT_WORKSPACE: str = Field(
         default="default", description="Default workspace/project key for Bitbucket repositories"
     )
+    BITBUCKET_CLOUD_WORKSPACES: str = Field(
+        default="",
+        description=(
+            "Comma separated Bitbucket Cloud workspaces offered as suggestions in the UI. "
+            "Used together with the workspaces discovered through the API and the ones "
+            "already stored locally."
+        ),
+    )
 
     # GitHub Enterprise API configuration
     GITHUB_ENTERPRISE_URL: str | None = Field(

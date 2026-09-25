@@ -302,3 +302,51 @@ def test_strip_credentials_is_a_noop_without_userinfo() -> None:
     )
     assert bitbucket_cloud.strip_credentials(None) is None
     assert bitbucket_cloud.strip_credentials("") == ""
+
+
+async def test_list_workspaces_reads_workspace_memberships(monkeypatch) -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(urlparse(str(request.url)).path)
+        return page(
+            [
+                {"workspace": {"slug": "aaronpliu", "name": "Aaron Liu"}},
+                {"workspace": {"slug": "acme", "name": "Acme Corp"}},
+            ]
+        )
+
+    install_transport(monkeypatch, handler)
+
+    workspaces = await provider().list_workspaces()
+
+    assert workspaces == [
+        {"slug": "aaronpliu", "name": "Aaron Liu"},
+        {"slug": "acme", "name": "Acme Corp"},
+    ]
+    assert seen == ["/2.0/user/permissions/workspaces"]
+
+
+async def test_list_workspaces_falls_back_to_plain_workspace_list(monkeypatch) -> None:
+    """Atlassian API tokens get a 404 on the membership endpoint."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = urlparse(str(request.url)).path
+        seen.append(path)
+        if path.endswith("/user/permissions/workspaces"):
+            return httpx.Response(404, json={"type": "error"})
+        return page([{"slug": "aaronpliu", "name": "Aaron Liu"}])
+
+    install_transport(monkeypatch, handler)
+
+    workspaces = await provider().list_workspaces()
+
+    assert workspaces == [{"slug": "aaronpliu", "name": "Aaron Liu"}]
+    assert seen == ["/2.0/user/permissions/workspaces", "/2.0/workspaces"]
+
+
+async def test_list_workspaces_returns_empty_when_discovery_is_unavailable(monkeypatch) -> None:
+    install_transport(monkeypatch, lambda request: httpx.Response(404, json={"type": "error"}))
+
+    assert await provider().list_workspaces() == []

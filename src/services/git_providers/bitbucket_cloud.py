@@ -51,6 +51,16 @@ def strip_credentials(url: str | None) -> str | None:
     return urlunsplit((parsed.scheme, host, parsed.path, parsed.query, parsed.fragment))
 
 
+def _workspace_entry(raw: Any) -> dict[str, Any] | None:
+    """Normalize a Cloud workspace payload into ``{slug, name}``."""
+    if not isinstance(raw, dict):
+        return None
+    slug = raw.get("slug")
+    if not slug:
+        return None
+    return {"slug": str(slug), "name": str(raw.get("name") or slug)}
+
+
 def stable_id(value: str) -> int:
     """Derive a stable numeric id from a Cloud uuid / slug.
 
@@ -187,6 +197,43 @@ class BitbucketCloudProvider(BaseGitProvider):
             page += 1
 
         return values[:limit]
+
+    async def list_workspaces(self) -> list[dict[str, Any]]:
+        """Discover the workspaces reachable with the configured credentials.
+
+        Account level endpoints are not exposed to Atlassian API tokens (they
+        answer 404), so this is best effort: an empty list is returned instead of
+        raising and the caller falls back to locally known workspaces.
+        """
+        candidates: list[tuple[str, Any]] = [
+            ("/user/permissions/workspaces", lambda value: value.get("workspace")),
+            ("/workspaces", lambda value: value),
+        ]
+
+        for path, extract in candidates:
+            try:
+                payload = await self._request(
+                    f"{self._base_url}{path}",
+                    {"pagelen": MAX_PAGE_LEN, "role": "member"},
+                )
+            except NotFoundException:
+                logger.debug(f"Bitbucket Cloud workspace discovery unsupported at {path}")
+                continue
+            except GitServiceException as e:
+                logger.debug(f"Bitbucket Cloud workspace discovery failed at {path}: {e}")
+                continue
+
+            entries = [
+                entry
+                for entry in (
+                    _workspace_entry(extract(value)) for value in payload.get("values") or []
+                )
+                if entry
+            ]
+            if entries:
+                return entries
+
+        return []
 
     async def get_project_info(self, project_key: str) -> dict[str, Any] | None:
         """Fetch workspace information (Cloud has no Bitbucket project concept).

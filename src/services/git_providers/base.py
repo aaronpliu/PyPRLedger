@@ -106,6 +106,17 @@ class BaseGitProvider(ABC):
         """
         raise NotImplementedError(f"Provider '{self.name}' does not implement list_commits_until()")
 
+    async def list_workspaces(self) -> list[dict[str, Any]]:
+        """Return the workspaces (Bitbucket Cloud) reachable with the credentials.
+
+        Only Bitbucket Cloud has a workspace concept, so every other provider
+        reports no workspaces instead of raising.
+
+        Returns:
+            List of dicts with ``slug`` and ``name`` keys.
+        """
+        return []
+
     async def list_refs(
         self,
         project_key: str,
