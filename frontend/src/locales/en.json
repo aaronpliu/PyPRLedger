@@ -99,7 +99,8 @@
     "projectRegistry": "Project Registry",
     "reviewValidation": "Review Validation",
     "systemSettings": "System Settings",
-    "releases": "Releases"
+    "releases": "Releases",
+    "releaseComparison": "Release Comparison"
   },
   "auth": {
     "login_title": "Login to PR Ledger",

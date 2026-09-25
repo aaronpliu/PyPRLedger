@@ -99,7 +99,8 @@
     "projectRegistry": "项目注册表",
     "reviewValidation": "审查验证",
     "systemSettings": "系统设置",
-    "releases": "版本"
+    "releases": "版本",
+    "releaseComparison": "版本对比"
   },
   "auth": {
     "login_title": "登录到 PR Ledger",
