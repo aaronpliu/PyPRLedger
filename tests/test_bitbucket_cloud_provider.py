@@ -263,3 +263,42 @@ async def test_release_diff_compare_runs_against_cloud_provider(monkeypatch) -> 
     assert [commit.id for commit in result.old_release_commits] == [C1]
     assert [commit.id for commit in result.added_commits] == [C2]
     assert result.old_release_commits[0].author_name == "Jane Doe"
+
+
+async def test_repository_url_drops_clone_credentials(monkeypatch) -> None:
+    """Cloud clone links embed the account name - it must not reach the database."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "uuid": "{aaaa-bbbb}",
+                "name": "Web App",
+                "slug": REPO,
+                "links": {
+                    "html": {"href": f"https://bitbucket.org/{WORKSPACE}/{REPO}"},
+                    "clone": [
+                        {
+                            "name": "https",
+                            "href": f"https://alice@bitbucket.org/{WORKSPACE}/{REPO}.git",
+                        }
+                    ],
+                },
+            },
+        )
+
+    install_transport(monkeypatch, handler)
+
+    info = await provider().get_repository_info(WORKSPACE, REPO)
+
+    assert info is not None
+    assert info["repository_url"] == f"https://bitbucket.org/{WORKSPACE}/{REPO}.git"
+
+
+def test_strip_credentials_is_a_noop_without_userinfo() -> None:
+    assert (
+        bitbucket_cloud.strip_credentials("https://bitbucket.org/acme/web-app.git")
+        == "https://bitbucket.org/acme/web-app.git"
+    )
+    assert bitbucket_cloud.strip_credentials(None) is None
+    assert bitbucket_cloud.strip_credentials("") == ""

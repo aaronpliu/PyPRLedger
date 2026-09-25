@@ -182,6 +182,26 @@ describe('ReleasesView', () => {
     expect(option.text()).toBe('FOO')
   })
 
+  it('does not repeat the project key as name when they only differ in case', async () => {
+    vi.mocked(projectsApi.getAllProjects).mockResolvedValue([
+      {
+        ...PROJECTS[0],
+        project_key: 'ai',
+        project_name: 'AI',
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const option = wrapper
+      .findAllComponents({ name: 'ElSelect' })[0]
+      .findAllComponents({ name: 'ElOption' })[0]
+
+    expect(option.props('label')).toBe('ai')
+    expect(option.text()).toBe('ai')
+  })
+
   it('shows the project name as secondary text when it differs from the key', async () => {
     const wrapper = mountView()
     await flushPromises()

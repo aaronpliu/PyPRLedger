@@ -30,7 +30,7 @@ class RecordingProvider:
         self.project_lookups.append(project_key)
         return {
             "project_id": 1,
-            "project_name": project_key,
+            "project_name": f"{project_key} workspace",
             "project_key": project_key,
             "project_url": f"https://example.com/{project_key}",
         }
@@ -64,7 +64,28 @@ async def test_cloud_uses_workspace_slug_for_remote_lookups(db_session, monkeypa
     assert provider.project_lookups == ["aaronpliu"]
     assert provider.repository_lookups == [("aaronpliu", "pylang")]
     assert project.project_key == "AI"
+    assert project.project_name == "AI"
     assert repository.repository_slug == "pylang"
+
+
+async def test_cloud_keeps_workspace_name_without_alias(db_session, monkeypatch) -> None:
+    install_provider(monkeypatch, "bitbucket_cloud")
+
+    project = await EntitySyncService(db_session, git_provider="bitbucket_cloud").sync_project(
+        "aaronpliu"
+    )
+
+    assert project.project_name == "aaronpliu workspace"
+
+
+async def test_server_keeps_remote_project_name(db_session, monkeypatch) -> None:
+    install_provider(monkeypatch, "bitbucket_server")
+
+    project = await EntitySyncService(
+        db_session, git_provider="bitbucket_server", workspace_slug="aaronpliu"
+    ).sync_project("AI")
+
+    assert project.project_name == "AI workspace"
 
 
 async def test_cloud_without_workspace_slug_falls_back_to_project_key(

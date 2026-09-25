@@ -650,11 +650,15 @@ const selectedWorkspaceSlug = computed(() =>
   isCloudProvider.value ? (repo.value.workspace_slug ?? '').trim() : '',
 )
 
-// Bitbucket projects often use the same string for key and name - only show the
-// name as secondary text when it actually adds information.
+// Projects often use the same string for key and name - only show the name as
+// secondary text when it adds information. The comparison ignores case so a key
+// like `ai` with name `AI` renders as "ai" instead of "aiAI".
 function secondaryName(value: string, name?: string | null): string | undefined {
   const trimmed = (name ?? '').trim()
-  return trimmed && trimmed !== value ? trimmed : undefined
+  if (!trimmed) {
+    return undefined
+  }
+  return trimmed.toLowerCase() === (value ?? '').trim().toLowerCase() ? undefined : trimmed
 }
 
 // Release refs are suggested from the repository tags / branches, but any ref

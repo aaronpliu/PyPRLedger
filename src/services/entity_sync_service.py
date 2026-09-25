@@ -8,6 +8,7 @@ Supports multiple providers (Bitbucket Server, GitHub Enterprise) via provider a
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,6 +62,25 @@ class EntitySyncService:
             return project_key
         logger.debug(f"Using Cloud workspace '{workspace}' for project '{project_key}'")
         return workspace
+
+    def _display_name(
+        self,
+        project_key: str,
+        remote_key: str,
+        project_info: dict[str, Any],
+        provider: BaseGitProvider,
+    ) -> str:
+        """Pick the project name shown in the UI.
+
+        For Bitbucket Cloud the remote project is a workspace whose name is the
+        workspace display name (e.g. ``aaronpliu``). When the payload addresses it
+        through a different business key (``workspace_slug`` alias), that workspace
+        name would be confusing, so the business key is shown instead.
+        """
+        remote_name = project_info.get("project_name") or remote_key
+        if provider.name == GitProvider.BITBUCKET_CLOUD.value and remote_key != project_key:
+            return project_key
+        return remote_name
 
     async def _resolve_provider(self) -> BaseGitProvider:
         """Lazy-resolve provider on first use, then memoize for the session."""
@@ -143,7 +163,7 @@ class EntitySyncService:
         # with pull_request_review.project_key and project_registry.
         project = Project(
             project_id=project_info["project_id"],
-            project_name=project_info["project_name"],
+            project_name=self._display_name(project_key, remote_key, project_info, provider),
             project_key=project_key,
             project_url=project_info["project_url"],
             git_provider=provider.name,

@@ -17,6 +17,7 @@ import hashlib
 import logging
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -30,6 +31,24 @@ logger = logging.getLogger(__name__)
 
 CLOUD_API_URL = "https://api.bitbucket.org/2.0"
 MAX_PAGE_LEN = 100
+
+
+def strip_credentials(url: str | None) -> str | None:
+    """Drop the ``user@`` userinfo that Cloud clone links embed.
+
+    Cloud returns clone hrefs such as ``https://alice@bitbucket.org/ws/repo.git``.
+    The username adds no value for a stored repository URL and leaks the
+    authenticated account, so it is removed.
+    """
+    if not url:
+        return url
+    parsed = urlsplit(url)
+    if not parsed.username:
+        return url
+    host = parsed.hostname or ""
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    return urlunsplit((parsed.scheme, host, parsed.path, parsed.query, parsed.fragment))
 
 
 def stable_id(value: str) -> int:
@@ -213,7 +232,7 @@ class BitbucketCloudProvider(BaseGitProvider):
             "repository_id": stable_id(str(api_response.get("uuid") or repo_slug)),
             "repository_name": api_response.get("name") or repo_slug,
             "repository_slug": api_response.get("slug") or repo_slug,
-            "repository_url": https_url or html.get("href") or "",
+            "repository_url": strip_credentials(https_url) or html.get("href") or "",
             "project_id": stable_id(str(project.get("uuid") or workspace)) if project else None,
             "description": api_response.get("description") or "",
         }
