@@ -873,3 +873,45 @@ async def test_cloud_without_workspace_slug_falls_back_to_project_key() -> None:
     )
 
     assert fake.project_keys == ["aaronpliu"]
+
+
+# --------------------------------------------------------------------------- #
+# Refs caching / explicit refresh
+# --------------------------------------------------------------------------- #
+
+
+async def test_refresh_bypasses_the_cache_and_picks_up_new_tags() -> None:
+    """A tag created on the git side must show up after an explicit refresh."""
+    fake = FakeGitProvider()
+    service = build_service(fake)
+
+    # 1. first call fills the cache
+    first = await service.list_refs(refs_payload())
+    assert "v9.9.9" not in first.tags
+
+    # 2. the git side gets a new tag ...
+    REF_NAMES["tags"].append("v9.9.9")
+    try:
+        cached = await service.list_refs(refs_payload())
+        assert "v9.9.9" not in cached.tags, "cached response is expected to be stale"
+
+        # 3. ... and an explicit refresh reads through to the provider
+        refreshed = await service.list_refs(refs_payload(refresh=True))
+        assert "v9.9.9" in refreshed.tags
+
+        # 4. the cache now holds the fresh list for the automatic loads
+        after = await service.list_refs(refs_payload())
+        assert "v9.9.9" in after.tags
+    finally:
+        REF_NAMES["tags"].remove("v9.9.9")
+
+
+async def test_cache_hit_avoids_the_provider_call() -> None:
+    fake = FakeGitProvider()
+    service = build_service(fake)
+
+    await service.list_refs(refs_payload())
+    calls_after_first = len(fake.calls)
+    await service.list_refs(refs_payload())
+
+    assert len(fake.calls) == calls_after_first

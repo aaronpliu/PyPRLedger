@@ -16,6 +16,8 @@ export interface ReleaseRefsRequest {
   git_provider?: string | null
   /** Bitbucket Cloud only: workspace holding the repository (falls back to project_key). */
   workspace_slug?: string | null
+  /** Bypass the backend cache - used by the Refresh action to pick up new tags. */
+  refresh?: boolean
   limit?: number
 }
 

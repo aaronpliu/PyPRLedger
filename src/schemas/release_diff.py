@@ -52,6 +52,13 @@ class ReleaseDiffRepository(BaseModel):
             "remotely while project_key stays the business key. Ignored by other providers."
         ),
     )
+    refresh: bool = Field(
+        default=False,
+        description=(
+            "Bypass the Redis cache and read from the git provider again. Used by the "
+            "'Refresh' action so newly created tags / branches show up immediately."
+        ),
+    )
 
 
 class ReleaseRefsRequest(ReleaseDiffRepository):

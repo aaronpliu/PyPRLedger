@@ -580,6 +580,36 @@ describe('ReleasesView', () => {
     expect(wrapper.text()).toContain('2 tag(s) / 2 branch(es) loaded')
   })
 
+  it('refreshes the ref suggestions through the provider, bypassing the cache', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'ALPHA')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'alpha-api')
+    await flushPromises()
+
+    // the automatic load may use the backend cache
+    expect(releaseDiffApi.listRefs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ refresh: false }),
+    )
+
+    const refreshButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.refresh_refs)
+    await refreshButton!.trigger('click')
+    await flushPromises()
+
+    // the Refresh action asks the backend to read through to Bitbucket
+    expect(releaseDiffApi.listRefs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ refresh: true }),
+    )
+    expect(wrapper.text()).toContain(
+      enMessages.releaseDiff.refs_fetched_at.replace('{time}', ''),
+    )
+  })
+
   it('suggests the loaded refs and still accepts a manually typed ref', async () => {
     vi.mocked(releaseDiffApi.compare).mockResolvedValue({
       project_key: 'ALPHA',

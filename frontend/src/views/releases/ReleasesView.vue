@@ -138,12 +138,15 @@
           }}
         </span>
         <span v-else>{{ t('releaseDiff.ref_suggestions_hint') }}</span>
+        <span v-if="refsLoadedAt" class="refs-fetched-at">
+          {{ t('releaseDiff.refs_fetched_at', { time: refsLoadedAt }) }}
+        </span>
         <el-button
           link
           type="primary"
           :loading="refsLoading"
           :disabled="!selectedProjectKey || !selectedRepositorySlug"
-          @click="loadRefs"
+          @click="loadRefs(true)"
         >
           {{ t('releaseDiff.refresh_refs') }}
         </el-button>
@@ -716,6 +719,7 @@ const workspacesLoaded = ref(false)
 const refs = ref<{ tags: string[]; branches: string[] }>({ tags: [], branches: [] })
 const refsLoading = ref(false)
 const refsFailed = ref(false)
+const refsLoadedAt = ref('')
 
 const compareSection = ref<HTMLElement | null>(null)
 const checkSection = ref<HTMLElement | null>(null)
@@ -884,7 +888,14 @@ async function loadRepositories(projectKey: string) {
   }
 }
 
-async function loadRefs() {
+/**
+ * Load the tag / branch suggestions.
+ *
+ * ``force`` is used by the Refresh action: it asks the backend to bypass its
+ * Redis cache so tags created on the git side show up immediately. The automatic
+ * loads (repository / provider change) use the cache to stay fast.
+ */
+async function loadRefs(force = false) {
   if (!selectedProjectKey.value || !selectedRepositorySlug.value) {
     refs.value = { tags: [], branches: [] }
     refsFailed.value = false
@@ -896,12 +907,17 @@ async function loadRefs() {
     const response = await releaseDiffApi.listRefs({
       ...basePayload(),
       limit: REFS_FETCH_LIMIT,
+      refresh: force,
     })
     refs.value = {
       tags: response.tags ?? [],
       branches: response.branches ?? [],
     }
     refsFailed.value = false
+    refsLoadedAt.value = dayjs().format('HH:mm:ss')
+    if (force) {
+      ElMessage.success(t('releaseDiff.refs_refreshed'))
+    }
   } catch {
     refs.value = { tags: [], branches: [] }
     refsFailed.value = true
@@ -1246,6 +1262,10 @@ async function copySha(value: string) {
 
 .refs-hint-warning {
   color: var(--el-color-warning);
+}
+
+.refs-fetched-at {
+  color: var(--el-text-color-placeholder);
 }
 
 .ref-option {

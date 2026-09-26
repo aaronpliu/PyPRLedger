@@ -110,7 +110,7 @@ class ReleaseDiffService:
             request.new_release_base_ref,
             request.max_commits,
         )
-        cached = await self._read_cache(cache_key)
+        cached = None if request.refresh else await self._read_cache(cache_key)
         if cached is not None:
             self.metrics.increment_cache_hit("release_diff")
             self.metrics.increment_release_diff("compare", provider_name, "cache_hit")
@@ -233,7 +233,8 @@ class ReleaseDiffService:
             request.repository_slug,
             request.limit,
         )
-        cached = await self._read_cache(cache_key)
+        # An explicit refresh must observe tags / branches created on the git side
+        cached = None if request.refresh else await self._read_cache(cache_key)
         if cached is not None:
             self.metrics.increment_cache_hit("release_diff")
             self.metrics.increment_release_diff("refs", provider_name, "cache_hit")
@@ -253,7 +254,11 @@ class ReleaseDiffService:
             branches=self._clean_refs(raw_refs.get("branches")),
         )
 
-        await self._write_cache(cache_key, response.model_dump(mode="json"))
+        await self._write_cache(
+            cache_key,
+            response.model_dump(mode="json"),
+            ttl=settings.CACHE_TTL_RELEASE_REFS,
+        )
         self.metrics.increment_release_diff("refs", provider_name, "success")
         logger.info(
             "Release refs listed",
@@ -591,10 +596,14 @@ class ReleaseDiffService:
             )
             return None
 
-    async def _write_cache(self, cache_key: str, payload: dict) -> None:
+    async def _write_cache(self, cache_key: str, payload: dict, ttl: int | None = None) -> None:
         """Write a response to the cache, tolerating cache failures."""
         try:
-            await self.cache.set_json(cache_key, payload, expire=settings.CACHE_TTL_RELEASE_DIFF)
+            await self.cache.set_json(
+                cache_key,
+                payload,
+                expire=ttl if ttl is not None else settings.CACHE_TTL_RELEASE_DIFF,
+            )
         except Exception as e:
             logger.warning(
                 "Release diff cache write failed",

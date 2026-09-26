@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     CACHE_TTL_RELEASE_DIFF: int = Field(
         default=300, description="Cache TTL (seconds) for release diff / commit check results"
     )
+    CACHE_TTL_RELEASE_REFS: int = Field(
+        default=60,
+        description=(
+            "Cache TTL (seconds) for the release ref (tag / branch) suggestions. Kept short "
+            "because tags are created on the git side at any time; an explicit refresh "
+            "(refresh=true) always bypasses the cache."
+        ),
+    )
 
     # Security configuration
     SECRET_KEY: str = Field(default="development-secret-key-change-in-production")

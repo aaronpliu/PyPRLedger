@@ -289,6 +289,16 @@
                   :value="tag"
                 />
               </el-select>
+              <el-button
+                link
+                type="primary"
+                size="small"
+                :loading="refsLoading"
+                :disabled="!hasCoordinates"
+                @click="loadRefs(true)"
+              >
+                {{ t('releaseNotes.refresh_tags') }}
+              </el-button>
             </el-form-item>
 
             <el-form-item :label="t('releaseNotes.previous_tag')">
@@ -559,16 +569,29 @@ async function ensureWorkspaceSuggestions() {
   }
 }
 
-async function loadRefs() {
+/**
+ * Load the tag / branch suggestions.
+ *
+ * ``force`` bypasses the backend cache so a tag that was just created on the
+ * git side shows up immediately.
+ */
+async function loadRefs(force = false) {
   tags.value = []
   branches.value = []
   if (!hasCoordinates.value) return
 
   refsLoading.value = true
   try {
-    const response = await releaseDiffApi.listRefs({ ...coordinates(), limit: 200 })
+    const response = await releaseDiffApi.listRefs({
+      ...coordinates(),
+      limit: 200,
+      refresh: force,
+    })
     tags.value = response.tags ?? []
     branches.value = response.branches ?? []
+    if (force) {
+      ElMessage.success(t('releaseNotes.refresh_tags_ok'))
+    }
   } catch {
     // refs are only suggestions - typing the tag manually stays possible
   } finally {

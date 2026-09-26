@@ -209,6 +209,26 @@ describe('ReleaseNotesView', () => {
     expect(text).toContain(enMessages.releaseNotes.released_by.replace('{author}', 'alice'))
   })
 
+  it('refreshes the tag suggestions through the provider', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    expect(releaseDiffApi.listRefs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ refresh: false }),
+    )
+
+    const refreshButton = buttonsByLabel(wrapper, enMessages.releaseNotes.refresh_tags)
+    expect(refreshButton).toHaveLength(1)
+
+    await refreshButton[0].trigger('click')
+    await flushPromises()
+
+    expect(releaseDiffApi.listRefs).toHaveBeenLastCalledWith(
+      expect.objectContaining({ project_key: 'ALPHA', refresh: true }),
+    )
+  })
+
   it('drafts a new version release', async () => {
     const wrapper = mountView()
     await flushPromises()
