@@ -118,7 +118,13 @@
           </el-col>
           <el-col :xs="24" :sm="12" :md="6">
             <el-form-item :label="t('releaseDiff.max_commits')">
-              <el-input-number v-model="maxCommits" :min="1" :max="5000" style="width: 100%" />
+              <el-tooltip
+                :content="t('releaseDiff.max_commits_help')"
+                placement="top"
+                :show-after="100"
+              >
+                <el-input-number v-model="maxCommits" :min="1" :max="5000" style="width: 100%" />
+              </el-tooltip>
             </el-form-item>
           </el-col>
         </el-row>
@@ -352,6 +358,15 @@
             :closable="false"
             class="status-alert"
           />
+          <el-alert
+            v-if="commitSetsTruncated"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="status-alert"
+            :title="t('releaseDiff.commit_set_bounded_title')"
+            :description="t('releaseDiff.commit_set_bounded_help')"
+          />
 
           <div class="report-actions">
             <el-button size="small" :icon="Download" @click="exportReport('compare')">
@@ -397,13 +412,27 @@
           <el-row :gutter="16" class="stat-row">
             <el-col :xs="12" :md="6">
               <div class="stat-card">
-                <span class="stat-value">{{ compareResult.summary.old_commit_count ?? 0 }}</span>
+                <span class="stat-value">
+                  {{
+                    commitCountLabel(
+                      compareResult.summary.old_commit_count ?? 0,
+                      compareResult.old_commits_truncated,
+                    )
+                  }}
+                </span>
                 <span class="stat-label">{{ t('releaseDiff.old_commit_count') }}</span>
               </div>
             </el-col>
             <el-col :xs="12" :md="6">
               <div class="stat-card">
-                <span class="stat-value">{{ compareResult.summary.new_commit_count ?? 0 }}</span>
+                <span class="stat-value">
+                  {{
+                    commitCountLabel(
+                      compareResult.summary.new_commit_count ?? 0,
+                      compareResult.new_commits_truncated,
+                    )
+                  }}
+                </span>
                 <span class="stat-label">{{ t('releaseDiff.new_commit_count') }}</span>
               </div>
             </el-col>
@@ -441,13 +470,19 @@
               <commit-table :commits="compareResult.added_commits" />
             </el-collapse-item>
             <el-collapse-item
-              :title="`${t('releaseDiff.old_release_commits_title')} (${compareResult.old_release_commits.length})`"
+              :title="`${t('releaseDiff.old_release_commits_title')} (${commitCountLabel(
+                compareResult.old_release_commits.length,
+                compareResult.old_commits_truncated,
+              )})`"
               name="old"
             >
               <commit-table :commits="compareResult.old_release_commits" />
             </el-collapse-item>
             <el-collapse-item
-              :title="`${t('releaseDiff.new_release_commits_title')} (${compareResult.new_release_commits.length})`"
+              :title="`${t('releaseDiff.new_release_commits_title')} (${commitCountLabel(
+                compareResult.new_release_commits.length,
+                compareResult.new_commits_truncated,
+              )})`"
               name="new"
             >
               <commit-table :commits="compareResult.new_release_commits" />
@@ -774,6 +809,15 @@ const compareAlertType = computed<'success' | 'warning' | 'info'>(() => {
   return compareResult.value.old_commits_included ? 'success' : 'warning'
 })
 
+// A multi-year repository can hold tens of thousands of commits: the old / new
+// release commit sets are therefore only loaded as a bounded preview.
+const commitSetsTruncated = computed(
+  () =>
+    Boolean(
+      compareResult.value?.old_commits_truncated || compareResult.value?.new_commits_truncated,
+    ),
+)
+
 const compareStatusText = computed(() => {
   if (!compareResult.value) return ''
   if (compareResult.value.status === 'identical') return t('releaseDiff.status_identical')
@@ -823,6 +867,11 @@ const refOptions = computed<RefSuggestion[]>(() => [
 ])
 
 const refCount = computed(() => refs.value.tags.length + refs.value.branches.length)
+
+// Commit sets are a bounded preview of a release, so mark the counts as "at least"
+function commitCountLabel(count: number, truncated?: boolean): string {
+  return truncated ? `≥${count}` : String(count)
+}
 
 function refTypeLabel(type: string): string {
   return type === 'tag' ? t('releaseDiff.ref_type_tag') : t('releaseDiff.ref_type_branch')

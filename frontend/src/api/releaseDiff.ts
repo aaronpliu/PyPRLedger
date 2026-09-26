@@ -41,6 +41,8 @@ export interface ReleaseCompareRequest {
   new_release_base_ref?: string | null
   include_commits?: boolean
   max_commits?: number
+  /** Maximum number of commits returned per release commit set (default 200) */
+  commit_preview_limit?: number
 }
 
 export interface ReleaseCompareResponse {
@@ -64,6 +66,9 @@ export interface ReleaseCompareResponse {
   added_commits: CommitInfo[]
   old_release_commits: CommitInfo[]
   new_release_commits: CommitInfo[]
+  /** The old / new release commit sets hit the commit_preview_limit (long history) */
+  old_commits_truncated?: boolean
+  new_commits_truncated?: boolean
   truncated: boolean
 }
 

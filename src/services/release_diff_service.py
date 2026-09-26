@@ -118,13 +118,17 @@ class ReleaseDiffService:
                 ReleaseCompareResponse(**cached), bool(request.include_commits)
             )
 
+        # The commit sets are only a preview: a multi-year repository can hold tens of
+        # thousands of commits, so they are bounded by commit_preview_limit and flagged
+        # as truncated instead of being fetched and rendered in full.
+        preview_limit = request.commit_preview_limit
         old_commits, old_truncated = await self._fetch_release_commits(
             provider=provider,
             project_key=remote_key,
             repository_slug=request.repository_slug,
             release_ref=request.old_release_ref,
             base_ref=request.old_release_base_ref,
-            max_commits=request.max_commits,
+            max_commits=preview_limit,
         )
         new_commits, new_truncated = await self._fetch_release_commits(
             provider=provider,
@@ -132,7 +136,7 @@ class ReleaseDiffService:
             repository_slug=request.repository_slug,
             release_ref=request.new_release_ref,
             base_ref=request.new_release_base_ref,
-            max_commits=request.max_commits,
+            max_commits=preview_limit,
         )
 
         behind_ids, behind_truncated = await self._fetch_compare_ids(
@@ -190,6 +194,8 @@ class ReleaseDiffService:
             added_commits=added_commits,
             old_release_commits=old_commits,
             new_release_commits=new_commits,
+            old_commits_truncated=old_truncated,
+            new_commits_truncated=new_truncated,
             truncated=old_truncated or new_truncated or behind_truncated or ahead_truncated,
         )
 

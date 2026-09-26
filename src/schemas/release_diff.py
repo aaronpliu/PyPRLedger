@@ -116,6 +116,17 @@ class ReleaseCompareRequest(ReleaseDiffRepository):
     max_commits: int = Field(
         default=1000, ge=1, le=5000, description="Maximum number of commits fetched per ref"
     )
+    commit_preview_limit: int = Field(
+        default=200,
+        ge=1,
+        le=2000,
+        description=(
+            "Maximum number of commits fetched and returned for the old / new release commit "
+            "sets. A long-lived repository can hold tens of thousands of commits, so both sets "
+            "are bounded and flagged with *_commits_truncated; use the release base refs to "
+            "scope a release to its own commits."
+        ),
+    )
 
     @field_validator(
         "old_release_ref",
@@ -211,7 +222,11 @@ class ReleaseCompareResponse(BaseModel):
     )
     summary: dict = Field(
         default_factory=dict,
-        description="Counts: old_commit_count, new_commit_count, missing_count, added_count",
+        description=(
+            "Counts: old_commit_count, new_commit_count, missing_count, added_count. The "
+            "commit counts describe the commit sets returned below, which are capped by "
+            "commit_preview_limit - see old_commits_truncated / new_commits_truncated."
+        ),
     )
     missing_commits: list[CommitInfo] = Field(
         default_factory=list,
@@ -227,8 +242,20 @@ class ReleaseCompareResponse(BaseModel):
     new_release_commits: list[CommitInfo] = Field(
         default_factory=list, description="Commits belonging to the new release scope"
     )
+    old_commits_truncated: bool = Field(
+        default=False,
+        description=(
+            "True when the old release commit set hit the commit_preview_limit, i.e. only the "
+            "newest commits of that release (of possibly tens of thousands) are returned"
+        ),
+    )
+    new_commits_truncated: bool = Field(
+        default=False,
+        description="True when the new release commit set hit the commit_preview_limit",
+    )
     truncated: bool = Field(
-        default=False, description="True when a commit list hit the max_commits cap"
+        default=False,
+        description="True when any commit list hit its cap (max_commits or commit_preview_limit)",
     )
 
 

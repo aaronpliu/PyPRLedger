@@ -6,6 +6,7 @@ import ReleasesView from '@/views/releases/ReleasesView.vue'
 import { projectsApi } from '@/api/projects'
 import type { RepositorySummary } from '@/api/projects'
 import { releaseDiffApi } from '@/api/releaseDiff'
+import type { ReleaseCompareResponse } from '@/api/releaseDiff'
 import {
   buildReleaseReportHtml,
   downloadReleaseReport,
@@ -879,8 +880,10 @@ describe('ReleasesView reports and screenshots', () => {
     vi.mocked(releaseReportFilename).mockReturnValue('release-report.html')
   })
 
-  async function mountWithCompareResult() {
-    vi.mocked(releaseDiffApi.compare).mockResolvedValue(COMPARE_RESULT)
+  async function mountWithCompareResult(
+    response: ReleaseCompareResponse = COMPARE_RESULT as ReleaseCompareResponse,
+  ) {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue(response)
 
     const wrapper = mountView()
     await flushPromises()
@@ -917,6 +920,20 @@ describe('ReleasesView reports and screenshots', () => {
     expect(buttonsByLabel(wrapper, enMessages.releaseDiff.report_export_both)).toHaveLength(1)
     expect(buttonsByLabel(wrapper, enMessages.releaseDiff.screenshot_both)).toHaveLength(1)
   }, 30000)
+
+  it('marks truncated release commit sets with a lower bound and a warning', async () => {
+    const wrapper = await mountWithCompareResult({
+      ...COMPARE_RESULT,
+      old_commits_truncated: true,
+      new_commits_truncated: true,
+      old_release_commits: [{ id: 'aaa1111', display_id: 'aaa111' }],
+      new_release_commits: [{ id: 'bbb2222', display_id: 'bbb222' }],
+      summary: { old_commit_count: 200, new_commit_count: 200, missing_count: 1 },
+    } as ReleaseCompareResponse)
+
+    expect(wrapper.text()).toContain(enMessages.releaseDiff.commit_set_bounded_title)
+    expect(wrapper.text()).toContain('≥200')
+  })
 
   it('exports the comparison result as an HTML report', async () => {
     const wrapper = await mountWithCompareResult()

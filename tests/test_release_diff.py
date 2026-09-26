@@ -915,3 +915,54 @@ async def test_cache_hit_avoids_the_provider_call() -> None:
     await service.list_refs(refs_payload())
 
     assert len(fake.calls) == calls_after_first
+
+
+# --------------------------------------------------------------------------- #
+# Bounded release commit sets (long lived repositories)
+# --------------------------------------------------------------------------- #
+
+
+async def test_commit_sets_are_bounded_by_the_preview_limit(monkeypatch) -> None:
+    """A multi-year history must not be fetched / returned in full."""
+    old_ids = [f"{index:040x}" for index in range(1, 61)]
+    new_ids = old_ids + [f"{index:040x}" for index in range(61, 66)]
+
+    monkeypatch.setitem(REF_COMMITS, "v3.0.0", old_ids)
+    monkeypatch.setitem(REF_COMMITS, "v3.1.0", new_ids)
+    for index, sha in enumerate(old_ids + new_ids):
+        monkeypatch.setitem(COMMITS, sha, bitbucket_commit(sha, f"chore: commit {index}"))
+
+    service = build_service(FakeGitProvider())
+    result = await service.compare_releases(
+        compare_payload(
+            old_release_ref="v3.0.0",
+            new_release_ref="v3.1.0",
+            commit_preview_limit=10,
+        )
+    )
+
+    assert len(result.old_release_commits) == 10
+    assert len(result.new_release_commits) == 10
+    assert result.old_commits_truncated is True
+    assert result.new_commits_truncated is True
+    assert result.truncated is True
+    # the counts describe the bounded preview, the UI marks them with ">="
+    assert result.summary["old_commit_count"] == 10
+    assert result.summary["new_commit_count"] == 10
+
+
+async def test_short_commit_sets_are_not_flagged_as_truncated() -> None:
+    service = build_service(FakeGitProvider())
+
+    result = await service.compare_releases(compare_payload())
+
+    assert result.old_commits_truncated is False
+    assert result.new_commits_truncated is False
+    assert result.summary["old_commit_count"] == len(REF_COMMITS["v1.0.0"])
+
+
+async def test_preview_limit_is_validated() -> None:
+    with pytest.raises(ValueError):
+        compare_payload(commit_preview_limit=0)
+    with pytest.raises(ValueError):
+        compare_payload(commit_preview_limit=5000)

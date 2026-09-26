@@ -146,8 +146,11 @@ function commitUrlCell(url?: string | null): string {
   return link(url)
 }
 
-function commitTable(commits: CommitInfo[] | undefined): string {
+function commitTable(commits: CommitInfo[] | undefined, truncated = false): string {
   const rows = commits ?? []
+  const note = truncated
+    ? `<p class="muted">${escapeHtml(t('releaseDiff.commit_set_bounded_title'))}</p>`
+    : ''
   if (rows.length === 0) {
     return `<p class="muted">${escapeHtml(t('releaseDiff.report_no_commits'))}</p>`
   }
@@ -170,7 +173,7 @@ function commitTable(commits: CommitInfo[] | undefined): string {
     })
     .join('')
 
-  return `<table class="data">
+  return `${note}<table class="data">
     <thead><tr>
       <th>${escapeHtml(t('releaseDiff.col_commit'))}</th>
       <th>${escapeHtml(t('releaseDiff.col_author'))}</th>
@@ -255,10 +258,10 @@ export function buildCompareSectionHtml(
   ${commitTable(result.added_commits)}
 
   <h3>${escapeHtml(t('releaseDiff.old_release_commits_title'))} (${result.old_release_commits?.length ?? 0})</h3>
-  ${commitTable(result.old_release_commits)}
+  ${commitTable(result.old_release_commits, Boolean(result.old_commits_truncated))}
 
   <h3>${escapeHtml(t('releaseDiff.new_release_commits_title'))} (${result.new_release_commits?.length ?? 0})</h3>
-  ${commitTable(result.new_release_commits)}
+  ${commitTable(result.new_release_commits, Boolean(result.new_commits_truncated))}
 </section>`
 }
 
