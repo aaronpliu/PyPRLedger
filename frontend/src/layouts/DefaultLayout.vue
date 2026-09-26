@@ -9,6 +9,7 @@
             <el-menu
               mode="horizontal"
               :default-active="activeMenu"
+              :ellipsis="false"
               router
               background-color="var(--el-color-primary)"
               text-color="#ffffff"
@@ -18,11 +19,6 @@
             >
               <el-menu-item index="/">{{ t('menu.dashboard') }}</el-menu-item>
               <el-menu-item index="/reviews">{{ t('menu.reviews') }}</el-menu-item>
-              <el-sub-menu index="/releases">
-                <template #title>{{ t('menu.releases') }}</template>
-                <el-menu-item index="/releases">{{ t('menu.releaseComparison') }}</el-menu-item>
-                <el-menu-item index="/releases/notes">{{ t('menu.releaseNotes') }}</el-menu-item>
-              </el-sub-menu>
               <el-sub-menu v-if="isAdmin" index="/task-assignment">
                 <template #title>{{ t('menu.taskAssignment') }}</template>
                 <!-- Applications sub-group -->
@@ -44,6 +40,12 @@
                 <template #title>{{ t('menu.scores') }}</template>
                 <el-menu-item index="/scores">{{ t('menu.scoreList') }}</el-menu-item>
                 <el-menu-item index="/scores/analytics">{{ t('menu.analytics') }}</el-menu-item>
+              </el-sub-menu>
+              <!-- Standalone release tooling - independent of the review workflow -->
+              <el-sub-menu index="/releases">
+                <template #title>{{ t('menu.releases') }}</template>
+                <el-menu-item index="/releases">{{ t('menu.releaseComparison') }}</el-menu-item>
+                <el-menu-item index="/releases/notes">{{ t('menu.releaseNotes') }}</el-menu-item>
               </el-sub-menu>
               <el-menu-item index="/notifications">{{ t('menu.notifications') }}</el-menu-item>
             </el-menu>
@@ -241,17 +243,50 @@ const handleLanguageChange = (lang: string) => {
   display: flex;
   align-items: center;
   gap: 20px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .logo {
   font-size: 20px;
   font-weight: bold;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Every menu item stays visible: the menu never collapses into "..." and scrolls
+   horizontally instead when the window is too narrow for all entries. */
+.header-left :deep(nav) {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.header-left :deep(nav)::-webkit-scrollbar {
+  height: 4px;
+}
+
+.header-left :deep(nav)::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 2px;
+}
+
+.header-left :deep(nav)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.header-left :deep(.el-menu--horizontal) {
+  border-bottom: none;
+  white-space: nowrap;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex: 0 0 auto;
 }
 
 .language-flag {
