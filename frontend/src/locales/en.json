@@ -960,6 +960,7 @@
     "reset": "Reset",
     "status_included": "All old release commits are included",
     "status_missing": "Old release commits are missing",
+    "status_missing_in_release": "Some commits are not part of the target release",
     "status_identical": "Both refs are identical",
     "old_commit_count": "Old Release Commits",
     "new_commit_count": "New Release Commits",

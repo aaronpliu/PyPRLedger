@@ -393,7 +393,7 @@
           </div>
 
           <div v-if="compareResult.missing_commits.length" class="result-actions">
-            <el-button size="small" type="warning" plain @click="sendMissingToCheck">
+            <el-button size="small" type="danger" plain @click="sendMissingToCheck">
               {{ t('releaseDiff.send_missing_to_check') }}
             </el-button>
           </div>
@@ -457,10 +457,22 @@
           </el-row>
 
           <el-collapse v-model="openSections">
-            <el-collapse-item
-              :title="`${t('releaseDiff.missing_commits_title')} (${compareResult.missing_commits.length})`"
-              name="missing"
-            >
+            <el-collapse-item name="missing">
+              <template #title>
+                <span class="collapse-title">
+                  <span class="collapse-title-missing">
+                    {{ t('releaseDiff.missing_commits_title') }}
+                  </span>
+                  <el-tag
+                    :type="compareResult.missing_commits.length ? 'danger' : 'info'"
+                    size="small"
+                    round
+                    effect="dark"
+                  >
+                    {{ compareResult.missing_commits.length }}
+                  </el-tag>
+                </span>
+              </template>
               <commit-table :commits="compareResult.missing_commits" />
             </el-collapse-item>
             <el-collapse-item
@@ -591,11 +603,11 @@
 
         <div v-if="checkResult" class="result-block">
           <el-alert
-            :type="checkResult.all_included ? 'success' : 'warning'"
+            :type="checkResult.all_included ? 'success' : 'error'"
             :title="
               checkResult.all_included
                 ? t('releaseDiff.status_included')
-                : t('releaseDiff.status_missing')
+                : t('releaseDiff.status_missing_in_release')
             "
             :closable="false"
             show-icon
@@ -660,7 +672,12 @@
             </el-col>
           </el-row>
 
-          <el-table :data="checkResult.results" stripe style="width: 100%">
+          <el-table
+            :data="checkResult.results"
+            :row-class-name="checkRowClass"
+            stripe
+            style="width: 100%"
+          >
             <el-table-column :label="t('releaseDiff.col_commit')" min-width="220">
               <template #default="{ row }">
                 <span class="commit-sha" @click="copySha(row.matched_id || row.commit)">
@@ -803,10 +820,11 @@ const reportContext = computed(() => ({
 }))
 const bothSections = computed(() => document.querySelector<HTMLElement>('.tool-sections'))
 
-const compareAlertType = computed<'success' | 'warning' | 'info'>(() => {
+// A missing release commit set is a defect, not a notice: highlight it in red
+const compareAlertType = computed<'success' | 'error' | 'info'>(() => {
   if (!compareResult.value) return 'info'
   if (compareResult.value.status === 'identical') return 'info'
-  return compareResult.value.old_commits_included ? 'success' : 'warning'
+  return compareResult.value.old_commits_included ? 'success' : 'error'
 })
 
 // A multi-year repository can hold tens of thousands of commits: the old / new
@@ -867,6 +885,11 @@ const refOptions = computed<RefSuggestion[]>(() => [
 ])
 
 const refCount = computed(() => refs.value.tags.length + refs.value.branches.length)
+
+// Missing commits are tinted red in the check result table so they stand out
+function checkRowClass({ row }: { row: { included: boolean } }): string {
+  return row.included ? '' : 'row-missing'
+}
 
 // Commit sets are a bounded preview of a release, so mark the counts as "at least"
 function commitCountLabel(count: number, truncated?: boolean): string {
@@ -1379,8 +1402,30 @@ async function copySha(value: string) {
 }
 
 .stat-card.danger {
-  border-color: var(--el-color-danger-light-5);
+  border-color: var(--el-color-danger-light-3);
+  border-left: 4px solid var(--el-color-danger);
   background: var(--el-color-danger-light-9);
+}
+
+/* Missing counts are the headline number of a broken release */
+.stat-card.danger .stat-value {
+  color: var(--el-color-danger);
+}
+
+/* Missing commit rows in the check result table */
+:deep(.el-table .row-missing td.el-table__cell) {
+  background: var(--el-color-danger-light-9);
+}
+
+.collapse-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapse-title-missing {
+  font-weight: 600;
+  color: var(--el-color-danger);
 }
 
 .stat-value {

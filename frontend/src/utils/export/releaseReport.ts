@@ -34,9 +34,10 @@ export interface ReleaseReportInput {
 
 export type ReleaseReportKind = 'compare' | 'check' | 'both'
 
+// "missing" states are rendered in red (they are defects, not notices)
 const STATUS_CLASS: Record<string, string> = {
   included: 'ok',
-  missing_commits: 'warn',
+  missing_commits: 'missing',
   identical: 'info',
 }
 
@@ -246,12 +247,14 @@ export function buildCompareSectionHtml(
   <div class="stats">
     ${stat(t('releaseDiff.old_commit_count'), summary.old_commit_count ?? 0)}
     ${stat(t('releaseDiff.new_commit_count'), summary.new_commit_count ?? 0)}
-    ${stat(t('releaseDiff.missing_count'), summary.missing_count ?? 0, 'warn')}
+    ${stat(t('releaseDiff.missing_count'), summary.missing_count ?? 0, 'missing')}
     ${stat(t('releaseDiff.added_count'), summary.added_count ?? 0, 'ok')}
     ${stat(t('releaseDiff.common_count'), summary.common_count ?? 0)}
   </div>
 
-  <h3>${escapeHtml(t('releaseDiff.missing_commits_title'))} (${result.missing_commits?.length ?? 0})</h3>
+  <h3 class="section-missing">
+    ${escapeHtml(t('releaseDiff.missing_commits_title'))} (${result.missing_commits?.length ?? 0})
+  </h3>
   ${commitTable(result.missing_commits)}
 
   <h3>${escapeHtml(t('releaseDiff.added_commits_title'))} (${result.added_commits?.length ?? 0})</h3>
@@ -281,7 +284,7 @@ export function buildCheckSectionHtml(
         : sha
       return `<tr>
         <td class="mono">${shaCell}</td>
-        <td class="${row.included ? 'cell-ok' : 'cell-warn'}">${escapeHtml(
+        <td class="${row.included ? 'cell-ok' : 'cell-missing'}">${escapeHtml(
           row.included ? t('releaseDiff.result_included') : t('releaseDiff.result_missing'),
         )}</td>
         <td>${escapeHtml(row.commit_info?.author_name || '-')}</td>
@@ -328,8 +331,10 @@ export function buildCheckSectionHtml(
 
   return `<section class="report-section">
   <h2>2. ${escapeHtml(t('releaseDiff.tab_check'))}</h2>
-  <p class="status status-${result.all_included ? 'ok' : 'warn'}">${escapeHtml(
-    result.all_included ? t('releaseDiff.status_included') : t('releaseDiff.status_missing'),
+  <p class="status status-${result.all_included ? 'ok' : 'missing'}">${escapeHtml(
+    result.all_included
+      ? t('releaseDiff.status_included')
+      : t('releaseDiff.status_missing_in_release'),
   )}</p>
   ${
     result.truncated
@@ -381,17 +386,21 @@ const REPORT_STYLE = `
   .muted { color: #9ca3af; font-size: 13px; }
   .status { display: inline-block; margin: 0 0 12px; padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; }
   .status-ok { background: #dcfce7; color: #166534; }
-  .status-warn { background: #fef3c7; color: #92400e; }
   .status-info { background: #e0e7ff; color: #3730a3; }
+  /* Missing commits are defects - highlighted in red, not amber */
+  .status-missing { background: #fee2e2; color: #991b1b; box-shadow: inset 0 0 0 1px #fca5a5; }
   .warning { margin: 0 0 12px; color: #92400e; font-size: 13px; }
   .stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 4px; }
   .stat { flex: 1 1 120px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; text-align: center; background: #fafafa; }
   .stat-value { display: block; font-size: 20px; font-weight: 700; }
   .stat-label { display: block; font-size: 11px; color: #6b7280; }
   .stat-ok { border-color: #bbf7d0; background: #f0fdf4; }
-  .stat-warn { border-color: #fde68a; background: #fffbeb; }
+  .stat-missing { border-color: #fca5a5; border-left: 4px solid #dc2626; background: #fef2f2; }
+  .stat-missing .stat-value { color: #dc2626; }
+  .section-missing { color: #b91c1c; }
+  .section-missing::after { content: ''; display: block; margin-top: 6px; height: 2px; width: 72px; background: #dc2626; }
   .cell-ok { color: #15803d; font-weight: 600; }
-  .cell-warn { color: #b45309; font-weight: 600; }
+  .cell-missing { color: #b91c1c; font-weight: 700; }
   footer { margin-top: 32px; color: #9ca3af; font-size: 12px; text-align: center; }
   @media print { body { background: #fff; padding: 0; } .report { box-shadow: none; border-radius: 0; } }
 `

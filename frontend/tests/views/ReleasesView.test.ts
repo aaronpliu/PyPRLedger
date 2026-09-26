@@ -921,6 +921,69 @@ describe('ReleasesView reports and screenshots', () => {
     expect(buttonsByLabel(wrapper, enMessages.releaseDiff.screenshot_both)).toHaveLength(1)
   }, 30000)
 
+  it('highlights missing release commits in red', async () => {
+    const wrapper = await mountWithCompareResult()
+
+    // status banner turns red instead of amber
+    expect(wrapper.findComponent({ name: 'ElAlert' }).props('type')).toBe('error')
+    // missing commits counter is red and visible even when the section is collapsed
+    expect(wrapper.find('.collapse-title-missing').text()).toContain(
+      enMessages.releaseDiff.missing_commits_title,
+    )
+    expect(wrapper.findAll('.el-tag--danger').length).toBeGreaterThan(0)
+    // the shortcut that forwards the missing shas is red as well
+    const sendButton = buttonsByLabel(wrapper, enMessages.releaseDiff.send_missing_to_check)[0]
+    expect(sendButton.classes()).toContain('el-button--danger')
+  })
+
+  it('highlights missing commits in the check result', async () => {
+    vi.mocked(releaseDiffApi.check).mockResolvedValue({
+      project_key: 'ALPHA',
+      repository_slug: 'alpha-api',
+      git_provider: 'bitbucket_server',
+      target_release_ref: 'v1.3.0',
+      target_release_base_ref: null,
+      all_included: false,
+      summary: { requested: 2, included_count: 1, missing_count: 1, release_commit_count: 5 },
+      results: [
+        { commit: 'aaa1111', included: true, matched_id: 'aaa1111' },
+        { commit: 'bbb2222', included: false },
+      ],
+      truncated: false,
+    })
+
+    const wrapper = await mountWithCompareResult()
+
+    await wrapper.find('textarea').setValue('aaa1111\nbbb2222')
+    const refInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    await refInputs[2].find('input').setValue('v1.3.0')
+
+    const checkButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.run_check)
+    await checkButton!.trigger('click')
+    await flushPromises()
+
+    // the check banner is red and missing rows get a red tint
+    const errorAlert = wrapper
+      .findAllComponents({ name: 'ElAlert' })
+      .find(
+        (alert: AnyWrapper) =>
+          alert.props('type') === 'error' &&
+          alert.text().includes(enMessages.releaseDiff.status_missing_in_release),
+      )
+    expect(errorAlert).toBeDefined()
+
+    const resultsTable = wrapper
+      .findAllComponents({ name: 'ElTable' })
+      .find((table: AnyWrapper) =>
+        (table.props('data') ?? []).some((row: AnyWrapper) => 'included' in row),
+      )
+    const rowClassName = resultsTable!.props('rowClassName')
+    expect(rowClassName({ row: { included: false }, rowIndex: 0 })).toBe('row-missing')
+    expect(rowClassName({ row: { included: true }, rowIndex: 1 })).toBe('')
+  })
+
   it('marks truncated release commit sets with a lower bound and a warning', async () => {
     const wrapper = await mountWithCompareResult({
       ...COMPARE_RESULT,

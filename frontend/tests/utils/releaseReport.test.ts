@@ -163,6 +163,19 @@ describe('buildCompareSectionHtml', () => {
     expect(html.match(/No commits/g)).toHaveLength(2)
   })
 
+  it('highlights missing commits in red instead of amber', () => {
+    const html = buildCompareSectionHtml(COMPARE, CONTEXT)
+
+    // the status banner and the missing stat use the missing (red) variants
+    expect(html).toContain('class="status status-missing"')
+    expect(html).toContain('class="stat stat-missing"')
+    expect(html).toContain('<h3 class="section-missing">')
+    expect(html).not.toContain('status-warn')
+    expect(html).not.toContain('stat-warn')
+    // the truncated notice stays amber
+    expect(html).toContain('class="warning"')
+  })
+
   it('escapes commit messages coming from the git provider', () => {
     const html = buildCompareSectionHtml(COMPARE, CONTEXT)
 
@@ -180,7 +193,10 @@ describe('buildCheckSectionHtml', () => {
     expect(html).toContain('v1.0.0..v1.1.0')
     expect(html).toContain('https://bitbucket.org/aaronpliu/pylang/commits/v1.1.0')
     expect(html.match(/class="cell-ok"/g)).toHaveLength(1)
-    expect(html.match(/class="cell-warn"/g)).toHaveLength(1)
+    // missing entries are red, not amber
+    expect(html.match(/class="cell-missing"/g)).toHaveLength(1)
+    expect(html).not.toContain('cell-warn')
+    expect(html).toContain('class="status status-missing"')
     expect(html.match(/class="url"/g)).toBeTruthy()
   })
 })

@@ -961,6 +961,7 @@
     "reset": "重置",
     "status_included": "舊版本提交已全部包含",
     "status_missing": "存在未包含的舊版本提交",
+    "status_missing_in_release": "存在不在目標版本中的提交",
     "status_identical": "兩個 Ref 完全相同",
     "old_commit_count": "舊版本提交數",
     "new_commit_count": "新版本提交數",
