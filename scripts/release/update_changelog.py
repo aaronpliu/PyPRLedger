@@ -3,9 +3,10 @@
 
 import subprocess
 import sys
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+
+from commit_parser import CHANGELOG, CHANGELOG_ORDER, categorize
 
 
 def run_git(cmd):
@@ -42,39 +43,8 @@ def categorize_commits(commit_range):
     log_cmd = ["log", "--oneline", "--no-decorate", commit_range]
     log_output = run_git(log_cmd)
 
-    categories = defaultdict(list)
-
-    for line in log_output.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-
-        # Extract commit message (skip hash)
-        parts = line.split(" ", 1)
-        if len(parts) < 2:
-            categories["Other Changes"].append(line)
-            continue
-        message = parts[1]
-
-        # Categorize based on conventional commit prefixes
-        if message.startswith("feat:"):
-            categories["Added"].append(message[5:].strip())
-        elif message.startswith("fix:"):
-            categories["Fixed"].append(message[4:].strip())
-        elif message.startswith("improve:") or message.startswith("impr:"):
-            categories["Improved"].append(message.split(":", 1)[1].strip())
-        elif message.startswith("docs:") or message.startswith("doc:"):
-            categories["Documentation"].append(message.split(":", 1)[1].strip())
-        elif message.startswith("refactor:"):
-            categories["Changed"].append(f"[Refactor] {message.split(':', 1)[1].strip()}")
-        elif message.startswith("chore:") or message.startswith("build:"):
-            categories["Dependencies"].append(message.split(":", 1)[1].strip())
-        elif message.startswith("breaking:"):
-            categories["Breaking Changes"].append(message.split(":", 1)[1].strip())
-        else:
-            categories["Other Changes"].append(line)
-
-    return dict(categories)
+    # Categorization relies on conventional commit subjects, scopes included
+    return categorize(log_output, CHANGELOG)
 
 
 def generate_changelog_entry(backend_version, frontend_version, categories):
@@ -89,21 +59,9 @@ def generate_changelog_entry(backend_version, frontend_version, categories):
         "",
     ]
 
-    # Order of categories
-    category_order = [
-        "Added",
-        "Fixed",
-        "Improved",
-        "Changed",
-        "Documentation",
-        "Dependencies",
-        "Breaking Changes",
-        "Other Changes",
-    ]
-
     has_content = False
 
-    for cat in category_order:
+    for cat in CHANGELOG_ORDER:
         if cat in categories and categories[cat]:
             has_content = True
             lines.append(f"### {cat}")
@@ -161,20 +119,8 @@ def update_changelog(backend_version, frontend_version):
         "",
     ]
 
-    # Order of categories
-    category_order = [
-        "Added",
-        "Fixed",
-        "Improved",
-        "Changed",
-        "Documentation",
-        "Dependencies",
-        "Breaking Changes",
-        "Other Changes",
-    ]
-
     has_content = False
-    for cat in category_order:
+    for cat in CHANGELOG_ORDER:
         if cat in categories and categories[cat]:
             has_content = True
             new_section_lines.append(f"### {cat}")
