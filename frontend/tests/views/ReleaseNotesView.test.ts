@@ -186,6 +186,14 @@ async function selectTab(wrapper: AnyWrapper, label: string) {
   await flushPromises()
 }
 
+/** Label of the navigator tab that is currently active. */
+function activeTabLabel(wrapper: AnyWrapper) {
+  const active = wrapper
+    .findAll('.el-tabs__item')
+    .find((item: AnyWrapper) => item.classes().includes('is-active'))
+  return active?.text() ?? ''
+}
+
 async function selectRepository(wrapper: AnyWrapper) {
   const selects = wrapper.findAllComponents({ name: 'ElSelect' })
   await selects[0].vm.$emit('update:modelValue', 'ALPHA')
@@ -530,6 +538,138 @@ describe('ReleaseNotesView', () => {
     expect(wrapper.text()).toContain(
       enMessages.releaseNotes.full_history.replace('{tag}', 'v1.0.0'),
     )
+  })
+
+  it('shows a note icon only for tags that have a release', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    const tagItems = wrapper.findAll('.tag-item')
+    // v1.2.0 has no release, v1.1.0 does
+    expect(tagItems[0].find('.tag-note-link').exists()).toBe(false)
+    expect(tagItems[1].find('.tag-note-link').exists()).toBe(true)
+  })
+
+  it('opens the release note of a tag from the note icon', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    // clicking the icon must not fall through to the commits of the tag
+    const commitsLoads = vi.mocked(releaseNotesApi.preview).mock.calls.length
+    const released = wrapper.findAll('.tag-item')[1]
+    await released.find('.tag-note-link').trigger('click')
+    await flushPromises()
+
+    // the releases tab is back and the release of that tag is selected
+    expect(activeTabLabel(wrapper)).toBe(enMessages.releaseNotes.list_title)
+    expect(wrapper.find('.nav-item.active').text()).toContain('v1.1.0')
+    expect(wrapper.find('.md-preview-stub').text()).toContain('add login page')
+    expect(vi.mocked(releaseNotesApi.preview).mock.calls.length).toBe(commitsLoads)
+  })
+
+  it('pages the releases tab to the note of a tag living on another page', async () => {
+    const manyNotes = Array.from({ length: 25 }, (_, index) =>
+      release({
+        id: index + 1,
+        tag_name: `v1.${25 - index}.0`,
+        name: `v1.${25 - index}.0`,
+        body: `## release v1.${25 - index}.0`,
+      }),
+    )
+    const wanted = manyNotes[22] // page 3 with a page size of 10
+    vi.mocked(releaseNotesApi.list).mockImplementation(async (params) => {
+      const offset = params?.offset ?? 0
+      if ((params?.limit ?? 0) > 10) {
+        // the lookup from the tags tab asks for the whole list
+        return { total: manyNotes.length, items: manyNotes }
+      }
+      return {
+        total: manyNotes.length,
+        items: manyNotes.slice(offset, offset + (params?.limit ?? 10)),
+      }
+    })
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: [wanted.tag_name, 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    await wrapper.findAll('.tag-item')[0].find('.tag-note-link').trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ limit: 10, offset: 20 }),
+    )
+    expect(wrapper.find('.nav-item.active').text()).toContain(wanted.tag_name)
+    expect(wrapper.find('.md-preview-stub').text()).toContain(wanted.body)
+  })
+
+  it('walks the capped pages of the release list when indexing the tags', async () => {
+    const allNotes = Array.from({ length: 450 }, (_, index) =>
+      release({
+        id: index + 1,
+        tag_name: `v1.${450 - index}.0`,
+        name: `v1.${450 - index}.0`,
+        body: `## release ${index}`,
+      }),
+    )
+    const wanted = allNotes[320] // page 33 at a page size of 10
+    const unreleased = 'v0.9.0' // no release note for this one
+    const requested: Array<{ limit: number; offset: number }> = []
+    vi.mocked(releaseNotesApi.list).mockImplementation(async (params) => {
+      const limit = params?.limit ?? 50
+      const offset = params?.offset ?? 0
+      requested.push({ limit, offset })
+      return { total: allNotes.length, items: allNotes.slice(offset, offset + limit) }
+    })
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: [wanted.tag_name, unreleased],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    // 200 is the backend cap for GET /release/notes - asking for more answers 422
+    const indexRequests = requested.filter((call) => call.limit === 200)
+    expect(indexRequests.map((call) => call.offset)).toEqual([0, 200, 400])
+
+    const tagItems = wrapper.findAll('.tag-item')
+    expect(tagItems[0].find('.tag-note-link').exists()).toBe(true)
+    expect(tagItems[1].find('.tag-note-link').exists()).toBe(false)
+
+    await tagItems[0].find('.tag-note-link').trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ limit: 10, offset: 320 }),
+    )
+    expect(wrapper.find('.nav-item.active').text()).toContain(wanted.tag_name)
+    expect(wrapper.find('.md-preview-stub').text()).toContain(wanted.body)
   })
 
   it('offers to draft a release from the selected tag', async () => {

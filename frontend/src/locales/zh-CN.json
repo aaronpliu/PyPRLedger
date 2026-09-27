@@ -1067,6 +1067,7 @@
     "tags_empty": "该仓库暂无标签",
     "tags_hint": "标签对应的提交",
     "draft_for_tag": "为该标签起草版本",
+    "open_note": "打开版本说明",
     "select_title": "版本说明",
     "select_hint": "在左侧选择版本或标签以查看说明",
     "tag_commits_title": "{tag} 的提交",

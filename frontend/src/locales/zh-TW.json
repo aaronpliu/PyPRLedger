@@ -1067,6 +1067,7 @@
     "tags_empty": "該倉庫尚無標籤",
     "tags_hint": "標籤對應的提交",
     "draft_for_tag": "為該標籤起草版本",
+    "open_note": "開啟版本說明",
     "select_title": "版本說明",
     "select_hint": "在左側選擇版本或標籤以查看說明",
     "tag_commits_title": "{tag} 的提交",

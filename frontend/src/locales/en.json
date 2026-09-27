@@ -1066,6 +1066,7 @@
     "tags_empty": "No tags in this repository yet",
     "tags_hint": "Commits of a tag",
     "draft_for_tag": "Draft a release for this tag",
+    "open_note": "Open the release note",
     "select_title": "Release notes",
     "select_hint": "Select a release or a tag on the left to read its notes",
     "tag_commits_title": "Commits of {tag}",

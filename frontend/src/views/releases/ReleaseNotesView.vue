@@ -238,6 +238,23 @@
                   >
                     <div class="nav-item-main">
                       <span class="nav-item-name">{{ tag }}</span>
+                      <!-- A tag can only show a note icon when a release exists for it -->
+                      <el-tooltip
+                        v-if="tagHasNote(tag)"
+                        :content="t('releaseNotes.open_note')"
+                        placement="top"
+                        :show-after="100"
+                      >
+                        <el-button
+                          link
+                          type="primary"
+                          size="small"
+                          class="tag-note-link"
+                          :icon="Document"
+                          :aria-label="t('releaseNotes.open_note')"
+                          @click.stop="openNoteForTag(tag)"
+                        />
+                      </el-tooltip>
                     </div>
                   </li>
                 </ul>
@@ -539,7 +556,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Close, Refresh } from '@element-plus/icons-vue'
+import { Close, Document, Refresh } from '@element-plus/icons-vue'
 import { MdEditor, MdPreview, type ToolbarNames } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { projectsApi } from '@/api/projects'
@@ -559,6 +576,10 @@ const authStore = useAuthStore()
 const MANAGE_ROLES = ['review_admin', 'system_admin']
 
 const PREVIEW_MAX_COMMITS = 500
+// GET /release/notes accepts at most 200 rows per call (backend cap)
+const NOTE_LOOKUP_PAGE_SIZE = 200
+// Safety bound when indexing the released tags of a repository
+const NOTE_LOOKUP_MAX = 2000
 
 const toolbars: ToolbarNames[] = [
   'bold',
@@ -611,6 +632,10 @@ const tagCommits = ref<CommitInfo[]>([])
 const tagCommitCount = ref(0)
 const tagCommitsLoading = ref(false)
 const tagTruncated = ref(false)
+// tag name -> release (id + position in the full list), loaded for the tags tab
+const releaseTagIndex = ref<Map<string, { id: number; position: number }>>(new Map())
+const releaseTagIndexLoaded = ref(false)
+const releaseTagIndexLoading = ref(false)
 
 const saving = ref(false)
 const importing = ref(false)
@@ -731,6 +756,106 @@ function selectTag(tag: string) {
   closeForm()
   selectedTag.value = tag
   void loadTagCommits(tag)
+}
+
+/** Whether a release note exists for a tag (independent of the current page). */
+function tagHasNote(tag: string): boolean {
+  return releaseTagIndex.value.has(tag)
+}
+
+/**
+ * Build the tag -> release index once per repository.
+ *
+ * The navigator only holds the current page of releases, but a tag has to show
+ * its note icon (and jump to the note) no matter which page that release is on.
+ */
+async function loadReleaseTagIndex(force = false) {
+  if (!hasCoordinates.value || releaseTagIndexLoading.value) {
+    return
+  }
+  if (releaseTagIndexLoaded.value && !force) {
+    return
+  }
+
+  const projectKey = selectedProjectKey.value
+  const repositorySlug = selectedRepositorySlug.value
+
+  releaseTagIndexLoading.value = true
+  try {
+    const index = new Map<string, { id: number; position: number }>()
+    let position = 0
+    let total = Number.POSITIVE_INFINITY
+
+    // A page holds at most 200 rows, so walk the pages to cover every release and
+    // keep the positions aligned with the paginated list of the releases tab.
+    while (position < total && position < NOTE_LOOKUP_MAX) {
+      const response = await releaseNotesApi.list({
+        project_key: projectKey,
+        repository_slug: repositorySlug,
+        limit: NOTE_LOOKUP_PAGE_SIZE,
+        offset: position,
+      })
+      const items: ReleaseNote[] = response.items ?? []
+      items.forEach((note, indexInPage) => {
+        if (!index.has(note.tag_name)) {
+          index.set(note.tag_name, { id: note.id, position: position + indexInPage })
+        }
+      })
+      total = response.total ?? position + items.length
+      if (items.length === 0) {
+        break
+      }
+      position += items.length
+    }
+
+    // another repository may have been selected while the pages were loading
+    if (
+      projectKey !== selectedProjectKey.value ||
+      repositorySlug !== selectedRepositorySlug.value
+    ) {
+      return
+    }
+
+    releaseTagIndex.value = index
+    releaseTagIndexLoaded.value = true
+  } catch {
+    // the tags tab stays usable, only the note icons are missing
+    ElMessage.error(t('releaseNotes.load_failed'))
+  } finally {
+    releaseTagIndexLoading.value = false
+  }
+}
+
+function invalidateReleaseTagIndex() {
+  releaseTagIndex.value = new Map()
+  releaseTagIndexLoaded.value = false
+}
+
+/** Releases changed: drop the tag icons and reload them when they are on screen. */
+function refreshReleaseTagIndex() {
+  invalidateReleaseTagIndex()
+  if (tabIsTags.value) {
+    void loadReleaseTagIndex()
+  }
+}
+
+/** Jump from a tag to its release note (the note icon in the tags tab). */
+async function openNoteForTag(tag: string) {
+  closeForm()
+  await loadReleaseTagIndex()
+
+  const entry = releaseTagIndex.value.get(tag)
+  if (!entry) {
+    return
+  }
+
+  activeTab.value = 'releases'
+  // Select before paging: the reload keeps a selection that is on the new page
+  selectedId.value = entry.id
+  const page = Math.floor(entry.position / notesPageSize.value) + 1
+  if (page !== notesPage.value) {
+    notesPage.value = page
+  }
 }
 
 function coordinates() {
@@ -1019,6 +1144,7 @@ async function saveRelease(status: 'draft' | 'published') {
     selectedId.value = saved.id
     selectedTag.value = null
     await loadNotes()
+    refreshReleaseTagIndex()
   } catch {
     ElMessage.error(t('releaseNotes.save_failed'))
   } finally {
@@ -1065,6 +1191,7 @@ async function importFromProvider() {
       }),
     )
     await loadNotes()
+    refreshReleaseTagIndex()
   } catch {
     ElMessage.error(t('releaseNotes.import_failed'))
   } finally {
@@ -1100,6 +1227,7 @@ async function confirmDelete(note: ReleaseNote) {
       closeForm()
     }
     await loadNotes()
+    refreshReleaseTagIndex()
   } catch {
     ElMessage.error(t('releaseNotes.delete_failed'))
   }
@@ -1145,10 +1273,16 @@ watch(
     tagCommitCount.value = 0
     notesPage.value = 1
     tagPage.value = 1
+    invalidateReleaseTagIndex()
     void loadRefs()
     void loadNotes()
+    if (tabIsTags.value) {
+      void loadReleaseTagIndex()
+    }
   },
 )
+
+
 
 // Releases are paged on the server, tags in the browser
 watch(notesPage, () => void loadNotes())
@@ -1167,9 +1301,14 @@ watch(tagPageSize, () => {
 })
 
 // The tags tab maps a tag to the commits it released: pick the newest tag when
-// the tab is opened without an explicit selection
+// the tab is opened without an explicit selection, and know which tags have a
+// release so their note icon can be shown
 watch(activeTab, (tab) => {
-  if (tab === 'tags' && !selectedTag.value) {
+  if (tab !== 'tags') {
+    return
+  }
+  void loadReleaseTagIndex()
+  if (!selectedTag.value) {
     const newest = sortedTags.value[0]
     if (newest) {
       selectTag(newest)
@@ -1341,6 +1480,12 @@ onBeforeUnmount(() => {
 
 .tag-item .nav-item-main {
   justify-content: space-between;
+}
+
+/* Note icon of a tag that already has a release */
+.tag-note-link {
+  height: auto;
+  padding: 2px;
 }
 
 .detail-card .release-meta {
