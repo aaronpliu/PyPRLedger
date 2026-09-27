@@ -577,6 +577,67 @@ describe('ReleaseNotesView', () => {
     expect(preview).not.toContain('browse/PRL-123')
   })
 
+  it('badges the selected tag instead of the release of the other tab', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v0.1.0', 'v0.2.0', 'v0.3.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 2,
+      items: [
+        release(),
+        release({ id: 2, tag_name: 'v0.2.0', name: 'v0.2.0', is_latest: false }),
+      ],
+    })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    const row = wrapper
+      .findAll('.tag-item')
+      .find((item: AnyWrapper) => item.text() === 'v0.2.0')
+    await row!.trigger('click')
+    await flushPromises()
+
+    const header = wrapper.find('.detail-card .section-title').text()
+    expect(header).toContain(
+      enMessages.releaseNotes.tag_commits_title.replace('{tag}', 'v0.2.0'),
+    )
+    // the release badges of the releases tab (tag v1.1.0, "Latest") stay there
+    expect(header).not.toContain('v1.1.0')
+    expect(header).not.toContain(enMessages.releaseNotes.badge_latest)
+  })
+
+  it('drafts for the tag selected in the tags navigator', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v0.1.0', 'v0.2.0', 'v0.3.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    // pick an older tag in the navigator
+    const row = wrapper
+      .findAll('.tag-item')
+      .find((item: AnyWrapper) => item.text() === 'v0.2.0')
+    await row!.trigger('click')
+    await flushPromises()
+
+    // the list header button must draft for that tag, not for the newest one
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
+    expect(tagSelect.props('modelValue')).toBe('v0.2.0')
+  })
+
   it('drafts from the newest tag whatever order the provider returns', async () => {
     // Bitbucket Cloud lists tags oldest first (alphabetically)
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({

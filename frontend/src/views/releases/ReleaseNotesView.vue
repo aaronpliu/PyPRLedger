@@ -292,7 +292,9 @@
             <div class="section-header">
               <div class="section-title">
                 <h3>{{ detailTitle }}</h3>
-                <template v-if="selectedNote && !editorOpen">
+                <!-- The badges describe the selection of the active tab: a release
+                     kept from the releases tab must not decorate a tag. -->
+                <template v-if="tabIsReleases && selectedNote && !editorOpen">
                   <el-tag size="small" effect="plain">{{ selectedNote.tag_name }}</el-tag>
                   <el-tag v-if="selectedNote.is_latest" size="small" type="success" round>
                     {{ t('releaseNotes.badge_latest') }}
@@ -1087,9 +1089,13 @@ function closeForm() {
 function startNewRelease(tag?: string) {
   resetForm()
   editorOpen.value = true
-  // Draft from the clicked tag, or preselect the newest one (the provider order
-  // would hand out the oldest tag, e.g. v0.1.0, for every new draft)
-  const initial = tag ?? sortedTags.value[0] ?? tags.value[0]
+  // The tag the release is being drafted for, in order of preference:
+  //   1. the tag that was clicked next to the draft button,
+  //   2. the tag selected in the tags navigator (the draft button of the list
+  //      header must not fall back to another version while a tag is active),
+  //   3. the newest tag - the provider order hands out the oldest one (v0.1.0)
+  const selected = tabIsTags.value ? selectedTag.value : null
+  const initial = tag ?? selected ?? sortedTags.value[0] ?? tags.value[0]
   if (initial) {
     form.value.tag_name = initial
   }
