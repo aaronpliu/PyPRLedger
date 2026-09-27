@@ -136,6 +136,22 @@ def build_service(fake: FakeGitProvider) -> ReleaseDiffService:
     return ReleaseDiffService(provider_factory=lambda _name: fake)
 
 
+class StubCache:
+    """Cache stub serving a fixed payload, standing in for Redis."""
+
+    def __init__(self, payload: dict[str, Any] | None = None) -> None:
+        self.payload = payload
+        self.writes: list[tuple[str, dict[str, Any]]] = []
+
+    async def get_json(self, key: str) -> dict[str, Any] | None:
+        return self.payload
+
+    async def set_json(self, key: str, value: dict[str, Any], expire: int | None = None) -> bool:
+        self.writes.append((key, value))
+        self.payload = value
+        return True
+
+
 def compare_payload(**overrides: Any) -> ReleaseCompareRequest:
     payload: dict[str, Any] = {
         "project_key": "PROJ",
@@ -968,6 +984,27 @@ async def test_cache_hit_avoids_the_provider_call() -> None:
     await service.list_refs(refs_payload())
 
     assert len(fake.calls) == calls_after_first
+
+
+async def test_cached_refs_are_cleaned_of_repeated_entries() -> None:
+    """A payload written by an older revision must not render duplicate refs."""
+    service = ReleaseDiffService(
+        provider_factory=lambda _name: FakeGitProvider(),
+        cache=StubCache(
+            {
+                "project_key": "PROJ",
+                "repository_slug": "my-repo",
+                "git_provider": "bitbucket_server",
+                "tags": ["v0.1.0", "v0.1.0", "v0.2.0"],
+                "branches": ["main", "main"],
+            }
+        ),
+    )
+
+    refs = await service.list_refs(refs_payload())
+
+    assert refs.tags == ["v0.1.0", "v0.2.0"]
+    assert refs.branches == ["main"]
 
 
 # --------------------------------------------------------------------------- #

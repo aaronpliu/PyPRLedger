@@ -244,7 +244,12 @@ class ReleaseDiffService:
         if cached is not None:
             self.metrics.increment_cache_hit("release_diff")
             self.metrics.increment_release_diff("refs", provider_name, "cache_hit")
-            return ReleaseRefsResponse(**cached)
+            response = ReleaseRefsResponse(**cached)
+            # A payload written by an older revision may hold repeated refs, which
+            # would render one identical row per occurrence in the UI
+            response.tags = self._clean_refs(response.tags)
+            response.branches = self._clean_refs(response.branches)
+            return response
 
         raw_refs = await provider.list_refs(
             project_key=remote_key,

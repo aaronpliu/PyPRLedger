@@ -384,12 +384,7 @@
                 :placeholder="t('releaseNotes.tag_placeholder')"
                 style="width: 100%"
               >
-                <el-option
-                  v-for="tag in tags"
-                  :key="tag"
-                  :label="tag"
-                  :value="tag"
-                />
+                <el-option v-for="tag in sortedTags" :key="tag" :label="tag" :value="tag" />
               </el-select>
               <el-tooltip :content="t('releaseNotes.refresh_tags')" placement="top">
                 <el-button
@@ -712,12 +707,14 @@ const canManage = computed(() =>
 // Importing / pushing only works for providers with a release API
 const canImportFromProvider = computed(() => canManage.value && isGithubProvider.value)
 const canSave = computed(() => hasCoordinates.value && Boolean(form.value.tag_name.trim()))
-const selectableRefs = computed(() => [...tags.value, ...branches.value])
 
-// Newest first: versions compare numerically so v1.10.0 sorts above v1.9.0
+// Newest first: versions compare numerically so v1.10.0 sorts above v1.9.0.
+// The provider returns the tags in its own order (Bitbucket Cloud lists them
+// alphabetically, i.e. oldest first), so every tag picker uses this order.
 const sortedTags = computed(() =>
   [...tags.value].sort((a, b) => b.localeCompare(a, undefined, { numeric: true })),
 )
+const selectableRefs = computed(() => [...sortedTags.value, ...branches.value])
 const visibleTags = computed(() => {
   const start = (tagPage.value - 1) * tagPageSize.value
   return sortedTags.value.slice(start, start + tagPageSize.value)
@@ -759,6 +756,16 @@ function formatDate(value?: string | null): string {
 function previousTagFor(tag: string): string | null {
   const index = sortedTags.value.indexOf(tag)
   return index >= 0 ? (sortedTags.value[index + 1] ?? null) : null
+}
+
+/**
+ * Clean the ref names of the provider response.
+ *
+ * A repeated entry would otherwise render one identical row per occurrence in
+ * the tag / branch pickers, so the list is de-duplicated (and blanks dropped).
+ */
+function uniqueRefs(values: string[] | null | undefined): string[] {
+  return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))]
 }
 
 /** Select a stored release and show its notes. */
@@ -946,8 +953,8 @@ async function loadRefs(force = false) {
       limit: 200,
       refresh: force,
     })
-    tags.value = response.tags ?? []
-    branches.value = response.branches ?? []
+    tags.value = uniqueRefs(response.tags)
+    branches.value = uniqueRefs(response.branches)
     tagPage.value = 1
     // The tags tab always has a selection so the commits of a tag are visible
     if (tabIsTags.value && !selectedTag.value) {
@@ -1065,8 +1072,9 @@ function closeForm() {
 function startNewRelease(tag?: string) {
   resetForm()
   editorOpen.value = true
-  // Draft from the clicked tag, or preselect the newest one
-  const initial = tag ?? tags.value[0]
+  // Draft from the clicked tag, or preselect the newest one (the provider order
+  // would hand out the oldest tag, e.g. v0.1.0, for every new draft)
+  const initial = tag ?? sortedTags.value[0] ?? tags.value[0]
   if (initial) {
     form.value.tag_name = initial
   }

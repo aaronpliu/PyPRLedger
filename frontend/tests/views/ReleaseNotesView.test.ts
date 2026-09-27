@@ -532,6 +532,52 @@ describe('ReleaseNotesView', () => {
     )
   })
 
+  it('drafts from the newest tag whatever order the provider returns', async () => {
+    // Bitbucket Cloud lists tags oldest first (alphabetically)
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v0.1.0', 'v0.2.0', 'v0.3.0'],
+      branches: ['feature/Pylang'],
+    } as never)
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    expect(wrapper.find('.form-card').exists()).toBe(false)
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
+    // the newest tag is preselected, not the first entry of the provider
+    expect(tagSelect.props('modelValue')).toBe('v0.3.0')
+    expect(
+      tagSelect
+        .findAllComponents({ name: 'ElOption' })
+        .map((option: AnyWrapper) => option.props('label')),
+    ).toEqual(['v0.3.0', 'v0.2.0', 'v0.1.0'])
+  })
+
+  it('ignores repeated ref names coming from the provider', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v0.1.0', 'v0.1.0', 'v0.2.0', 'v0.2.0'],
+      branches: ['main', 'main'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    expect(wrapper.findAll('.tag-item').map((item: AnyWrapper) => item.text())).toEqual([
+      'v0.2.0',
+      'v0.1.0',
+    ])
+  })
+
   it('maps a tag of the tags tab to the commits it released', async () => {
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
       ...REFS,
