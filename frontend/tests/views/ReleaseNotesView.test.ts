@@ -5,8 +5,10 @@ import ElementPlus, { ElMessageBox } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ReleaseNotesView from '@/views/releases/ReleaseNotesView.vue'
 import { projectsApi } from '@/api/projects'
+import { rbacApi } from '@/api/rbac'
 import { releaseDiffApi } from '@/api/releaseDiff'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
+import { resetJiraSettings } from '@/composables/useJira'
 import { useAuthStore } from '@/stores/auth'
 import enMessages from '@/locales/en.json'
 
@@ -15,6 +17,13 @@ vi.mock('@/api/projects', () => ({
     getAllProjects: vi.fn(),
     getProjectRepositories: vi.fn(),
     getCloudWorkspaces: vi.fn(),
+  },
+}))
+
+// The commit tables ask for the JIRA link settings (no JIRA configured here)
+vi.mock('@/api/rbac', () => ({
+  rbacApi: {
+    getJiraSettings: vi.fn().mockResolvedValue({ base_url: '', project_keys: [] }),
   },
 }))
 
@@ -214,6 +223,9 @@ describe('ReleaseNotesView', () => {
     vi.mocked(releaseNotesApi.create).mockResolvedValue(release({ status: 'draft' }) as any)
     vi.mocked(releaseNotesApi.update).mockResolvedValue(release() as any)
     vi.mocked(releaseNotesApi.remove).mockResolvedValue({ message: 'ok' })
+    // JIRA is off unless a test asks for it
+    vi.mocked(rbacApi.getJiraSettings).mockResolvedValue({ base_url: '', project_keys: [] })
+    resetJiraSettings()
   })
 
   it('asks for a repository before showing releases', async () => {
@@ -530,6 +542,39 @@ describe('ReleaseNotesView', () => {
     expect(wrapper.text()).toContain(
       enMessages.releaseNotes.released_by.replace('{author}', 'alice'),
     )
+  })
+
+  it('links the JIRA tickets of a note body written by hand', async () => {
+    vi.mocked(rbacApi.getJiraSettings).mockResolvedValue({
+      base_url: 'https://jira.local',
+      project_keys: [],
+    })
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ body: '## Notes\n\n- ship the login fix PRL-123' })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const preview = wrapper.find('.md-preview-stub').text()
+    expect(preview).toContain('- ship the login fix [PRL-123](https://jira.local/browse/PRL-123)')
+  })
+
+  it('keeps a hand written note body as typed while JIRA is not configured', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ body: '## Notes\n\n- ship the login fix PRL-123' })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const preview = wrapper.find('.md-preview-stub').text()
+    expect(preview).toContain('- ship the login fix PRL-123')
+    expect(preview).not.toContain('browse/PRL-123')
   })
 
   it('drafts from the newest tag whatever order the provider returns', async () => {

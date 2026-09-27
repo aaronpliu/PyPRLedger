@@ -246,6 +246,74 @@ describe('buildReleaseReportHtml', () => {
   })
 })
 
+describe('release report — commit message and author cells', () => {
+  const JIRA_CONTEXT: ReleaseReportContext = {
+    ...CONTEXT,
+    jira: { base_url: 'https://jira.local', project_keys: [] },
+  }
+
+  const COMMIT = {
+    id: C1,
+    display_id: '1111111',
+    author_name: 'Aaron Liu',
+    author_username: 'aaronpliu',
+    author_url: 'https://bitbucket.org/aaronpliu/',
+    message: 'fix: crash on logout PRL-123',
+    url: 'https://bitbucket.org/aaronpliu/pylang/commits/1111111',
+  }
+
+  it('links the JIRA ticket keys and the author profile', () => {
+    const html = buildCompareSectionHtml(
+      { ...COMPARE, missing_commits: [COMMIT] },
+      JIRA_CONTEXT,
+    )
+
+    expect(html).toContain(
+      '<a href="https://jira.local/browse/PRL-123" target="_blank" rel="noopener">PRL-123</a>',
+    )
+    expect(html).toContain(
+      '<a href="https://bitbucket.org/aaronpliu/" target="_blank" rel="noopener">@aaronpliu</a>',
+    )
+    // the display name stays available as the tooltip of the account
+    expect(html).toContain('fix: crash on logout')
+  })
+
+  it('links the ticket keys of the commit check as well', () => {
+    const html = buildCheckSectionHtml(
+      {
+        ...CHECK,
+        results: [
+          { commit: C1, included: true, matched_id: C1, commit_info: COMMIT },
+        ],
+      },
+      JIRA_CONTEXT,
+    )
+
+    expect(html).toContain('href="https://jira.local/browse/PRL-123"')
+    expect(html).toContain('>@aaronpliu</a>')
+  })
+
+  it('keeps the cells plain while JIRA is not configured', () => {
+    const html = buildCompareSectionHtml({ ...COMPARE, missing_commits: [COMMIT] }, CONTEXT)
+
+    expect(html).not.toContain('jira.local')
+    expect(html).toContain('fix: crash on logout PRL-123')
+  })
+
+  it('falls back to the display name when the provider reports no account', () => {
+    const html = buildCompareSectionHtml(
+      {
+        ...COMPARE,
+        missing_commits: [{ ...COMMIT, author_username: null, author_url: null }],
+      },
+      JIRA_CONTEXT,
+    )
+
+    expect(html).toContain('<td>Aaron Liu</td>')
+    expect(html).not.toContain('@aaronpliu</a>')
+  })
+})
+
 describe('releaseReportFilename', () => {
   it('builds a filesystem safe name per report kind', () => {
     const filename = releaseReportFilename('both', { ...CONTEXT, project_key: 'my project/x' })

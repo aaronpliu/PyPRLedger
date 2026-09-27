@@ -544,7 +544,7 @@
             </div>
 
             <div v-if="selectedNote.body" class="release-body" @click="openNoteLink">
-              <MdPreview :model-value="selectedNote.body" :theme="mdTheme" preview-theme="github" />
+              <MdPreview :model-value="noteBody(selectedNote.body)" :theme="mdTheme" preview-theme="github" />
             </div>
             <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
           </template>
@@ -575,6 +575,8 @@ import { releaseDiffApi } from '@/api/releaseDiff'
 import type { CommitInfo } from '@/api/releaseDiff'
 import CommitTable from '@/components/release/CommitTable.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
+import { useJira } from '@/composables/useJira'
+import { linkifyJiraMarkdown } from '@/utils/jira'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
 import { useAuthStore } from '@/stores/auth'
 
@@ -582,6 +584,8 @@ type NavigatorTab = 'releases' | 'tags'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+// JIRA link settings: also used to link the ticket keys of hand written notes
+const { jiraSettings, loadJiraSettings } = useJira()
 
 // Release notes are manageable by review administrators (RBAC: release_note.manage)
 const MANAGE_ROLES = ['review_admin', 'system_admin']
@@ -1054,6 +1058,17 @@ function resetForm() {
  * Notes link to the git platform (commit links, the "Full Changelog" comparison):
  * open them in a new tab so the release page is not replaced.
  */
+/**
+ * Note body as it is rendered.
+ *
+ * The backend links the JIRA tickets of the notes it generates itself; a body
+ * written or imported by hand keeps its plain text, so the ticket keys are
+ * linked here as well (code blocks and existing links stay untouched).
+ */
+function noteBody(body?: string | null): string {
+  return linkifyJiraMarkdown(body, jiraSettings.value)
+}
+
 function openNoteLink(event: MouseEvent) {
   const href = (event.target as HTMLElement | null)?.closest?.('a')?.getAttribute('href')
   if (!href) {
@@ -1351,6 +1366,7 @@ onMounted(() => {
     attributeFilter: ['data-theme', 'class'],
   })
   void loadProjects()
+  void loadJiraSettings()
 })
 
 onBeforeUnmount(() => {

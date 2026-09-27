@@ -37,6 +37,13 @@ vi.mock('@/api/releaseDiff', () => ({
   },
 }))
 
+// JIRA ticket links are driven by these settings (no JIRA configured here)
+vi.mock('@/api/rbac', () => ({
+  rbacApi: {
+    getJiraSettings: vi.fn().mockResolvedValue({ base_url: '', project_keys: [] }),
+  },
+}))
+
 vi.mock('@/utils/export/releaseReport', () => ({
   buildReleaseReportHtml: vi.fn(() => '<html>report</html>'),
   downloadReleaseReport: vi.fn(),

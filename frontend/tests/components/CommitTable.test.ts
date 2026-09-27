@@ -1,11 +1,17 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createApp, h } from 'vue'
 import ElementPlus from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import CommitTable from '@/components/release/CommitTable.vue'
+import { rbacApi } from '@/api/rbac'
+import { resetJiraSettings } from '@/composables/useJira'
 import type { CommitInfo } from '@/api/releaseDiff'
 import enMessages from '@/locales/en.json'
+
+vi.mock('@/api/rbac', () => ({
+  rbacApi: { getJiraSettings: vi.fn() },
+}))
 
 function commits(count: number): CommitInfo[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -47,6 +53,12 @@ function renderCell(wrapper: AnyWrapper, label: string, row: CommitInfo): HTMLEl
 }
 
 describe('CommitTable', () => {
+  beforeEach(() => {
+    vi.mocked(rbacApi.getJiraSettings).mockReset()
+    vi.mocked(rbacApi.getJiraSettings).mockResolvedValue({ base_url: '', project_keys: [] })
+    resetJiraSettings()
+  })
+
   it('renders every commit without pagination for a short list', () => {
     const wrapper = mountTable(commits(5))
 
@@ -86,6 +98,41 @@ describe('CommitTable', () => {
     expect(link!.textContent!.trim()).toBe('@aaronpliu')
     expect(link!.getAttribute('href')).toBe('https://git.local/users/aaronpliu')
     expect(link!.getAttribute('title')).toBe('Aaron Liu')
+  })
+
+  it('links the JIRA ticket key of a commit subject', async () => {
+    vi.mocked(rbacApi.getJiraSettings).mockResolvedValue({
+      base_url: 'https://jira.local',
+      project_keys: [],
+    })
+    const wrapper = mountTable(commits(1))
+    await flushPromises()
+
+    const cell = renderCell(wrapper, enMessages.releaseDiff.col_message, {
+      id: '1'.repeat(40),
+      display_id: '1111111',
+      message: 'feat: fix login PRL-123',
+    })
+
+    const link = cell.querySelector('a.commit-ticket')
+    expect(link).not.toBeNull()
+    expect(link!.textContent!.trim()).toBe('PRL-123')
+    expect(link!.getAttribute('href')).toBe('https://jira.local/browse/PRL-123')
+    expect(cell.textContent).toContain('fix login')
+  })
+
+  it('keeps the subject plain while JIRA is not configured', async () => {
+    const wrapper = mountTable(commits(1))
+    await flushPromises()
+
+    const cell = renderCell(wrapper, enMessages.releaseDiff.col_message, {
+      id: '1'.repeat(40),
+      display_id: '1111111',
+      message: 'feat: fix login PRL-123',
+    })
+
+    expect(cell.querySelector('a.commit-ticket')).toBeNull()
+    expect(cell.textContent).toContain('fix login PRL-123')
   })
 
   it('falls back to the display name when the provider reports no account', () => {
