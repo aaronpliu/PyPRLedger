@@ -8,8 +8,11 @@ Supports multiple providers (Bitbucket Server, GitHub Enterprise) via provider a
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
 
 from sqlalchemy import and_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.git_provider import GitProvider
@@ -23,6 +26,10 @@ from src.services.git_providers import BaseGitProvider, get_git_provider
 logger = logging.getLogger(__name__)
 
 
+# Entities synced from the git provider, all keyed by a remote identifier
+SyncedEntity = TypeVar("SyncedEntity", Project, Repository, User)
+
+
 class EntitySyncService:
     """Service for synchronizing entities from Git provider API.
 
@@ -32,12 +39,54 @@ class EntitySyncService:
     3. Default to bitbucket_server (preserves existing behavior)
     """
 
-    def __init__(self, db: AsyncSession, git_provider: str | GitProvider | None = None):
+    def __init__(
+        self,
+        db: AsyncSession,
+        git_provider: str | GitProvider | None = None,
+        workspace_slug: str | None = None,
+    ):
         self.db = db
         self._provider: BaseGitProvider | None = None
+        self._workspace_slug = workspace_slug
         self._payload_hint: str | None = (
             git_provider.value if isinstance(git_provider, GitProvider) else git_provider
         )
+
+    def _remote_project_key(self, project_key: str, provider: BaseGitProvider) -> str:
+        """Resolve the identifier used to address the project/repository remotely.
+
+        Bitbucket Server and GitHub Enterprise address repositories with the
+        project key (or organization), while Bitbucket Cloud addresses them with
+        the workspace slug. A payload may therefore carry an explicit
+        ``workspace_slug`` so the business ``project_key`` (used by the database
+        and the project registry) can differ from the Cloud workspace.
+        """
+        if provider.name != GitProvider.BITBUCKET_CLOUD.value:
+            return project_key
+        workspace = (self._workspace_slug or "").strip()
+        if not workspace or workspace == project_key:
+            return project_key
+        logger.debug(f"Using Cloud workspace '{workspace}' for project '{project_key}'")
+        return workspace
+
+    def _display_name(
+        self,
+        project_key: str,
+        remote_key: str,
+        project_info: dict[str, Any],
+        provider: BaseGitProvider,
+    ) -> str:
+        """Pick the project name shown in the UI.
+
+        For Bitbucket Cloud the remote project is a workspace whose name is the
+        workspace display name (e.g. ``aaronpliu``). When the payload addresses it
+        through a different business key (``workspace_slug`` alias), that workspace
+        name would be confusing, so the business key is shown instead.
+        """
+        remote_name = project_info.get("project_name") or remote_key
+        if provider.name == GitProvider.BITBUCKET_CLOUD.value and remote_key != project_key:
+            return project_key
+        return remote_name
 
     async def _resolve_provider(self) -> BaseGitProvider:
         """Lazy-resolve provider on first use, then memoize for the session."""
@@ -89,6 +138,102 @@ class EntitySyncService:
         except Exception:
             pass
 
+    async def _insert_or_reuse(
+        self,
+        entity: SyncedEntity,
+        lookup: Callable[[], Awaitable[SyncedEntity | None]],
+    ) -> SyncedEntity:
+        """Insert ``entity``, falling back to ``lookup`` when it is already stored.
+
+        The remote identifiers are unique in the database, so anything that slipped
+        between our lookup and this insert (a concurrent request, or another
+        business key addressing the same remote entity) would raise a duplicate key
+        error. The insert therefore runs inside a savepoint: a constraint violation
+        only rolls that back, and the transaction of the caller - which already
+        holds the raw review payload - stays usable.
+        """
+        try:
+            async with self.db.begin_nested():
+                self.db.add(entity)
+                await self.db.flush()
+            return entity
+        except IntegrityError:
+            logger.warning(
+                f"{type(entity).__name__} is already stored under another key - reusing it"
+            )
+            existing = await lookup()
+            if existing is None:
+                raise
+            return existing
+
+    async def _find_project_by_remote(
+        self, provider: BaseGitProvider, project_info: dict[str, Any]
+    ) -> Project | None:
+        """Find the stored row of the same remote project.
+
+        A remote project (Bitbucket workspace, Server project, GitHub organization)
+        is identified by ``project_id``; the very same remote project can be reached
+        through different business keys (``project_key`` / ``workspace_slug``), and
+        ``project.project_id`` is unique - so the stored row has to be reused rather
+        than inserted again.
+        """
+        project_id = project_info.get("project_id")
+        if project_id is not None:
+            result = await self.db.execute(select(Project).where(Project.project_id == project_id))
+            project = result.scalar_one_or_none()
+            if project:
+                if project.git_provider != provider.name:
+                    logger.warning(
+                        f"Project {project_id} is stored for provider "
+                        f"'{project.git_provider}' but requested for '{provider.name}' - "
+                        "reusing the stored row"
+                    )
+                return project
+
+        project_url = (project_info.get("project_url") or "").strip()
+        if project_url:
+            result = await self.db.execute(
+                select(Project).where(
+                    and_(
+                        Project.git_provider == provider.name,
+                        Project.project_url == project_url,
+                    )
+                )
+            )
+            return result.scalar_one_or_none()
+        return None
+
+    async def _find_repository_by_remote(
+        self, project: Project, repo_info: dict[str, Any]
+    ) -> Repository | None:
+        """Find the stored row of the same remote repository.
+
+        ``repository_id`` is the provider side identifier and unique in the
+        database; the repository URL is the fallback for a slug that was renamed
+        remotely (or addressed through a different alias).
+        """
+        repository_id = repo_info.get("repository_id")
+        if repository_id is not None:
+            result = await self.db.execute(
+                select(Repository).where(Repository.repository_id == repository_id)
+            )
+            repository = result.scalar_one_or_none()
+            if repository:
+                return repository
+
+        repository_url = (repo_info.get("repository_url") or "").strip()
+        if repository_url:
+            result = await self.db.execute(
+                select(Repository).where(
+                    and_(
+                        Repository.project_id == project.project_id,
+                        Repository.repository_url == repository_url,
+                    )
+                )
+            )
+            return result.scalar_one_or_none()
+        return None
+
     async def sync_project(self, project_key: str) -> Project:
         """
         Sync project entity - query first, then fetch from API if not exists
@@ -109,24 +254,40 @@ class EntitySyncService:
             return project
 
         provider = await self._resolve_provider()
-        logger.info(f"Project not found, fetching from {provider.name}: {project_key}")
-        project_info = await provider.get_project_info(project_key)
+        remote_key = self._remote_project_key(project_key, provider)
+        logger.info(f"Project not found, fetching from {provider.name}: {remote_key}")
+        project_info = await provider.get_project_info(remote_key)
 
         if not project_info:
-            raise ValueError(f"Failed to fetch project info for {project_key}")
+            raise ValueError(f"Failed to fetch project info for {remote_key} from {provider.name}")
 
+        # The same remote project may already be stored under another business key
+        # (e.g. a Cloud workspace reached as 'AI' and as 'web-development'):
+        # project.project_id is unique, so that row has to be reused.
+        stored = await self._find_project_by_remote(provider, project_info)
+        if stored:
+            logger.info(
+                f"Reusing stored project '{stored.project_key}' for '{project_key}' "
+                f"({provider.name}, project_id={stored.project_id})"
+            )
+            return stored
+
+        # Keep the caller's project key as the business key so it stays consistent
+        # with pull_request_review.project_key and project_registry.
         project = Project(
             project_id=project_info["project_id"],
-            project_name=project_info["project_name"],
-            project_key=project_info["project_key"],
+            project_name=self._display_name(project_key, remote_key, project_info, provider),
+            project_key=project_key,
             project_url=project_info["project_url"],
             git_provider=provider.name,
         )
-        self.db.add(project)
-        await self.db.flush()
 
-        logger.info(f"Created project from {provider.name} API: {project_key}")
-        return project
+        created = await self._insert_or_reuse(
+            project, lambda: self._find_project_by_remote(provider, project_info)
+        )
+        if created is project:
+            logger.info(f"Created project from {provider.name} API: {project_key}")
+        return created
 
     async def sync_repository(
         self,
@@ -159,14 +320,27 @@ class EntitySyncService:
 
         await self._try_resolve_provider_from_registry(project.project_key, repository_slug)
         provider = await self._resolve_provider()
+        remote_key = self._remote_project_key(project.project_key, provider)
         logger.info(
-            f"Repository not found, fetching from {provider.name}: "
-            f"{project.project_key}/{repository_slug}"
+            f"Repository not found, fetching from {provider.name}: {remote_key}/{repository_slug}"
         )
-        repo_info = await provider.get_repository_info(project.project_key, repository_slug)
+        repo_info = await provider.get_repository_info(remote_key, repository_slug)
 
         if not repo_info:
-            raise ValueError(f"Failed to fetch repository info for {repository_slug}")
+            raise ValueError(
+                f"Failed to fetch repository info for {remote_key}/{repository_slug} "
+                f"from {provider.name}"
+            )
+
+        # The same remote repository may already be stored under another slug
+        # (renamed remotely, or addressed through a project alias)
+        stored = await self._find_repository_by_remote(project, repo_info)
+        if stored:
+            logger.info(
+                f"Reusing stored repository '{stored.repository_slug}' for "
+                f"'{repository_slug}' ({provider.name}, repository_id={stored.repository_id})"
+            )
+            return stored
 
         repository = Repository(
             repository_id=repo_info["repository_id"],
@@ -175,11 +349,25 @@ class EntitySyncService:
             repository_slug=repository_slug,
             repository_url=repo_info["repository_url"],
         )
-        self.db.add(repository)
-        await self.db.flush()
 
-        logger.info(f"Created repository from {provider.name} API: {repository_slug}")
-        return repository
+        created = await self._insert_or_reuse(
+            repository, lambda: self._find_repository_by_remote(project, repo_info)
+        )
+        if created is repository:
+            logger.info(f"Created repository from {provider.name} API: {repository_slug}")
+        return created
+
+    async def _find_user_by_remote(self, user_info: dict[str, Any]) -> User | None:
+        """Find the stored row of the same remote user (``user_id`` is unique).
+
+        A provider can expose the same account under a different login (renamed
+        account), which would otherwise insert a duplicate ``user_id``.
+        """
+        user_id = user_info.get("user_id")
+        if user_id is None:
+            return None
+        result = await self.db.execute(select(User).where(User.user_id == user_id))
+        return result.scalar_one_or_none()
 
     async def sync_user(self, username: str, is_reviewer: bool = False) -> User:
         """
@@ -210,6 +398,14 @@ class EntitySyncService:
         if not user_info:
             raise ValueError(f"Failed to fetch user info for {username}")
 
+        stored = await self._find_user_by_remote(user_info)
+        if stored:
+            logger.info(
+                f"Reusing stored user '{stored.username}' for '{username}' "
+                f"({provider.name}, user_id={stored.user_id})"
+            )
+            return stored
+
         user = User(
             user_id=user_info["user_id"],
             username=username,
@@ -218,8 +414,10 @@ class EntitySyncService:
             active=True,
             is_reviewer=is_reviewer,
         )
-        self.db.add(user)
-        await self.db.flush()
+
+        created = await self._insert_or_reuse(user, lambda: self._find_user_by_remote(user_info))
+        if created is not user:
+            return created
 
         logger.info(f"Created user from {provider.name} API: {username}")
 

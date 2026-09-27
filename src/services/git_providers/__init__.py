@@ -28,10 +28,14 @@ def get_git_provider(provider_name: str | GitProvider) -> BaseGitProvider:
     if provider_str in _provider_cache:
         return _provider_cache[provider_str]
 
-    if provider_str in (GitProvider.BITBUCKET_SERVER, GitProvider.BITBUCKET_CLOUD):
+    if provider_str == GitProvider.BITBUCKET_SERVER:
         from src.services.git_providers.bitbucket_server import BitbucketServerProvider
 
         provider = BitbucketServerProvider()
+    elif provider_str == GitProvider.BITBUCKET_CLOUD:
+        from src.services.git_providers.bitbucket_cloud import BitbucketCloudProvider
+
+        provider = BitbucketCloudProvider()
     elif provider_str == GitProvider.GITHUB_ENTERPRISE:
         from src.services.git_providers.github_enterprise import GitHubEnterpriseProvider
 

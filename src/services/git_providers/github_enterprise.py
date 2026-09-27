@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
 from src.core.config import settings
+from src.core.exceptions import GitServiceException, NotFoundException
 from src.core.git_provider import GitProvider
 from src.services.git_providers.base import BaseGitProvider
 
@@ -39,6 +41,25 @@ class GitHubEnterpriseProvider(BaseGitProvider):
     @property
     def name(self) -> str:
         return GitProvider.GITHUB_ENTERPRISE.value
+
+    def web_compare_url(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+    ) -> str | None:
+        """Deep link to the GitHub compare view (``{base}...{head}``)."""
+        if not self.base_url or not self.compare_refs_ready(
+            project_key, repository_slug, from_ref, to_ref
+        ):
+            return None
+
+        return (
+            f"{self.base_url}/{quote(project_key.strip(), safe='')}"
+            f"/{quote(repository_slug.strip(), safe='')}/compare/"
+            f"{quote(from_ref.strip(), safe='')}...{quote(to_ref.strip(), safe='')}"
+        )
 
     async def _make_request(self, url: str) -> dict[str, Any] | None:
         try:
@@ -127,3 +148,240 @@ class GitHubEnterpriseProvider(BaseGitProvider):
             "email_address": api_response.get("email") or f"{username}@github.local",
             "active": True,
         }
+
+    async def _request(self, url: str, params: dict[str, Any]) -> Any:
+        """Make a GET request, raising typed exceptions on failure."""
+        return await self._request_json(url, params=params)
+
+    async def _request_json(
+        self,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        method: str = "GET",
+        payload: dict[str, Any] | None = None,
+    ) -> Any:
+        """Execute a GitHub API call, raising typed exceptions on failure."""
+        try:
+            async with httpx.AsyncClient(verify=False) as client:
+                response = await client.request(
+                    method,
+                    url,
+                    headers=self.headers,
+                    params=params or {},
+                    json=payload,
+                    timeout=30.0,
+                )
+        except httpx.HTTPError as e:
+            logger.error(f"GitHub API request failed: {url} - {e}")
+            raise GitServiceException(f"GitHub Enterprise request failed: {e}") from e
+
+        if response.status_code == 404:
+            raise NotFoundException(f"GitHub resource not found: {url}")
+        if response.status_code >= 400:
+            raise GitServiceException(
+                f"GitHub Enterprise returned {response.status_code} for {url}: "
+                f"{response.text[:300]}"
+            )
+
+        if response.status_code == 204 or not response.content:
+            return None
+        return response.json()
+
+    # ------------------------------------------------------------------ #
+    # Releases (GitHub Releases API)
+    # ------------------------------------------------------------------ #
+
+    @property
+    def supports_releases(self) -> bool:
+        return True
+
+    async def list_releases(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Fetch the releases of a repository.
+
+        Maps to GET /api/v3/repos/{owner}/{repo}/releases
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/releases"
+        logger.info(f"Listing releases on GitHub: {project_key}/{repository_slug}")
+
+        payload = await self._fetch_paged_values(url, limit)
+        return [self._normalize_release(release) for release in payload]
+
+    async def create_release(
+        self,
+        project_key: str,
+        repository_slug: str,
+        *,
+        tag_name: str,
+        name: str,
+        body: str = "",
+        target_commitish: str | None = None,
+        draft: bool = False,
+        prerelease: bool = False,
+    ) -> dict[str, Any]:
+        """Publish a release.
+
+        Maps to POST /api/v3/repos/{owner}/{repo}/releases
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/releases"
+        logger.info(f"Creating release on GitHub: {project_key}/{repository_slug} {tag_name}")
+
+        payload: dict[str, Any] = {
+            "tag_name": tag_name,
+            "name": name,
+            "body": body or "",
+            "draft": draft,
+            "prerelease": prerelease,
+        }
+        if target_commitish:
+            payload["target_commitish"] = target_commitish
+
+        created = await self._request_json(url, method="POST", payload=payload)
+        return self._normalize_release(created or {})
+
+    async def update_release(
+        self,
+        project_key: str,
+        repository_slug: str,
+        release_id: str,
+        *,
+        name: str | None = None,
+        body: str | None = None,
+        prerelease: bool | None = None,
+    ) -> dict[str, Any]:
+        """Update an existing release.
+
+        Maps to PATCH /api/v3/repos/{owner}/{repo}/releases/{release_id}
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/releases/{release_id}"
+        logger.info(f"Updating release {release_id} on GitHub: {project_key}/{repository_slug}")
+
+        payload: dict[str, Any] = {}
+        if name is not None:
+            payload["name"] = name
+        if body is not None:
+            payload["body"] = body
+        if prerelease is not None:
+            payload["prerelease"] = prerelease
+
+        updated = await self._request_json(url, method="PATCH", payload=payload)
+        return self._normalize_release(updated or {})
+
+    @staticmethod
+    def _normalize_release(release: dict[str, Any]) -> dict[str, Any]:
+        """Map a GitHub release payload onto the provider independent shape."""
+        author = release.get("author") or {}
+        return {
+            "id": str(release.get("id") or ""),
+            "tag_name": release.get("tag_name") or "",
+            "name": release.get("name") or release.get("tag_name") or "",
+            "body": release.get("body") or "",
+            "draft": bool(release.get("draft")),
+            "prerelease": bool(release.get("prerelease")),
+            "html_url": release.get("html_url") or "",
+            "published_at": release.get("published_at") or release.get("created_at"),
+            "created_at": release.get("created_at"),
+            "author": author.get("login"),
+        }
+
+    async def _fetch_paged_values(self, url: str, limit: int) -> list[dict[str, Any]]:
+        """Page through a GitHub list endpoint until ``limit`` values are collected."""
+        values: list[dict[str, Any]] = []
+        page = 1
+
+        while len(values) < limit:
+            page_size = min(100, limit - len(values))
+            payload = await self._request(url, {"per_page": page_size, "page": page})
+            if not payload:
+                break
+
+            values.extend(payload)
+            if len(payload) < page_size:
+                break
+            page += 1
+
+        return values[:limit]
+
+    async def list_refs(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 100,
+    ) -> dict[str, list[str]]:
+        """Fetch tags and branches of a repository.
+
+        Maps to GET /api/v3/repos/{owner}/{repo}/tags and /branches
+        """
+        base = f"{self.api_url}/repos/{project_key}/{repository_slug}"
+        logger.info(f"Listing refs on GitHub: {project_key}/{repository_slug}")
+
+        tags = await self._fetch_paged_values(f"{base}/tags", limit)
+        branches = await self._fetch_paged_values(f"{base}/branches", limit)
+
+        return {
+            "tags": self._ref_names(tags),
+            "branches": self._ref_names(branches),
+        }
+
+    @staticmethod
+    def _ref_names(values: list[dict[str, Any]]) -> list[str]:
+        """Extract ref names from GitHub tag / branch payloads."""
+        names: list[str] = []
+        for value in values:
+            name = str(value.get("name") or value.get("ref") or "").strip()
+            if name:
+                names.append(name)
+        return names
+
+    async def compare_commits(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Fetch commits reachable from ``to_ref`` but not from ``from_ref``.
+
+        Maps to GET /api/v3/repos/{owner}/{repo}/compare/{from}...{to}
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/compare/{from_ref}...{to_ref}"
+        logger.info(f"Comparing commits on GitHub: {project_key}/{repository_slug}")
+
+        payload = await self._request(url, {"per_page": min(limit, 100)})
+        commits = payload.get("commits") or []
+        return commits[:limit]
+
+    async def list_commits_until(
+        self,
+        project_key: str,
+        repository_slug: str,
+        until_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Fetch commits reachable from ``until_ref`` (newest first).
+
+        Maps to GET /api/v3/repos/{owner}/{repo}/commits?sha={ref}
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/commits"
+        logger.info(f"Listing commits on GitHub: {project_key}/{repository_slug}")
+
+        commits: list[dict[str, Any]] = []
+        page = 1
+        while len(commits) < limit:
+            payload = await self._request(
+                url, {"sha": until_ref, "per_page": min(100, limit - len(commits)), "page": page}
+            )
+            if not payload:
+                break
+            commits.extend(payload)
+            if len(payload) < min(100, limit - len(commits) + len(payload)):
+                break
+            page += 1
+
+        return commits[:limit]

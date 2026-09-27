@@ -133,6 +133,13 @@ class MetricsCollector:
             registry=self.registry,
         )
 
+        self.release_diff_operations_total = Counter(
+            "release_diff_operations_total",
+            "Total number of release diff operations (compare / check)",
+            ["operation", "provider", "result"],
+            registry=self.registry,
+        )
+
         # Database metrics
         self.db_connections_active = Gauge(
             "db_connections_active", "Number of active database connections", registry=self.registry
@@ -469,6 +476,19 @@ class MetricsCollector:
             error_type: Type of error
         """
         self.cache_errors_total.labels(cache_type=cache_type, error_type=error_type).inc()
+
+    def increment_release_diff(self, operation: str, provider: str, result: str) -> None:
+        """
+        Increment release diff operation counter
+
+        Args:
+            operation: Operation name ("compare" or "check")
+            provider: Git provider used for the lookup
+            result: Operation outcome (e.g. "included", "missing_commits", "cache_hit")
+        """
+        self.release_diff_operations_total.labels(
+            operation=operation, provider=provider, result=result
+        ).inc()
 
     def set_db_connections_active(self, count: int) -> None:
         """

@@ -22,9 +22,21 @@ def get_git_status():
 
 
 def get_changed_files():
-    """Get list of changed files."""
-    stdout, _ = run_cmd("git diff --name-only", capture=True)
-    return [f for f in stdout.split("\n") if f]
+    """List every path that will be committed (modified, staged or untracked)."""
+    stdout, _ = run_cmd("git status --porcelain", capture=True)
+    files = []
+    for line in stdout.split("\n"):
+        if not line.strip():
+            continue
+        # porcelain lines read "<XY> <path>" (leading blanks collapsed by split)
+        parts = line.split(maxsplit=1)
+        if len(parts) < 2:
+            continue
+        path = parts[1].strip()
+        if " -> " in path:  # renamed entries read "old -> new"
+            path = path.split(" -> ")[-1]
+        files.append(path.strip('"'))
+    return files
 
 
 def get_commit_hash():

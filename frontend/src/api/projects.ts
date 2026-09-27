@@ -6,6 +6,7 @@ export interface ProjectSummary {
   project_name: string
   project_key: string
   project_url: string
+  git_provider?: string | null
   created_date: string
   updated_date: string
 }
@@ -28,6 +29,17 @@ export interface RepositorySummary {
   updated_date: string
 }
 
+export interface CloudWorkspaceOption {
+  slug: string
+  name: string
+  /** Where the suggestion comes from: config | api | database */
+  source: string
+}
+
+export interface CloudWorkspaceListResponse {
+  workspaces: CloudWorkspaceOption[]
+}
+
 export const projectsApi = {
   listProjects(params?: {
     page?: number
@@ -41,6 +53,13 @@ export const projectsApi = {
   async getAllProjects(): Promise<ProjectSummary[]> {
     const response = await request.get('/projects/all')
     return response.data || response
+  },
+
+  // Bitbucket Cloud workspaces offered for the repository / release diff forms
+  async getCloudWorkspaces(): Promise<CloudWorkspaceOption[]> {
+    const response = await request.get('/projects/cloud-workspaces')
+    const payload = response.data || response
+    return payload?.workspaces ?? []
   },
 
   // Get repositories for a specific project

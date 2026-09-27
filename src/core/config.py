@@ -73,6 +73,17 @@ class Settings(BaseSettings):
     CACHE_TTL_PROJECTS: int = Field(default=21600)
     CACHE_TTL_USERS: int = Field(default=43200)
     CACHE_TTL_STATS: int = Field(default=3600)
+    CACHE_TTL_RELEASE_DIFF: int = Field(
+        default=300, description="Cache TTL (seconds) for release diff / commit check results"
+    )
+    CACHE_TTL_RELEASE_REFS: int = Field(
+        default=60,
+        description=(
+            "Cache TTL (seconds) for the release ref (tag / branch) suggestions. Kept short "
+            "because tags are created on the git side at any time; an explicit refresh "
+            "(refresh=true) always bypasses the cache."
+        ),
+    )
 
     # Security configuration
     SECRET_KEY: str = Field(default="development-secret-key-change-in-production")
@@ -145,8 +156,42 @@ class Settings(BaseSettings):
             "Only applicable to Bitbucket Server/Data Center (not Bitbucket Cloud)."
         ),
     )
+    BITBUCKET_CLOUD_API_URL: str = Field(
+        default="https://api.bitbucket.org/2.0",
+        description="Bitbucket Cloud (bitbucket.org) REST API 2.0 base URL",
+    )
+    BITBUCKET_CLOUD_TOKEN: str | None = Field(
+        default=None,
+        description=(
+            "Bitbucket Cloud access token (OAuth2 / workspace access token). When set it "
+            "is sent as a Bearer token, otherwise BITBUCKET_CLOUD_USER + app password "
+            "(Basic auth) is used."
+        ),
+    )
+    BITBUCKET_CLOUD_USER: str | None = Field(
+        default=None,
+        description=(
+            "Bitbucket Cloud username (Atlassian account). Falls back to BITBUCKET_USER "
+            "when unset - set it explicitly to use Server and Cloud side by side."
+        ),
+    )
+    BITBUCKET_CLOUD_APP_PASSWORD: str | None = Field(
+        default=None,
+        description=(
+            "Bitbucket Cloud app password. Falls back to BITBUCKET_PASSWORD when unset - "
+            "set it explicitly to use Server and Cloud side by side."
+        ),
+    )
     BITBUCKET_DEFAULT_WORKSPACE: str = Field(
         default="default", description="Default workspace/project key for Bitbucket repositories"
+    )
+    BITBUCKET_CLOUD_WORKSPACES: str = Field(
+        default="",
+        description=(
+            "Comma separated Bitbucket Cloud workspaces offered as suggestions in the UI. "
+            "Used together with the workspaces discovered through the API and the ones "
+            "already stored locally."
+        ),
     )
 
     # GitHub Enterprise API configuration

@@ -57,3 +57,176 @@ class BaseGitProvider(ABC):
             Dict with keys: user_id, username, display_name, email_address
             None if not found.
         """
+
+    async def compare_commits(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Return raw commits reachable from ``to_ref`` but not from ``from_ref``.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            from_ref: Base ref (exclusive)
+            to_ref: Target ref (inclusive)
+            limit: Maximum number of commits to return
+
+        Returns:
+            List of provider-specific raw commit dicts.
+
+        Raises:
+            NotImplementedError: When the provider does not expose a compare API.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement compare_commits()")
+
+    async def list_commits_until(
+        self,
+        project_key: str,
+        repository_slug: str,
+        until_ref: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Return raw commits reachable from ``until_ref`` (newest first).
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            until_ref: Ref to walk from (inclusive)
+            limit: Maximum number of commits to return
+
+        Returns:
+            List of provider-specific raw commit dicts.
+
+        Raises:
+            NotImplementedError: When the provider does not expose a commit listing API.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement list_commits_until()")
+
+    @property
+    def supports_releases(self) -> bool:
+        """Whether the provider exposes a release API (GitHub Enterprise does)."""
+        return False
+
+    async def list_releases(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return the provider releases of a repository.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            limit: Maximum number of releases returned
+
+        Returns:
+            List of dicts with ``id``, ``tag_name``, ``name``, ``body``, ``draft``,
+            ``prerelease``, ``html_url``, ``published_at`` and ``author``.
+
+        Raises:
+            NotImplementedError: When the provider has no release API.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement list_releases()")
+
+    async def create_release(
+        self,
+        project_key: str,
+        repository_slug: str,
+        *,
+        tag_name: str,
+        name: str,
+        body: str = "",
+        target_commitish: str | None = None,
+        draft: bool = False,
+        prerelease: bool = False,
+    ) -> dict[str, Any]:
+        """Publish a release on the provider.
+
+        Raises:
+            NotImplementedError: When the provider has no release API.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement create_release()")
+
+    async def update_release(
+        self,
+        project_key: str,
+        repository_slug: str,
+        release_id: str,
+        *,
+        name: str | None = None,
+        body: str | None = None,
+        prerelease: bool | None = None,
+    ) -> dict[str, Any]:
+        """Update an existing provider release.
+
+        Raises:
+            NotImplementedError: When the provider has no release API.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement update_release()")
+
+    @staticmethod
+    def compare_refs_ready(*refs: str | None) -> bool:
+        """Whether a comparison can be addressed remotely (all parts non blank)."""
+        return all(bool(ref and ref.strip()) for ref in refs)
+
+    def web_compare_url(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+    ) -> str | None:
+        """Browsable URL comparing two revisions, when the platform has one.
+
+        ``from_ref`` is the base (exclusive) and ``to_ref`` the target (inclusive),
+        matching :meth:`compare_commits`, so the page shows what ``to_ref`` adds on
+        top of ``from_ref``.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            from_ref: Base revision (tag, branch or commit)
+            to_ref: Target revision
+
+        Returns:
+            The comparison URL, or ``None`` when the provider exposes no web UI or
+            the host needed to build the URL is not configured.
+        """
+        return None
+
+    async def list_workspaces(self) -> list[dict[str, Any]]:
+        """Return the workspaces (Bitbucket Cloud) reachable with the credentials.
+
+        Only Bitbucket Cloud has a workspace concept, so every other provider
+        reports no workspaces instead of raising.
+
+        Returns:
+            List of dicts with ``slug`` and ``name`` keys.
+        """
+        return []
+
+    async def list_refs(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 100,
+    ) -> dict[str, list[str]]:
+        """Return the tags and branches of a repository.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            limit: Maximum number of names returned per ref type
+
+        Returns:
+            Dict with ``tags`` and ``branches`` keys, each holding ref names.
+
+        Raises:
+            NotImplementedError: When the provider does not expose ref listing.
+        """
+        raise NotImplementedError(f"Provider '{self.name}' does not implement list_refs()")

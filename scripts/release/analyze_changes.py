@@ -3,7 +3,8 @@
 
 import subprocess
 import sys
-from collections import defaultdict
+
+from commit_parser import ANALYSIS, ANALYSIS_ORDER, categorize
 
 
 def run_git(cmd):
@@ -22,28 +23,8 @@ def categorize_changes(commit_range):
     files_cmd = ["diff", "--name-only", commit_range]
     files_output = run_git(files_cmd).split("\n") if run_git(files_cmd) else []
 
-    categories = defaultdict(list)
-
-    # Simple categorization based on commit message prefixes
-    for line in log_output.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        # Extract commit type from message (feat:, fix:, docs:, etc.)
-        if line.startswith("feat:"):
-            categories["Features"].append(line[5:].strip())
-        elif line.startswith("fix:"):
-            categories["Bug Fixes"].append(line[4:].strip())
-        elif line.startswith("improve:") or line.startswith("impr:"):
-            categories["Improvements"].append(line.split(":", 1)[1].strip())
-        elif line.startswith("docs:") or line.startswith("doc:"):
-            categories["Documentation"].append(line.split(":", 1)[1].strip())
-        elif line.startswith("refactor:"):
-            categories["Improvements"].append(f"[Refactor] {line.split(':', 1)[1].strip()}")
-        elif line.startswith("chore:") or line.startswith("build:"):
-            categories["Dependencies"].append(line.split(":", 1)[1].strip())
-        else:
-            categories["Other Changes"].append(line)
+    # Categorization relies on conventional commit subjects, scopes included
+    categories = categorize(log_output, ANALYSIS)
 
     # Also check for specific file patterns
     frontend_changes = [f for f in files_output if f.startswith("frontend/")]
@@ -56,15 +37,7 @@ def generate_summary(categories, frontend_files, backend_files):
     """Generate markdown summary of changes."""
     lines = ["## Summary of Changes\n"]
 
-    for cat in [
-        "Features",
-        "Bug Fixes",
-        "Improvements",
-        "Documentation",
-        "Dependencies",
-        "Breaking Changes",
-        "Other Changes",
-    ]:
+    for cat in ANALYSIS_ORDER:
         if cat in categories and categories[cat]:
             lines.append(f"### {cat}")
             for item in categories[cat][:10]:  # Limit to first 10

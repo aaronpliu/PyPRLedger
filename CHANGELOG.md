@@ -5,6 +5,66 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.1] - 2026-09-27
+
+**Backend Version**: 1.22.1
+**Frontend Version**: 1.17.1
+
+### Added
+- Link the `Full Changelog` range of a release to the revision comparison of the git provider (Bitbucket Cloud `{new}%0D{old}`, Bitbucket Server/Data Center `compare/commits?sourceBranch&targetBranch`, GitHub `base...head`)
+- Split the release navigator into `Releases` and `Tags` tabs, each with its own pagination (server-side for releases, browser-side for tags)
+- Map a tag to the commits it released, scoped against the next older tag of the repository
+- Show a note icon on tags that already have a release, jumping to that note from any page of the list
+
+### Fixed
+- Reuse an already stored project / repository / user when the same remote entity is addressed through another business key, instead of failing with a duplicate key error on `POST /api/v1/reviews`
+- Keep the original cause when a flush fails during an upsert: the failed payload is recorded in a fresh transaction instead of masking the error with a `PendingRollbackError`
+- Look releases up by the payload business keys, so a retry through an aliased Cloud workspace updates its own review
+- Keep the release tag index within the `GET /release/notes` limit of 200 rows per call
+
+### Improved
+- Follow the application theme in the rendered release note and the markdown editor (md-editor dark palette blended with the app surfaces)
+- Open note links in a new tab so the release page is not replaced
+
+### Changed
+- Render the draft / edit release panel on demand instead of always showing the right column
+- Move the read-only notice above the navigator so non-admins keep the full width
+
+---
+
+## [1.22.0] - 2026-09-26
+
+**Backend Version**: 1.22.0
+**Frontend Version**: 1.17.0
+
+### Added
+- Support Bitbucket Cloud (bitbucket.org) as a git provider next to Bitbucket Server/Data Center, resolved per project or per request
+- Add dedicated Bitbucket Cloud credentials (`BITBUCKET_CLOUD_USER` / `BITBUCKET_CLOUD_APP_PASSWORD` / `BITBUCKET_CLOUD_TOKEN`) so both platforms can run side by side
+- Add `workspace_slug` to PR reviews and release diff requests so the Cloud workspace can differ from the business project key
+- Offer Bitbucket Cloud workspaces for selection, merged from `BITBUCKET_CLOUD_WORKSPACES`, the Cloud API and the workspaces already synced locally
+- Add the Releases workspace: release comparison, commit membership check, commit lists and HTML/PNG export
+- Add release notes management (new tables, API, permissions and view)
+- Add a per-repository endpoint returning branches and tags for the release ref pickers
+
+### Fixed
+- Keep Server and Cloud credentials apart and log the resolved auth mode on provider startup
+- Return actionable messages when Bitbucket Cloud authentication fails, including on a workspace the account cannot see
+- Keep the payload project key as the business key while addressing the Cloud workspace remotely
+- Strip the account name from Cloud clone URLs before persisting repository URLs
+- Prevent stale analytics responses from overwriting newer data
+
+### Improved
+- Highlight missing release commits in red in the UI and in the exported HTML report
+- Improve the commit tables: short SHAs with copy, per-commit links and clearer bounded-set hints
+- Compare releases through the provider compare API and remove redundant provider requests
+
+### Changed
+- Rework the Releases page into a two-column layout (compare | check) and surface it in the main navigation
+- Sync TypeScript compiler settings with the current toolchain
+- Categorize scoped conventional commits correctly in the release tooling
+
+---
+
 ## [1.21.1] - 2026-09-07
 
 **Backend Version**: 1.21.1
