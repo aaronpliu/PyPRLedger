@@ -98,8 +98,13 @@ def build_release_notes_markdown(
     version: str,
     previous_version: str | None = None,
     include_authors: bool = True,
+    compare_url: str | None = None,
 ) -> str:
-    """Group commits into a changelog in the style of GitHub release notes."""
+    """Group commits into a changelog in the style of GitHub release notes.
+
+    When ``compare_url`` is given the "Full Changelog" line links to the
+    revision comparison on the git platform, otherwise the range stays plain text.
+    """
     grouped: dict[str, list[str]] = {}
 
     for commit in commits:
@@ -131,7 +136,11 @@ def build_release_notes_markdown(
             lines.append("")
 
     if previous_version:
-        lines.append(f"**Full Changelog**: `{previous_version}...{version}`")
+        label = f"{previous_version}...{version}"
+        if compare_url:
+            lines.append(f"**Full Changelog**: [{label}]({compare_url})")
+        else:
+            lines.append(f"**Full Changelog**: `{label}`")
 
     return "\n".join(lines).strip() + "\n"
 
@@ -464,6 +473,30 @@ class ReleaseNoteService:
     # Note generation
     # ------------------------------------------------------------------ #
 
+    def compare_url(
+        self,
+        *,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+        git_provider: str | None = None,
+        workspace_slug: str | None = None,
+    ) -> str | None:
+        """Browsable comparison link for the release scope, when the platform has one.
+
+        Building the URL is best effort: an unknown provider or a missing host must
+        never fail the note generation, the range is then kept as plain text.
+        """
+        try:
+            provider_name = resolve_provider_name(git_provider)
+            provider = self._provider_factory(provider_name)
+            remote_key = resolve_remote_project_key(project_key, provider_name, workspace_slug)
+            return provider.web_compare_url(remote_key, repository_slug, from_ref, to_ref)
+        except Exception as e:
+            logger.warning(f"Could not build the release comparison link: {e}")
+            return None
+
     async def generate_preview(
         self, request: ReleaseNotePreviewRequest
     ) -> ReleaseNotePreviewResponse:
@@ -497,11 +530,25 @@ class ReleaseNoteService:
             )
             commits = [commit.model_dump() for commit in version_commits]
 
+        compare_url = (
+            self.compare_url(
+                project_key=request.project_key,
+                repository_slug=request.repository_slug,
+                from_ref=request.previous_version,
+                to_ref=request.version,
+                git_provider=request.git_provider,
+                workspace_slug=request.workspace_slug,
+            )
+            if request.previous_version
+            else None
+        )
+
         body = build_release_notes_markdown(
             commits,
             version=request.version,
             previous_version=request.previous_version,
             include_authors=request.include_authors,
+            compare_url=compare_url,
         )
 
         return ReleaseNotePreviewResponse(

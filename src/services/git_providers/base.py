@@ -169,6 +169,36 @@ class BaseGitProvider(ABC):
         """
         raise NotImplementedError(f"Provider '{self.name}' does not implement update_release()")
 
+    @staticmethod
+    def compare_refs_ready(*refs: str | None) -> bool:
+        """Whether a comparison can be addressed remotely (all parts non blank)."""
+        return all(bool(ref and ref.strip()) for ref in refs)
+
+    def web_compare_url(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+    ) -> str | None:
+        """Browsable URL comparing two revisions, when the platform has one.
+
+        ``from_ref`` is the base (exclusive) and ``to_ref`` the target (inclusive),
+        matching :meth:`compare_commits`, so the page shows what ``to_ref`` adds on
+        top of ``from_ref``.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            from_ref: Base revision (tag, branch or commit)
+            to_ref: Target revision
+
+        Returns:
+            The comparison URL, or ``None`` when the provider exposes no web UI or
+            the host needed to build the URL is not configured.
+        """
+        return None
+
     async def list_workspaces(self) -> list[dict[str, Any]]:
         """Return the workspaces (Bitbucket Cloud) reachable with the credentials.
 

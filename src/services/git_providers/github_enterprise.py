@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -40,6 +41,25 @@ class GitHubEnterpriseProvider(BaseGitProvider):
     @property
     def name(self) -> str:
         return GitProvider.GITHUB_ENTERPRISE.value
+
+    def web_compare_url(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+    ) -> str | None:
+        """Deep link to the GitHub compare view (``{base}...{head}``)."""
+        if not self.base_url or not self.compare_refs_ready(
+            project_key, repository_slug, from_ref, to_ref
+        ):
+            return None
+
+        return (
+            f"{self.base_url}/{quote(project_key.strip(), safe='')}"
+            f"/{quote(repository_slug.strip(), safe='')}/compare/"
+            f"{quote(from_ref.strip(), safe='')}...{quote(to_ref.strip(), safe='')}"
+        )
 
     async def _make_request(self, url: str) -> dict[str, Any] | None:
         try:

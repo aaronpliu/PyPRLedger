@@ -17,7 +17,7 @@ import hashlib
 import logging
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
 
@@ -30,6 +30,8 @@ from src.services.git_providers.base import BaseGitProvider
 logger = logging.getLogger(__name__)
 
 CLOUD_API_URL = "https://api.bitbucket.org/2.0"
+# Web UI host: the REST API lives on api.bitbucket.org, the browsable pages do not
+CLOUD_WEB_URL = "https://bitbucket.org"
 MAX_PAGE_LEN = 100
 
 
@@ -197,6 +199,29 @@ class BitbucketCloudProvider(BaseGitProvider):
             page += 1
 
         return values[:limit]
+
+    def web_compare_url(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+    ) -> str | None:
+        """Deep link to the Cloud compare page.
+
+        Cloud keeps both revisions in one path segment separated by a carriage
+        return - ``/{workspace}/{repo}/branches/compare/{to}%0D{from}`` - which is
+        exactly what the compare page itself generates and what the router accepts
+        (an unknown revision in that spec answers 404).
+        """
+        if not self.compare_refs_ready(project_key, repository_slug, from_ref, to_ref):
+            return None
+
+        spec = f"{quote(to_ref.strip(), safe='')}%0D{quote(from_ref.strip(), safe='')}"
+        return (
+            f"{CLOUD_WEB_URL}/{quote(project_key.strip(), safe='')}"
+            f"/{quote(repository_slug.strip(), safe='')}/branches/compare/{spec}"
+        )
 
     async def list_workspaces(self) -> list[dict[str, Any]]:
         """Discover the workspaces reachable with the configured credentials.

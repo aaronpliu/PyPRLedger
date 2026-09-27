@@ -165,6 +165,24 @@ class StubProvider(BaseGitProvider):
         }
 
 
+class ComparingProvider(StubProvider):
+    """Stub provider that can address a revision comparison remotely."""
+
+    def __init__(
+        self,
+        url: str | None = "https://github.local/PROJ/my-repo/compare/v1.0.0...v1.1.0",
+    ) -> None:
+        super().__init__()
+        self._compare_url = url
+        self.compare_url_calls: list[tuple[str, str, str, str]] = []
+
+    def web_compare_url(
+        self, project_key: str, repository_slug: str, from_ref: str, to_ref: str
+    ) -> str | None:
+        self.compare_url_calls.append((project_key, repository_slug, from_ref, to_ref))
+        return self._compare_url
+
+
 class StubRBAC:
     """RBAC stub returning a fixed permission decision."""
 
@@ -241,6 +259,34 @@ def test_build_markdown_groups_commits_and_appends_the_changelog_link() -> None:
     assert "- crash on logout by John Roe in [2222222](https://git.local/commits/2222222)" in body
     # section order: features before bug fixes
     assert body.index("Features") < body.index("Bug Fixes")
+    assert "**Full Changelog**: `v1.0.0...v1.1.0`" in body
+
+
+def test_build_markdown_links_the_changelog_range_when_a_compare_url_is_known() -> None:
+    commits = [commit(C1, "feat: add login page").model_dump()]
+    url = "https://git.local/PROJ/my-repo/compare/commits?sourceBranch=v1.1.0&targetBranch=v1.0.0"
+
+    body = build_release_notes_markdown(
+        commits,
+        version="v1.1.0",
+        previous_version="v1.0.0",
+        compare_url=url,
+    )
+
+    assert f"**Full Changelog**: [v1.0.0...v1.1.0]({url})" in body
+    assert "`v1.0.0...v1.1.0`" not in body
+
+
+def test_build_markdown_keeps_the_range_plain_without_a_compare_url() -> None:
+    commits = [commit(C1, "feat: add login page").model_dump()]
+
+    body = build_release_notes_markdown(
+        commits,
+        version="v1.1.0",
+        previous_version="v1.0.0",
+        compare_url=None,
+    )
+
     assert "**Full Changelog**: `v1.0.0...v1.1.0`" in body
 
 
@@ -382,11 +428,104 @@ async def test_preview_uses_the_compare_scope_when_a_previous_version_exists(
     assert diff.list_calls == []
 
 
+async def test_preview_links_the_changelog_range_to_the_provider_comparison(
+    db_session: AsyncSession,
+) -> None:
+    diff = StubDiffService([commit(C1, "feat: add login page")])
+    provider = ComparingProvider()
+    service = build_service(db_session, diff, provider=provider)
+
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="PROJ",
+            repository_slug="my-repo",
+            version="v1.1.0",
+            previous_version="v1.0.0",
+        )
+    )
+
+    # the range is asked for in the (base, target) order the providers expect
+    assert provider.compare_url_calls == [("PROJ", "my-repo", "v1.0.0", "v1.1.0")]
+    assert (
+        "**Full Changelog**: [v1.0.0...v1.1.0]"
+        "(https://github.local/PROJ/my-repo/compare/v1.0.0...v1.1.0)" in preview.body
+    )
+
+
+async def test_preview_addresses_the_cloud_workspace_in_the_comparison_link(
+    db_session: AsyncSession,
+) -> None:
+    diff = StubDiffService([commit(C1, "feat: add login page")])
+    provider = ComparingProvider(
+        "https://bitbucket.org/aaronpliu/pylang/branches/compare/v1.1.0%0Dv1.0.0"
+    )
+    service = build_service(db_session, diff, provider=provider)
+
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="AI",
+            repository_slug="pylang",
+            workspace_slug="aaronpliu",
+            git_provider="bitbucket_cloud",
+            version="v1.1.0",
+            previous_version="v1.0.0",
+        )
+    )
+
+    # the business key stays AI, the workspace addresses the repository remotely
+    assert provider.compare_url_calls == [("aaronpliu", "pylang", "v1.0.0", "v1.1.0")]
+    assert "branches/compare/v1.1.0%0Dv1.0.0" in preview.body
+
+
+async def test_preview_keeps_the_plain_range_when_no_comparison_url_exists(
+    db_session: AsyncSession,
+) -> None:
+    diff = StubDiffService([commit(C1, "feat: add login page")])
+    provider = ComparingProvider(url=None)
+    service = build_service(db_session, diff, provider=provider)
+
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="PROJ",
+            repository_slug="my-repo",
+            version="v1.1.0",
+            previous_version="v1.0.0",
+        )
+    )
+
+    assert "**Full Changelog**: `v1.0.0...v1.1.0`" in preview.body
+
+
+async def test_preview_survives_a_broken_comparison_link(db_session: AsyncSession) -> None:
+    class ExplodingProvider(ComparingProvider):
+        def web_compare_url(
+            self, project_key: str, repository_slug: str, from_ref: str, to_ref: str
+        ) -> str | None:
+            raise RuntimeError("provider exploded")
+
+    diff = StubDiffService([commit(C1, "feat: add login page")])
+    service = build_service(db_session, diff, provider=ExplodingProvider())
+
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="PROJ",
+            repository_slug="my-repo",
+            version="v1.1.0",
+            previous_version="v1.0.0",
+        )
+    )
+
+    # a broken link must never fail the note generation
+    assert preview.commit_count == 1
+    assert "**Full Changelog**: `v1.0.0...v1.1.0`" in preview.body
+
+
 async def test_preview_lists_commits_when_there_is_no_previous_version(
     db_session: AsyncSession,
 ) -> None:
     diff = StubDiffService([commit(C1, "feat: initial import")], truncated=True)
-    service = build_service(db_session, diff)
+    provider = ComparingProvider()
+    service = build_service(db_session, diff, provider=provider)
 
     preview = await service.generate_preview(
         ReleaseNotePreviewRequest(
@@ -402,6 +541,9 @@ async def test_preview_lists_commits_when_there_is_no_previous_version(
     assert preview.truncated is True
     assert diff.compare_calls == []
     assert diff.list_calls[0]["ref"] == "v1.0.0"
+    # a first release has nothing to compare against
+    assert provider.compare_url_calls == []
+    assert "Full Changelog" not in preview.body
     assert diff.list_calls[0]["workspace_slug"] == "acme"
 
 

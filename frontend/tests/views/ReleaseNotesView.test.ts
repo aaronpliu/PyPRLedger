@@ -369,6 +369,50 @@ describe('ReleaseNotesView', () => {
     expect(wrapper.find('.md-editor-stub').exists()).toBe(false)
   })
 
+  it('opens release note links in a new tab', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+
+    try {
+      const wrapper = mountView()
+      await flushPromises()
+      await selectRepository(wrapper)
+
+      // the markdown preview is stubbed, so drop a link into the rendered body
+      const body = wrapper.find('.release-body')
+      const anchor = document.createElement('a')
+      anchor.setAttribute(
+        'href',
+        'https://bitbucket.org/aaronpliu/pylang/branches/compare/v0.2.0%0Dv0.1.0',
+      )
+      body.element.appendChild(anchor)
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+      anchor.dispatchEvent(click)
+
+      expect(openSpy).toHaveBeenCalledWith(anchor.href, '_blank', 'noopener,noreferrer')
+      expect(click.defaultPrevented).toBe(true)
+    } finally {
+      openSpy.mockRestore()
+    }
+  })
+
+  it('does not intercept clicks that are not links', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+
+    try {
+      const wrapper = mountView()
+      await flushPromises()
+      await selectRepository(wrapper)
+
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+      wrapper.find('.release-body').element.dispatchEvent(click)
+
+      expect(openSpy).not.toHaveBeenCalled()
+      expect(click.defaultPrevented).toBe(false)
+    } finally {
+      openSpy.mockRestore()
+    }
+  })
+
   it('keeps the draft panel closed until it is requested', async () => {
     const wrapper = mountView()
     await flushPromises()

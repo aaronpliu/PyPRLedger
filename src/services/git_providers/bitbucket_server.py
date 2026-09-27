@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import logging
 from typing import Any
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -54,6 +55,31 @@ class BitbucketServerProvider(BaseGitProvider):
     @property
     def name(self) -> str:
         return GitProvider.BITBUCKET_SERVER.value
+
+    def web_compare_url(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+    ) -> str | None:
+        """Deep link to the repository compare page.
+
+        The page lives at the same path as the documented REST resource
+        (``/projects/{key}/repos/{slug}/compare/commits``) and takes the pair as
+        ``sourceBranch`` (the newer side, i.e. ``to_ref``) and ``targetBranch``
+        (the base, i.e. ``from_ref``).
+        """
+        if not self._server_url or not self.compare_refs_ready(
+            project_key, repository_slug, from_ref, to_ref
+        ):
+            return None
+
+        query = urlencode({"sourceBranch": to_ref.strip(), "targetBranch": from_ref.strip()})
+        return (
+            f"{self._server_url}/projects/{quote(project_key.strip(), safe='')}"
+            f"/repos/{quote(repository_slug.strip(), safe='')}/compare/commits?{query}"
+        )
 
     async def _make_request(self, url: str) -> dict[str, Any] | None:
         """Make HTTP request to Bitbucket Server API."""

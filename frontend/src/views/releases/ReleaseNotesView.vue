@@ -226,7 +226,12 @@
                 </span>
               </div>
 
-              <div v-if="note.body" class="release-body" :class="{ collapsed: !expanded[note.id] }">
+              <div
+                v-if="note.body"
+                class="release-body"
+                :class="{ collapsed: !expanded[note.id] }"
+                @click="openNoteLink"
+              >
                 <MdPreview :model-value="note.body" :theme="mdTheme" preview-theme="github" />
                 <div v-if="!expanded[note.id]" class="body-fade" />
               </div>
@@ -663,6 +668,19 @@ function resetForm() {
     push_to_provider: false,
     target_commitish: '',
   }
+}
+
+/**
+ * Notes link to the git platform (commit links, the "Full Changelog" comparison):
+ * open them in a new tab so the release page is not replaced.
+ */
+function openNoteLink(event: MouseEvent) {
+  const href = (event.target as HTMLElement | null)?.closest?.('a')?.getAttribute('href')
+  if (!href) {
+    return
+  }
+  event.preventDefault()
+  window.open(href, '_blank', 'noopener,noreferrer')
 }
 
 /** Close the draft / edit panel and clear the form. */
