@@ -15,6 +15,8 @@ export interface ReleaseNote {
   /** Latest published, non pre-release version of the repository */
   is_latest: boolean
   author?: string | null
+  /** Profile picture of the author (only when the account has one) */
+  author_avatar_url?: string | null
   published_date?: string | null
   created_date?: string | null
   updated_date?: string | null

@@ -98,6 +98,14 @@ class ReleaseNoteResponse(BaseModel):
     is_prerelease: bool
     is_latest: bool = Field(default=False, description="Latest published, non pre-release version")
     author: str | None = None
+    author_avatar_url: str | None = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "Profile picture of the author, resolved from the local account. "
+            "Null when the author is unknown locally or has no avatar."
+        ),
+    )
     published_date: datetime | None = None
     created_date: datetime | None = None
     updated_date: datetime | None = None

@@ -401,6 +401,36 @@ async def test_update_missing_release_returns_none(db_session: AsyncSession) -> 
     assert await service.update_note(4242, ReleaseNoteUpdateRequest(name="nope")) is None
 
 
+async def test_author_avatars_only_returns_accounts_that_have_a_picture(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add_all(
+        [
+            AuthUser(
+                username="alice",
+                email="alice@example.com",
+                password_hash="x",
+                avatar_url="/api/v1/users/avatars/1_ab.png",
+            ),
+            AuthUser(
+                username="bob",
+                email="bob@example.com",
+                password_hash="x",
+                avatar_url=None,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    service = build_service(db_session)
+    avatars = await service.author_avatars(["alice", "bob", "octocat", None])
+
+    # bob has no picture, octocat is a provider login without a local account
+    assert avatars == {"alice": "/api/v1/users/avatars/1_ab.png"}
+    assert await service.author_avatars([]) == {}
+    assert await service.author_avatars([None]) == {}
+
+
 # --------------------------------------------------------------------------- #
 # Service: note generation
 # --------------------------------------------------------------------------- #
@@ -861,6 +891,57 @@ async def test_endpoint_create_list_and_publish(async_client, authenticated_clie
     assert listed.status_code == 200
     assert listed.json()["total"] == 1
     assert listed.json()["items"][0]["is_latest"] is True
+
+
+async def test_endpoint_returns_the_author_avatar_url(
+    async_client, authenticated_client, db_session
+) -> None:
+    db_session.add(
+        AuthUser(
+            username="tester",
+            email="tester@example.com",
+            password_hash="x",
+            avatar_url="/api/v1/users/avatars/1_ab.png",
+        )
+    )
+    await db_session.flush()
+
+    created = await async_client.post(
+        "/api/v1/release/notes",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "tag_name": "v1.0.0",
+            "status": "published",
+        },
+    )
+
+    assert created.status_code == 201
+    assert created.json()["author"] == "tester"
+    assert created.json()["author_avatar_url"] == "/api/v1/users/avatars/1_ab.png"
+
+    listed = await async_client.get(
+        "/api/v1/release/notes", params={"project_key": "PROJ", "repository_slug": "my-repo"}
+    )
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["author_avatar_url"] == "/api/v1/users/avatars/1_ab.png"
+
+
+async def test_endpoint_leaves_the_avatar_empty_without_a_local_account(
+    async_client, authenticated_client
+) -> None:
+    created = await async_client.post(
+        "/api/v1/release/notes",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "tag_name": "v1.0.0",
+            "status": "published",
+        },
+    )
+
+    assert created.status_code == 201
+    assert created.json()["author_avatar_url"] is None
 
 
 async def test_endpoint_rejects_duplicate_tag(async_client, authenticated_client) -> None:

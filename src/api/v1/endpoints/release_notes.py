@@ -18,6 +18,7 @@ manage them.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -89,11 +90,39 @@ async def ensure_permission(
         )
 
 
-def _serialize(note: ReleaseNote, latest_id: int | None) -> ReleaseNoteResponse:
+def _serialize(
+    note: ReleaseNote,
+    latest_id: int | None,
+    avatars: Mapping[str, str] | None = None,
+) -> ReleaseNoteResponse:
     """Serialize a release and flag it when it is the latest published version."""
     response = ReleaseNoteResponse.model_validate(note)
     response.is_latest = note.id == latest_id
+    # Only authors with a local profile picture get one (imported releases keep
+    # the provider login, which has no avatar here)
+    if avatars and note.author:
+        response.author_avatar_url = avatars.get(note.author)
     return response
+
+
+async def serialize_note(
+    service: ReleaseNoteService,
+    note: ReleaseNote,
+    latest_id: int | None,
+) -> ReleaseNoteResponse:
+    """Serialize one release, resolving the profile picture of its author."""
+    avatars = await service.author_avatars([note.author])
+    return _serialize(note, latest_id, avatars)
+
+
+async def serialize_notes(
+    service: ReleaseNoteService,
+    notes: list[ReleaseNote],
+    latest_id: int | None,
+) -> list[ReleaseNoteResponse]:
+    """Serialize releases, resolving the profile pictures of their authors."""
+    avatars = await service.author_avatars([note.author for note in notes])
+    return [_serialize(note, latest_id, avatars) for note in notes]
 
 
 @router.get(
@@ -142,7 +171,7 @@ async def list_release_notes(
 
     return ReleaseNoteListResponse(
         total=total,
-        items=[_serialize(note, latest_id) for note in notes],
+        items=await serialize_notes(service, notes, latest_id),
     )
 
 
@@ -243,7 +272,7 @@ async def import_release_notes(
         imported=imported,
         updated=updated,
         skipped=skipped,
-        items=[_serialize(note, latest_id) for note in notes],
+        items=await serialize_notes(service, notes, latest_id),
     )
 
 
@@ -278,7 +307,7 @@ async def create_release_note(
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug
     )
-    return _serialize(note, latest_id)
+    return await serialize_note(service, note, latest_id)
 
 
 @router.get(
@@ -306,7 +335,7 @@ async def get_release_note(
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug
     )
-    return _serialize(note, latest_id)
+    return await serialize_note(service, note, latest_id)
 
 
 @router.put(
@@ -335,7 +364,7 @@ async def update_release_note(
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug
     )
-    return _serialize(note, latest_id)
+    return await serialize_note(service, note, latest_id)
 
 
 @router.delete(
@@ -416,4 +445,4 @@ async def push_release_note(
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug
     )
-    return _serialize(note, latest_id)
+    return await serialize_note(service, note, latest_id)

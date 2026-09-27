@@ -250,6 +250,43 @@ describe('ReleaseNotesView', () => {
     expect(text).toContain(enMessages.releaseNotes.released_by.replace('{author}', 'alice'))
   })
 
+  it('shows the profile icon of the author when one is available', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({ author: 'alice', author_avatar_url: '/api/v1/users/avatars/1_ab.png' }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // one icon in the navigator entry, one next to the author of the notes
+    const icons = wrapper.findAll('img.avatar-img')
+    expect(icons).toHaveLength(2)
+    expect(icons.map((icon: AnyWrapper) => icon.attributes('src'))).toEqual([
+      '/api/v1/users/avatars/1_ab.png',
+      '/api/v1/users/avatars/1_ab.png',
+    ])
+    expect(icons.map((icon: AnyWrapper) => icon.attributes('alt'))).toEqual(['alice', 'alice'])
+  })
+
+  it('keeps the release without an icon when the author has no picture', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // the author is still named, only the icon is skipped
+    expect(
+      wrapper.text().includes(
+        enMessages.releaseNotes.released_by.replace('{author}', 'alice'),
+      ),
+    ).toBe(true)
+    expect(wrapper.find('img.avatar-img').exists()).toBe(false)
+    expect(wrapper.find('.release-author-avatar').exists()).toBe(false)
+  })
+
   it('refreshes the tag suggestions through the provider', async () => {
     const wrapper = mountView()
     await flushPromises()

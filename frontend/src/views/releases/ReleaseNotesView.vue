@@ -186,7 +186,15 @@
                       </el-tag>
                     </div>
                     <div class="nav-item-meta">
-                      {{ formatDate(note.published_date || note.updated_date) }}
+                      <!-- Profile picture of the author, when the account has one -->
+                      <UserAvatar
+                        v-if="note.author && note.author_avatar_url"
+                        class="nav-item-avatar"
+                        :username="note.author"
+                        :avatar-url="note.author_avatar_url"
+                        :size="16"
+                      />
+                      <span>{{ formatDate(note.published_date || note.updated_date) }}</span>
                     </div>
                   </li>
                 </ul>
@@ -513,7 +521,14 @@
           <!-- Read-only notes of the selected release -->
           <template v-else-if="tabIsReleases && selectedNote">
             <div class="release-meta">
-              <span v-if="selectedNote.author">
+              <span v-if="selectedNote.author" class="release-author">
+                <UserAvatar
+                  v-if="selectedNote.author_avatar_url"
+                  class="release-author-avatar"
+                  :username="selectedNote.author"
+                  :avatar-url="selectedNote.author_avatar_url"
+                  :size="22"
+                />
                 {{ t('releaseNotes.released_by', { author: selectedNote.author }) }}
               </span>
               <span v-if="selectedNote.published_date">
@@ -564,6 +579,7 @@ import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/
 import { releaseDiffApi } from '@/api/releaseDiff'
 import type { CommitInfo } from '@/api/releaseDiff'
 import CommitTable from '@/components/release/CommitTable.vue'
+import UserAvatar from '@/components/user/UserAvatar.vue'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
 import { useAuthStore } from '@/stores/auth'
 
@@ -1474,8 +1490,17 @@ onBeforeUnmount(() => {
 }
 
 .nav-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+.nav-item-avatar {
+  /* keep the requested size: the border must not grow the icon */
+  box-sizing: border-box;
+  border: 1px solid var(--el-border-color-lighter);
 }
 
 .tag-item .nav-item-main {
@@ -1500,6 +1525,19 @@ onBeforeUnmount(() => {
   margin-top: 6px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+.release-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.release-author-avatar {
+  box-sizing: border-box;
+  border: 1px solid var(--el-border-color-lighter);
+  vertical-align: middle;
 }
 
 .release-body {

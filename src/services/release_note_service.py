@@ -8,7 +8,7 @@ reuses the release diff comparison against the git provider.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from typing import Any
 
@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import NotFoundException
+from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
 from src.schemas.release_diff import ReleaseCompareRequest
 from src.schemas.release_note import (
@@ -221,6 +222,25 @@ class ReleaseNoteService:
             .limit(1)
         )
         return (await self.db.execute(statement)).scalar_one_or_none()
+
+    async def author_avatars(self, authors: Iterable[str | None]) -> dict[str, str]:
+        """Map release authors to their profile picture URL.
+
+        The author of a release is a username snapshot, so the picture is looked
+        up on the local account. Authors without an account (releases imported
+        from a git provider keep the provider login) or without an uploaded
+        avatar are simply absent from the mapping.
+        """
+        usernames = {author for author in authors if author}
+        if not usernames:
+            return {}
+
+        statement = select(AuthUser.username, AuthUser.avatar_url).where(
+            AuthUser.username.in_(usernames),
+            AuthUser.avatar_url.is_not(None),
+        )
+        rows = (await self.db.execute(statement)).all()
+        return {username: avatar_url for username, avatar_url in rows if avatar_url}
 
     async def get_note(self, note_id: int) -> ReleaseNote | None:
         """Fetch one release by id."""
