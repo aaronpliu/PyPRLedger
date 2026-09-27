@@ -16,6 +16,16 @@ class CommitInfo(BaseModel):
     id: str = Field(..., description="Full commit SHA")
     display_id: str | None = Field(default=None, description="Short commit SHA")
     author_name: str | None = Field(default=None, description="Author display name")
+    author_username: str | None = Field(
+        default=None,
+        description=(
+            "Provider login / account slug of the author (Bitbucket Server name, Cloud "
+            "nickname, GitHub login). Used to link the author profile."
+        ),
+    )
+    author_url: str | None = Field(
+        default=None, description="Web URL of the author profile, when the provider has one"
+    )
     author_email: str | None = Field(default=None, description="Author email address")
     author_timestamp: int | None = Field(
         default=None, description="Author timestamp in milliseconds since epoch"

@@ -242,6 +242,23 @@ class Settings(BaseSettings):
     SLACK_WEBHOOK_URL: str | None = Field(default=None)
     SLACK_ENABLED: bool = Field(default=False)
 
+    # JIRA integration - release notes link the ticket keys found in commit messages
+    JIRA_BASE_URL: str | None = Field(
+        default=None,
+        description=(
+            "Base URL of the JIRA instance, e.g. https://your-domain.atlassian.net (no "
+            "trailing slash needed). Ticket keys in generated release notes then link to "
+            "{JIRA_BASE_URL}/browse/{KEY-123}. Leave empty to keep them as plain text."
+        ),
+    )
+    JIRA_PROJECT_KEYS: str = Field(
+        default="",
+        description=(
+            "Optional comma separated allowlist of JIRA project keys to link, e.g. "
+            "'PRL,AI'. Empty links every PROJECT-123 shaped key of a commit message."
+        ),
+    )
+
     # Avatar upload configuration
     AVATAR_UPLOAD_DIR: str = Field(default="uploads/avatars")
     MAX_AVATAR_SIZE: int = Field(default=5 * 1024 * 1024)  # 5MB
