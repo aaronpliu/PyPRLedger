@@ -199,6 +199,18 @@ class BaseGitProvider(ABC):
         """
         return None
 
+    def web_user_url(self, username: str) -> str | None:
+        """Browsable profile page of a user, when the platform has one.
+
+        Args:
+            username: Provider login / account slug of the user
+
+        Returns:
+            The profile URL, or ``None`` when the provider exposes no web UI or the
+            host needed to build the URL is not configured.
+        """
+        return None
+
     async def list_workspaces(self) -> list[dict[str, Any]]:
         """Return the workspaces (Bitbucket Cloud) reachable with the credentials.
 

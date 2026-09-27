@@ -497,12 +497,16 @@ class ReleaseDiffService:
     def _normalize_commit(raw: dict[str, Any]) -> CommitInfo:
         """Normalize provider-specific commit payloads into CommitInfo."""
         if "sha" in raw:
+            # GitHub: the commit author is in commit.author, the linked account in author
             commit = raw.get("commit") or {}
             author = commit.get("author") or {}
+            user = raw.get("author") or {}
             return CommitInfo(
                 id=raw.get("sha", ""),
                 display_id=raw.get("sha", "")[:SHORT_SHA_LENGTH] or None,
-                author_name=author.get("name"),
+                author_name=author.get("name") or user.get("login"),
+                author_username=user.get("login"),
+                author_url=user.get("html_url"),
                 author_email=author.get("email"),
                 author_timestamp=ReleaseDiffService._to_epoch_ms(author.get("date")),
                 message=commit.get("message"),
@@ -514,12 +518,31 @@ class ReleaseDiffService:
         return CommitInfo(
             id=commit_id,
             display_id=raw.get("displayId") or (commit_id[:SHORT_SHA_LENGTH] or None),
-            author_name=author.get("name") or author.get("displayName"),
+            author_name=author.get("displayName") or author.get("name"),
+            author_username=ReleaseDiffService._author_username(author),
             author_email=author.get("emailAddress"),
             author_timestamp=raw.get("authorTimestamp"),
             message=raw.get("message"),
             url=raw.get("url"),
         )
+
+    @staticmethod
+    def _author_username(author: dict[str, Any]) -> str | None:
+        """Provider account of a Bitbucket style commit author, when there is one.
+
+        Bitbucket Server reports the account slug in ``name`` while the display name
+        lives in ``displayName``; the Cloud adapter translates the Cloud user object
+        into the same shape and may state the account explicitly.
+        """
+        explicit = author.get("username") or author.get("nickname")
+        if explicit:
+            return str(explicit)
+
+        name = author.get("name")
+        # a slug never contains whitespace, a display name usually does
+        if isinstance(name, str) and name.strip() and " " not in name.strip():
+            return name.strip()
+        return None
 
     @staticmethod
     def _to_epoch_ms(value: str | None) -> int | None:

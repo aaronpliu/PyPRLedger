@@ -238,6 +238,59 @@ async def test_compare_include_commits_false_returns_counts_only() -> None:
     assert result.summary["missing_count"] == 1
 
 
+def test_normalize_commit_extracts_the_bitbucket_author_account() -> None:
+    """Server keeps the account slug in ``name`` and the human name in ``displayName``."""
+    info = ReleaseDiffService._normalize_commit(
+        {
+            "id": C1,
+            "displayId": C1[:7],
+            "author": {"name": "aaronpliu", "displayName": "Aaron Liu"},
+            "message": "feat: add login page",
+        }
+    )
+
+    assert info.author_name == "Aaron Liu"
+    assert info.author_username == "aaronpliu"
+    # the profile URL is not part of the payload: the provider builds it
+    assert info.author_url is None
+
+
+def test_normalize_commit_does_not_mistake_a_display_name_for_an_account() -> None:
+    info = ReleaseDiffService._normalize_commit(bitbucket_commit(C1, "chore: initial import"))
+
+    assert info.author_name == "Jane Doe"
+    assert info.author_username is None
+
+
+def test_normalize_commit_extracts_the_github_author_account() -> None:
+    info = ReleaseDiffService._normalize_commit(
+        {
+            "sha": C1,
+            "commit": {"message": "feat: add login page", "author": {"name": "Aaron Liu"}},
+            "author": {"login": "aaronpliu", "html_url": "https://github.local/aaronpliu"},
+            "html_url": f"https://github.local/commits/{C1[:7]}",
+        }
+    )
+
+    assert info.author_name == "Aaron Liu"
+    assert info.author_username == "aaronpliu"
+    assert info.author_url == "https://github.local/aaronpliu"
+
+
+def test_normalize_commit_survives_a_github_commit_without_a_linked_account() -> None:
+    info = ReleaseDiffService._normalize_commit(
+        {
+            "sha": C1,
+            "commit": {"message": "feat: add login page", "author": {"name": "Jane Doe"}},
+            "author": None,
+        }
+    )
+
+    assert info.author_name == "Jane Doe"
+    assert info.author_username is None
+    assert info.author_url is None
+
+
 async def test_compare_normalizes_bitbucket_commit_fields() -> None:
     fake = FakeGitProvider()
     service = build_service(fake)

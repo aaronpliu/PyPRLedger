@@ -61,6 +61,12 @@ class GitHubEnterpriseProvider(BaseGitProvider):
             f"{quote(from_ref.strip(), safe='')}...{quote(to_ref.strip(), safe='')}"
         )
 
+    def web_user_url(self, username: str) -> str | None:
+        """Profile page of a GitHub user (``{base}/{login}``)."""
+        if not self.base_url or not username or not username.strip():
+            return None
+        return f"{self.base_url}/{quote(username.strip(), safe='')}"
+
     async def _make_request(self, url: str) -> dict[str, Any] | None:
         try:
             async with httpx.AsyncClient(verify=False) as client:

@@ -223,6 +223,12 @@ class BitbucketCloudProvider(BaseGitProvider):
             f"/{quote(repository_slug.strip(), safe='')}/branches/compare/{spec}"
         )
 
+    def web_user_url(self, username: str) -> str | None:
+        """Profile page of a Cloud account (``bitbucket.org/{nickname}/``)."""
+        if not username or not username.strip():
+            return None
+        return f"{CLOUD_WEB_URL}/{quote(username.strip(), safe='')}/"
+
     async def list_workspaces(self) -> list[dict[str, Any]]:
         """Discover the workspaces reachable with the configured credentials.
 
@@ -423,6 +429,9 @@ class BitbucketCloudProvider(BaseGitProvider):
                     "id": commit_hash,
                     "author": {
                         "name": author_name(raw_author, user),
+                        # Cloud reports the account as ``nickname``; kept apart from the
+                        # display name so the author can be linked to its profile
+                        "username": user.get("nickname"),
                         "emailAddress": author_email(
                             raw_author, user, f"{user.get('nickname') or 'unknown'}@bitbucket.org"
                         ),

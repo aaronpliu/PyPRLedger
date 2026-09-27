@@ -21,7 +21,19 @@
     </el-table-column>
     <el-table-column :label="t('releaseDiff.col_author')" width="180">
       <template #default="{ row }">
-        {{ row.author_name || '-' }}
+        <!-- The provider account links to the profile page; the display name is the tooltip -->
+        <a
+          v-if="row.author_username"
+          class="commit-author"
+          :href="row.author_url || undefined"
+          :title="row.author_name || row.author_username"
+          target="_blank"
+          rel="noopener"
+          @click.stop
+        >
+          @{{ row.author_username }}
+        </a>
+        <span v-else>{{ row.author_name || '-' }}</span>
       </template>
     </el-table-column>
     <el-table-column :label="t('releaseDiff.col_date')" width="180">
@@ -124,6 +136,15 @@ async function copy(value: string) {
 }
 
 .commit-sha:hover {
+  text-decoration: underline;
+}
+
+.commit-author {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.commit-author:hover {
   text-decoration: underline;
 }
 </style>

@@ -112,3 +112,48 @@ def test_compare_urls_are_omitted_when_a_part_is_missing() -> None:
         assert provider.web_compare_url("PROJ", "repo", "", "v1.1.0") is None
         assert provider.web_compare_url("PROJ", "repo", "   ", "v1.1.0") is None
         assert provider.web_compare_url("PROJ", "repo", "v1.0.0", "") is None
+
+
+# --------------------------------------------------------------------------- #
+# User profile links (release note author mentions)
+# --------------------------------------------------------------------------- #
+
+
+def test_server_user_url_points_at_the_profile_page() -> None:
+    url = get_git_provider("bitbucket_server").web_user_url("aaronpliu")
+
+    assert url == f"{settings.BITBUCKET_SERVER_URL.rstrip('/')}/users/aaronpliu"
+
+
+def test_cloud_user_url_points_at_the_nickname_profile() -> None:
+    url = get_git_provider("bitbucket_cloud").web_user_url("aaronpliu")
+
+    assert url == "https://bitbucket.org/aaronpliu/"
+
+
+def test_github_user_url_uses_the_base_host(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "GITHUB_ENTERPRISE_URL", "https://github.local")
+
+    provider = github_enterprise.GitHubEnterpriseProvider()
+
+    assert provider.web_user_url("aaronpliu") == "https://github.local/aaronpliu"
+
+
+def test_user_urls_are_omitted_without_a_host_or_a_username(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "GITHUB_ENTERPRISE_URL", "")
+
+    providers = [
+        bitbucket_server.BitbucketServerProvider(),
+        bitbucket_cloud.BitbucketCloudProvider(),
+        github_enterprise.GitHubEnterpriseProvider(),
+    ]
+
+    for provider in providers:
+        assert provider.web_user_url("") is None
+        assert provider.web_user_url("   ") is None
+
+
+def test_github_user_url_is_omitted_without_a_host(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "GITHUB_ENTERPRISE_URL", "")
+
+    assert github_enterprise.GitHubEnterpriseProvider().web_user_url("aaronpliu") is None

@@ -8,6 +8,7 @@ reuses the release diff comparison against the git provider.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable, Iterable
 from datetime import datetime
 from typing import Any
@@ -15,6 +16,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.core.exceptions import NotFoundException
 from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
@@ -108,6 +110,68 @@ def commit_section(message: str | None) -> str:
     return OTHER_SECTION
 
 
+# JIRA ticket key: a project key (letter, then letters / digits / underscore) and a number
+JIRA_TICKET_RE = re.compile(r"\b[A-Z][A-Z0-9_]{1,9}-\d+\b")
+
+
+def jira_settings() -> tuple[str | None, set[str]]:
+    """Configured JIRA base URL and the project keys allowed to be linked.
+
+    Returns:
+        ``(base_url, project_keys)``: the base URL without a trailing slash (``None``
+        when JIRA is not configured) and the allowlist of project keys (empty when
+        every ``PROJECT-123`` shaped key may be linked).
+    """
+    url = getattr(settings, "JIRA_BASE_URL", None)
+    raw_keys = getattr(settings, "JIRA_PROJECT_KEYS", "") or ""
+    return (
+        url.rstrip("/") if url else None,
+        {key.strip().upper() for key in raw_keys.split(",") if key.strip()},
+    )
+
+
+def linkify_jira_tickets(
+    text: str | None,
+    *,
+    base_url: str | None = None,
+    project_keys: Iterable[str] = (),
+) -> str | None:
+    """Link the JIRA ticket keys of a commit subject to ``{base_url}/browse/{KEY-123}``.
+
+    Without a base URL the text is returned untouched. ``project_keys`` narrows the
+    highlighting to the listed projects, which keeps look-alikes such as ``UTF-8``
+    out of the notes.
+    """
+    if not text or not base_url:
+        return text
+
+    allowed = {key.upper() for key in project_keys}
+
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(0)
+        if allowed and key.rsplit("-", 1)[0].upper() not in allowed:
+            return key
+        return f"[{key}]({base_url}/browse/{key})"
+
+    return JIRA_TICKET_RE.sub(replace, text)
+
+
+def author_reference(commit: dict[str, Any]) -> str:
+    """Author mention of a note line.
+
+    A known provider account is shown as ``@login`` linked to its profile; commits
+    without one (unmatched email, provider without profiles) keep the plain name.
+    """
+    username = commit.get("author_username")
+    if username:
+        handle = f"@{username}"
+        url = commit.get("author_url")
+        return f" by [{handle}]({url})" if url else f" by {handle}"
+
+    name = commit.get("author_name")
+    return f" by {name}" if name else ""
+
+
 def commit_subject(message: str | None) -> str:
     """First line of the commit, with the conventional prefix stripped."""
     if not message:
@@ -129,24 +193,30 @@ def build_release_notes_markdown(
     previous_version: str | None = None,
     include_authors: bool = True,
     compare_url: str | None = None,
+    jira_base_url: str | None = None,
+    jira_project_keys: Iterable[str] = (),
 ) -> str:
     """Group commits into a changelog in the style of GitHub release notes.
 
     When ``compare_url`` is given the "Full Changelog" line links to the
     revision comparison on the git platform, otherwise the range stays plain text.
+    Commit authors are mentioned as ``@login`` linked to their profile, and JIRA
+    ticket keys are linked when ``jira_base_url`` is configured.
     """
     grouped: dict[str, list[str]] = {}
 
     for commit in commits:
         section = commit_section(commit.get("message"))
         subject = commit_subject(commit.get("message")) or commit.get("id", "")[:7]
+        subject = linkify_jira_tickets(
+            subject, base_url=jira_base_url, project_keys=jira_project_keys
+        )
 
         sha = commit.get("display_id") or str(commit.get("id", ""))[:7]
         url = commit.get("url")
         reference = f"[{sha}]({url})" if url else f"`{sha}`"
 
-        author = commit.get("author_name")
-        author_part = f" by {author}" if include_authors and author else ""
+        author_part = author_reference(commit) if include_authors else ""
 
         grouped.setdefault(section, []).append(f"- {subject}{author_part} in {reference}")
 
@@ -546,6 +616,37 @@ class ReleaseNoteService:
             logger.warning(f"Could not build the release comparison link: {e}")
             return None
 
+    def resolve_author_urls(
+        self,
+        commits: list[dict[str, Any]],
+        *,
+        git_provider: str | None = None,
+    ) -> None:
+        """Fill in the profile URL of the commit authors the provider knows.
+
+        Best effort: a missing provider configuration must never fail the note
+        generation, the author is then mentioned without a link.
+        """
+        pending = [
+            commit
+            for commit in commits
+            if commit.get("author_username") and not commit.get("author_url")
+        ]
+        if not pending:
+            return
+
+        try:
+            provider = self._provider_factory(resolve_provider_name(git_provider))
+        except Exception as e:
+            logger.warning(f"Could not resolve the commit author profiles: {e}")
+            return
+
+        for commit in pending:
+            try:
+                commit["author_url"] = provider.web_user_url(str(commit["author_username"]))
+            except Exception as e:
+                logger.warning(f"Could not build the author profile URL: {e}")
+
     async def generate_preview(
         self, request: ReleaseNotePreviewRequest
     ) -> ReleaseNotePreviewResponse:
@@ -592,12 +693,17 @@ class ReleaseNoteService:
             else None
         )
 
+        self.resolve_author_urls(commits, git_provider=request.git_provider)
+        jira_base_url, jira_project_keys = jira_settings()
+
         body = build_release_notes_markdown(
             commits,
             version=request.version,
             previous_version=request.previous_version,
             include_authors=request.include_authors,
             compare_url=compare_url,
+            jira_base_url=jira_base_url,
+            jira_project_keys=jira_project_keys,
         )
 
         return ReleaseNotePreviewResponse(

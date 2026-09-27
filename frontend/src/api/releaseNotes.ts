@@ -84,6 +84,10 @@ export interface PreviewCommit {
   id: string
   display_id?: string | null
   author_name?: string | null
+  /** Provider login / account slug of the author (when the provider reports one) */
+  author_username?: string | null
+  /** Web URL of the author profile */
+  author_url?: string | null
   message?: string | null
   url?: string | null
 }

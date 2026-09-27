@@ -4,6 +4,10 @@ export interface CommitInfo {
   id: string
   display_id?: string | null
   author_name?: string | null
+  /** Provider login / account slug of the author (when the provider reports one) */
+  author_username?: string | null
+  /** Web URL of the author profile */
+  author_url?: string | null
   author_email?: string | null
   author_timestamp?: number | null
   message?: string | null

@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.v1.endpoints.release_notes import get_rbac_service, get_release_note_service
+from src.core.config import settings
 from src.core.database import get_db_session
 from src.core.exceptions import NotFoundException
 from src.core.git_provider import GitProvider
@@ -32,9 +33,12 @@ from src.services.release_note_service import (
     OTHER_SECTION,
     SECTION_EMOJI,
     ReleaseNoteService,
+    author_reference,
     build_release_notes_markdown,
     commit_section,
     commit_subject,
+    jira_settings,
+    linkify_jira_tickets,
     parse_provider_datetime,
 )
 
@@ -187,6 +191,9 @@ class ComparingProvider(StubProvider):
     ) -> str | None:
         self.compare_url_calls.append((project_key, repository_slug, from_ref, to_ref))
         return self._compare_url
+
+    def web_user_url(self, username: str) -> str | None:
+        return f"https://github.local/{username}"
 
 
 class StubRBAC:
@@ -358,6 +365,101 @@ def test_build_markdown_can_skip_authors_and_handles_empty_scopes() -> None:
 
     empty = build_release_notes_markdown([], version="v1.0.0")
     assert "No commits found in this release scope" in empty
+
+
+# --------------------------------------------------------------------------- #
+# Author mentions and JIRA ticket links
+# --------------------------------------------------------------------------- #
+
+
+def test_author_reference_links_the_provider_account() -> None:
+    linked = author_reference(
+        {
+            "author_name": "Aaron Liu",
+            "author_username": "aaronpliu",
+            "author_url": "https://git.local/users/aaronpliu",
+        }
+    )
+
+    assert linked == " by [@aaronpliu](https://git.local/users/aaronpliu)"
+    # a known account without a profile page is still mentioned as @login
+    assert author_reference({"author_username": "aaronpliu"}) == " by @aaronpliu"
+    # unknown account: the display name stays plain text
+    assert author_reference({"author_name": "Jane Doe"}) == " by Jane Doe"
+    assert author_reference({}) == ""
+
+
+def test_build_markdown_mentions_the_author_account() -> None:
+    commits = [
+        {
+            "id": "aaa1111",
+            "display_id": "aaa1111",
+            "message": "feat: add login page",
+            "author_name": "Aaron Liu",
+            "author_username": "aaronpliu",
+            "author_url": "https://git.local/users/aaronpliu",
+            "url": "https://git.local/commits/aaa1111",
+        }
+    ]
+
+    body = build_release_notes_markdown(commits, version="v1.1.0")
+
+    assert (
+        "- add login page by [@aaronpliu](https://git.local/users/aaronpliu)"
+        " in [aaa1111](https://git.local/commits/aaa1111)" in body
+    )
+
+
+def test_jira_settings_normalize_the_base_url_and_the_project_keys(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "JIRA_BASE_URL", "https://jira.local/")
+    monkeypatch.setattr(settings, "JIRA_PROJECT_KEYS", "prl, ai")
+
+    assert jira_settings() == ("https://jira.local", {"PRL", "AI"})
+
+    monkeypatch.setattr(settings, "JIRA_BASE_URL", "")
+    monkeypatch.setattr(settings, "JIRA_PROJECT_KEYS", "")
+
+    assert jira_settings() == (None, set())
+
+
+def test_linkify_jira_tickets_needs_a_base_url() -> None:
+    assert linkify_jira_tickets("PRL-123 fix login") == "PRL-123 fix login"
+    assert linkify_jira_tickets("PRL-123 fix login", base_url="") == "PRL-123 fix login"
+    assert linkify_jira_tickets(None, base_url="https://jira.local") is None
+
+
+def test_linkify_jira_tickets_links_the_keys() -> None:
+    linked = linkify_jira_tickets("PRL-123 fix login, also PRL-456", base_url="https://jira.local")
+
+    assert "[PRL-123](https://jira.local/browse/PRL-123)" in linked
+    assert "[PRL-456](https://jira.local/browse/PRL-456)" in linked
+    assert "fix login" in linked
+
+
+def test_linkify_jira_tickets_can_be_restricted_to_project_keys() -> None:
+    linked = linkify_jira_tickets(
+        "PRL-123 fix login and UTF-8 encoding",
+        base_url="https://jira.local",
+        project_keys={"prl"},
+    )
+
+    assert "[PRL-123](https://jira.local/browse/PRL-123)" in linked
+    # a look-alike key of another project stays plain text
+    assert "UTF-8" in linked
+    assert "[UTF-8]" not in linked
+
+
+def test_build_markdown_links_the_ticket_keys_of_the_subject() -> None:
+    commits = [commit(C1, "feat: add login page PRL-123").model_dump()]
+
+    body = build_release_notes_markdown(
+        commits,
+        version="v1.1.0",
+        jira_base_url="https://jira.local",
+        jira_project_keys={"PRL"},
+    )
+
+    assert "- add login page [PRL-123](https://jira.local/browse/PRL-123)" in body
 
 
 # --------------------------------------------------------------------------- #
@@ -564,6 +666,64 @@ async def test_preview_addresses_the_cloud_workspace_in_the_comparison_link(
     # the business key stays AI, the workspace addresses the repository remotely
     assert provider.compare_url_calls == [("aaronpliu", "pylang", "v1.0.0", "v1.1.0")]
     assert "branches/compare/v1.1.0%0Dv1.0.0" in preview.body
+
+
+async def test_preview_links_the_author_profile_and_the_jira_tickets(
+    db_session: AsyncSession, monkeypatch
+) -> None:
+    monkeypatch.setattr(settings, "JIRA_BASE_URL", "https://jira.local")
+    monkeypatch.setattr(settings, "JIRA_PROJECT_KEYS", "PRL")
+
+    diff = StubDiffService(
+        [
+            CommitInfo(
+                id=C1,
+                display_id=C1[:7],
+                author_name="Aaron Liu",
+                author_username="aaronpliu",
+                message="feat: add login page PRL-123",
+            )
+        ]
+    )
+    provider = ComparingProvider()
+    service = build_service(db_session, diff, provider=provider)
+
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="PROJ",
+            repository_slug="my-repo",
+            version="v1.1.0",
+            previous_version="v1.0.0",
+        )
+    )
+
+    assert (
+        "- add login page [PRL-123](https://jira.local/browse/PRL-123)"
+        " by [@aaronpliu](https://github.local/aaronpliu)" in preview.body
+    )
+    # the resolved profile URL is exposed with the commits as well
+    assert preview.commits[0]["author_url"] == "https://github.local/aaronpliu"
+
+
+async def test_preview_keeps_the_plain_text_when_jira_is_not_configured(
+    db_session: AsyncSession, monkeypatch
+) -> None:
+    monkeypatch.setattr(settings, "JIRA_BASE_URL", "")
+
+    diff = StubDiffService([commit(C1, "feat: add login page PRL-123")])
+    service = build_service(db_session, diff, provider=ComparingProvider())
+
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="PROJ",
+            repository_slug="my-repo",
+            version="v1.1.0",
+            previous_version="v1.0.0",
+        )
+    )
+
+    assert "PRL-123" in preview.body
+    assert "browse/PRL-123" not in preview.body
 
 
 async def test_preview_keeps_the_plain_range_when_no_comparison_url_exists(

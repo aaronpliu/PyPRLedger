@@ -118,6 +118,8 @@ async def test_commits_are_normalized_to_the_server_shape(monkeypatch) -> None:
     commit = commits[0]
     assert commit["id"] == C1
     assert commit["author"]["name"] == "Jane Doe"
+    # the Cloud account stays apart from the display name so it can be linked
+    assert commit["author"]["username"] == "jane"
     assert commit["author"]["emailAddress"] == "jane@example.com"
     assert commit["authorTimestamp"] == 1_714_557_600_000
     assert commit["message"] == "feat: add login page"
@@ -263,6 +265,7 @@ async def test_release_diff_compare_runs_against_cloud_provider(monkeypatch) -> 
     assert [commit.id for commit in result.old_release_commits] == [C1]
     assert [commit.id for commit in result.added_commits] == [C2]
     assert result.old_release_commits[0].author_name == "Jane Doe"
+    assert result.old_release_commits[0].author_username == "jane"
 
 
 async def test_repository_url_drops_clone_credentials(monkeypatch) -> None:

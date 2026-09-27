@@ -81,6 +81,12 @@ class BitbucketServerProvider(BaseGitProvider):
             f"/repos/{quote(repository_slug.strip(), safe='')}/compare/commits?{query}"
         )
 
+    def web_user_url(self, username: str) -> str | None:
+        """Profile page of a Bitbucket Server user (``/users/{slug}``)."""
+        if not self._server_url or not username or not username.strip():
+            return None
+        return f"{self._server_url}/users/{quote(username.strip(), safe='')}"
+
     async def _make_request(self, url: str) -> dict[str, Any] | None:
         """Make HTTP request to Bitbucket Server API."""
         try:
