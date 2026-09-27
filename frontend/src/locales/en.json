@@ -1063,6 +1063,7 @@
     "delete_confirm": "Delete release {tag}? This cannot be undone.",
     "read_only_title": "Read-only",
     "read_only_help": "Only review administrators can draft, publish or delete releases. You can still read every release and its notes.",
+    "close_editor": "Close",
     "import_from_provider": "Import from GitHub",
     "imported_ok": "Import finished: {imported} new, {updated} updated, {skipped} skipped",
     "import_failed": "Failed to import the releases",

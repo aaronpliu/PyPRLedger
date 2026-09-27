@@ -98,9 +98,19 @@
       </el-form>
     </el-card>
 
+    <el-alert
+      v-if="!canManage"
+      class="read-only-alert"
+      type="info"
+      :closable="false"
+      show-icon
+      :title="t('releaseNotes.read_only_title')"
+      :description="t('releaseNotes.read_only_help')"
+    />
+
     <el-row :gutter="16" class="notes-row">
       <!-- ============ Release list ============ -->
-      <el-col :xs="24" :lg="15">
+      <el-col :xs="24" :lg="editorOpen ? 15 : 24">
         <el-card shadow="never" class="notes-card">
           <template #header>
             <div class="section-header">
@@ -217,7 +227,7 @@
               </div>
 
               <div v-if="note.body" class="release-body" :class="{ collapsed: !expanded[note.id] }">
-                <MdPreview :model-value="note.body" preview-theme="github" />
+                <MdPreview :model-value="note.body" :theme="mdTheme" preview-theme="github" />
                 <div v-if="!expanded[note.id]" class="body-fade" />
               </div>
               <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
@@ -241,19 +251,9 @@
         </el-card>
       </el-col>
 
-      <!-- ============ Draft / edit form (review administrators only) ============ -->
-      <el-col :xs="24" :lg="9">
-        <div v-if="!canManage" class="form-anchor">
-          <el-card shadow="never" class="form-card">
-            <el-alert
-              type="info"
-              :closable="false"
-              :title="t('releaseNotes.read_only_title')"
-              :description="t('releaseNotes.read_only_help')"
-            />
-          </el-card>
-        </div>
-        <div v-else ref="formCard" class="form-anchor">
+      <!-- ============ Draft / edit form: only while drafting or editing ============ -->
+      <el-col v-if="editorOpen" :xs="24" :lg="9">
+        <div ref="formCard" class="form-anchor">
         <el-card shadow="never" class="form-card">
           <template #header>
             <div class="section-header">
@@ -266,6 +266,15 @@
                   }}
                 </h3>
               </div>
+              <el-button
+                link
+                size="small"
+                :icon="Close"
+                :aria-label="t('releaseNotes.close_editor')"
+                @click="closeForm"
+              >
+                {{ t('releaseNotes.close_editor') }}
+              </el-button>
             </div>
           </template>
 
@@ -342,6 +351,7 @@
                 <MdEditor
                   v-model="form.body"
                   :toolbars="toolbars"
+                  :theme="mdTheme"
                   :preview="false"
                   :style="{ height: '320px' }"
                   :placeholder="t('releaseNotes.notes_placeholder')"
@@ -383,9 +393,7 @@
               <el-button :loading="saving" :disabled="!canSave" @click="saveRelease('draft')">
                 {{ t('releaseNotes.save_draft') }}
               </el-button>
-              <el-button v-if="editingId" @click="resetForm">
-                {{ t('releaseNotes.cancel') }}
-              </el-button>
+              <el-button @click="closeForm">{{ t('releaseNotes.cancel') }}</el-button>
             </div>
           </el-form>
         </el-card>
@@ -396,9 +404,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Close } from '@element-plus/icons-vue'
 import { MdEditor, MdPreview, type ToolbarNames } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { projectsApi } from '@/api/projects'
@@ -476,6 +485,23 @@ const form = ref({
 
 const editingId = ref<number | null>(null)
 const editingStatus = ref<'draft' | 'published'>('draft')
+// The draft / edit panel is only rendered while it is actually needed
+const editorOpen = ref(false)
+
+// ------------------------------------------------------------------ #
+// Theme
+// ------------------------------------------------------------------ #
+
+// md-editor-v3 switches to its dark palette through the ``theme`` prop (the
+// ``.md-editor-dark`` class), it does not follow the app theme by itself.
+const themeTrigger = ref(0)
+const isDarkTheme = computed(() => {
+  void themeTrigger.value
+  return document.documentElement.getAttribute('data-theme') === 'dark'
+})
+const mdTheme = computed<'dark' | 'light'>(() => (isDarkTheme.value ? 'dark' : 'light'))
+
+let themeObserver: MutationObserver | null = null
 
 const selectedProjectKey = computed(() => (repo.value.project_key ?? '').trim())
 const selectedRepositorySlug = computed(() => (repo.value.repository_slug ?? '').trim())
@@ -639,8 +665,15 @@ function resetForm() {
   }
 }
 
+/** Close the draft / edit panel and clear the form. */
+function closeForm() {
+  resetForm()
+  editorOpen.value = false
+}
+
 function startNewRelease() {
   resetForm()
+  editorOpen.value = true
   // Preselect the newest tag so a new version can be drafted quickly
   const newest = tags.value[0]
   if (newest) {
@@ -653,6 +686,7 @@ function editNote(note: ReleaseNote) {
   editingId.value = note.id
   editingStatus.value = note.status
   generatedCount.value = null
+  editorOpen.value = true
   form.value = {
     tag_name: note.tag_name,
     previous_tag: note.previous_tag ?? '',
@@ -728,7 +762,7 @@ async function saveRelease(status: 'draft' | 'published') {
       await pushNote(saved, true)
     }
 
-    resetForm()
+    closeForm()
     await loadNotes()
   } catch {
     ElMessage.error(t('releaseNotes.save_failed'))
@@ -808,7 +842,7 @@ async function confirmDelete(note: ReleaseNote) {
     await releaseNotesApi.remove(note.id)
     ElMessage.success(t('releaseNotes.deleted_ok'))
     if (editingId.value === note.id) {
-      resetForm()
+      closeForm()
     }
     await loadNotes()
   } catch {
@@ -848,13 +882,30 @@ watch(isCloudProvider, (isCloud) => {
 watch(
   () => [selectedProjectKey.value, selectedRepositorySlug.value, selectedWorkspaceSlug.value, repo.value.git_provider],
   () => {
-    resetForm()
+    // Another repository means another release: drop a half filled draft too
+    closeForm()
     void loadRefs()
     void loadNotes()
   },
 )
 
-onMounted(loadProjects)
+onMounted(() => {
+  // The theme lives on the <html> element, so watch it instead of re-reading it
+  // on every render
+  themeObserver = new MutationObserver(() => {
+    themeTrigger.value++
+  })
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme', 'class'],
+  })
+  void loadProjects()
+})
+
+onBeforeUnmount(() => {
+  themeObserver?.disconnect()
+  themeObserver = null
+})
 </script>
 
 <style scoped>
@@ -966,6 +1017,44 @@ onMounted(loadProjects)
 .release-body {
   position: relative;
   margin-top: 12px;
+}
+
+/* The card already provides the surface: keep the rendered markdown on it instead
+   of letting md-editor paint its own (pure black in dark mode) background */
+.release-body :deep(.md-editor),
+.release-body :deep(.md-editor-preview-wrapper),
+.release-body :deep(.md-editor-preview),
+.notes-editor :deep(.md-editor) {
+  background-color: transparent;
+}
+
+.notes-editor :deep(.md-editor) {
+  border-radius: 8px;
+}
+
+/* md-editor ships its own dark palette (black surfaces) - blend it with the app one */
+[data-theme='dark'] .release-body :deep(.md-editor),
+[data-theme='dark'] .notes-editor :deep(.md-editor) {
+  --md-bk-color: var(--el-bg-color);
+  --md-bk-color-outstand: var(--el-fill-color);
+  --md-border-color: var(--el-border-color);
+  --md-color: var(--el-text-color-primary);
+}
+
+[data-theme='dark'] .release-body :deep(.github-theme) {
+  --md-theme-color: var(--el-text-color-regular);
+  --md-theme-heading-color: var(--el-text-color-primary);
+  --md-theme-heading-bg-color: transparent;
+  --md-theme-heading-1-border: 1px solid var(--el-border-color);
+  --md-theme-heading-2-border: 1px solid var(--el-border-color);
+  --md-theme-quote-color: var(--el-text-color-secondary);
+  --md-theme-quote-border: 0.25em solid var(--el-border-color);
+  --md-theme-table-stripe-color: var(--el-fill-color);
+  --md-theme-table-td-border-color: var(--el-border-color);
+  --md-theme-code-inline-bg-color: var(--el-fill-color);
+  --md-theme-code-block-bg-color: var(--el-fill-color-light);
+  --md-theme-code-before-bg-color: var(--el-fill-color-light);
+  --md-theme-link-color: var(--el-color-primary-light-3);
 }
 
 .release-body.collapsed {

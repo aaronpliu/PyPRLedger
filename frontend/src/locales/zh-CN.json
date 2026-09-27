@@ -1064,6 +1064,7 @@
     "delete_confirm": "确认删除版本 {tag}？该操作不可撤销。",
     "read_only_title": "只读",
     "read_only_help": "只有评审管理员可以起草、发布或删除版本；你仍可以查看所有版本及其说明。",
+    "close_editor": "关闭",
     "import_from_provider": "从 GitHub 导入",
     "imported_ok": "导入完成：新增 {imported}，更新 {updated}，跳过 {skipped}",
     "import_failed": "导入版本失败",

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import ElementPlus, { ElMessageBox } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ReleaseNotesView from '@/views/releases/ReleaseNotesView.vue'
@@ -42,14 +43,14 @@ vi.mock('@/api/releaseNotes', () => ({
 vi.mock('md-editor-v3', () => ({
   MdEditor: {
     name: 'MdEditor',
-    props: ['modelValue'],
+    props: ['modelValue', 'theme'],
     emits: ['update:modelValue'],
     template:
       '<textarea class="md-editor-stub" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
   MdPreview: {
     name: 'MdPreview',
-    props: ['modelValue'],
+    props: ['modelValue', 'theme'],
     template: '<div class="md-preview-stub">{{ modelValue }}</div>',
   },
 }))
@@ -218,6 +219,10 @@ describe('ReleaseNotesView', () => {
       expect.objectContaining({ refresh: false }),
     )
 
+    // the refresh lives in the draft panel, which opens on demand
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
     const refreshButton = buttonsByLabel(wrapper, enMessages.releaseNotes.refresh_tags)
     expect(refreshButton).toHaveLength(1)
 
@@ -354,11 +359,98 @@ describe('ReleaseNotesView', () => {
     // the list is still visible
     expect(wrapper.text()).toContain('v1.1.0')
     expect(wrapper.text()).toContain(enMessages.releaseNotes.read_only_title)
+    // the notice is a banner, not a side panel, so the list keeps the full width
+    expect(wrapper.find('.read-only-alert').exists()).toBe(true)
+    expect(wrapper.findAll('.notes-row > .el-col')).toHaveLength(1)
     // but no management affordances
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)).toHaveLength(0)
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.edit_release)).toHaveLength(0)
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.delete)).toHaveLength(0)
     expect(wrapper.find('.md-editor-stub').exists()).toBe(false)
+  })
+
+  it('keeps the draft panel closed until it is requested', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // nothing to draft yet: the list owns the whole row
+    expect(wrapper.find('.form-card').exists()).toBe(false)
+    expect(wrapper.find('.md-editor-stub').exists()).toBe(false)
+    expect(wrapper.findAll('.notes-row > .el-col')[0].classes()).toContain('el-col-lg-24')
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.form-card').exists()).toBe(true)
+    expect(wrapper.findAll('.notes-row > .el-col')[0].classes()).toContain('el-col-lg-15')
+
+    // and closing it brings the list back to full width
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.close_editor)[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.form-card').exists()).toBe(false)
+    expect(wrapper.findAll('.notes-row > .el-col')[0].classes()).toContain('el-col-lg-24')
+  })
+
+  it('closes the draft panel after a release is saved', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.save_draft)[0].trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.create).toHaveBeenCalled()
+    expect(wrapper.find('.form-card').exists()).toBe(false)
+  })
+
+  it('follows the dark theme in the markdown preview and editor', async () => {
+    document.documentElement.setAttribute('data-theme', 'dark')
+
+    try {
+      const wrapper = mountView()
+      await flushPromises()
+      await selectRepository(wrapper)
+
+      expect(wrapper.findComponent({ name: 'MdPreview' }).props('theme')).toBe('dark')
+
+      await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+      await flushPromises()
+
+      expect(wrapper.findComponent({ name: 'MdEditor' }).props('theme')).toBe('dark')
+    } finally {
+      document.documentElement.setAttribute('data-theme', 'light')
+    }
+  })
+
+  it('switches the markdown theme when the app theme changes', async () => {
+    document.documentElement.setAttribute('data-theme', 'light')
+
+    try {
+      const wrapper = mountView()
+      await flushPromises()
+      await selectRepository(wrapper)
+
+      await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+      await flushPromises()
+
+      expect(wrapper.findComponent({ name: 'MdEditor' }).props('theme')).toBe('light')
+      expect(wrapper.findComponent({ name: 'MdPreview' }).props('theme')).toBe('light')
+
+      document.documentElement.setAttribute('data-theme', 'dark')
+      // MutationObserver callbacks are microtasks - let them run before asserting
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      await nextTick()
+
+      expect(wrapper.findComponent({ name: 'MdEditor' }).props('theme')).toBe('dark')
+      expect(wrapper.findComponent({ name: 'MdPreview' }).props('theme')).toBe('dark')
+    } finally {
+      document.documentElement.setAttribute('data-theme', 'light')
+    }
   })
 
   it('imports the releases of a GitHub repository', async () => {
