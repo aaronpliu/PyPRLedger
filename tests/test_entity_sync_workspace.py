@@ -9,8 +9,12 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 
 import src.services.entity_sync_service as entity_sync_module
+from src.models.project import Project
+from src.models.repository import Repository
+from src.models.user import User
 from src.services.entity_sync_service import EntitySyncService
 
 
@@ -21,6 +25,7 @@ class RecordingProvider:
         self._name = name
         self.project_lookups: list[str] = []
         self.repository_lookups: list[tuple[str, str]] = []
+        self.user_lookups: list[str] = []
 
     @property
     def name(self) -> str:
@@ -42,6 +47,16 @@ class RecordingProvider:
             "repository_name": repo_slug,
             "repository_slug": repo_slug,
             "repository_url": f"https://example.com/{workspace}/{repo_slug}",
+        }
+
+    async def get_user_info(self, username: str) -> dict[str, Any]:
+        self.user_lookups.append(username)
+        # one and the same remote account, whatever login it is addressed with
+        return {
+            "user_id": 7,
+            "username": username,
+            "display_name": username.title(),
+            "email_address": "alice@example.com",
         }
 
 
@@ -123,6 +138,107 @@ async def test_blank_workspace_slug_falls_back_to_project_key(db_session, monkey
 
     assert provider.project_lookups == ["AI"]
     assert provider.repository_lookups == [("AI", "pylang")]
+
+
+async def test_same_remote_project_is_reused_across_business_keys(db_session, monkeypatch) -> None:
+    """One remote project must never be inserted twice.
+
+    ``project.project_id`` is unique while the business key (project_key /
+    workspace_slug) can address the same workspace in different ways - inserting
+    again used to fail with "Duplicate entry ... for key 'project.project_id'"
+    (issue seen on POST /api/v1/reviews).
+    """
+    install_provider(monkeypatch, "bitbucket_cloud")
+
+    first = await EntitySyncService(
+        db_session, git_provider="bitbucket_cloud", workspace_slug="aaronpliu"
+    ).sync_project("AI")
+
+    # the very same workspace, addressed with another business key
+    second = await EntitySyncService(
+        db_session, git_provider="bitbucket_cloud", workspace_slug="aaronpliu"
+    ).sync_project("web-development")
+
+    assert second.project_id == first.project_id
+    # the already stored business key wins
+    assert second.project_key == "AI"
+
+    rows = (await db_session.execute(select(Project))).scalars().all()
+    assert len(rows) == 1
+
+
+async def test_concurrently_inserted_remote_project_is_reused(db_session, monkeypatch) -> None:
+    """A race between the lookup and the insert must not poison the transaction.
+
+    The insert runs inside a savepoint, so the duplicate key only rolls that back
+    and the row stored by the other request is reused.
+    """
+    provider = install_provider(monkeypatch, "bitbucket_cloud")
+    real_lookup = EntitySyncService._find_project_by_remote
+    lookup_calls = 0
+
+    async def racing_lookup(self, current_provider, project_info):
+        nonlocal lookup_calls
+        stored = await real_lookup(self, current_provider, project_info)
+        if stored is None and lookup_calls == 0:
+            lookup_calls += 1
+            # a concurrent request stores the same remote project right after our lookup
+            self.db.add(
+                Project(
+                    project_id=project_info["project_id"],
+                    project_name="racer",
+                    project_key="RACER",
+                    project_url="https://bitbucket.org/aaronpliu/",
+                    git_provider="bitbucket_cloud",
+                )
+            )
+            await self.db.flush()
+        return stored
+
+    monkeypatch.setattr(EntitySyncService, "_find_project_by_remote", racing_lookup)
+
+    project = await EntitySyncService(
+        db_session, git_provider="bitbucket_cloud", workspace_slug="aaronpliu"
+    ).sync_project("AI")
+
+    assert provider.project_lookups == ["aaronpliu"]
+    # the row of the other request wins, no duplicate key error is raised
+    assert project.project_key == "RACER"
+
+    rows = (await db_session.execute(select(Project))).scalars().all()
+    assert len(rows) == 1
+
+
+async def test_same_remote_repository_is_reused_across_slugs(db_session, monkeypatch) -> None:
+    install_provider(monkeypatch, "bitbucket_server")
+
+    service = EntitySyncService(db_session, git_provider="bitbucket_server")
+    project = await service.sync_project("PROJ")
+
+    first = await service.sync_repository("alpha-api", project)
+    # same remote repository (repository_id 2), reached through another slug
+    second = await service.sync_repository("alpha-api-renamed", project)
+
+    assert second.repository_id == first.repository_id
+    assert second.repository_slug == "alpha-api"
+
+    rows = (await db_session.execute(select(Repository))).scalars().all()
+    assert len(rows) == 1
+
+
+async def test_same_remote_user_is_reused_across_logins(db_session, monkeypatch) -> None:
+    install_provider(monkeypatch, "bitbucket_server")
+
+    service = EntitySyncService(db_session, git_provider="bitbucket_server")
+
+    first = await service.sync_user("alice")
+    second = await service.sync_user("alice.renamed")
+
+    assert second.user_id == first.user_id
+    assert second.username == "alice"
+
+    rows = (await db_session.execute(select(User))).scalars().all()
+    assert len(rows) == 1
 
 
 def test_review_create_accepts_workspace_slug() -> None:

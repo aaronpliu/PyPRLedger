@@ -512,11 +512,14 @@ class ReviewService:
                 username=review_data.reviewer, is_reviewer=True
             )
 
+        # Reviews are keyed by the business keys of the payload (see _populate_base),
+        # which can differ from the stored project/repository keys when a Cloud
+        # workspace is addressed through an alias.
         existing_base = await self._get_existing_base(
             review_data,
             db,
-            project.project_key,
-            repository.repository_slug,
+            review_data.project_key,
+            review_data.repository_slug,
         )
 
         if reviewer and existing_base:
@@ -666,11 +669,14 @@ class ReviewService:
                     username=review_data.reviewer, is_reviewer=True
                 )
 
+            # Lookup by the payload business keys: they are what a review row is
+            # stored with, so a retry of the same payload updates that row instead
+            # of adding a duplicate (the stored keys may carry an alias).
             existing_base = await self._get_existing_base(
                 review_data,
                 db,
-                project.project_key,
-                repository.repository_slug,
+                review_data.project_key,
+                review_data.repository_slug,
             )
             existing_assignment = None
             if reviewer and existing_base:
@@ -765,10 +771,11 @@ class ReviewService:
                         PullRequestReviewRaw.status == "failed",
                         func.json_extract(PullRequestReviewRaw.request_payload, "$.pull_request_id")
                         == str(existing_base.pull_request_id),
+                        # the raw payloads carry the payload keys, not the stored ones
                         func.json_extract(PullRequestReviewRaw.request_payload, "$.project_key")
-                        == str(project.project_key),
+                        == str(review_data.project_key),
                         func.json_extract(PullRequestReviewRaw.request_payload, "$.repository_slug")
-                        == str(repository.repository_slug),
+                        == str(review_data.repository_slug),
                     )
                 )
                 old_failed_records = (await db.execute(cleanup_query)).scalars().all()
@@ -830,15 +837,34 @@ class ReviewService:
                 return new_review_response, True
 
         except Exception as e:
-            # Step 4: Mark raw record as failed
-            raw_record.status = "failed"
-            raw_record.error_message = str(e)
-            raw_record.error_details = {
+            # Step 4: Mark the raw record as failed.
+            #
+            # A failed flush (e.g. a duplicate key) leaves the transaction unusable,
+            # and the raw record insert goes down with the rollback - so the failure
+            # is recorded in a fresh transaction, otherwise the rollback error would
+            # hide the real cause.
+            error_message = str(e)
+            error_details = {
                 "error_type": type(e).__name__,
                 "traceback": traceback.format_exc(),
             }
-            raw_record.processed_date = get_current_time()
-            await db.commit()
+
+            await db.rollback()
+            db.add(
+                PullRequestReviewRaw(
+                    request_payload=review_data.model_dump(),
+                    status="failed",
+                    error_message=error_message,
+                    error_details=error_details,
+                    processed_date=get_current_time(),
+                )
+            )
+            try:
+                await db.commit()
+            except Exception:
+                # Recording the failure must never mask the original error
+                logger.exception("Failed to store the failed review payload")
+                await db.rollback()
 
             raise  # Re-raise to API endpoint
 
