@@ -130,6 +130,27 @@ function release(overrides: Partial<ReleaseNote> = {}): ReleaseNote {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type AnyWrapper = any
 
+const PREVIEW_COMMIT = {
+  id: 'abc1234567890',
+  display_id: 'abc1234',
+  author_name: 'Jane Doe',
+  message: 'feat: add login page',
+  url: 'https://git.local/commits/abc1234',
+}
+
+/** Preview payload (the note body is irrelevant for the tag -> commits view). */
+function preview(commits: (typeof PREVIEW_COMMIT)[] = []) {
+  return {
+    version: 'v1.2.0',
+    previous_version: 'v1.1.0' as string | null,
+    suggested_name: 'v1.2.0',
+    body: '## What’s Changed',
+    commit_count: commits.length,
+    commits,
+    truncated: false,
+  }
+}
+
 const mountedWrappers: AnyWrapper[] = []
 
 afterEach(() => {
@@ -153,6 +174,16 @@ function selectByPlaceholder(wrapper: AnyWrapper, placeholder: string) {
   return wrapper
     .findAllComponents({ name: 'ElSelect' })
     .find((select: AnyWrapper) => select.props('placeholder') === placeholder)
+}
+
+/** Switch the navigator between the releases and the tags tab. */
+async function selectTab(wrapper: AnyWrapper, label: string) {
+  const tab = wrapper
+    .findAll('.el-tabs__item')
+    .find((item: AnyWrapper) => item.text() === label)
+  expect(tab).toBeDefined()
+  await tab!.trigger('click')
+  await flushPromises()
 }
 
 async function selectRepository(wrapper: AnyWrapper) {
@@ -201,7 +232,8 @@ describe('ReleaseNotesView', () => {
     expect(releaseNotesApi.list).toHaveBeenCalledWith({
       project_key: 'ALPHA',
       repository_slug: 'alpha-api',
-      limit: 100,
+      limit: 10,
+      offset: 0,
     })
     const text = wrapper.text()
     expect(text).toContain('v1.1.0')
@@ -214,12 +246,13 @@ describe('ReleaseNotesView', () => {
     const wrapper = mountView()
     await flushPromises()
     await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
 
     expect(releaseDiffApi.listRefs).toHaveBeenLastCalledWith(
       expect.objectContaining({ refresh: false }),
     )
 
-    // the refresh sits in the tags section of the navigator, next to the tags
+    // the refresh sits in the tags tab, next to the tags it reloads
     const refreshButton = buttonsByLabel(wrapper, enMessages.releaseNotes.refresh_tags)
     expect(refreshButton).toHaveLength(1)
 
@@ -454,55 +487,118 @@ describe('ReleaseNotesView', () => {
     )
   })
 
-  it('lists every tag of the repository and flags the released ones', async () => {
+  it('maps a tag of the tags tab to the commits it released', async () => {
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
       ...REFS,
-      tags: ['v1.2.0', 'v1.1.0'],
+      tags: ['v1.2.0', 'v1.1.0', 'v1.0.0'],
     } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([PREVIEW_COMMIT]))
 
     const wrapper = mountView()
     await flushPromises()
     await selectRepository(wrapper)
 
-    const tagItems = wrapper.findAll('.tag-item')
-    expect(tagItems.map((item) => item.text())).toHaveLength(2)
-    // v1.1.0 has a release, the newer tag does not
-    expect(tagItems[0].text()).toContain('v1.2.0')
-    expect(tagItems[0].text()).not.toContain(enMessages.releaseNotes.tag_released)
-    expect(tagItems[1].text()).toContain('v1.1.0')
-    expect(tagItems[1].text()).toContain(enMessages.releaseNotes.tag_released)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    // the newest tag is selected and scoped against the next older one
+    expect(releaseNotesApi.preview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_key: 'ALPHA',
+        repository_slug: 'alpha-api',
+        version: 'v1.2.0',
+        previous_version: 'v1.1.0',
+      }),
+    )
+    expect(wrapper.text()).toContain(
+      enMessages.releaseNotes.tag_commits_title.replace('{tag}', 'v1.2.0'),
+    )
+    expect(wrapper.text()).toContain(
+      enMessages.releaseNotes.range.replace('{from}', 'v1.1.0').replace('{to}', 'v1.2.0'),
+    )
+    expect(wrapper.find('.commit-table').text()).toContain('abc1234')
+
+    // the oldest tag has no predecessor: its full history is listed
+    const oldest = wrapper
+      .findAll('.tag-item')
+      .find((item) => item.text() === 'v1.0.0')!
+    await oldest.trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.preview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ version: 'v1.0.0', previous_version: undefined }),
+    )
+    expect(wrapper.text()).toContain(
+      enMessages.releaseNotes.full_history.replace('{tag}', 'v1.0.0'),
+    )
   })
 
-  it('selects the release of a tag and offers to draft the ones without', async () => {
+  it('offers to draft a release from the selected tag', async () => {
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
       ...REFS,
       tags: ['v1.2.0', 'v1.1.0'],
     } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
 
     const wrapper = mountView()
     await flushPromises()
     await selectRepository(wrapper)
-
-    const tagItems = wrapper.findAll('.tag-item')
-    await tagItems[1].trigger('click')
-    await flushPromises()
-
-    // a released tag opens its notes
-    expect(wrapper.find('.md-preview-stub').text()).toContain('add login page')
-
-    await tagItems[0].trigger('click')
-    await flushPromises()
-
-    // an unreleased tag offers to draft from it
-    expect(wrapper.text()).toContain(
-      enMessages.releaseNotes.tag_not_released.replace('{tag}', 'v1.2.0'),
-    )
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
 
     await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_for_tag)[0].trigger('click')
     await flushPromises()
 
     const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
     expect(tagSelect.props('modelValue')).toBe('v1.2.0')
+  })
+
+  it('paginates the releases on the server', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({ total: 30, items: [release()] })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const pager = wrapper.findComponent({ name: 'ElPagination' })
+    expect(pager.props('total')).toBe(30)
+
+    // Element Plus emits kebab-case update events
+    pager.vm.$emit('update:current-page', 2)
+    await flushPromises()
+
+    expect(releaseNotesApi.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ limit: 10, offset: 10 }),
+    )
+
+    // a bigger page size asks the backend for more releases at once
+    wrapper.findComponent({ name: 'ElPagination' }).vm.$emit('update:page-size', 50)
+    await flushPromises()
+
+    expect(releaseNotesApi.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ limit: 50, offset: 0 }),
+    )
+  })
+
+  it('paginates the tags in the browser', async () => {
+    const manyTags = Array.from({ length: 25 }, (_, index) => `v1.${25 - index}.0`)
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({ ...REFS, tags: manyTags } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    expect(wrapper.findAll('.tag-item')).toHaveLength(20)
+
+    const pager = wrapper.findComponent({ name: 'ElPagination' })
+    expect(pager.props('total')).toBe(25)
+
+    pager.vm.$emit('update:current-page', 2)
+    await flushPromises()
+
+    expect(wrapper.findAll('.tag-item')).toHaveLength(5)
+    // no extra provider round trip: the tags are already in memory
+    expect(releaseDiffApi.listRefs).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the editor closed until it is requested', async () => {

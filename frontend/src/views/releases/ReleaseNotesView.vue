@@ -148,61 +148,67 @@
             :title="t('releaseNotes.needs_repository')"
           />
 
-          <div v-else-if="notesLoading" class="loading-block">
-            <el-skeleton :rows="4" animated />
-          </div>
-
-          <template v-else>
-            <!-- Published / draft versions already stored for the repository -->
-            <div class="nav-section">
-              <div class="nav-section-title">
-                <span>{{ t('releaseNotes.list_title') }}</span>
-                <el-tag v-if="notes.length" size="small" type="info" round>
-                  {{ notes.length }}
-                </el-tag>
+          <el-tabs v-else v-model="activeTab" class="nav-tabs">
+            <!-- ============ Stored releases, paginated ============ -->
+            <el-tab-pane name="releases" :label="t('releaseNotes.list_title')">
+              <div v-if="notesLoading" class="loading-block">
+                <el-skeleton :rows="4" animated />
               </div>
 
               <el-empty
-                v-if="notes.length === 0"
+                v-else-if="notes.length === 0"
                 :description="t('releaseNotes.empty')"
                 :image-size="60"
               />
 
-              <ul v-else class="nav-list">
-                <li
-                  v-for="note in notes"
-                  :key="note.id"
-                  class="nav-item"
-                  :class="{ active: selectedNote?.id === note.id && !editorOpen }"
-                  @click="selectNote(note)"
-                >
-                  <div class="nav-item-main">
-                    <span class="nav-item-name">{{ note.name }}</span>
-                    <el-tag size="small" effect="plain">{{ note.tag_name }}</el-tag>
-                  </div>
-                  <div class="nav-item-badges">
-                    <el-tag v-if="note.is_latest" size="small" type="success" round>
-                      {{ t('releaseNotes.badge_latest') }}
-                    </el-tag>
-                    <el-tag v-if="note.is_prerelease" size="small" type="warning" round>
-                      {{ t('releaseNotes.badge_prerelease') }}
-                    </el-tag>
-                    <el-tag v-if="note.status === 'draft'" size="small" type="info" round>
-                      {{ t('releaseNotes.badge_draft') }}
-                    </el-tag>
-                  </div>
-                  <div class="nav-item-meta">
-                    {{ formatDate(note.published_date || note.updated_date) }}
-                  </div>
-                </li>
-              </ul>
-            </div>
+              <template v-else>
+                <ul class="nav-list">
+                  <li
+                    v-for="note in notes"
+                    :key="note.id"
+                    class="nav-item"
+                    :class="{ active: tabIsReleases && selectedNote?.id === note.id && !editorOpen }"
+                    @click="selectNote(note)"
+                  >
+                    <div class="nav-item-main">
+                      <span class="nav-item-name">{{ note.name }}</span>
+                      <el-tag size="small" effect="plain">{{ note.tag_name }}</el-tag>
+                    </div>
+                    <div class="nav-item-badges">
+                      <el-tag v-if="note.is_latest" size="small" type="success" round>
+                        {{ t('releaseNotes.badge_latest') }}
+                      </el-tag>
+                      <el-tag v-if="note.is_prerelease" size="small" type="warning" round>
+                        {{ t('releaseNotes.badge_prerelease') }}
+                      </el-tag>
+                      <el-tag v-if="note.status === 'draft'" size="small" type="info" round>
+                        {{ t('releaseNotes.badge_draft') }}
+                      </el-tag>
+                    </div>
+                    <div class="nav-item-meta">
+                      {{ formatDate(note.published_date || note.updated_date) }}
+                    </div>
+                  </li>
+                </ul>
 
-            <!-- Every tag of the repository, released or not -->
-            <div class="nav-section">
+                <el-pagination
+                  v-if="notesTotal > notesPageSize"
+                  v-model:current-page="notesPage"
+                  v-model:page-size="notesPageSize"
+                  class="nav-pagination"
+                  size="small"
+                  background
+                  :page-sizes="[5, 10, 20, 50]"
+                  :total="notesTotal"
+                  layout="total, sizes, prev, pager, next"
+                />
+              </template>
+            </el-tab-pane>
+
+            <!-- ============ Every tag of the repository, paginated ============ -->
+            <el-tab-pane name="tags" :label="t('releaseNotes.panel_tags')">
               <div class="nav-section-title">
-                <span>{{ t('releaseNotes.panel_tags') }}</span>
-                <el-tag v-if="tags.length" size="small" type="info" round>{{ tags.length }}</el-tag>
+                <span>{{ t('releaseNotes.tags_hint') }}</span>
                 <el-button
                   link
                   type="primary"
@@ -221,30 +227,35 @@
                 :image-size="60"
               />
 
-              <ul v-else class="nav-list">
-                <li
-                  v-for="tag in tags"
-                  :key="tag"
-                  class="nav-item tag-item"
-                  :class="{ active: selectedTag === tag && !editorOpen }"
-                  @click="selectTag(tag)"
-                >
-                  <div class="nav-item-main">
-                    <span class="nav-item-name">{{ tag }}</span>
-                    <el-tag
-                      v-if="noteByTag(tag)"
-                      size="small"
-                      type="success"
-                      effect="plain"
-                      round
-                    >
-                      {{ t('releaseNotes.tag_released') }}
-                    </el-tag>
-                  </div>
-                </li>
-              </ul>
-            </div>
-          </template>
+              <template v-else>
+                <ul class="nav-list">
+                  <li
+                    v-for="tag in visibleTags"
+                    :key="tag"
+                    class="nav-item tag-item"
+                    :class="{ active: selectedTag === tag && !editorOpen }"
+                    @click="selectTag(tag)"
+                  >
+                    <div class="nav-item-main">
+                      <span class="nav-item-name">{{ tag }}</span>
+                    </div>
+                  </li>
+                </ul>
+
+                <el-pagination
+                  v-if="tags.length > tagPageSize"
+                  v-model:current-page="tagPage"
+                  v-model:page-size="tagPageSize"
+                  class="nav-pagination"
+                  size="small"
+                  background
+                  :page-sizes="[10, 20, 50, 100]"
+                  :total="tags.length"
+                  layout="total, sizes, prev, pager, next"
+                />
+              </template>
+            </el-tab-pane>
+          </el-tabs>
         </el-card>
       </el-col>
 
@@ -268,7 +279,7 @@
                     {{ t('releaseNotes.badge_draft') }}
                   </el-tag>
                 </template>
-                <el-tag v-else-if="selectedTag && !editorOpen" size="small" effect="plain">
+                <el-tag v-else-if="tabIsTags && selectedTag && !editorOpen" size="small" effect="plain">
                   {{ selectedTag }}
                 </el-tag>
               </div>
@@ -284,7 +295,15 @@
                 >
                   {{ t('releaseNotes.close_editor') }}
                 </el-button>
-                <template v-else-if="selectedNote">
+                <el-button
+                  v-else-if="tabIsTags && selectedTag && canManage"
+                  type="primary"
+                  size="small"
+                  @click="startNewRelease(selectedTag)"
+                >
+                  {{ t('releaseNotes.draft_for_tag') }}
+                </el-button>
+                <template v-else-if="tabIsReleases && selectedNote">
                   <el-button
                     v-if="selectedNote.external_url"
                     link
@@ -448,8 +467,34 @@
             </div>
           </el-form>
 
+          <!-- Commits released by the selected tag (mapping tag -> commits) -->
+          <template v-else-if="tabIsTags && selectedTag">
+            <div class="release-meta">
+              <span>
+                {{
+                  tagPrevious
+                    ? t('releaseNotes.range', { from: tagPrevious, to: selectedTag })
+                    : t('releaseNotes.full_history', { tag: selectedTag })
+                }}
+              </span>
+              <span v-if="!tagCommitsLoading"> · {{ t('releaseNotes.commit_count', { count: tagCommitCount }) }}</span>
+            </div>
+
+            <el-alert
+              v-if="tagTruncated"
+              class="status-alert"
+              type="warning"
+              :closable="false"
+              :title="t('releaseNotes.commits_truncated')"
+            />
+
+            <el-skeleton v-if="tagCommitsLoading" class="loading-block" :rows="5" animated />
+
+            <commit-table v-else :commits="tagCommits" :empty-text="t('releaseNotes.commits_empty')" />
+          </template>
+
           <!-- Read-only notes of the selected release -->
-          <template v-else-if="selectedNote">
+          <template v-else-if="tabIsReleases && selectedNote">
             <div class="release-meta">
               <span v-if="selectedNote.author">
                 {{ t('releaseNotes.released_by', { author: selectedNote.author }) }}
@@ -477,14 +522,6 @@
             <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
           </template>
 
-          <!-- A tag without a release yet: offer to draft one -->
-          <div v-else-if="selectedTag" class="tag-panel">
-            <p class="muted">{{ t('releaseNotes.tag_not_released', { tag: selectedTag }) }}</p>
-            <el-button v-if="canManage" type="primary" @click="startNewRelease(selectedTag)">
-              {{ t('releaseNotes.draft_for_tag') }}
-            </el-button>
-          </div>
-
           <el-skeleton v-else-if="notesLoading" :rows="6" animated />
 
           <el-empty
@@ -508,8 +545,12 @@ import 'md-editor-v3/lib/style.css'
 import { projectsApi } from '@/api/projects'
 import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/api/projects'
 import { releaseDiffApi } from '@/api/releaseDiff'
+import type { CommitInfo } from '@/api/releaseDiff'
+import CommitTable from '@/components/release/CommitTable.vue'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
 import { useAuthStore } from '@/stores/auth'
+
+type NavigatorTab = 'releases' | 'tags'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -552,10 +593,24 @@ const branches = ref<string[]>([])
 const notes = ref<ReleaseNote[]>([])
 const notesTotal = ref(0)
 const notesLoading = ref(false)
-// Column 1 is a navigator: either a stored release or a bare tag is selected
+// Column 1 is a navigator with two tabs: stored releases and repository tags
+const activeTab = ref<NavigatorTab>('releases')
+const tabIsReleases = computed(() => activeTab.value === 'releases')
+const tabIsTags = computed(() => activeTab.value === 'tags')
+// Releases are paginated by the backend, tags are paginated in the browser
+const notesPage = ref(1)
+const notesPageSize = ref(10)
+const tagPage = ref(1)
+const tagPageSize = ref(20)
+// Either a stored release or a tag is selected, depending on the active tab
 const selectedId = ref<number | null>(null)
 const selectedTag = ref<string | null>(null)
 const selectedNote = computed(() => notes.value.find((note) => note.id === selectedId.value) ?? null)
+// Commits covered by the selected tag (the tag -> commits mapping)
+const tagCommits = ref<CommitInfo[]>([])
+const tagCommitCount = ref(0)
+const tagCommitsLoading = ref(false)
+const tagTruncated = ref(false)
 
 const saving = ref(false)
 const importing = ref(false)
@@ -618,16 +673,31 @@ const canImportFromProvider = computed(() => canManage.value && isGithubProvider
 const canSave = computed(() => hasCoordinates.value && Boolean(form.value.tag_name.trim()))
 const selectableRefs = computed(() => [...tags.value, ...branches.value])
 
-// Header of the notes column: the editor, the selected release or the selected tag
+// Newest first: versions compare numerically so v1.10.0 sorts above v1.9.0
+const sortedTags = computed(() =>
+  [...tags.value].sort((a, b) => b.localeCompare(a, undefined, { numeric: true })),
+)
+const visibleTags = computed(() => {
+  const start = (tagPage.value - 1) * tagPageSize.value
+  return sortedTags.value.slice(start, start + tagPageSize.value)
+})
+// The release scope of a tag runs from the next older tag to the tag itself
+const tagPrevious = computed(() =>
+  selectedTag.value ? previousTagFor(selectedTag.value) : null,
+)
+
+// Header of the right column: the editor, the selected release or the tag commits
 const detailTitle = computed(() => {
   if (editorOpen.value) {
     return editingId.value ? t('releaseNotes.edit_release') : t('releaseNotes.draft_new')
   }
+  if (tabIsTags.value) {
+    return selectedTag.value
+      ? t('releaseNotes.tag_commits_title', { tag: selectedTag.value })
+      : t('releaseNotes.select_title')
+  }
   if (selectedNote.value) {
     return selectedNote.value.name
-  }
-  if (selectedTag.value) {
-    return selectedTag.value
   }
   return t('releaseNotes.select_title')
 })
@@ -644,31 +714,23 @@ function formatDate(value?: string | null): string {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
 }
 
-/** Release stored for a tag, when there is one. */
-function noteByTag(tag: string): ReleaseNote | undefined {
-  return notes.value.find((note) => note.tag_name === tag)
+/** The tag released just before ``tag`` (the base of its release scope). */
+function previousTagFor(tag: string): string | null {
+  const index = sortedTags.value.indexOf(tag)
+  return index >= 0 ? (sortedTags.value[index + 1] ?? null) : null
 }
 
 /** Select a stored release and show its notes. */
 function selectNote(note: ReleaseNote) {
   closeForm()
   selectedId.value = note.id
-  selectedTag.value = null
 }
 
-/**
- * Select a tag: a tag that already has a release shows its notes, a bare tag
- * offers to draft one (the tag is the natural starting point of a release).
- */
+/** Select a tag and show the commits it released. */
 function selectTag(tag: string) {
-  const existing = noteByTag(tag)
-  if (existing) {
-    selectNote(existing)
-    return
-  }
   closeForm()
-  selectedId.value = null
   selectedTag.value = tag
+  void loadTagCommits(tag)
 }
 
 function coordinates() {
@@ -745,6 +807,14 @@ async function loadRefs(force = false) {
     })
     tags.value = response.tags ?? []
     branches.value = response.branches ?? []
+    tagPage.value = 1
+    // The tags tab always has a selection so the commits of a tag are visible
+    if (tabIsTags.value && !selectedTag.value) {
+      const newest = sortedTags.value[0]
+      if (newest) {
+        selectTag(newest)
+      }
+    }
     if (force) {
       ElMessage.success(t('releaseNotes.refresh_tags_ok'))
     }
@@ -765,19 +835,51 @@ async function loadNotes() {
     const response = await releaseNotesApi.list({
       project_key: selectedProjectKey.value,
       repository_slug: selectedRepositorySlug.value,
-      limit: 100,
+      limit: notesPageSize.value,
+      offset: (notesPage.value - 1) * notesPageSize.value,
     })
     notes.value = response.items ?? []
     notesTotal.value = response.total ?? notes.value.length
-    // Keep the selection meaningful: fall back to the newest release
+    // Keep the selection meaningful: fall back to the first release of the page
     if (!notes.value.some((note) => note.id === selectedId.value)) {
       selectedId.value = notes.value[0]?.id ?? null
-      selectedTag.value = null
     }
   } catch {
     ElMessage.error(t('releaseNotes.load_failed'))
   } finally {
     notesLoading.value = false
+  }
+}
+
+/**
+ * Load the commits of a tag's release scope (from the previous tag to the tag).
+ *
+ * This is the tag -> commits mapping shown in the tags tab; the generated note
+ * body of the same scope is ignored on purpose.
+ */
+async function loadTagCommits(tag: string) {
+  tagCommits.value = []
+  tagCommitCount.value = 0
+  tagTruncated.value = false
+  if (!hasCoordinates.value) return
+
+  tagCommitsLoading.value = true
+  try {
+    const response = await releaseNotesApi.preview({
+      ...coordinates(),
+      version: tag,
+      previous_version: previousTagFor(tag) ?? undefined,
+      max_commits: PREVIEW_MAX_COMMITS,
+    })
+    // a newer click may have overtaken this response
+    if (selectedTag.value !== tag) return
+    tagCommits.value = (response.commits ?? []) as CommitInfo[]
+    tagCommitCount.value = response.commit_count ?? tagCommits.value.length
+    tagTruncated.value = Boolean(response.truncated)
+  } catch {
+    ElMessage.error(t('releaseNotes.commits_load_failed'))
+  } finally {
+    tagCommitsLoading.value = false
   }
 }
 
@@ -1039,10 +1141,41 @@ watch(
     closeForm()
     selectedId.value = null
     selectedTag.value = null
+    tagCommits.value = []
+    tagCommitCount.value = 0
+    notesPage.value = 1
+    tagPage.value = 1
     void loadRefs()
     void loadNotes()
   },
 )
+
+// Releases are paged on the server, tags in the browser
+watch(notesPage, () => void loadNotes())
+
+// Changing the page size always restarts from the first page
+watch(notesPageSize, () => {
+  if (notesPage.value === 1) {
+    void loadNotes()
+  } else {
+    notesPage.value = 1
+  }
+})
+
+watch(tagPageSize, () => {
+  tagPage.value = 1
+})
+
+// The tags tab maps a tag to the commits it released: pick the newest tag when
+// the tab is opened without an explicit selection
+watch(activeTab, (tab) => {
+  if (tab === 'tags' && !selectedTag.value) {
+    const newest = sortedTags.value[0]
+    if (newest) {
+      selectTag(newest)
+    }
+  }
+})
 
 onMounted(() => {
   // The theme lives on the <html> element, so watch it instead of re-reading it
@@ -1122,23 +1255,33 @@ onBeforeUnmount(() => {
   padding: 8px 0;
 }
 
-/* Navigator: releases and tags of the repository */
-.nav-section + .nav-section {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--el-border-color-lighter);
+/* Navigator: releases and tags of the repository, one tab each */
+.nav-tabs :deep(.el-tabs__header) {
+  margin-bottom: 12px;
+}
+
+.nav-tabs :deep(.el-tabs__item) {
+  padding: 0 12px;
 }
 
 .nav-section-title {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 10px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
   color: var(--el-text-color-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+}
+
+.nav-pagination {
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+
+.nav-pagination :deep(.el-pagination__total),
+.nav-pagination :deep(.el-pagination__sizes) {
+  margin-right: auto;
 }
 
 .nav-list {
@@ -1198,14 +1341,6 @@ onBeforeUnmount(() => {
 
 .tag-item .nav-item-main {
   justify-content: space-between;
-}
-
-.tag-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 8px 0;
 }
 
 .detail-card .release-meta {
