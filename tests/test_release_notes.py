@@ -28,6 +28,9 @@ from src.schemas.release_note import (
 )
 from src.services.git_providers.base import BaseGitProvider
 from src.services.release_note_service import (
+    NOTE_SECTIONS,
+    OTHER_SECTION,
+    SECTION_EMOJI,
     ReleaseNoteService,
     build_release_notes_markdown,
     commit_section,
@@ -39,6 +42,9 @@ from src.services.release_note_service import (
 C1 = "1111111111111111111111111111111111111111"
 C2 = "2222222222222222222222222222222222222222"
 C3 = "3333333333333333333333333333333333333333"
+C4 = "4444444444444444444444444444444444444444"
+C5 = "5555555555555555555555555555555555555555"
+C6 = "6666666666666666666666666666666666666666"
 
 
 def commit(
@@ -226,13 +232,37 @@ def create_payload(**overrides: Any) -> ReleaseNoteCreateRequest:
 # --------------------------------------------------------------------------- #
 
 
-def test_commit_section_maps_conventional_types() -> None:
-    assert commit_section("feat(api): add endpoint") == "Features"
-    assert commit_section("fix: crash") == "Bug Fixes"
-    assert commit_section("perf!: faster") == "Performance"
-    assert commit_section("chore: bump deps") == "Maintenance"
+def test_commit_section_maps_conventional_types_to_changelog_categories() -> None:
+    # Keep a Changelog vocabulary
+    assert commit_section("feat(api): add endpoint") == "Added"
+    assert commit_section("fix: crash") == "Fixed"
+    assert commit_section("security: rotate tokens") == "Security"
+    assert commit_section("deprecate: legacy export") == "Deprecated"
+    assert commit_section("revert: drop widget") == "Removed"
+    assert commit_section("remove: drop widget") == "Removed"
+
+    # every non functional change (breaking or not) lands in Changed
+    assert commit_section("improve: faster list") == "Changed"
+    assert commit_section("perf!: faster") == "Changed"
+    assert commit_section("refactor: split module") == "Changed"
+    assert commit_section("chore: bump deps") == "Changed"
+
+    # documentation and tests keep a section of their own
+    assert commit_section("docs: update readme") == "Documentation"
+    assert commit_section("test: cover the upsert") == "Tests"
+
     assert commit_section("random change") == "Other Changes"
     assert commit_section(None) == "Other Changes"
+
+
+def test_section_emoji_covers_every_produced_section() -> None:
+    # one emoji per Keep a Changelog category
+    for category in ("Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"):
+        assert category in SECTION_EMOJI
+        assert SECTION_EMOJI[category]
+
+    produced = {title for title, _ in NOTE_SECTIONS} | {OTHER_SECTION}
+    assert produced <= set(SECTION_EMOJI)
 
 
 def test_commit_subject_strips_the_conventional_prefix() -> None:
@@ -252,14 +282,43 @@ def test_build_markdown_groups_commits_and_appends_the_changelog_link() -> None:
     body = build_release_notes_markdown(commits, version="v1.1.0", previous_version="v1.0.0")
 
     assert body.startswith("## What's Changed")
-    assert "### 🚀 Features" in body
-    assert "### 🐛 Bug Fixes" in body
+    assert "### ✨ Added" in body
+    assert "### 🐛 Fixed" in body
     assert "### 📚 Documentation" in body
     assert "- add login page by Jane Doe in [1111111](https://git.local/commits/1111111)" in body
     assert "- crash on logout by John Roe in [2222222](https://git.local/commits/2222222)" in body
-    # section order: features before bug fixes
-    assert body.index("Features") < body.index("Bug Fixes")
+    # section order: added before fixed
+    assert body.index("Added") < body.index("Fixed")
     assert "**Full Changelog**: `v1.0.0...v1.1.0`" in body
+
+
+def test_build_markdown_renders_the_changelog_categories_in_order() -> None:
+    commits = [
+        commit(C1, "revert: drop old widget").model_dump(),
+        commit(C2, "security: rotate tokens").model_dump(),
+        commit(C3, "fix: crash on logout").model_dump(),
+        commit(C4, "deprecate: legacy export").model_dump(),
+        commit(C5, "perf: cache tags").model_dump(),
+        commit(C6, "feat: add login page").model_dump(),
+    ]
+
+    body = build_release_notes_markdown(commits, version="v1.2.0")
+
+    # Keep a Changelog order, whatever the commit order is
+    headings = [
+        "### ✨ Added",
+        "### 🔄 Changed",
+        "### ⚠️ Deprecated",
+        "### 🗑️ Removed",
+        "### 🐛 Fixed",
+        "### 🔒 Security",
+    ]
+    for heading in headings:
+        assert heading in body
+
+    positions = [body.index(heading) for heading in headings]
+    assert positions == sorted(positions)
+    assert "### 📝 Other Changes" not in body
 
 
 def test_build_markdown_links_the_changelog_range_when_a_compare_url_is_known() -> None:

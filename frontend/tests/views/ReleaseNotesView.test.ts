@@ -357,7 +357,7 @@ describe('ReleaseNotesView', () => {
       version: 'v1.1.0',
       previous_version: 'v1.0.0',
       suggested_name: 'v1.1.0',
-      body: '## What\u2019s Changed\n\n### 🚀 Features\n- add login page',
+      body: '## What\u2019s Changed\n\n### ✨ Added\n- add login page',
       commit_count: 3,
       commits: [],
       truncated: false,

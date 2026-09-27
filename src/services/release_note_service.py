@@ -39,28 +39,57 @@ from src.utils.timezone import get_current_time, utc_to_local
 logger = logging.getLogger(__name__)
 
 
-# Conventional commit type -> (section title, section order)
+# Conventional commit type -> (section title, commit prefixes, section order).
+#
+# Sections follow Keep a Changelog (https://keepachangelog.com) so the generated
+# notes use the same vocabulary as the project changelog:
+#
+#   Added       new features
+#   Changed     changes to existing functionality
+#   Deprecated  soon to be removed features
+#   Removed     features removed in this version
+#   Fixed       bug fixes
+#   Security    security related fixes
+#
+# Documentation and Tests keep a section of their own, otherwise those commits
+# would be buried in "Other Changes".
 NOTE_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Features", ("feat", "feature")),
-    ("Bug Fixes", ("fix", "bugfix")),
-    ("Performance", ("perf",)),
-    ("Refactoring", ("refactor",)),
+    ("Added", ("feat", "feature", "add")),
+    (
+        "Changed",
+        (
+            "change",
+            "improve",
+            "impr",
+            "refactor",
+            "perf",
+            "style",
+            "build",
+            "ci",
+            "chore",
+            "deps",
+        ),
+    ),
+    ("Deprecated", ("deprecate", "deprecated")),
+    ("Removed", ("remove", "removed", "revert")),
+    ("Fixed", ("fix", "bugfix", "hotfix")),
+    ("Security", ("security", "sec", "secure")),
     ("Documentation", ("docs", "doc")),
     ("Tests", ("test", "tests")),
-    ("Maintenance", ("build", "ci", "chore", "style", "deps")),
-    ("Reverts", ("revert",)),
 )
 
 OTHER_SECTION = "Other Changes"
+
+# Emoji each section is rendered with (one per Keep a Changelog category)
 SECTION_EMOJI: dict[str, str] = {
-    "Features": "🚀",
-    "Bug Fixes": "🐛",
-    "Performance": "⚡",
-    "Refactoring": "♻️",
+    "Added": "✨",
+    "Changed": "🔄",
+    "Deprecated": "⚠️",
+    "Removed": "🗑️",
+    "Fixed": "🐛",
+    "Security": "🔒",
     "Documentation": "📚",
     "Tests": "✅",
-    "Maintenance": "🔧",
-    "Reverts": "⏪",
     OTHER_SECTION: "📝",
 }
 
