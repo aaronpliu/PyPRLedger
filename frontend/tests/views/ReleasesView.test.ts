@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import ElementPlus from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ReleasesView from '@/views/releases/ReleasesView.vue'
@@ -597,6 +598,8 @@ describe('ReleasesView', () => {
     await flushPromises()
     await selects[1].vm.$emit('update:modelValue', 'alpha-api')
     await flushPromises()
+    // the coordinate watcher loads the ref suggestions on the next tick
+    await nextTick()
 
     // the automatic load may use the backend cache
     expect(releaseDiffApi.listRefs).toHaveBeenLastCalledWith(

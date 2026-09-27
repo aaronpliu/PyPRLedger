@@ -209,6 +209,8 @@ async function selectRepository(wrapper: AnyWrapper) {
   await flushPromises()
   await selects[1].vm.$emit('update:modelValue', 'alpha-api')
   await flushPromises()
+  // let the coordinate watcher load the refs / notes of the new repository
+  await nextTick()
 }
 
 describe('ReleaseNotesView', () => {
