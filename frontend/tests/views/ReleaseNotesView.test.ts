@@ -219,10 +219,7 @@ describe('ReleaseNotesView', () => {
       expect.objectContaining({ refresh: false }),
     )
 
-    // the refresh lives in the draft panel, which opens on demand
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
-    await flushPromises()
-
+    // the refresh sits in the tags section of the navigator, next to the tags
     const refreshButton = buttonsByLabel(wrapper, enMessages.releaseNotes.refresh_tags)
     expect(refreshButton).toHaveLength(1)
 
@@ -359,9 +356,9 @@ describe('ReleaseNotesView', () => {
     // the list is still visible
     expect(wrapper.text()).toContain('v1.1.0')
     expect(wrapper.text()).toContain(enMessages.releaseNotes.read_only_title)
-    // the notice is a banner, not a side panel, so the list keeps the full width
+    // the notice is a banner above the two columns
     expect(wrapper.find('.read-only-alert').exists()).toBe(true)
-    expect(wrapper.findAll('.notes-row > .el-col')).toHaveLength(1)
+    expect(wrapper.findAll('.notes-row > .el-col')).toHaveLength(2)
     // but no management affordances
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)).toHaveLength(0)
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.edit_release)).toHaveLength(0)
@@ -413,31 +410,126 @@ describe('ReleaseNotesView', () => {
     }
   })
 
-  it('keeps the draft panel closed until it is requested', async () => {
+  it('lays the navigator and the notes out in two columns', async () => {
     const wrapper = mountView()
     await flushPromises()
     await selectRepository(wrapper)
 
-    // nothing to draft yet: the list owns the whole row
-    expect(wrapper.find('.form-card').exists()).toBe(false)
+    const columns = wrapper.findAll('.notes-row > .el-col')
+    expect(columns).toHaveLength(2)
+    // navigator (releases + tags) on the left, notes on the right
+    expect(columns[0].classes()).toContain('el-col-lg-8')
+    expect(columns[1].classes()).toContain('el-col-lg-16')
+    expect(columns[0].text()).toContain('v1.1.0')
+    expect(columns[1].find('.md-preview-stub').exists()).toBe(true)
+  })
+
+  it('shows the notes of the selected release in the second column', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 2,
+      items: [
+        release(),
+        release({ id: 2, tag_name: 'v1.2.0', name: 'v1.2.0', body: '## Later release' }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // the newest release is selected by default
+    expect(wrapper.find('.nav-item.active').text()).toContain('v1.1.0')
+    expect(wrapper.find('.md-preview-stub').text()).toContain('add login page')
+
+    const items = wrapper.findAll('.nav-item')
+    const later = items.find((item) => item.text().includes('v1.2.0'))!
+    await later.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.nav-item.active').text()).toContain('v1.2.0')
+    expect(wrapper.find('.md-preview-stub').text()).toContain('Later release')
+    // the released meta of the selection is shown above the notes
+    expect(wrapper.text()).toContain(
+      enMessages.releaseNotes.released_by.replace('{author}', 'alice'),
+    )
+  })
+
+  it('lists every tag of the repository and flags the released ones', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const tagItems = wrapper.findAll('.tag-item')
+    expect(tagItems.map((item) => item.text())).toHaveLength(2)
+    // v1.1.0 has a release, the newer tag does not
+    expect(tagItems[0].text()).toContain('v1.2.0')
+    expect(tagItems[0].text()).not.toContain(enMessages.releaseNotes.tag_released)
+    expect(tagItems[1].text()).toContain('v1.1.0')
+    expect(tagItems[1].text()).toContain(enMessages.releaseNotes.tag_released)
+  })
+
+  it('selects the release of a tag and offers to draft the ones without', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const tagItems = wrapper.findAll('.tag-item')
+    await tagItems[1].trigger('click')
+    await flushPromises()
+
+    // a released tag opens its notes
+    expect(wrapper.find('.md-preview-stub').text()).toContain('add login page')
+
+    await tagItems[0].trigger('click')
+    await flushPromises()
+
+    // an unreleased tag offers to draft from it
+    expect(wrapper.text()).toContain(
+      enMessages.releaseNotes.tag_not_released.replace('{tag}', 'v1.2.0'),
+    )
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_for_tag)[0].trigger('click')
+    await flushPromises()
+
+    const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
+    expect(tagSelect.props('modelValue')).toBe('v1.2.0')
+  })
+
+  it('keeps the editor closed until it is requested', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // the notes of the selected release are shown instead of the editor
+    expect(wrapper.find('.editor-form').exists()).toBe(false)
     expect(wrapper.find('.md-editor-stub').exists()).toBe(false)
-    expect(wrapper.findAll('.notes-row > .el-col')[0].classes()).toContain('el-col-lg-24')
+    expect(wrapper.find('.md-preview-stub').exists()).toBe(true)
 
     await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.form-card').exists()).toBe(true)
-    expect(wrapper.findAll('.notes-row > .el-col')[0].classes()).toContain('el-col-lg-15')
+    expect(wrapper.find('.editor-form').exists()).toBe(true)
+    expect(wrapper.find('.md-editor-stub').exists()).toBe(true)
 
-    // and closing it brings the list back to full width
+    // closing it brings the notes of the selection back
     await buttonsByLabel(wrapper, enMessages.releaseNotes.close_editor)[0].trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.form-card').exists()).toBe(false)
-    expect(wrapper.findAll('.notes-row > .el-col')[0].classes()).toContain('el-col-lg-24')
+    expect(wrapper.find('.editor-form').exists()).toBe(false)
+    expect(wrapper.find('.md-preview-stub').exists()).toBe(true)
   })
 
-  it('closes the draft panel after a release is saved', async () => {
+  it('closes the editor after a release is saved and selects it', async () => {
     const wrapper = mountView()
     await flushPromises()
     await selectRepository(wrapper)
@@ -449,7 +541,7 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
 
     expect(releaseNotesApi.create).toHaveBeenCalled()
-    expect(wrapper.find('.form-card').exists()).toBe(false)
+    expect(wrapper.find('.editor-form').exists()).toBe(false)
   })
 
   it('follows the dark theme in the markdown preview and editor', async () => {
@@ -483,6 +575,9 @@ describe('ReleaseNotesView', () => {
       await flushPromises()
 
       expect(wrapper.findComponent({ name: 'MdEditor' }).props('theme')).toBe('light')
+      // the notes panel is replaced by the editor, so close it to check the preview
+      await buttonsByLabel(wrapper, enMessages.releaseNotes.close_editor)[0].trigger('click')
+      await flushPromises()
       expect(wrapper.findComponent({ name: 'MdPreview' }).props('theme')).toBe('light')
 
       document.documentElement.setAttribute('data-theme', 'dark')
@@ -490,7 +585,6 @@ describe('ReleaseNotesView', () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
       await nextTick()
 
-      expect(wrapper.findComponent({ name: 'MdEditor' }).props('theme')).toBe('dark')
       expect(wrapper.findComponent({ name: 'MdPreview' }).props('theme')).toBe('dark')
     } finally {
       document.documentElement.setAttribute('data-theme', 'light')

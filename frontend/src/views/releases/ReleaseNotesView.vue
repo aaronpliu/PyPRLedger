@@ -109,8 +109,8 @@
     />
 
     <el-row :gutter="16" class="notes-row">
-      <!-- ============ Release list ============ -->
-      <el-col :xs="24" :lg="editorOpen ? 15 : 24">
+      <!-- ============ Column 1: releases and tags ============ -->
+      <el-col :xs="24" :lg="8">
         <el-card shadow="never" class="notes-card">
           <template #header>
             <div class="section-header">
@@ -133,7 +133,7 @@
                   type="primary"
                   size="small"
                   :disabled="!hasCoordinates"
-                  @click="startNewRelease"
+                  @click="startNewRelease()"
                 >
                   {{ t('releaseNotes.draft_new') }}
                 </el-button>
@@ -152,46 +152,160 @@
             <el-skeleton :rows="4" animated />
           </div>
 
-          <el-empty v-else-if="notes.length === 0" :description="t('releaseNotes.empty')" />
+          <template v-else>
+            <!-- Published / draft versions already stored for the repository -->
+            <div class="nav-section">
+              <div class="nav-section-title">
+                <span>{{ t('releaseNotes.list_title') }}</span>
+                <el-tag v-if="notes.length" size="small" type="info" round>
+                  {{ notes.length }}
+                </el-tag>
+              </div>
 
-          <div v-else class="release-list">
-            <div v-for="note in notes" :key="note.id" class="release-item">
-              <div class="release-head">
-                <div class="release-title">
-                  <span class="release-name">{{ note.name }}</span>
-                  <el-tag size="small" effect="plain">{{ note.tag_name }}</el-tag>
-                  <el-tag v-if="note.is_latest" size="small" type="success" round>
+              <el-empty
+                v-if="notes.length === 0"
+                :description="t('releaseNotes.empty')"
+                :image-size="60"
+              />
+
+              <ul v-else class="nav-list">
+                <li
+                  v-for="note in notes"
+                  :key="note.id"
+                  class="nav-item"
+                  :class="{ active: selectedNote?.id === note.id && !editorOpen }"
+                  @click="selectNote(note)"
+                >
+                  <div class="nav-item-main">
+                    <span class="nav-item-name">{{ note.name }}</span>
+                    <el-tag size="small" effect="plain">{{ note.tag_name }}</el-tag>
+                  </div>
+                  <div class="nav-item-badges">
+                    <el-tag v-if="note.is_latest" size="small" type="success" round>
+                      {{ t('releaseNotes.badge_latest') }}
+                    </el-tag>
+                    <el-tag v-if="note.is_prerelease" size="small" type="warning" round>
+                      {{ t('releaseNotes.badge_prerelease') }}
+                    </el-tag>
+                    <el-tag v-if="note.status === 'draft'" size="small" type="info" round>
+                      {{ t('releaseNotes.badge_draft') }}
+                    </el-tag>
+                  </div>
+                  <div class="nav-item-meta">
+                    {{ formatDate(note.published_date || note.updated_date) }}
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <!-- Every tag of the repository, released or not -->
+            <div class="nav-section">
+              <div class="nav-section-title">
+                <span>{{ t('releaseNotes.panel_tags') }}</span>
+                <el-tag v-if="tags.length" size="small" type="info" round>{{ tags.length }}</el-tag>
+                <el-button
+                  link
+                  type="primary"
+                  size="small"
+                  :loading="refsLoading"
+                  :disabled="!hasCoordinates"
+                  @click="loadRefs(true)"
+                >
+                  {{ t('releaseNotes.refresh_tags') }}
+                </el-button>
+              </div>
+
+              <el-empty
+                v-if="tags.length === 0"
+                :description="t('releaseNotes.tags_empty')"
+                :image-size="60"
+              />
+
+              <ul v-else class="nav-list">
+                <li
+                  v-for="tag in tags"
+                  :key="tag"
+                  class="nav-item tag-item"
+                  :class="{ active: selectedTag === tag && !editorOpen }"
+                  @click="selectTag(tag)"
+                >
+                  <div class="nav-item-main">
+                    <span class="nav-item-name">{{ tag }}</span>
+                    <el-tag
+                      v-if="noteByTag(tag)"
+                      size="small"
+                      type="success"
+                      effect="plain"
+                      round
+                    >
+                      {{ t('releaseNotes.tag_released') }}
+                    </el-tag>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </template>
+        </el-card>
+      </el-col>
+
+      <!-- ============ Column 2: notes of the selection (or the editor) ============ -->
+      <el-col :xs="24" :lg="16">
+        <div ref="formCard" class="form-anchor">
+        <el-card shadow="never" class="detail-card">
+          <template #header>
+            <div class="section-header">
+              <div class="section-title">
+                <h3>{{ detailTitle }}</h3>
+                <template v-if="selectedNote && !editorOpen">
+                  <el-tag size="small" effect="plain">{{ selectedNote.tag_name }}</el-tag>
+                  <el-tag v-if="selectedNote.is_latest" size="small" type="success" round>
                     {{ t('releaseNotes.badge_latest') }}
                   </el-tag>
-                  <el-tag v-if="note.is_prerelease" size="small" type="warning" round>
+                  <el-tag v-if="selectedNote.is_prerelease" size="small" type="warning" round>
                     {{ t('releaseNotes.badge_prerelease') }}
                   </el-tag>
-                  <el-tag v-if="note.status === 'draft'" size="small" type="info" round>
+                  <el-tag v-if="selectedNote.status === 'draft'" size="small" type="info" round>
                     {{ t('releaseNotes.badge_draft') }}
                   </el-tag>
-                </div>
-                <div class="release-actions">
+                </template>
+                <el-tag v-else-if="selectedTag && !editorOpen" size="small" effect="plain">
+                  {{ selectedTag }}
+                </el-tag>
+              </div>
+
+              <div class="header-actions">
+                <el-button
+                  v-if="editorOpen"
+                  link
+                  size="small"
+                  :icon="Close"
+                  :aria-label="t('releaseNotes.close_editor')"
+                  @click="closeForm"
+                >
+                  {{ t('releaseNotes.close_editor') }}
+                </el-button>
+                <template v-else-if="selectedNote">
                   <el-button
-                    v-if="note.external_url"
+                    v-if="selectedNote.external_url"
                     link
                     size="small"
                     tag="a"
-                    :href="note.external_url"
+                    :href="selectedNote.external_url"
                     target="_blank"
                     rel="noopener"
                   >
                     {{ t('releaseNotes.view_on_provider') }}
                   </el-button>
                   <template v-if="canManage">
-                    <el-button link type="primary" size="small" @click="editNote(note)">
+                    <el-button link type="primary" size="small" @click="editNote(selectedNote)">
                       {{ t('releaseNotes.edit_release') }}
                     </el-button>
                     <el-button
-                      v-if="note.status === 'draft'"
+                      v-if="selectedNote.status === 'draft'"
                       link
                       type="success"
                       size="small"
-                      @click="publishNote(note)"
+                      @click="publishNote(selectedNote)"
                     >
                       {{ t('releaseNotes.publish') }}
                     </el-button>
@@ -200,90 +314,20 @@
                       link
                       type="primary"
                       size="small"
-                      @click="pushNote(note)"
+                      @click="pushNote(selectedNote)"
                     >
                       {{ t('releaseNotes.push_to_provider') }}
                     </el-button>
-                    <el-button link type="danger" size="small" @click="confirmDelete(note)">
+                    <el-button link type="danger" size="small" @click="confirmDelete(selectedNote)">
                       {{ t('releaseNotes.delete') }}
                     </el-button>
                   </template>
-                </div>
+                </template>
               </div>
-
-              <div class="release-meta">
-                <span v-if="note.author">
-                  {{ t('releaseNotes.released_by', { author: note.author }) }}
-                </span>
-                <span v-if="note.published_date">
-                  · {{ formatDate(note.published_date) }}
-                </span>
-                <span v-else-if="note.updated_date">
-                  · {{ t('releaseNotes.updated_at', { date: formatDate(note.updated_date) }) }}
-                </span>
-                <span v-if="note.previous_tag" class="release-range">
-                  · {{ t('releaseNotes.range', { from: note.previous_tag, to: note.tag_name }) }}
-                </span>
-              </div>
-
-              <div
-                v-if="note.body"
-                class="release-body"
-                :class="{ collapsed: !expanded[note.id] }"
-                @click="openNoteLink"
-              >
-                <MdPreview :model-value="note.body" :theme="mdTheme" preview-theme="github" />
-                <div v-if="!expanded[note.id]" class="body-fade" />
-              </div>
-              <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
-
-              <el-button
-                v-if="note.body && isLongBody(note.body)"
-                link
-                type="primary"
-                size="small"
-                class="expand-toggle"
-                @click="toggleExpanded(note.id)"
-              >
-                {{
-                  expanded[note.id]
-                    ? t('releaseNotes.show_less')
-                    : t('releaseNotes.show_more')
-                }}
-              </el-button>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-
-      <!-- ============ Draft / edit form: only while drafting or editing ============ -->
-      <el-col v-if="editorOpen" :xs="24" :lg="9">
-        <div ref="formCard" class="form-anchor">
-        <el-card shadow="never" class="form-card">
-          <template #header>
-            <div class="section-header">
-              <div class="section-title">
-                <h3>
-                  {{
-                    editingId
-                      ? t('releaseNotes.edit_release')
-                      : t('releaseNotes.draft_new')
-                  }}
-                </h3>
-              </div>
-              <el-button
-                link
-                size="small"
-                :icon="Close"
-                :aria-label="t('releaseNotes.close_editor')"
-                @click="closeForm"
-              >
-                {{ t('releaseNotes.close_editor') }}
-              </el-button>
             </div>
           </template>
 
-          <el-form :model="form" label-position="top">
+          <el-form v-if="editorOpen" class="editor-form" :model="form" label-position="top">
             <el-form-item :label="t('releaseNotes.tag')" required>
               <el-select
                 v-model="form.tag_name"
@@ -303,16 +347,18 @@
                   :value="tag"
                 />
               </el-select>
-              <el-button
-                link
-                type="primary"
-                size="small"
-                :loading="refsLoading"
-                :disabled="!hasCoordinates"
-                @click="loadRefs(true)"
-              >
-                {{ t('releaseNotes.refresh_tags') }}
-              </el-button>
+              <el-tooltip :content="t('releaseNotes.refresh_tags')" placement="top">
+                <el-button
+                  link
+                  type="primary"
+                  size="small"
+                  :icon="Refresh"
+                  :loading="refsLoading"
+                  :disabled="!hasCoordinates"
+                  :aria-label="t('releaseNotes.refresh_tags')"
+                  @click="loadRefs(true)"
+                />
+              </el-tooltip>
             </el-form-item>
 
             <el-form-item :label="t('releaseNotes.previous_tag')">
@@ -401,6 +447,50 @@
               <el-button @click="closeForm">{{ t('releaseNotes.cancel') }}</el-button>
             </div>
           </el-form>
+
+          <!-- Read-only notes of the selected release -->
+          <template v-else-if="selectedNote">
+            <div class="release-meta">
+              <span v-if="selectedNote.author">
+                {{ t('releaseNotes.released_by', { author: selectedNote.author }) }}
+              </span>
+              <span v-if="selectedNote.published_date">
+                · {{ formatDate(selectedNote.published_date) }}
+              </span>
+              <span v-else-if="selectedNote.updated_date">
+                · {{ t('releaseNotes.updated_at', { date: formatDate(selectedNote.updated_date) }) }}
+              </span>
+              <span v-if="selectedNote.previous_tag" class="release-range">
+                ·
+                {{
+                  t('releaseNotes.range', {
+                    from: selectedNote.previous_tag,
+                    to: selectedNote.tag_name,
+                  })
+                }}
+              </span>
+            </div>
+
+            <div v-if="selectedNote.body" class="release-body" @click="openNoteLink">
+              <MdPreview :model-value="selectedNote.body" :theme="mdTheme" preview-theme="github" />
+            </div>
+            <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
+          </template>
+
+          <!-- A tag without a release yet: offer to draft one -->
+          <div v-else-if="selectedTag" class="tag-panel">
+            <p class="muted">{{ t('releaseNotes.tag_not_released', { tag: selectedTag }) }}</p>
+            <el-button v-if="canManage" type="primary" @click="startNewRelease(selectedTag)">
+              {{ t('releaseNotes.draft_for_tag') }}
+            </el-button>
+          </div>
+
+          <el-skeleton v-else-if="notesLoading" :rows="6" animated />
+
+          <el-empty
+            v-else
+            :description="t(hasCoordinates ? 'releaseNotes.select_hint' : 'releaseNotes.needs_repository')"
+          />
         </el-card>
         </div>
       </el-col>
@@ -409,10 +499,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Close } from '@element-plus/icons-vue'
+import { Close, Refresh } from '@element-plus/icons-vue'
 import { MdEditor, MdPreview, type ToolbarNames } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { projectsApi } from '@/api/projects'
@@ -427,7 +517,6 @@ const authStore = useAuthStore()
 // Release notes are manageable by review administrators (RBAC: release_note.manage)
 const MANAGE_ROLES = ['review_admin', 'system_admin']
 
-const LONG_BODY_THRESHOLD = 600
 const PREVIEW_MAX_COMMITS = 500
 
 const toolbars: ToolbarNames[] = [
@@ -463,7 +552,10 @@ const branches = ref<string[]>([])
 const notes = ref<ReleaseNote[]>([])
 const notesTotal = ref(0)
 const notesLoading = ref(false)
-const expanded = reactive<Record<number, boolean>>({})
+// Column 1 is a navigator: either a stored release or a bare tag is selected
+const selectedId = ref<number | null>(null)
+const selectedTag = ref<string | null>(null)
+const selectedNote = computed(() => notes.value.find((note) => note.id === selectedId.value) ?? null)
 
 const saving = ref(false)
 const importing = ref(false)
@@ -526,6 +618,20 @@ const canImportFromProvider = computed(() => canManage.value && isGithubProvider
 const canSave = computed(() => hasCoordinates.value && Boolean(form.value.tag_name.trim()))
 const selectableRefs = computed(() => [...tags.value, ...branches.value])
 
+// Header of the notes column: the editor, the selected release or the selected tag
+const detailTitle = computed(() => {
+  if (editorOpen.value) {
+    return editingId.value ? t('releaseNotes.edit_release') : t('releaseNotes.draft_new')
+  }
+  if (selectedNote.value) {
+    return selectedNote.value.name
+  }
+  if (selectedTag.value) {
+    return selectedTag.value
+  }
+  return t('releaseNotes.select_title')
+})
+
 function secondaryName(value: string, name?: string | null): string | undefined {
   const trimmed = (name ?? '').trim()
   if (!trimmed) return undefined
@@ -538,12 +644,31 @@ function formatDate(value?: string | null): string {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
 }
 
-function isLongBody(body: string): boolean {
-  return body.length > LONG_BODY_THRESHOLD || body.split('\n').length > 12
+/** Release stored for a tag, when there is one. */
+function noteByTag(tag: string): ReleaseNote | undefined {
+  return notes.value.find((note) => note.tag_name === tag)
 }
 
-function toggleExpanded(noteId: number) {
-  expanded[noteId] = !expanded[noteId]
+/** Select a stored release and show its notes. */
+function selectNote(note: ReleaseNote) {
+  closeForm()
+  selectedId.value = note.id
+  selectedTag.value = null
+}
+
+/**
+ * Select a tag: a tag that already has a release shows its notes, a bare tag
+ * offers to draft one (the tag is the natural starting point of a release).
+ */
+function selectTag(tag: string) {
+  const existing = noteByTag(tag)
+  if (existing) {
+    selectNote(existing)
+    return
+  }
+  closeForm()
+  selectedId.value = null
+  selectedTag.value = tag
 }
 
 function coordinates() {
@@ -644,6 +769,11 @@ async function loadNotes() {
     })
     notes.value = response.items ?? []
     notesTotal.value = response.total ?? notes.value.length
+    // Keep the selection meaningful: fall back to the newest release
+    if (!notes.value.some((note) => note.id === selectedId.value)) {
+      selectedId.value = notes.value[0]?.id ?? null
+      selectedTag.value = null
+    }
   } catch {
     ElMessage.error(t('releaseNotes.load_failed'))
   } finally {
@@ -689,18 +819,20 @@ function closeForm() {
   editorOpen.value = false
 }
 
-function startNewRelease() {
+function startNewRelease(tag?: string) {
   resetForm()
   editorOpen.value = true
-  // Preselect the newest tag so a new version can be drafted quickly
-  const newest = tags.value[0]
-  if (newest) {
-    form.value.tag_name = newest
+  // Draft from the clicked tag, or preselect the newest one
+  const initial = tag ?? tags.value[0]
+  if (initial) {
+    form.value.tag_name = initial
   }
   formCard.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
 function editNote(note: ReleaseNote) {
+  selectedId.value = note.id
+  selectedTag.value = null
   editingId.value = note.id
   editingStatus.value = note.status
   generatedCount.value = null
@@ -781,6 +913,9 @@ async function saveRelease(status: 'draft' | 'published') {
     }
 
     closeForm()
+    // Show what was just written instead of falling back to the newest release
+    selectedId.value = saved.id
+    selectedTag.value = null
     await loadNotes()
   } catch {
     ElMessage.error(t('releaseNotes.save_failed'))
@@ -900,8 +1035,10 @@ watch(isCloudProvider, (isCloud) => {
 watch(
   () => [selectedProjectKey.value, selectedRepositorySlug.value, selectedWorkspaceSlug.value, repo.value.git_provider],
   () => {
-    // Another repository means another release: drop a half filled draft too
+    // Another repository means another release: drop a half filled draft as well
     closeForm()
+    selectedId.value = null
+    selectedTag.value = null
     void loadRefs()
     void loadNotes()
   },
@@ -976,11 +1113,8 @@ onBeforeUnmount(() => {
 }
 
 .notes-card,
-.form-anchor {
-  height: 100%;
-}
-
-.form-card {
+.form-anchor,
+.detail-card {
   height: 100%;
 }
 
@@ -988,42 +1122,98 @@ onBeforeUnmount(() => {
   padding: 8px 0;
 }
 
-.release-list {
+/* Navigator: releases and tags of the repository */
+.nav-section + .nav-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.nav-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.nav-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 4px;
+  max-height: 520px;
+  margin: 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  list-style: none;
 }
 
-.release-item {
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.release-head {
+.nav-item {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.release-title {
+.nav-item:hover {
+  background: var(--el-fill-color-light);
+}
+
+.nav-item.active {
+  border-color: var(--el-color-primary-light-5);
+  background: var(--el-color-primary-light-9);
+}
+
+.nav-item-main {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
-.release-name {
-  font-size: 16px;
+.nav-item-name {
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-.release-actions {
+.nav-item-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  flex-shrink: 0;
+}
+
+.nav-item-meta {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.tag-item .nav-item-main {
+  justify-content: space-between;
+}
+
+.tag-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.detail-card .release-meta {
+  margin-top: 0;
+}
+
+.detail-card .release-body {
+  margin-top: 12px;
 }
 
 .release-meta {
@@ -1073,23 +1263,6 @@ onBeforeUnmount(() => {
   --md-theme-code-block-bg-color: var(--el-fill-color-light);
   --md-theme-code-before-bg-color: var(--el-fill-color-light);
   --md-theme-link-color: var(--el-color-primary-light-3);
-}
-
-.release-body.collapsed {
-  max-height: 260px;
-  overflow: hidden;
-}
-
-.body-fade {
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 48px;
-  background: linear-gradient(to bottom, transparent, var(--el-bg-color));
-  pointer-events: none;
-}
-
-.expand-toggle {
-  margin-top: 4px;
 }
 
 .muted {
