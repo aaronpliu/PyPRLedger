@@ -5,6 +5,33 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.1] - 2026-09-27
+
+**Backend Version**: 1.22.1
+**Frontend Version**: 1.17.1
+
+### Added
+- Link the `Full Changelog` range of a release to the revision comparison of the git provider (Bitbucket Cloud `{new}%0D{old}`, Bitbucket Server/Data Center `compare/commits?sourceBranch&targetBranch`, GitHub `base...head`)
+- Split the release navigator into `Releases` and `Tags` tabs, each with its own pagination (server-side for releases, browser-side for tags)
+- Map a tag to the commits it released, scoped against the next older tag of the repository
+- Show a note icon on tags that already have a release, jumping to that note from any page of the list
+
+### Fixed
+- Reuse an already stored project / repository / user when the same remote entity is addressed through another business key, instead of failing with a duplicate key error on `POST /api/v1/reviews`
+- Keep the original cause when a flush fails during an upsert: the failed payload is recorded in a fresh transaction instead of masking the error with a `PendingRollbackError`
+- Look releases up by the payload business keys, so a retry through an aliased Cloud workspace updates its own review
+- Keep the release tag index within the `GET /release/notes` limit of 200 rows per call
+
+### Improved
+- Follow the application theme in the rendered release note and the markdown editor (md-editor dark palette blended with the app surfaces)
+- Open note links in a new tab so the release page is not replaced
+
+### Changed
+- Render the draft / edit release panel on demand instead of always showing the right column
+- Move the read-only notice above the navigator so non-admins keep the full width
+
+---
+
 ## [1.22.0] - 2026-09-26
 
 **Backend Version**: 1.22.0
