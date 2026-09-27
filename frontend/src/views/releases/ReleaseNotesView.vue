@@ -8,6 +8,19 @@
             <h2>{{ t('releaseNotes.title') }}</h2>
             <p class="subtitle">{{ t('releaseNotes.subtitle') }}</p>
           </div>
+          <!-- Users who cannot manage releases only get a label: the explanation
+               is kept in the tooltip instead of a banner over the page -->
+          <el-tooltip
+            v-if="!canManage"
+            :content="t('releaseNotes.read_only_help')"
+            placement="bottom-end"
+            :show-after="100"
+          >
+            <el-tag class="read-only-tag" type="info" size="small" round effect="plain">
+              <el-icon><InfoFilled /></el-icon>
+              <span>{{ t('releaseNotes.read_only_title') }}</span>
+            </el-tag>
+          </el-tooltip>
         </div>
       </template>
 
@@ -97,16 +110,6 @@
         </el-row>
       </el-form>
     </el-card>
-
-    <el-alert
-      v-if="!canManage"
-      class="read-only-alert"
-      type="info"
-      :closable="false"
-      show-icon
-      :title="t('releaseNotes.read_only_title')"
-      :description="t('releaseNotes.read_only_help')"
-    />
 
     <el-row :gutter="16" class="notes-row">
       <!-- ============ Column 1: releases and tags ============ -->
@@ -568,7 +571,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Close, Document, Refresh } from '@element-plus/icons-vue'
+import { Close, Document, InfoFilled, Refresh } from '@element-plus/icons-vue'
 import { MdEditor, MdPreview, type ToolbarNames } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { projectsApi } from '@/api/projects'
@@ -1389,10 +1392,26 @@ onBeforeUnmount(() => {
   padding: 4px;
 }
 
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .card-header h2 {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
+}
+
+/* Read-only label of a user without the release administrator role: the label
+   states the limitation, the tooltip explains it */
+.read-only-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: help;
 }
 
 .subtitle {

@@ -447,10 +447,16 @@ describe('ReleaseNotesView', () => {
 
     // the list is still visible
     expect(wrapper.text()).toContain('v1.1.0')
-    expect(wrapper.text()).toContain(enMessages.releaseNotes.read_only_title)
-    // the notice is a banner above the two columns
-    expect(wrapper.find('.read-only-alert').exists()).toBe(true)
-    expect(wrapper.findAll('.notes-row > .el-col')).toHaveLength(2)
+    // the restriction is a label only: no banner above the page
+    expect(wrapper.find('.el-alert').exists()).toBe(false)
+    const readOnlyTag = wrapper.find('.read-only-tag')
+    expect(readOnlyTag.exists()).toBe(true)
+    expect(readOnlyTag.text()).toContain(enMessages.releaseNotes.read_only_title)
+    // the explanation is kept in the tooltip of the label
+    const readOnlyTooltip = wrapper
+      .findAllComponents({ name: 'ElTooltip' })
+      .find((tooltip: AnyWrapper) => tooltip.find('.read-only-tag').exists())
+    expect(readOnlyTooltip!.props('content')).toBe(enMessages.releaseNotes.read_only_help)
     // but no management affordances
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)).toHaveLength(0)
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.edit_release)).toHaveLength(0)
