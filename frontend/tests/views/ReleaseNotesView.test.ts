@@ -5,8 +5,10 @@ import ElementPlus, { ElMessageBox } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ReleaseNotesView from '@/views/releases/ReleaseNotesView.vue'
 import { projectsApi } from '@/api/projects'
+import { rbacApi } from '@/api/rbac'
 import { releaseDiffApi } from '@/api/releaseDiff'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
+import { resetJiraSettings } from '@/composables/useJira'
 import { useAuthStore } from '@/stores/auth'
 import enMessages from '@/locales/en.json'
 
@@ -15,6 +17,13 @@ vi.mock('@/api/projects', () => ({
     getAllProjects: vi.fn(),
     getProjectRepositories: vi.fn(),
     getCloudWorkspaces: vi.fn(),
+  },
+}))
+
+// The commit tables ask for the JIRA link settings (no JIRA configured here)
+vi.mock('@/api/rbac', () => ({
+  rbacApi: {
+    getJiraSettings: vi.fn().mockResolvedValue({ base_url: '', project_keys: [] }),
   },
 }))
 
@@ -200,6 +209,8 @@ async function selectRepository(wrapper: AnyWrapper) {
   await flushPromises()
   await selects[1].vm.$emit('update:modelValue', 'alpha-api')
   await flushPromises()
+  // let the coordinate watcher load the refs / notes of the new repository
+  await nextTick()
 }
 
 describe('ReleaseNotesView', () => {
@@ -214,6 +225,9 @@ describe('ReleaseNotesView', () => {
     vi.mocked(releaseNotesApi.create).mockResolvedValue(release({ status: 'draft' }) as any)
     vi.mocked(releaseNotesApi.update).mockResolvedValue(release() as any)
     vi.mocked(releaseNotesApi.remove).mockResolvedValue({ message: 'ok' })
+    // JIRA is off unless a test asks for it
+    vi.mocked(rbacApi.getJiraSettings).mockResolvedValue({ base_url: '', project_keys: [] })
+    resetJiraSettings()
   })
 
   it('asks for a repository before showing releases', async () => {
@@ -433,10 +447,16 @@ describe('ReleaseNotesView', () => {
 
     // the list is still visible
     expect(wrapper.text()).toContain('v1.1.0')
-    expect(wrapper.text()).toContain(enMessages.releaseNotes.read_only_title)
-    // the notice is a banner above the two columns
-    expect(wrapper.find('.read-only-alert').exists()).toBe(true)
-    expect(wrapper.findAll('.notes-row > .el-col')).toHaveLength(2)
+    // the restriction is a label only: no banner above the page
+    expect(wrapper.find('.el-alert').exists()).toBe(false)
+    const readOnlyTag = wrapper.find('.read-only-tag')
+    expect(readOnlyTag.exists()).toBe(true)
+    expect(readOnlyTag.text()).toContain(enMessages.releaseNotes.read_only_title)
+    // the explanation is kept in the tooltip of the label
+    const readOnlyTooltip = wrapper
+      .findAllComponents({ name: 'ElTooltip' })
+      .find((tooltip: AnyWrapper) => tooltip.find('.read-only-tag').exists())
+    expect(readOnlyTooltip!.props('content')).toBe(enMessages.releaseNotes.read_only_help)
     // but no management affordances
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)).toHaveLength(0)
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.edit_release)).toHaveLength(0)
@@ -530,6 +550,146 @@ describe('ReleaseNotesView', () => {
     expect(wrapper.text()).toContain(
       enMessages.releaseNotes.released_by.replace('{author}', 'alice'),
     )
+  })
+
+  it('links the JIRA tickets of a note body written by hand', async () => {
+    vi.mocked(rbacApi.getJiraSettings).mockResolvedValue({
+      base_url: 'https://jira.local',
+      project_keys: [],
+    })
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ body: '## Notes\n\n- ship the login fix PRL-123' })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const preview = wrapper.find('.md-preview-stub').text()
+    expect(preview).toContain('- ship the login fix [PRL-123](https://jira.local/browse/PRL-123)')
+  })
+
+  it('keeps a hand written note body as typed while JIRA is not configured', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ body: '## Notes\n\n- ship the login fix PRL-123' })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const preview = wrapper.find('.md-preview-stub').text()
+    expect(preview).toContain('- ship the login fix PRL-123')
+    expect(preview).not.toContain('browse/PRL-123')
+  })
+
+  it('badges the selected tag instead of the release of the other tab', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v0.1.0', 'v0.2.0', 'v0.3.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 2,
+      items: [
+        release(),
+        release({ id: 2, tag_name: 'v0.2.0', name: 'v0.2.0', is_latest: false }),
+      ],
+    })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    const row = wrapper
+      .findAll('.tag-item')
+      .find((item: AnyWrapper) => item.text() === 'v0.2.0')
+    await row!.trigger('click')
+    await flushPromises()
+
+    const header = wrapper.find('.detail-card .section-title').text()
+    expect(header).toContain(
+      enMessages.releaseNotes.tag_commits_title.replace('{tag}', 'v0.2.0'),
+    )
+    // the release badges of the releases tab (tag v1.1.0, "Latest") stay there
+    expect(header).not.toContain('v1.1.0')
+    expect(header).not.toContain(enMessages.releaseNotes.badge_latest)
+  })
+
+  it('drafts for the tag selected in the tags navigator', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v0.1.0', 'v0.2.0', 'v0.3.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    // pick an older tag in the navigator
+    const row = wrapper
+      .findAll('.tag-item')
+      .find((item: AnyWrapper) => item.text() === 'v0.2.0')
+    await row!.trigger('click')
+    await flushPromises()
+
+    // the list header button must draft for that tag, not for the newest one
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
+    expect(tagSelect.props('modelValue')).toBe('v0.2.0')
+  })
+
+  it('drafts from the newest tag whatever order the provider returns', async () => {
+    // Bitbucket Cloud lists tags oldest first (alphabetically)
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v0.1.0', 'v0.2.0', 'v0.3.0'],
+      branches: ['feature/Pylang'],
+    } as never)
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    expect(wrapper.find('.form-card').exists()).toBe(false)
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
+    // the newest tag is preselected, not the first entry of the provider
+    expect(tagSelect.props('modelValue')).toBe('v0.3.0')
+    expect(
+      tagSelect
+        .findAllComponents({ name: 'ElOption' })
+        .map((option: AnyWrapper) => option.props('label')),
+    ).toEqual(['v0.3.0', 'v0.2.0', 'v0.1.0'])
+  })
+
+  it('ignores repeated ref names coming from the provider', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v0.1.0', 'v0.1.0', 'v0.2.0', 'v0.2.0'],
+      branches: ['main', 'main'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    expect(wrapper.findAll('.tag-item').map((item: AnyWrapper) => item.text())).toEqual([
+      'v0.2.0',
+      'v0.1.0',
+    ])
   })
 
   it('maps a tag of the tags tab to the commits it released', async () => {

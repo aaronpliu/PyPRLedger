@@ -43,7 +43,20 @@
     </el-table-column>
     <el-table-column :label="t('releaseDiff.col_message')" min-width="260">
       <template #default="{ row }">
-        {{ firstLine(row.message) }}
+        <!-- JIRA ticket keys of the subject link to the configured JIRA -->
+        <template v-for="(segment, index) in messageSegments(row.message)" :key="index">
+          <a
+            v-if="segment.url"
+            class="commit-ticket"
+            :href="segment.url"
+            target="_blank"
+            rel="noopener"
+            @click.stop
+          >
+            {{ segment.text }}
+          </a>
+          <span v-else>{{ segment.text }}</span>
+        </template>
       </template>
     </el-table-column>
     </el-table>
@@ -65,11 +78,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import type { CommitInfo } from '@/api/releaseDiff'
+import { useJira } from '@/composables/useJira'
+import { jiraTicketSegments } from '@/utils/jira'
 
 const props = withDefaults(
   defineProps<{
@@ -84,9 +99,13 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
+// JIRA link settings are shared by every table and fetched once
+const { jiraSettings, loadJiraSettings } = useJira()
 
 const currentPage = ref(1)
 const pageSize = ref(props.pageSize)
+
+onMounted(() => void loadJiraSettings())
 
 // A new commit list always starts at the first page
 watch(
@@ -109,6 +128,12 @@ function formatTimestamp(value?: number | null): string {
 function firstLine(message?: string | null): string {
   if (!message) return '-'
   return message.split('\n')[0]
+}
+
+/** Subject split into text and JIRA ticket links (a single text segment without JIRA). */
+function messageSegments(message?: string | null) {
+  const segments = jiraTicketSegments(firstLine(message), jiraSettings.value)
+  return segments.length > 0 ? segments : [{ text: '-' }]
 }
 
 async function copy(value: string) {
@@ -145,6 +170,15 @@ async function copy(value: string) {
 }
 
 .commit-author:hover {
+  text-decoration: underline;
+}
+
+.commit-ticket {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.commit-ticket:hover {
   text-decoration: underline;
 }
 </style>

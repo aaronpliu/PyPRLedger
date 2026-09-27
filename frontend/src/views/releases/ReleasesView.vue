@@ -706,7 +706,22 @@
             </el-table-column>
             <el-table-column :label="t('releaseDiff.col_message')" min-width="260">
               <template #default="{ row }">
-                {{ firstLine(row.commit_info?.message) }}
+                <!-- JIRA ticket keys of the subject link to the configured JIRA -->
+                <template
+                  v-for="(segment, index) in messageSegments(row.commit_info?.message)"
+                  :key="index"
+                >
+                  <a
+                    v-if="segment.url"
+                    class="commit-ticket"
+                    :href="segment.url"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    {{ segment.text }}
+                  </a>
+                  <span v-else>{{ segment.text }}</span>
+                </template>
               </template>
             </el-table-column>
           </el-table>
@@ -727,6 +742,8 @@ import { ElMessage } from 'element-plus'
 import { Camera, Download, QuestionFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
+import { useJira } from '@/composables/useJira'
+import { jiraTicketSegments } from '@/utils/jira'
 import { projectsApi } from '@/api/projects'
 import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/api/projects'
 import {
@@ -809,6 +826,8 @@ const checkResult = ref<ReleaseCommitCheckResponse | null>(null)
 
 // Report / screenshot sharing
 const shareSupported = canShareImage()
+// JIRA link settings drive the ticket links of the commit messages and the report
+const { jiraSettings, loadJiraSettings } = useJira()
 const hasAnyResult = computed(() => Boolean(compareResult.value || checkResult.value))
 const reportContext = computed(() => ({
   project_key: selectedProjectKey.value,
@@ -817,6 +836,8 @@ const reportContext = computed(() => ({
   workspace_slug: selectedWorkspaceSlug.value || undefined,
   project_url: selectedProjectUrl.value,
   repository_url: selectedRepositoryUrl.value,
+  // The exported report links the JIRA ticket keys like the tables do
+  jira: jiraSettings.value,
 }))
 const bothSections = computed(() => document.querySelector<HTMLElement>('.tool-sections'))
 
@@ -1043,7 +1064,10 @@ watch(isCloudProvider, (isCloud) => {
   }
 })
 
-onMounted(loadProjects)
+onMounted(() => {
+  void loadProjects()
+  void loadJiraSettings()
+})
 
 function basePayload() {
   return {
@@ -1266,6 +1290,12 @@ function firstLine(message?: string | null): string {
   return message.split('\n')[0]
 }
 
+/** Subject split into text and JIRA ticket links (a single text segment without JIRA). */
+function messageSegments(message?: string | null) {
+  const segments = jiraTicketSegments(firstLine(message), jiraSettings.value)
+  return segments.length > 0 ? segments : [{ text: '-' }]
+}
+
 async function copySha(value: string) {
   try {
     await navigator.clipboard.writeText(value)
@@ -1443,6 +1473,15 @@ async function copySha(value: string) {
   font-size: 12px;
   color: var(--el-color-primary);
   cursor: pointer;
+}
+
+.commit-ticket {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.commit-ticket:hover {
+  text-decoration: underline;
 }
 
 :deep(.el-select-dropdown__item) .option-key {

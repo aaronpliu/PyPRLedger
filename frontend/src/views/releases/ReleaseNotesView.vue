@@ -8,6 +8,19 @@
             <h2>{{ t('releaseNotes.title') }}</h2>
             <p class="subtitle">{{ t('releaseNotes.subtitle') }}</p>
           </div>
+          <!-- Users who cannot manage releases only get a label: the explanation
+               is kept in the tooltip instead of a banner over the page -->
+          <el-tooltip
+            v-if="!canManage"
+            :content="t('releaseNotes.read_only_help')"
+            placement="bottom-end"
+            :show-after="100"
+          >
+            <el-tag class="read-only-tag" type="info" size="small" round effect="plain">
+              <el-icon><InfoFilled /></el-icon>
+              <span>{{ t('releaseNotes.read_only_title') }}</span>
+            </el-tag>
+          </el-tooltip>
         </div>
       </template>
 
@@ -97,16 +110,6 @@
         </el-row>
       </el-form>
     </el-card>
-
-    <el-alert
-      v-if="!canManage"
-      class="read-only-alert"
-      type="info"
-      :closable="false"
-      show-icon
-      :title="t('releaseNotes.read_only_title')"
-      :description="t('releaseNotes.read_only_help')"
-    />
 
     <el-row :gutter="16" class="notes-row">
       <!-- ============ Column 1: releases and tags ============ -->
@@ -292,7 +295,9 @@
             <div class="section-header">
               <div class="section-title">
                 <h3>{{ detailTitle }}</h3>
-                <template v-if="selectedNote && !editorOpen">
+                <!-- The badges describe the selection of the active tab: a release
+                     kept from the releases tab must not decorate a tag. -->
+                <template v-if="tabIsReleases && selectedNote && !editorOpen">
                   <el-tag size="small" effect="plain">{{ selectedNote.tag_name }}</el-tag>
                   <el-tag v-if="selectedNote.is_latest" size="small" type="success" round>
                     {{ t('releaseNotes.badge_latest') }}
@@ -384,12 +389,7 @@
                 :placeholder="t('releaseNotes.tag_placeholder')"
                 style="width: 100%"
               >
-                <el-option
-                  v-for="tag in tags"
-                  :key="tag"
-                  :label="tag"
-                  :value="tag"
-                />
+                <el-option v-for="tag in sortedTags" :key="tag" :label="tag" :value="tag" />
               </el-select>
               <el-tooltip :content="t('releaseNotes.refresh_tags')" placement="top">
                 <el-button
@@ -549,7 +549,7 @@
             </div>
 
             <div v-if="selectedNote.body" class="release-body" @click="openNoteLink">
-              <MdPreview :model-value="selectedNote.body" :theme="mdTheme" preview-theme="github" />
+              <MdPreview :model-value="noteBody(selectedNote.body)" :theme="mdTheme" preview-theme="github" />
             </div>
             <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
           </template>
@@ -571,7 +571,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Close, Document, Refresh } from '@element-plus/icons-vue'
+import { Close, Document, InfoFilled, Refresh } from '@element-plus/icons-vue'
 import { MdEditor, MdPreview, type ToolbarNames } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { projectsApi } from '@/api/projects'
@@ -580,6 +580,8 @@ import { releaseDiffApi } from '@/api/releaseDiff'
 import type { CommitInfo } from '@/api/releaseDiff'
 import CommitTable from '@/components/release/CommitTable.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
+import { useJira } from '@/composables/useJira'
+import { linkifyJiraMarkdown } from '@/utils/jira'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
 import { useAuthStore } from '@/stores/auth'
 
@@ -587,6 +589,8 @@ type NavigatorTab = 'releases' | 'tags'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+// JIRA link settings: also used to link the ticket keys of hand written notes
+const { jiraSettings, loadJiraSettings } = useJira()
 
 // Release notes are manageable by review administrators (RBAC: release_note.manage)
 const MANAGE_ROLES = ['review_admin', 'system_admin']
@@ -712,12 +716,14 @@ const canManage = computed(() =>
 // Importing / pushing only works for providers with a release API
 const canImportFromProvider = computed(() => canManage.value && isGithubProvider.value)
 const canSave = computed(() => hasCoordinates.value && Boolean(form.value.tag_name.trim()))
-const selectableRefs = computed(() => [...tags.value, ...branches.value])
 
-// Newest first: versions compare numerically so v1.10.0 sorts above v1.9.0
+// Newest first: versions compare numerically so v1.10.0 sorts above v1.9.0.
+// The provider returns the tags in its own order (Bitbucket Cloud lists them
+// alphabetically, i.e. oldest first), so every tag picker uses this order.
 const sortedTags = computed(() =>
   [...tags.value].sort((a, b) => b.localeCompare(a, undefined, { numeric: true })),
 )
+const selectableRefs = computed(() => [...sortedTags.value, ...branches.value])
 const visibleTags = computed(() => {
   const start = (tagPage.value - 1) * tagPageSize.value
   return sortedTags.value.slice(start, start + tagPageSize.value)
@@ -759,6 +765,16 @@ function formatDate(value?: string | null): string {
 function previousTagFor(tag: string): string | null {
   const index = sortedTags.value.indexOf(tag)
   return index >= 0 ? (sortedTags.value[index + 1] ?? null) : null
+}
+
+/**
+ * Clean the ref names of the provider response.
+ *
+ * A repeated entry would otherwise render one identical row per occurrence in
+ * the tag / branch pickers, so the list is de-duplicated (and blanks dropped).
+ */
+function uniqueRefs(values: string[] | null | undefined): string[] {
+  return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))]
 }
 
 /** Select a stored release and show its notes. */
@@ -946,8 +962,8 @@ async function loadRefs(force = false) {
       limit: 200,
       refresh: force,
     })
-    tags.value = response.tags ?? []
-    branches.value = response.branches ?? []
+    tags.value = uniqueRefs(response.tags)
+    branches.value = uniqueRefs(response.branches)
     tagPage.value = 1
     // The tags tab always has a selection so the commits of a tag are visible
     if (tabIsTags.value && !selectedTag.value) {
@@ -1047,6 +1063,17 @@ function resetForm() {
  * Notes link to the git platform (commit links, the "Full Changelog" comparison):
  * open them in a new tab so the release page is not replaced.
  */
+/**
+ * Note body as it is rendered.
+ *
+ * The backend links the JIRA tickets of the notes it generates itself; a body
+ * written or imported by hand keeps its plain text, so the ticket keys are
+ * linked here as well (code blocks and existing links stay untouched).
+ */
+function noteBody(body?: string | null): string {
+  return linkifyJiraMarkdown(body, jiraSettings.value)
+}
+
 function openNoteLink(event: MouseEvent) {
   const href = (event.target as HTMLElement | null)?.closest?.('a')?.getAttribute('href')
   if (!href) {
@@ -1065,8 +1092,13 @@ function closeForm() {
 function startNewRelease(tag?: string) {
   resetForm()
   editorOpen.value = true
-  // Draft from the clicked tag, or preselect the newest one
-  const initial = tag ?? tags.value[0]
+  // The tag the release is being drafted for, in order of preference:
+  //   1. the tag that was clicked next to the draft button,
+  //   2. the tag selected in the tags navigator (the draft button of the list
+  //      header must not fall back to another version while a tag is active),
+  //   3. the newest tag - the provider order hands out the oldest one (v0.1.0)
+  const selected = tabIsTags.value ? selectedTag.value : null
+  const initial = tag ?? selected ?? sortedTags.value[0] ?? tags.value[0]
   if (initial) {
     form.value.tag_name = initial
   }
@@ -1343,6 +1375,7 @@ onMounted(() => {
     attributeFilter: ['data-theme', 'class'],
   })
   void loadProjects()
+  void loadJiraSettings()
 })
 
 onBeforeUnmount(() => {
@@ -1359,10 +1392,26 @@ onBeforeUnmount(() => {
   padding: 4px;
 }
 
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .card-header h2 {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
+}
+
+/* Read-only label of a user without the release administrator role: the label
+   states the limitation, the tooltip explains it */
+.read-only-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: help;
 }
 
 .subtitle {

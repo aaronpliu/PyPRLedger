@@ -5,6 +5,7 @@ import type {
   ReleaseCompareResponse,
 } from '@/api/releaseDiff'
 import i18n from '@/i18n'
+import { jiraTicketSegments, type JiraSettings } from '@/utils/jira'
 import { tExport as t } from './shared'
 
 /**
@@ -23,6 +24,8 @@ export interface ReleaseReportContext {
   workspace_slug?: string | null
   project_url?: string | null
   repository_url?: string | null
+  /** JIRA link settings: ticket keys in commit messages become links when set */
+  jira?: JiraSettings | null
 }
 
 export interface ReleaseReportInput {
@@ -147,7 +150,35 @@ function commitUrlCell(url?: string | null): string {
   return link(url)
 }
 
-function commitTable(commits: CommitInfo[] | undefined, truncated = false): string {
+/** Commit subject with its JIRA ticket keys linked (everything escaped). */
+function messageCell(message: string | null | undefined, jira?: JiraSettings | null): string {
+  return jiraTicketSegments(firstLine(message), jira)
+    .map((segment) =>
+      segment.url
+        ? `<a href="${escapeHtml(segment.url)}" target="_blank" rel="noopener">${escapeHtml(
+            segment.text,
+          )}</a>`
+        : escapeHtml(segment.text),
+    )
+    .join('')
+}
+
+/** Author cell: a known provider account links to its profile, else the display name. */
+function authorCell(commit: CommitInfo | null | undefined): string {
+  const username = commit?.author_username
+  if (!username) return escapeHtml(commit?.author_name || '-')
+
+  const handle = `@${escapeHtml(username)}`
+  return commit?.author_url
+    ? `<a href="${escapeHtml(commit.author_url)}" target="_blank" rel="noopener">${handle}</a>`
+    : handle
+}
+
+function commitTable(
+  commits: CommitInfo[] | undefined,
+  truncated = false,
+  context?: ReleaseReportContext,
+): string {
   const rows = commits ?? []
   const note = truncated
     ? `<p class="muted">${escapeHtml(t('releaseDiff.commit_set_bounded_title'))}</p>`
@@ -162,11 +193,11 @@ function commitTable(commits: CommitInfo[] | undefined, truncated = false): stri
       const shaCell = commit.url
         ? `<a href="${escapeHtml(commit.url)}" target="_blank" rel="noopener">${sha}</a>`
         : sha
-      const message = escapeHtml(firstLine(commit.message))
+      const message = messageCell(commit.message, context?.jira)
       const fullMessage = escapeHtml(commit.message ?? '')
       return `<tr>
         <td class="mono">${shaCell}</td>
-        <td>${escapeHtml(commit.author_name || '-')}</td>
+        <td>${authorCell(commit)}</td>
         <td class="nowrap">${escapeHtml(formatTimestamp(commit.author_timestamp))}</td>
         <td title="${fullMessage}">${message}</td>
         <td class="url">${commitUrlCell(commit.url)}</td>
@@ -255,16 +286,16 @@ export function buildCompareSectionHtml(
   <h3 class="section-missing">
     ${escapeHtml(t('releaseDiff.missing_commits_title'))} (${result.missing_commits?.length ?? 0})
   </h3>
-  ${commitTable(result.missing_commits)}
+  ${commitTable(result.missing_commits, false, context)}
 
   <h3>${escapeHtml(t('releaseDiff.added_commits_title'))} (${result.added_commits?.length ?? 0})</h3>
-  ${commitTable(result.added_commits)}
+  ${commitTable(result.added_commits, false, context)}
 
   <h3>${escapeHtml(t('releaseDiff.old_release_commits_title'))} (${result.old_release_commits?.length ?? 0})</h3>
-  ${commitTable(result.old_release_commits, Boolean(result.old_commits_truncated))}
+  ${commitTable(result.old_release_commits, Boolean(result.old_commits_truncated), context)}
 
   <h3>${escapeHtml(t('releaseDiff.new_release_commits_title'))} (${result.new_release_commits?.length ?? 0})</h3>
-  ${commitTable(result.new_release_commits, Boolean(result.new_commits_truncated))}
+  ${commitTable(result.new_release_commits, Boolean(result.new_commits_truncated), context)}
 </section>`
 }
 
@@ -287,10 +318,11 @@ export function buildCheckSectionHtml(
         <td class="${row.included ? 'cell-ok' : 'cell-missing'}">${escapeHtml(
           row.included ? t('releaseDiff.result_included') : t('releaseDiff.result_missing'),
         )}</td>
-        <td>${escapeHtml(row.commit_info?.author_name || '-')}</td>
+        <td>${authorCell(row.commit_info)}</td>
         <td class="nowrap">${escapeHtml(formatTimestamp(row.commit_info?.author_timestamp))}</td>
-        <td title="${escapeHtml(row.commit_info?.message ?? '')}">${escapeHtml(
-          firstLine(row.commit_info?.message),
+        <td title="${escapeHtml(row.commit_info?.message ?? '')}">${messageCell(
+          row.commit_info?.message,
+          context.jira,
         )}</td>
         <td class="url">${commitUrlCell(commitUrl)}</td>
       </tr>`

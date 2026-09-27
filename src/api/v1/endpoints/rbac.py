@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
@@ -361,6 +362,31 @@ async def update_registration_enabled(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update registration setting: {str(e)}",
         ) from e
+
+
+# ============================================================================
+# JIRA Settings Endpoints
+# ============================================================================
+
+
+@router.get(
+    "/settings/jira",
+    response_model=dict,
+    summary="Get JIRA ticket link settings",
+    description=(
+        "Base URL and project keys used to turn the JIRA ticket keys of commit "
+        "messages and release notes into links. Empty when JIRA is not configured."
+    ),
+)
+async def get_jira_settings(
+    _current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+) -> dict:
+    """JIRA link configuration (JIRA_BASE_URL / JIRA_PROJECT_KEYS of the backend)."""
+    base_url = (settings.JIRA_BASE_URL or "").rstrip("/")
+    project_keys = [
+        key.strip().upper() for key in (settings.JIRA_PROJECT_KEYS or "").split(",") if key.strip()
+    ]
+    return {"base_url": base_url, "project_keys": project_keys}
 
 
 # ============================================================================

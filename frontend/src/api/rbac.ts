@@ -161,6 +161,13 @@ export const rbacApi = {
     return request.put('/rbac/settings/llm', data)
   },
 
+  // ===== JIRA Settings APIs =====
+
+  /** Get the JIRA base URL / project keys used to link ticket keys */
+  getJiraSettings(): Promise<{ base_url: string; project_keys: string[] }> {
+    return request.get('/rbac/settings/jira')
+  },
+
   // ===== Banner Settings APIs =====
 
   /** Get reviews page banner config */
