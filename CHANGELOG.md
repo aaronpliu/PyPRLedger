@@ -5,6 +5,33 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.2] - 2026-09-27
+
+**Backend Version**: 1.22.2
+**Frontend Version**: 1.17.2
+
+### Added
+- Group the generated release notes by *Keep a Changelog* sections (Added, Changed, Deprecated, Removed, Fixed, Security), with one emoji per section
+- Add `JIRA_BASE_URL` / `JIRA_PROJECT_KEYS` and publish them through `GET /api/v1/rbac/settings/jira`, so the generated notes and the UI link the same tickets
+- Return the profile picture of a release author (`author_avatar_url`) with every release
+- Return the provider account and profile page of a commit author (`author_username`, `author_url`) from every git provider
+
+### Fixed
+- Show the badges of the active tab only: the tag view no longer decorates a tag with the `vX` / `Latest` badges of the release selected on the releases tab
+- Preselect the tag a release is drafted for (the tag clicked in the navigator, else the one selected there, else the newest) instead of a fixed version
+- List the tags newest first in the version and ref pickers and drop repeated ref names (UI de-duplication plus a cleanup of the cached ref payload)
+
+### Improved
+- Link the JIRA ticket keys of commit messages in the commit tables, the commit check and the exported HTML report
+- Mention commit authors as `@login` linked to their provider profile in the generated notes, the commit tables and the report
+- Link the JIRA tickets of hand written release notes when they are displayed (code blocks and existing links are left untouched)
+- Show the author profile picture next to the release notes and in the navigator
+
+### Changed
+- Rename the note sections to the Keep a Changelog vocabulary: Features → Added, Bug Fixes → Fixed, Performance / Refactoring / Maintenance → Changed, Reverts → Removed; Documentation and Tests keep a section of their own
+
+---
+
 ## [1.22.1] - 2026-09-27
 
 **Backend Version**: 1.22.1
