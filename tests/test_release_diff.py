@@ -10,7 +10,11 @@ from typing import Any
 import httpx
 import pytest
 
-from src.api.v1.endpoints.release_diff import get_release_diff_service
+from src.api.v1.endpoints.release_diff import (
+    get_baseline_service,
+    get_rbac_service,
+    get_release_diff_service,
+)
 from src.core.database import get_db_session
 from src.core.exceptions import GitServiceException
 from src.core.permissions import get_current_user_with_token
@@ -22,6 +26,7 @@ from src.schemas.release_diff import (
     ReleaseRefsRequest,
 )
 from src.services.git_providers.base import BaseGitProvider
+from src.services.release_check_baseline_service import ReleaseCheckBaselineService
 from src.services.release_diff_service import ReleaseDiffService
 
 
@@ -69,6 +74,23 @@ REF_NAMES: dict[str, list[str]] = {
     "branches": ["main", "release/1.0"],
 }
 
+# Ancestry of a raw commit (a ref may point at a merge, a commit may not).
+SHA_ANCESTORS: dict[str, list[str]] = {
+    C1: [C1],
+    C2: [C1, C2],
+    C3: [C1, C2, C3],
+    C4: [C1, C2, C4],
+}
+
+
+def reachable(ref: str) -> list[str]:
+    """Commits reachable from a named ref or a raw commit SHA (oldest first)."""
+    if ref in REF_COMMITS:
+        return REF_COMMITS[ref]
+    if ref in SHA_ANCESTORS:
+        return SHA_ANCESTORS[ref]
+    raise GitServiceException(f"Ref not found: {ref}")
+
 
 class FakeGitProvider(BaseGitProvider):
     """In-memory git provider backed by REF_COMMITS."""
@@ -82,11 +104,7 @@ class FakeGitProvider(BaseGitProvider):
         return self._name
 
     def _resolve(self, ref: str) -> list[str]:
-        if ref in REF_COMMITS:
-            return REF_COMMITS[ref]
-        if ref in COMMITS:
-            return list(REF_COMMITS["v1.1.0"])  # raw sha behaves like the full history
-        raise GitServiceException(f"Ref not found: {ref}")
+        return reachable(ref)
 
     async def compare_commits(
         self,
@@ -156,8 +174,8 @@ def compare_payload(**overrides: Any) -> ReleaseCompareRequest:
     payload: dict[str, Any] = {
         "project_key": "PROJ",
         "repository_slug": "my-repo",
-        "old_release_ref": "v1.0.0",
-        "new_release_ref": "v2.0.0",
+        "source_ref": "v1.0.0",
+        "target_ref": "v2.0.0",
     }
     payload.update(overrides)
     return ReleaseCompareRequest(**payload)
@@ -184,74 +202,176 @@ def refs_payload(**overrides: Any) -> ReleaseRefsRequest:
 
 
 # --------------------------------------------------------------------------- #
-# Service: compare
+# Service: compare (verdict + missing + added in one call)
 # --------------------------------------------------------------------------- #
 
 
-async def test_compare_reports_missing_old_release_commits() -> None:
-    fake = FakeGitProvider()
-    service = build_service(fake)
+async def test_compare_reports_the_missing_and_added_commits() -> None:
+    service = build_service(FakeGitProvider())
 
     result = await service.compare_releases(compare_payload())
 
-    assert result.old_commits_included is False
-    assert result.status == "missing_commits"
+    assert result.verdict == "missing"
     assert [commit.id for commit in result.missing_commits] == [C3]
     assert [commit.id for commit in result.added_commits] == [C4]
-    assert result.summary["missing_count"] == 1
-    assert result.summary["added_count"] == 1
+    assert result.missing_count == 1
+    assert result.added_count == 1
+    assert result.scan_complete is True
+    assert result.added_complete is True
+    assert result.narrowed is False
+    assert result.baseline_ref is None
 
 
 async def test_compare_reports_full_inclusion() -> None:
-    fake = FakeGitProvider()
-    service = build_service(fake)
+    service = build_service(FakeGitProvider())
 
-    result = await service.compare_releases(compare_payload(new_release_ref="v1.1.0"))
+    result = await service.compare_releases(compare_payload(target_ref="v1.1.0"))
 
-    assert result.old_commits_included is True
-    assert result.status == "included"
+    assert result.verdict == "contained"
     assert result.missing_commits == []
+    assert result.missing_count == 0
     assert [commit.id for commit in result.added_commits] == [C4]
 
 
-async def test_compare_identical_refs() -> None:
-    fake = FakeGitProvider()
-    service = build_service(fake)
+async def test_compare_identical_refs_are_contained() -> None:
+    service = build_service(FakeGitProvider())
 
-    result = await service.compare_releases(compare_payload(new_release_ref="v1.0.0"))
+    result = await service.compare_releases(compare_payload(target_ref="v1.0.0"))
 
-    assert result.status == "identical"
-    assert result.old_commits_included is True
-    assert result.summary["missing_count"] == 0
+    assert result.verdict == "contained"
+    assert result.missing_count == 0
+    assert result.added_count == 0
+    assert result.scan_complete is True
 
 
-async def test_compare_with_release_base_refs_scopes_commit_sets() -> None:
-    fake = FakeGitProvider()
-    service = build_service(fake)
+async def test_compare_does_not_report_shared_history() -> None:
+    """Only work that never reached the other line is a difference."""
+    service = build_service(FakeGitProvider())
 
     result = await service.compare_releases(
-        compare_payload(
-            old_release_base_ref="v0.9.0",
-            new_release_base_ref="v1.0.0",
-            new_release_ref="v2.0.0",
-        )
+        compare_payload(source_ref="v1.1.0", target_ref="v2.0.0")
     )
 
-    assert [commit.id for commit in result.old_release_commits] == [C2, C3]
-    assert [commit.id for commit in result.new_release_commits] == [C4]
     assert [commit.id for commit in result.missing_commits] == [C3]
-    assert result.old_commits_included is False
+    assert result.missing_count == 1
+    # C4 exists on both lines, so it is neither missing nor added
+    assert result.added_count == 0
+
+
+async def test_compare_narrows_both_directions_by_the_baseline() -> None:
+    """A baseline drops difference commits that already existed at the starting point."""
+    service = build_service(FakeGitProvider())
+
+    result = await service.compare_releases(
+        compare_payload(source_ref="v1.1.0", target_ref="v2.0.0", baseline_ref="v1.0.0")
+    )
+
+    # C3 was already there at the baseline, so it no longer counts as missing
+    assert result.verdict == "contained"
+    assert result.narrowed is True
+    assert result.baseline_ref == "v1.0.0"
+    assert result.baseline_stored is False
+    assert result.filtered_by_baseline_count == 1
+
+
+async def test_compare_uses_the_stored_baseline_when_none_is_given() -> None:
+    service = build_service(FakeGitProvider())
+
+    result = await service.compare_releases(
+        compare_payload(source_ref="v1.1.0", target_ref="v2.0.0"),
+        baseline_ref="v1.0.0",
+    )
+
+    assert result.verdict == "contained"
+    assert result.baseline_ref == "v1.0.0"
+    assert result.baseline_stored is True
+    assert result.narrowed is True
+
+
+async def test_compare_ignores_the_stored_baseline_when_told_to() -> None:
+    service = build_service(FakeGitProvider())
+
+    result = await service.compare_releases(
+        compare_payload(source_ref="v1.1.0", target_ref="v2.0.0", use_stored_baseline=False),
+        baseline_ref="v1.0.0",
+    )
+
+    assert result.verdict == "missing"
+    assert result.baseline_ref is None
+    assert result.baseline_stored is False
+    assert result.narrowed is False
+
+
+async def test_compare_is_inconclusive_when_the_scan_is_capped() -> None:
+    """A capped scan must never be reported as a pass."""
+    service = build_service(FakeGitProvider())
+
+    result = await service.compare_releases(compare_payload(scan_limit=1))
+
+    assert result.verdict == "inconclusive"
+    assert result.scan_complete is False
+    assert result.scan_limit == 1
+    # the count is honest about being a lower bound
+    assert result.missing_count == 1
+
+
+async def test_compare_verdict_does_not_depend_on_a_release_listing() -> None:
+    """Regression: a capped / empty release listing used to hide a missing commit."""
+
+    class CappedListingProvider(FakeGitProvider):
+        async def list_commits_until(
+            self,
+            project_key: str,
+            repository_slug: str,
+            until_ref: str,
+            limit: int = 1000,
+        ) -> list[dict[str, Any]]:
+            return []
+
+    service = build_service(CappedListingProvider())
+
+    result = await service.compare_releases(compare_payload())
+
+    assert result.verdict == "missing"
+    assert [commit.id for commit in result.missing_commits] == [C3]
+
+
+async def test_compare_marks_rendered_details_as_truncated_without_touching_counts() -> None:
+    """Two added commits, render_limit=1: the count stays complete, the list does not."""
+
+    class TwoAddedProvider(FakeGitProvider):
+        async def compare_commits(
+            self,
+            project_key: str,
+            repository_slug: str,
+            from_ref: str,
+            to_ref: str,
+            limit: int = 1000,
+        ) -> list[dict[str, Any]]:
+            if from_ref == "v1.0.0" and to_ref == "v2.0.0":
+                return [COMMITS[C3], COMMITS[C4]][:limit]
+            return await super().compare_commits(
+                project_key, repository_slug, from_ref, to_ref, limit
+            )
+
+    service = build_service(TwoAddedProvider())
+
+    result = await service.compare_releases(compare_payload(render_limit=1))
+
+    assert result.added_count == 2
+    assert len(result.added_commits) == 1
+    assert result.rendered_truncated is True
 
 
 async def test_compare_include_commits_false_returns_counts_only() -> None:
-    fake = FakeGitProvider()
-    service = build_service(fake)
+    service = build_service(FakeGitProvider())
 
     result = await service.compare_releases(compare_payload(include_commits=False))
 
     assert result.missing_commits == []
     assert result.added_commits == []
-    assert result.summary["missing_count"] == 1
+    assert result.missing_count == 1
+    assert result.added_count == 1
 
 
 def test_normalize_commit_extracts_the_bitbucket_author_account() -> None:
@@ -367,7 +487,8 @@ async def test_check_partial_inclusion() -> None:
     assert result.all_included is False
     assert [item.included for item in result.results] == [True, False, True]
     assert result.summary["included_count"] == 2
-    assert result.results[1].reason == "not_found_in_release_scope"
+    assert result.verdict == "missing"
+    assert result.results[1].reason == "not_reachable_from_target"
     assert result.results[1].commit_info is None
 
 
@@ -545,18 +666,53 @@ def fake_provider() -> FakeGitProvider:
     return FakeGitProvider()
 
 
+class StubRBAC:
+    """RBAC stub: grants everything unless a test says otherwise."""
+
+    def __init__(self) -> None:
+        self.allowed = True
+        self.checks: list[dict[str, Any]] = []
+
+    async def check_permission(self, **kwargs: Any) -> bool:
+        self.checks.append(kwargs)
+        return self.allowed
+
+
+class StubBaselineService:
+    """Baseline store stub: no stored baseline unless a test says otherwise."""
+
+    def __init__(self, baseline_ref: str | None = None) -> None:
+        self.baseline_ref = baseline_ref
+
+    async def get_ref(self, **kwargs: Any) -> str | None:
+        return self.baseline_ref
+
+
 @pytest.fixture
-def authenticated_client(fake_provider):
-    """Test client with auth + release diff service dependencies overridden."""
+def authenticated_client(fake_provider, db_session):
+    """Test client with auth, the diff service and the baseline store overridden."""
 
     async def _current_user() -> AuthUser:
         return AuthUser(id=1, username="tester", email="tester@example.com")
 
+    async def _db_session() -> Any:
+        yield db_session
+
+    rbac = StubRBAC()
     app.dependency_overrides[get_current_user_with_token] = _current_user
+    app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_release_diff_service] = lambda: build_service(fake_provider)
-    yield
-    app.dependency_overrides.pop(get_current_user_with_token, None)
-    app.dependency_overrides.pop(get_release_diff_service, None)
+    app.dependency_overrides[get_baseline_service] = lambda: ReleaseCheckBaselineService(db_session)
+    app.dependency_overrides[get_rbac_service] = lambda: rbac
+    yield rbac
+    for dependency in (
+        get_current_user_with_token,
+        get_db_session,
+        get_release_diff_service,
+        get_baseline_service,
+        get_rbac_service,
+    ):
+        app.dependency_overrides.pop(dependency, None)
 
 
 async def test_endpoint_compare(async_client, authenticated_client) -> None:
@@ -565,17 +721,20 @@ async def test_endpoint_compare(async_client, authenticated_client) -> None:
         json={
             "project_key": "PROJ",
             "repository_slug": "my-repo",
-            "old_release_ref": "v1.0.0",
-            "new_release_ref": "v2.0.0",
+            "source_ref": "v1.0.0",
+            "target_ref": "v2.0.0",
         },
     )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "missing_commits"
-    assert body["old_commits_included"] is False
-    assert body["summary"]["missing_count"] == 1
+    assert body["verdict"] == "missing"
+    assert body["missing_count"] == 1
+    assert body["added_count"] == 1
     assert body["missing_commits"][0]["id"] == C3
+    assert body["added_commits"][0]["id"] == C4
+    assert body["scan_complete"] is True
+    assert body["baseline_ref"] is None
 
 
 async def test_endpoint_refs(async_client, authenticated_client) -> None:
@@ -663,8 +822,8 @@ async def test_endpoint_requires_authentication(async_client) -> None:
             json={
                 "project_key": "PROJ",
                 "repository_slug": "my-repo",
-                "old_release_ref": "v1.0.0",
-                "new_release_ref": "v2.0.0",
+                "source_ref": "v1.0.0",
+                "target_ref": "v2.0.0",
             },
         )
     finally:
@@ -695,8 +854,8 @@ async def test_endpoint_returns_bad_request_for_unknown_provider(
         json={
             "project_key": "PROJ",
             "repository_slug": "my-repo",
-            "old_release_ref": "v1.0.0",
-            "new_release_ref": "v2.0.0",
+            "source_ref": "v1.0.0",
+            "target_ref": "v2.0.0",
             "git_provider": "gitlab",
         },
     )
@@ -723,8 +882,8 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
         if parsed.path.endswith("/compare/commits"):
             from_ref = query["from"][0]
             to_ref = query["to"][0]
-            reachable_from = set(REF_COMMITS[from_ref])
-            ids = [sha for sha in REF_COMMITS[to_ref] if sha not in reachable_from]
+            reachable_from = set(reachable(from_ref))
+            ids = [sha for sha in reachable(to_ref) if sha not in reachable_from]
             return page([COMMITS[sha] for sha in ids], 0)
 
         if parsed.path.endswith("/commits"):
@@ -752,14 +911,15 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
 
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_release_diff_service] = lambda: ReleaseDiffService()
+    app.dependency_overrides[get_baseline_service] = lambda: StubBaselineService()
     try:
         compare_response = await async_client.post(
             "/api/v1/release/diff/compare",
             json={
                 "project_key": "PROJ",
                 "repository_slug": "my-repo",
-                "old_release_ref": "v1.0.0",
-                "new_release_ref": "v2.0.0",
+                "source_ref": "v1.0.0",
+                "target_ref": "v2.0.0",
             },
         )
         check_response = await async_client.post(
@@ -785,7 +945,8 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
     assert compare_response.status_code == 200
     compare_body = compare_response.json()
     assert compare_body["git_provider"] == "bitbucket_server"
-    assert compare_body["status"] == "missing_commits"
+    assert compare_body["verdict"] == "missing"
+    assert compare_body["missing_count"] == 1
     assert [commit["id"] for commit in compare_body["missing_commits"]] == [C3]
     assert compare_body["missing_commits"][0]["url"].startswith("http")
 
@@ -800,9 +961,197 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
     assert refs_body["branches"] == REF_NAMES["branches"]
 
 
+# --------------------------------------------------------------------------- #
+# Service: the per-build merge check (missing)
+# --------------------------------------------------------------------------- #
+
+
+# --------------------------------------------------------------------------- #
+# Service: the verdict no longer depends on a capped listing
+# --------------------------------------------------------------------------- #
+
+
+async def test_check_reports_a_contained_commit_beyond_the_release_listing() -> None:
+    """Regression: a capped listing used to turn a contained commit into a miss."""
+
+    class CappedListingProvider(FakeGitProvider):
+        async def list_commits_until(
+            self,
+            project_key: str,
+            repository_slug: str,
+            until_ref: str,
+            limit: int = 1000,
+        ) -> list[dict[str, Any]]:
+            return []
+
+    service = build_service(CappedListingProvider())
+
+    result = await service.check_commits(
+        check_payload(target_release_ref="v2.0.0", commits=[C1, C3])
+    )
+
+    assert [item.included for item in result.results] == [True, False]
+    assert result.results[0].reason == "matched"
+    assert result.results[0].matched_id is None  # no details without a listing
+    assert result.results[1].reason == "not_reachable_from_target"
+    assert result.verdict == "missing"
+
+
+async def test_check_excludes_commits_before_the_release_base() -> None:
+    service = build_service(FakeGitProvider())
+
+    result = await service.check_commits(
+        check_payload(
+            target_release_ref="v2.0.0", target_release_base_ref="v1.0.0", commits=[C2, C4]
+        )
+    )
+
+    assert [item.included for item in result.results] == [False, True]
+    assert result.results[0].reason == "excluded_by_release_base"
+
+
+# --------------------------------------------------------------------------- #
+# Service: stored baselines
+# --------------------------------------------------------------------------- #
+
+
+async def test_baseline_service_upserts_and_normalizes_the_project_key(db_session) -> None:
+    service = ReleaseCheckBaselineService(db_session)
+
+    saved = await service.save(
+        git_provider="bitbucket_server",
+        project_key="proj",
+        repository_slug="my-repo",
+        baseline_ref="v1.0.0",
+        note="fork point of the 1.x line",
+        updated_by="tester",
+    )
+
+    assert saved.project_key == "PROJ"
+    assert saved.note == "fork point of the 1.x line"
+    assert (
+        await service.get_ref(
+            git_provider="bitbucket_server", project_key="PROJ", repository_slug="my-repo"
+        )
+        == "v1.0.0"
+    )
+    # a different casing addresses the same baseline
+    assert (
+        await service.get_ref(
+            git_provider="bitbucket_server", project_key="proj", repository_slug="my-repo"
+        )
+        == "v1.0.0"
+    )
+
+    await service.save(
+        git_provider="bitbucket_server",
+        project_key="PROJ",
+        repository_slug="my-repo",
+        baseline_ref="v1.2.0",
+        updated_by="tester",
+    )
+
+    assert (
+        await service.get_ref(
+            git_provider="bitbucket_server", project_key="PROJ", repository_slug="my-repo"
+        )
+        == "v1.2.0"
+    )
+
+    assert (
+        await service.clear(
+            git_provider="bitbucket_server", project_key="PROJ", repository_slug="my-repo"
+        )
+        is True
+    )
+    assert (
+        await service.get_ref(
+            git_provider="bitbucket_server", project_key="PROJ", repository_slug="my-repo"
+        )
+        is None
+    )
+    assert (
+        await service.clear(
+            git_provider="bitbucket_server", project_key="PROJ", repository_slug="my-repo"
+        )
+        is False
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Endpoints: missing check and baseline
+# --------------------------------------------------------------------------- #
+
+
+async def test_endpoint_baseline_round_trip(async_client, authenticated_client) -> None:
+    saved = await async_client.put(
+        "/api/v1/release/diff/baseline",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "baseline_ref": "  v1.0.0  ",
+            "note": "fork point of the 1.x line",
+        },
+    )
+
+    assert saved.status_code == 200
+    saved_body = saved.json()
+    assert saved_body["baseline_ref"] == "v1.0.0"
+    assert saved_body["exists"] is True
+    assert saved_body["updated_by"] == "tester"
+
+    fetched = await async_client.get(
+        "/api/v1/release/diff/baseline",
+        params={"project_key": "proj", "repository_slug": "my-repo"},
+    )
+    assert fetched.status_code == 200
+    assert fetched.json()["project_key"] == "PROJ"
+    assert fetched.json()["baseline_ref"] == "v1.0.0"
+
+    cleared = await async_client.delete(
+        "/api/v1/release/diff/baseline",
+        params={"project_key": "PROJ", "repository_slug": "my-repo"},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["exists"] is False
+
+    after = await async_client.get(
+        "/api/v1/release/diff/baseline",
+        params={"project_key": "PROJ", "repository_slug": "my-repo"},
+    )
+    assert after.json()["exists"] is False
+    assert after.json()["baseline_ref"] is None
+
+
+async def test_endpoint_baseline_write_requires_the_manage_permission(
+    async_client, authenticated_client
+) -> None:
+    rbac: StubRBAC = authenticated_client
+    rbac.allowed = False
+
+    denied = await async_client.put(
+        "/api/v1/release/diff/baseline",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "baseline_ref": "v1.0.0",
+        },
+    )
+
+    assert denied.status_code == 403
+    assert rbac.checks and rbac.checks[0]["action"] == "manage"
+
+    # reading a baseline stays open to any authenticated user
+    allowed_read = await async_client.get(
+        "/api/v1/release/diff/baseline",
+        params={"project_key": "PROJ", "repository_slug": "my-repo"},
+    )
+    assert allowed_read.status_code == 200
+
+
 async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider) -> None:
     class FailingProvider(FakeGitProvider):
-        async def list_commits_until(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        async def compare_commits(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
             raise GitServiceException("Bitbucket is unreachable")
 
     async def _current_user() -> AuthUser:
@@ -810,19 +1159,21 @@ async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider) 
 
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_release_diff_service] = lambda: build_service(FailingProvider())
+    app.dependency_overrides[get_baseline_service] = lambda: StubBaselineService()
     try:
         response = await async_client.post(
             "/api/v1/release/diff/compare",
             json={
                 "project_key": "PROJ",
                 "repository_slug": "my-repo",
-                "old_release_ref": "v1.0.0",
-                "new_release_ref": "v2.0.0",
+                "source_ref": "v1.0.0",
+                "target_ref": "v2.0.0",
             },
         )
     finally:
         app.dependency_overrides.pop(get_current_user_with_token, None)
         app.dependency_overrides.pop(get_release_diff_service, None)
+        app.dependency_overrides.pop(get_baseline_service, None)
 
     assert response.status_code == 502
 
@@ -1008,51 +1359,33 @@ async def test_cached_refs_are_cleaned_of_repeated_entries() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Bounded release commit sets (long lived repositories)
+# Request validation and the removed second endpoint
 # --------------------------------------------------------------------------- #
 
 
-async def test_commit_sets_are_bounded_by_the_preview_limit(monkeypatch) -> None:
-    """A multi-year history must not be fetched / returned in full."""
-    old_ids = [f"{index:040x}" for index in range(1, 61)]
-    new_ids = old_ids + [f"{index:040x}" for index in range(61, 66)]
+def test_scan_and_render_limits_are_validated() -> None:
+    with pytest.raises(ValueError):
+        compare_payload(scan_limit=0)
+    with pytest.raises(ValueError):
+        compare_payload(scan_limit=10001)
+    with pytest.raises(ValueError):
+        compare_payload(render_limit=0)
+    with pytest.raises(ValueError):
+        compare_payload(render_limit=2001)
+    with pytest.raises(ValueError):
+        compare_payload(source_ref="   ")
 
-    monkeypatch.setitem(REF_COMMITS, "v3.0.0", old_ids)
-    monkeypatch.setitem(REF_COMMITS, "v3.1.0", new_ids)
-    for index, sha in enumerate(old_ids + new_ids):
-        monkeypatch.setitem(COMMITS, sha, bitbucket_commit(sha, f"chore: commit {index}"))
 
-    service = build_service(FakeGitProvider())
-    result = await service.compare_releases(
-        compare_payload(
-            old_release_ref="v3.0.0",
-            new_release_ref="v3.1.0",
-            commit_preview_limit=10,
-        )
+async def test_endpoint_missing_route_is_gone(async_client, authenticated_client) -> None:
+    """The two tools were folded into one comparison: the old route must not exist."""
+    response = await async_client.post(
+        "/api/v1/release/diff/missing",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "source_ref": "v1.0.0",
+            "target_ref": "v1.1.0",
+        },
     )
 
-    assert len(result.old_release_commits) == 10
-    assert len(result.new_release_commits) == 10
-    assert result.old_commits_truncated is True
-    assert result.new_commits_truncated is True
-    assert result.truncated is True
-    # the counts describe the bounded preview, the UI marks them with ">="
-    assert result.summary["old_commit_count"] == 10
-    assert result.summary["new_commit_count"] == 10
-
-
-async def test_short_commit_sets_are_not_flagged_as_truncated() -> None:
-    service = build_service(FakeGitProvider())
-
-    result = await service.compare_releases(compare_payload())
-
-    assert result.old_commits_truncated is False
-    assert result.new_commits_truncated is False
-    assert result.summary["old_commit_count"] == len(REF_COMMITS["v1.0.0"])
-
-
-async def test_preview_limit_is_validated() -> None:
-    with pytest.raises(ValueError):
-        compare_payload(commit_preview_limit=0)
-    with pytest.raises(ValueError):
-        compare_payload(commit_preview_limit=5000)
+    assert response.status_code == 404

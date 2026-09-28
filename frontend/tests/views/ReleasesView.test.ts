@@ -3,11 +3,14 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import ElementPlus from 'element-plus'
 import { createI18n } from 'vue-i18n'
+import { createMemoryHistory, createRouter } from 'vue-router'
+import type { Router } from 'vue-router'
 import ReleasesView from '@/views/releases/ReleasesView.vue'
 import { projectsApi } from '@/api/projects'
 import type { RepositorySummary } from '@/api/projects'
 import { releaseDiffApi } from '@/api/releaseDiff'
 import type { ReleaseCompareResponse } from '@/api/releaseDiff'
+import { useAuthStore } from '@/stores/auth'
 import {
   buildReleaseReportHtml,
   downloadReleaseReport,
@@ -35,6 +38,9 @@ vi.mock('@/api/releaseDiff', () => ({
     compare: vi.fn(),
     check: vi.fn(),
     listRefs: vi.fn(),
+    getBaseline: vi.fn(),
+    saveBaseline: vi.fn(),
+    clearBaseline: vi.fn(),
   },
 }))
 
@@ -140,7 +146,6 @@ const CLOUD_PROJECT = {
 }
 
 const BASE_REF_PLACEHOLDER = enMessages.releaseDiff.base_ref_placeholder
-const REF_PLACEHOLDER = enMessages.releaseDiff.ref_placeholder
 const WORKSPACE_PLACEHOLDER = enMessages.releaseDiff.workspace_slug_placeholder
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -150,6 +155,17 @@ function inputsByPlaceholder(wrapper: AnyWrapper, placeholder: string) {
   return wrapper
     .findAllComponents({ name: 'ElAutocomplete' })
     .filter((input: AnyWrapper) => input.props('placeholder') === placeholder)
+}
+
+/**
+ * The comparison card labels its refs as source / target (one vocabulary for the
+ * merged tool); the commit check card keeps the generic ref placeholder.
+ */
+function compareRefInputs(wrapper: AnyWrapper) {
+  return [
+    ...inputsByPlaceholder(wrapper, enMessages.releaseDiff.missing_source_placeholder),
+    ...inputsByPlaceholder(wrapper, enMessages.releaseDiff.missing_target_placeholder),
+  ]
 }
 
 function workspaceSelect(wrapper: AnyWrapper) {
@@ -166,16 +182,24 @@ afterEach(() => {
   mountedWrappers.splice(0).forEach((wrapper) => wrapper.unmount())
 })
 
+// The merge check keeps its selection in the URL, so the view needs a router
+let testRouter: Router | null = null
+
 function mountView() {
   const i18n = createI18n({
     legacy: false,
     locale: 'en',
     messages: { en: enMessages },
   })
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/', component: { template: '<div />' } }],
+  })
+  testRouter = router
 
   const wrapper = mount(ReleasesView, {
     global: {
-      plugins: [ElementPlus, i18n],
+      plugins: [ElementPlus, i18n, router],
     },
   })
   mountedWrappers.push(wrapper)
@@ -337,127 +361,9 @@ describe('ReleasesView', () => {
     expect(selects[2].props('modelValue')).toBe('github_enterprise')
   })
 
-  it('hides the base ref inputs until the release scope toggle is enabled', async () => {
-    const wrapper = mountView()
-    await flushPromises()
 
-    expect(inputsByPlaceholder(wrapper, BASE_REF_PLACEHOLDER)).toHaveLength(0)
 
-    await wrapper.findAllComponents({ name: 'ElSwitch' })[0].vm.$emit('update:modelValue', true)
-    await flushPromises()
 
-    expect(inputsByPlaceholder(wrapper, BASE_REF_PLACEHOLDER)).toHaveLength(2)
-  })
-
-  it('renders the effective scope of each release', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-
-    await wrapper.findAllComponents({ name: 'ElSwitch' })[0].vm.$emit('update:modelValue', true)
-    await flushPromises()
-
-    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
-    await releaseInputs[0].find('input').setValue('v1.2.0')
-    await releaseInputs[1].find('input').setValue('v1.3.0')
-
-    const baseInputs = inputsByPlaceholder(wrapper, BASE_REF_PLACEHOLDER)
-    // no base ref yet -> the whole history reachable from the release ref
-    expect(wrapper.text()).toContain('full history of v1.2.0')
-    expect(wrapper.text()).toContain('full history of v1.3.0')
-
-    await baseInputs[0].find('input').setValue('v1.1.0')
-    await baseInputs[1].find('input').setValue('v1.2.0')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('v1.1.0..v1.2.0')
-    expect(wrapper.text()).toContain('v1.2.0..v1.3.0')
-  })
-
-  it('fills the new release base with the old release ref on demand', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-
-    await wrapper.findAllComponents({ name: 'ElSwitch' })[0].vm.$emit('update:modelValue', true)
-    await flushPromises()
-
-    await inputsByPlaceholder(wrapper, REF_PLACEHOLDER)[0].find('input').setValue('v1.2.0')
-    await flushPromises()
-
-    const quickFill = wrapper
-      .findAll('button')
-      .find((button) => button.text() === enMessages.releaseDiff.scope_use_old_as_new_base)
-    expect(quickFill).toBeDefined()
-
-    await quickFill!.trigger('click')
-    await flushPromises()
-
-    const baseInputs = inputsByPlaceholder(wrapper, BASE_REF_PLACEHOLDER)
-    expect((baseInputs[1].find('input').element as HTMLInputElement).value).toBe('v1.2.0')
-  })
-
-  it('only sends base refs when the release scope is enabled', async () => {
-    vi.mocked(releaseDiffApi.compare).mockResolvedValue({
-      project_key: 'ALPHA',
-      repository_slug: 'alpha-api',
-      git_provider: 'bitbucket_server',
-      old_release_ref: 'v1.2.0',
-      new_release_ref: 'v1.3.0',
-      old_commits_included: true,
-      status: 'included',
-      summary: {},
-      missing_commits: [],
-      added_commits: [],
-      old_release_commits: [],
-      new_release_commits: [],
-      truncated: false,
-    })
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
-    await selects[0].vm.$emit('update:modelValue', 'ALPHA')
-    await flushPromises()
-    await selects[1].vm.$emit('update:modelValue', 'alpha-api')
-    await flushPromises()
-
-    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
-    await releaseInputs[0].find('input').setValue('v1.2.0')
-    await releaseInputs[1].find('input').setValue('v1.3.0')
-
-    const compareButton = wrapper
-      .findAll('button')
-      .find((button) => button.text() === enMessages.releaseDiff.run_compare)
-    await compareButton!.trigger('click')
-    await flushPromises()
-
-    expect(releaseDiffApi.compare).toHaveBeenCalledWith(
-      expect.objectContaining({
-        project_key: 'ALPHA',
-        repository_slug: 'alpha-api',
-        old_release_ref: 'v1.2.0',
-        new_release_ref: 'v1.3.0',
-        old_release_base_ref: undefined,
-        new_release_base_ref: undefined,
-      }),
-    )
-
-    await wrapper.findAllComponents({ name: 'ElSwitch' })[0].vm.$emit('update:modelValue', true)
-    await flushPromises()
-    const baseInputs = inputsByPlaceholder(wrapper, BASE_REF_PLACEHOLDER)
-    await baseInputs[0].find('input').setValue('v1.1.0')
-    await baseInputs[1].find('input').setValue('v1.2.0')
-
-    await compareButton!.trigger('click')
-    await flushPromises()
-
-    expect(releaseDiffApi.compare).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        old_release_base_ref: 'v1.1.0',
-        new_release_base_ref: 'v1.2.0',
-      }),
-    )
-  })
 
   it('shows both tools at once instead of hiding them behind tabs', async () => {
     const wrapper = mountView()
@@ -472,7 +378,7 @@ describe('ReleasesView', () => {
     expect(text).toContain(enMessages.releaseDiff.check_help)
   })
 
-  it('lays the compare and check tools out in two columns', async () => {
+  it('lays the release diff and the commit check out in two columns', async () => {
     const wrapper = mountView()
     await flushPromises()
 
@@ -491,19 +397,22 @@ describe('ReleasesView', () => {
       project_key: 'ALPHA',
       repository_slug: 'alpha-api',
       git_provider: 'bitbucket_server',
-      old_release_ref: 'v1.2.0',
-      new_release_ref: 'v1.3.0',
-      old_commits_included: false,
-      status: 'missing_commits',
-      summary: { missing_count: 2 },
+      source_ref: 'v1.2.0',
+      target_ref: 'v1.3.0',
+      verdict: 'missing',
+      scan_complete: true,
+      scan_limit: 2000,
+      filtered_by_baseline_count: 0,
+      narrowed: false,
+      missing_count: 2,
       missing_commits: [
         { id: 'aaa1111', display_id: 'aaa111' },
         { id: 'bbb2222', display_id: 'bbb222' },
       ],
+      added_count: 0,
       added_commits: [],
-      old_release_commits: [],
-      new_release_commits: [],
-      truncated: false,
+      added_complete: true,
+      rendered_truncated: false,
     })
 
     const wrapper = mountView()
@@ -515,7 +424,7 @@ describe('ReleasesView', () => {
     await selects[1].vm.$emit('update:modelValue', 'alpha-api')
     await flushPromises()
 
-    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    const releaseInputs = compareRefInputs(wrapper)
     await releaseInputs[0].find('input').setValue('v1.2.0')
     await releaseInputs[1].find('input').setValue('v1.3.0')
 
@@ -548,7 +457,7 @@ describe('ReleasesView', () => {
     await selects[1].vm.$emit('update:modelValue', 'alpha-api')
     await flushPromises()
 
-    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    const releaseInputs = compareRefInputs(wrapper)
     await releaseInputs[0].find('input').setValue('v1.2.0')
     await releaseInputs[1].find('input').setValue('v1.3.0')
 
@@ -561,7 +470,7 @@ describe('ReleasesView', () => {
     await flushPromises()
 
     expect(
-      (inputsByPlaceholder(wrapper, REF_PLACEHOLDER)[0].find('input').element as HTMLInputElement)
+      (compareRefInputs(wrapper)[0].find('input').element as HTMLInputElement)
         .value,
     ).toBe('')
     expect(selects[1].props('modelValue')).toBe('alpha-api')
@@ -612,8 +521,9 @@ describe('ReleasesView', () => {
     await refreshButton!.trigger('click')
     await flushPromises()
 
-    // the Refresh action asks the backend to read through to Bitbucket
-    expect(releaseDiffApi.listRefs).toHaveBeenLastCalledWith(
+    // the Refresh action asks the backend to read through to Bitbucket (a debounced
+    // automatic load may follow it, so match any cache-bypassing call)
+    expect(releaseDiffApi.listRefs).toHaveBeenCalledWith(
       expect.objectContaining({ refresh: true }),
     )
     expect(wrapper.text()).toContain(
@@ -626,16 +536,19 @@ describe('ReleasesView', () => {
       project_key: 'ALPHA',
       repository_slug: 'alpha-api',
       git_provider: 'bitbucket_server',
-      old_release_ref: 'deadbeef',
-      new_release_ref: 'v1.1.0',
-      old_commits_included: true,
-      status: 'included',
-      summary: {},
+      source_ref: 'deadbeef',
+      target_ref: 'v1.1.0',
+      verdict: 'contained',
+      scan_complete: true,
+      scan_limit: 2000,
+      filtered_by_baseline_count: 0,
+      narrowed: false,
+      missing_count: 0,
       missing_commits: [],
+      added_count: 0,
       added_commits: [],
-      old_release_commits: [],
-      new_release_commits: [],
-      truncated: false,
+      added_complete: true,
+      rendered_truncated: false,
     })
 
     const wrapper = mountView()
@@ -653,7 +566,7 @@ describe('ReleasesView', () => {
     await refreshButton!.trigger('click')
     await flushPromises()
 
-    const releaseFields = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    const releaseFields = compareRefInputs(wrapper)
     const fetchSuggestions = releaseFields[0].props('fetchSuggestions') as (
       query: string,
       cb: (items: { value: string }[]) => void,
@@ -672,7 +585,7 @@ describe('ReleasesView', () => {
     await flushPromises()
 
     expect(releaseDiffApi.compare).toHaveBeenCalledWith(
-      expect.objectContaining({ old_release_ref: 'deadbeef', new_release_ref: 'v1.1.0' }),
+      expect.objectContaining({ source_ref: 'deadbeef', target_ref: 'v1.1.0' }),
     )
   })
 
@@ -698,16 +611,19 @@ describe('ReleasesView', () => {
       project_key: 'AI',
       repository_slug: 'pylang',
       git_provider: 'bitbucket_cloud',
-      old_release_ref: 'v1.0.0',
-      new_release_ref: 'v1.1.0',
-      old_commits_included: true,
-      status: 'included',
-      summary: {},
+      source_ref: 'v1.0.0',
+      target_ref: 'v1.1.0',
+      verdict: 'contained',
+      scan_complete: true,
+      scan_limit: 2000,
+      filtered_by_baseline_count: 0,
+      narrowed: false,
+      missing_count: 0,
       missing_commits: [],
+      added_count: 0,
       added_commits: [],
-      old_release_commits: [],
-      new_release_commits: [],
-      truncated: false,
+      added_complete: true,
+      rendered_truncated: false,
     })
 
     const wrapper = mountView()
@@ -729,7 +645,7 @@ describe('ReleasesView', () => {
       select.findAllComponents({ name: 'ElOption' }).map((option: AnyWrapper) => option.props('value')),
     ).toEqual(['aaronpliu'])
 
-    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    const releaseInputs = compareRefInputs(wrapper)
     await releaseInputs[0].find('input').setValue('v1.0.0')
     await releaseInputs[1].find('input').setValue('v1.1.0')
 
@@ -809,16 +725,19 @@ describe('ReleasesView', () => {
       project_key: 'AI',
       repository_slug: 'pylang',
       git_provider: 'bitbucket_cloud',
-      old_release_ref: 'v1.0.0',
-      new_release_ref: 'v1.1.0',
-      old_commits_included: true,
-      status: 'included',
-      summary: {},
+      source_ref: 'v1.0.0',
+      target_ref: 'v1.1.0',
+      verdict: 'contained',
+      scan_complete: true,
+      scan_limit: 2000,
+      filtered_by_baseline_count: 0,
+      narrowed: false,
+      missing_count: 0,
       missing_commits: [],
+      added_count: 0,
       added_commits: [],
-      old_release_commits: [],
-      new_release_commits: [],
-      truncated: false,
+      added_complete: true,
+      rendered_truncated: false,
     })
 
     const wrapper = mountView()
@@ -837,7 +756,7 @@ describe('ReleasesView', () => {
     await cloudWorkspaceSelect.vm.$emit('update:modelValue', 'aaronpliu')
     await flushPromises()
 
-    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    const releaseInputs = compareRefInputs(wrapper)
     await releaseInputs[0].find('input').setValue('v1.0.0')
     await releaseInputs[1].find('input').setValue('v1.1.0')
 
@@ -859,20 +778,25 @@ describe('ReleasesView', () => {
 })
 
 describe('ReleasesView reports and screenshots', () => {
-  const COMPARE_RESULT = {
+  const COMPARE_RESULT: ReleaseCompareResponse = {
     project_key: 'ALPHA',
     repository_slug: 'alpha-api',
     git_provider: 'bitbucket_server',
-    old_release_ref: 'v1.2.0',
-    new_release_ref: 'v1.3.0',
-    old_commits_included: false,
-    status: 'missing_commits' as const,
-    summary: { missing_count: 1 },
+    source_ref: 'v1.2.0',
+    target_ref: 'v1.3.0',
+    baseline_ref: null,
+    baseline_stored: false,
+    narrowed: false,
+    verdict: 'missing',
+    scan_complete: true,
+    scan_limit: 2000,
+    filtered_by_baseline_count: 0,
+    missing_count: 1,
     missing_commits: [{ id: 'aaa1111', display_id: 'aaa111' }],
+    added_count: 0,
     added_commits: [],
-    old_release_commits: [],
-    new_release_commits: [],
-    truncated: false,
+    added_complete: true,
+    rendered_truncated: false,
   }
 
   beforeEach(() => {
@@ -904,7 +828,7 @@ describe('ReleasesView reports and screenshots', () => {
     await selects[1].vm.$emit('update:modelValue', 'alpha-api')
     await flushPromises()
 
-    const releaseInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
+    const releaseInputs = compareRefInputs(wrapper)
     await releaseInputs[0].find('input').setValue('v1.2.0')
     await releaseInputs[1].find('input').setValue('v1.3.0')
 
@@ -965,8 +889,9 @@ describe('ReleasesView reports and screenshots', () => {
     const wrapper = await mountWithCompareResult()
 
     await wrapper.find('textarea').setValue('aaa1111\nbbb2222')
-    const refInputs = inputsByPlaceholder(wrapper, REF_PLACEHOLDER)
-    await refInputs[2].find('input').setValue('v1.3.0')
+    // the check card keeps the generic ref placeholder
+    const checkRef = inputsByPlaceholder(wrapper, enMessages.releaseDiff.ref_placeholder)[0]
+    await checkRef.find('input').setValue('v1.3.0')
 
     const checkButton = wrapper
       .findAll('button')
@@ -994,18 +919,38 @@ describe('ReleasesView reports and screenshots', () => {
     expect(rowClassName({ row: { included: true }, rowIndex: 1 })).toBe('')
   })
 
-  it('marks truncated release commit sets with a lower bound and a warning', async () => {
+  it('marks rounded counts and a capped detail list, keeping the counts complete', async () => {
     const wrapper = await mountWithCompareResult({
       ...COMPARE_RESULT,
-      old_commits_truncated: true,
-      new_commits_truncated: true,
-      old_release_commits: [{ id: 'aaa1111', display_id: 'aaa111' }],
-      new_release_commits: [{ id: 'bbb2222', display_id: 'bbb222' }],
-      summary: { old_commit_count: 200, new_commit_count: 200, missing_count: 1 },
-    } as ReleaseCompareResponse)
+      missing_count: 250,
+      missing_commits: [{ id: 'aaa1111', display_id: 'aaa111' }],
+      rendered_truncated: true,
+    })
 
-    expect(wrapper.text()).toContain(enMessages.releaseDiff.commit_set_bounded_title)
-    expect(wrapper.text()).toContain('≥200')
+    // the scan completed, so the count is exact; only the rendered list is capped
+    expect(wrapper.text()).toContain('250')
+    expect(wrapper.text()).toContain(
+      enMessages.releaseDiff.missing_render_truncated
+        .replace('{rendered}', '1')
+        .replace('{count}', '250'),
+    )
+  })
+
+  it('flags a lower bound when the missing direction could not be enumerated', async () => {
+    const wrapper = await mountWithCompareResult({
+      ...COMPARE_RESULT,
+      verdict: 'inconclusive',
+      scan_complete: false,
+      scan_limit: 1,
+      missing_count: 1,
+    })
+
+    expect(wrapper.text()).toContain('≥1')
+    expect(wrapper.text()).toContain(
+      enMessages.releaseDiff.inconclusive_help
+        .replace('{limit}', '1')
+        .replace('{count}', '1'),
+    )
   })
 
   it('exports the comparison result as an HTML report', async () => {
@@ -1023,7 +968,7 @@ describe('ReleasesView reports and screenshots', () => {
           project_url: 'http://git.local/projects/ALPHA',
           repository_url: 'http://git.local/projects/ALPHA/repos/alpha-api',
         }),
-        compare: expect.objectContaining({ old_release_ref: 'v1.2.0' }),
+        compare: expect.objectContaining({ source_ref: 'v1.2.0' }),
         check: null,
       }),
     )
@@ -1041,7 +986,7 @@ describe('ReleasesView reports and screenshots', () => {
 
     expect(buildReleaseReportHtml).toHaveBeenCalledWith(
       expect.objectContaining({
-        compare: expect.objectContaining({ status: 'missing_commits' }),
+        compare: expect.objectContaining({ verdict: 'missing' }),
         check: null,
       }),
     )
@@ -1105,4 +1050,205 @@ describe('ReleasesView reports and screenshots', () => {
 
     expect(copyPngToClipboard).toHaveBeenCalledWith('data:image/png;base64,AAA')
   }, 30000)
+})
+
+describe('ReleasesView merged release diff', () => {
+  const SOURCE_PLACEHOLDER = enMessages.releaseDiff.missing_source_placeholder
+  const TARGET_PLACEHOLDER = enMessages.releaseDiff.missing_target_placeholder
+
+  const COMPARISON: ReleaseCompareResponse = {
+    project_key: 'ALPHA',
+    repository_slug: 'alpha-api',
+    git_provider: 'bitbucket_server',
+    source_ref: 'v1.1.5',
+    target_ref: 'v2.3.0',
+    baseline_ref: 'v1.0.0',
+    baseline_stored: true,
+    narrowed: true,
+    verdict: 'missing',
+    scan_complete: true,
+    scan_limit: 2000,
+    filtered_by_baseline_count: 2,
+    missing_count: 2,
+    missing_commits: [
+      { id: 'aaa1111', display_id: 'aaa111', message: 'fix: crash on logout' },
+      { id: 'bbb2222', display_id: 'bbb222', message: 'feat: new dashboard' },
+    ],
+    added_count: 1,
+    added_commits: [{ id: 'ccc3333', display_id: 'ccc333', message: 'chore: bump deps' }],
+    added_complete: true,
+    rendered_truncated: false,
+  }
+
+  const STORED_BASELINE = {
+    project_key: 'ALPHA',
+    repository_slug: 'alpha-api',
+    git_provider: 'bitbucket_server',
+    baseline_ref: 'v1.0.0',
+    note: 'fork point of the 1.x line',
+    updated_by: 'tester',
+    updated_date: '2026-09-28T00:00:00',
+    exists: true,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(projectsApi.getCloudWorkspaces).mockResolvedValue([])
+    vi.mocked(projectsApi.getAllProjects).mockResolvedValue(PROJECTS)
+    vi.mocked(projectsApi.getProjectRepositories).mockImplementation((projectKey: string) =>
+      Promise.resolve(REPOSITORIES_BY_PROJECT[projectKey] ?? []),
+    )
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue(REFS)
+    vi.mocked(releaseDiffApi.getBaseline).mockResolvedValue({
+      ...STORED_BASELINE,
+      baseline_ref: null,
+      note: null,
+      updated_by: null,
+      updated_date: null,
+      exists: false,
+    })
+  })
+
+  async function mountWithRepository() {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'ALPHA')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'alpha-api')
+    await flushPromises()
+
+    return wrapper
+  }
+
+  function refInput(wrapper: AnyWrapper, placeholder: string) {
+    return inputsByPlaceholder(wrapper, placeholder)[0].find('input')
+  }
+
+  async function runComparison(
+    wrapper: AnyWrapper,
+    source = 'v1.1.5',
+    target = 'v2.3.0',
+  ) {
+    await refInput(wrapper, SOURCE_PLACEHOLDER).setValue(source)
+    await refInput(wrapper, TARGET_PLACEHOLDER).setValue(target)
+    await flushPromises()
+
+    const button = wrapper
+      .findAll('button')
+      .find((item: AnyWrapper) => item.text() === enMessages.releaseDiff.run_compare)
+    await button!.trigger('click')
+    await flushPromises()
+  }
+
+  it('sends one request carrying source, target and the stored baseline', async () => {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue(COMPARISON)
+
+    const wrapper = await mountWithRepository()
+    await runComparison(wrapper)
+
+    expect(releaseDiffApi.compare).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_key: 'ALPHA',
+        repository_slug: 'alpha-api',
+        source_ref: 'v1.1.5',
+        target_ref: 'v2.3.0',
+        baseline_ref: undefined,
+        // an empty field still narrows against the repository baseline
+        use_stored_baseline: true,
+      }),
+    )
+  })
+
+  it('renders the verdict with the missing and the added commits', async () => {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue(COMPARISON)
+
+    const wrapper = await mountWithRepository()
+    await runComparison(wrapper)
+
+    expect(wrapper.text()).toContain(
+      enMessages.releaseDiff.missing_found
+        .replace('{count}', '2')
+        .replace('{source}', 'v1.1.5')
+        .replace('{target}', 'v2.3.0'),
+    )
+    expect(wrapper.text()).toContain('aaa111')
+    expect(wrapper.text()).toContain('ccc333')
+    expect(wrapper.text()).toContain(
+      enMessages.releaseDiff.missing_baseline_used
+        .replace('{ref}', 'v1.0.0')
+        .replace('{filtered}', '2'),
+    )
+  })
+
+  it('never renders an inconclusive verdict as a pass', async () => {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue({
+      ...COMPARISON,
+      verdict: 'inconclusive',
+      scan_complete: false,
+      scan_limit: 1,
+      missing_count: 1,
+      added_count: 0,
+      added_commits: [],
+      narrowed: false,
+      baseline_ref: null,
+      baseline_stored: false,
+    })
+
+    const wrapper = await mountWithRepository()
+    await runComparison(wrapper)
+
+    const verdict = wrapper
+      .findAllComponents({ name: 'ElAlert' })
+      .find((alert: AnyWrapper) =>
+        alert.text().includes(enMessages.releaseDiff.status_inconclusive),
+      )
+
+    expect(verdict).toBeDefined()
+    expect(verdict!.props('type')).toBe('warning')
+    expect(verdict!.props('type')).not.toBe('success')
+  })
+
+  it('stores and clears the baseline for the managing roles', async () => {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue(COMPARISON)
+    vi.mocked(releaseDiffApi.saveBaseline).mockResolvedValue(STORED_BASELINE)
+
+    const wrapper = await mountWithRepository()
+    await runComparison(wrapper)
+
+    const saveLabel = enMessages.releaseDiff.baseline_save
+    // not a managing role: no controls
+    expect(
+      wrapper.findAll('button').some((button: AnyWrapper) => button.text() === saveLabel),
+    ).toBe(false)
+
+    useAuthStore().user = { id: 1, username: 'tester', roles: ['review_admin'] } as never
+    await nextTick()
+
+    const baselineInput = refInput(wrapper, enMessages.releaseDiff.missing_baseline_placeholder)
+    await baselineInput.setValue('v1.0.0')
+    await flushPromises()
+
+    const saveButton = wrapper.findAll('button').find((button: AnyWrapper) => button.text() === saveLabel)
+    await saveButton!.trigger('click')
+    await flushPromises()
+
+    expect(releaseDiffApi.saveBaseline).toHaveBeenCalledWith(
+      expect.objectContaining({ project_key: 'ALPHA', baseline_ref: 'v1.0.0' }),
+    )
+  })
+
+  it('keeps the comparison selection in the URL', async () => {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue(COMPARISON)
+
+    const wrapper = await mountWithRepository()
+    await runComparison(wrapper)
+
+    const query = testRouter!.currentRoute.value.query
+    expect(query.project_key).toBe('ALPHA')
+    expect(query.repository_slug).toBe('alpha-api')
+    expect(query.source).toBe('v1.1.5')
+    expect(query.target).toBe('v2.3.0')
+  })
 })

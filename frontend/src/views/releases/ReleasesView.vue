@@ -213,12 +213,12 @@
 
         <el-form :model="compareForm" label-width="180px">
           <el-row :gutter="16">
-            <el-col :xs="24">
-              <el-form-item :label="t('releaseDiff.old_release_ref')" required>
+            <el-col :xs="24" :md="12">
+              <el-form-item :label="t('releaseDiff.missing_source_ref')" required>
                 <el-autocomplete
-                  v-model="compareForm.old_release_ref"
+                  v-model="compareForm.source_ref"
                   :fetch-suggestions="queryRefs"
-                  :placeholder="t('releaseDiff.ref_placeholder')"
+                  :placeholder="t('releaseDiff.missing_source_placeholder')"
                   clearable
                   trigger-on-focus
                   style="width: 100%"
@@ -234,12 +234,12 @@
                 </el-autocomplete>
               </el-form-item>
             </el-col>
-            <el-col :xs="24">
-              <el-form-item :label="t('releaseDiff.new_release_ref')" required>
+            <el-col :xs="24" :md="12">
+              <el-form-item :label="t('releaseDiff.missing_target_ref')" required>
                 <el-autocomplete
-                  v-model="compareForm.new_release_ref"
+                  v-model="compareForm.target_ref"
                   :fetch-suggestions="queryRefs"
-                  :placeholder="t('releaseDiff.ref_placeholder')"
+                  :placeholder="t('releaseDiff.missing_target_placeholder')"
                   clearable
                   trigger-on-focus
                   style="width: 100%"
@@ -257,25 +257,13 @@
             </el-col>
           </el-row>
 
-          <div class="scope-block">
-            <el-switch
-              v-model="compareScopeEnabled"
-              size="small"
-              @change="onCompareScopeToggle"
-            />
-            <span class="scope-title">{{ t('releaseDiff.scope_toggle') }}</span>
-            <el-tooltip :content="t('releaseDiff.scope_help')" placement="top" :show-after="100">
-              <el-icon class="help-icon"><QuestionFilled /></el-icon>
-            </el-tooltip>
-          </div>
-
-          <el-row v-if="compareScopeEnabled" :gutter="16">
-            <el-col :xs="24">
-              <el-form-item :label="t('releaseDiff.old_release_base_ref')">
+          <el-row :gutter="16">
+            <el-col :xs="24" :md="12">
+              <el-form-item :label="t('releaseDiff.missing_baseline_ref')">
                 <el-autocomplete
-                  v-model="compareForm.old_release_base_ref"
+                  v-model="compareForm.baseline_ref"
                   :fetch-suggestions="queryRefs"
-                  :placeholder="t('releaseDiff.base_ref_placeholder')"
+                  :placeholder="t('releaseDiff.missing_baseline_placeholder')"
                   clearable
                   trigger-on-focus
                   style="width: 100%"
@@ -290,45 +278,38 @@
                   </template>
                 </el-autocomplete>
               </el-form-item>
-              <div class="scope-preview">
-                {{ t('releaseDiff.scope_of') }} {{ t('releaseDiff.old_release_ref') }}:
-                <code>{{ scopeText(compareForm.old_release_base_ref, compareForm.old_release_ref) }}</code>
-              </div>
             </el-col>
-            <el-col :xs="24">
-              <el-form-item :label="t('releaseDiff.new_release_base_ref')">
-                <el-autocomplete
-                  v-model="compareForm.new_release_base_ref"
-                  :fetch-suggestions="queryRefs"
-                  :placeholder="t('releaseDiff.base_ref_placeholder')"
-                  clearable
-                  trigger-on-focus
-                  style="width: 100%"
+            <el-col :xs="24" :md="12">
+              <div class="baseline-actions">
+                <el-button
+                  v-if="canManageReleases"
+                  size="small"
+                  :loading="baselineSaving"
+                  :disabled="!canStoreBaseline"
+                  @click="saveBaseline"
                 >
-                  <template #default="{ item }">
-                    <div class="ref-option">
-                      <span>{{ item.value }}</span>
-                      <el-tag size="small" effect="plain" type="info">
-                        {{ refTypeLabel(item.type) }}
-                      </el-tag>
-                    </div>
-                  </template>
-                </el-autocomplete>
-              </el-form-item>
-              <div class="scope-preview">
-                {{ t('releaseDiff.scope_of') }} {{ t('releaseDiff.new_release_ref') }}:
-                <code>{{ scopeText(compareForm.new_release_base_ref, compareForm.new_release_ref) }}</code>
+                  {{ t('releaseDiff.baseline_save') }}
+                </el-button>
+                <el-button
+                  v-if="canManageReleases && storedBaseline?.exists"
+                  size="small"
+                  :loading="baselineSaving"
+                  @click="clearBaseline"
+                >
+                  {{ t('releaseDiff.baseline_clear') }}
+                </el-button>
               </div>
-            </el-col>
-            <el-col :xs="24">
-              <el-button
-                link
-                type="primary"
-                :disabled="!compareForm.old_release_ref.trim()"
-                @click="useOldAsNewBase"
-              >
-                {{ t('releaseDiff.scope_use_old_as_new_base') }}
-              </el-button>
+              <div class="scope-preview">
+                <template v-if="storedBaseline?.exists">
+                  {{
+                    t('releaseDiff.baseline_stored', {
+                      ref: storedBaseline.baseline_ref,
+                      user: storedBaseline.updated_by || '-',
+                    })
+                  }}
+                </template>
+                <template v-else>{{ t('releaseDiff.baseline_none') }}</template>
+              </div>
             </el-col>
           </el-row>
 
@@ -352,20 +333,30 @@
             class="status-alert"
           />
           <el-alert
-            v-if="compareResult.truncated"
+            v-if="compareResult.verdict === 'inconclusive'"
             type="warning"
-            :title="t('releaseDiff.truncated_warning')"
+            show-icon
             :closable="false"
             class="status-alert"
+            :title="t('releaseDiff.inconclusive_title')"
+            :description="
+              t('releaseDiff.inconclusive_help', {
+                limit: compareResult.scan_limit,
+                count: compareResult.missing_count,
+              })
+            "
           />
           <el-alert
-            v-if="commitSetsTruncated"
-            type="warning"
+            v-if="compareResult.narrowed"
+            type="info"
             :closable="false"
-            show-icon
             class="status-alert"
-            :title="t('releaseDiff.commit_set_bounded_title')"
-            :description="t('releaseDiff.commit_set_bounded_help')"
+            :title="
+              t('releaseDiff.missing_baseline_used', {
+                ref: compareResult.baseline_ref,
+                filtered: compareResult.filtered_by_baseline_count,
+              })
+            "
           />
 
           <div class="report-actions">
@@ -400,58 +391,41 @@
 
           <div class="scope-used">
             <el-tag size="small" type="info">
-              {{ t('releaseDiff.old_release_ref') }}:
-              {{ scopeText(compareResult.old_release_base_ref, compareResult.old_release_ref) }}
-            </el-tag>
-            <el-tag size="small" type="info">
-              {{ t('releaseDiff.new_release_ref') }}:
-              {{ scopeText(compareResult.new_release_base_ref, compareResult.new_release_ref) }}
+              {{ t('releaseDiff.missing_baseline_ref') }}:
+              {{
+                compareResult.baseline_ref
+                  ? compareResult.baseline_stored
+                    ? t('releaseDiff.baseline_stored', {
+                        ref: compareResult.baseline_ref,
+                        user: '-',
+                      })
+                    : compareResult.baseline_ref
+                  : t('releaseDiff.baseline_none_applied')
+              }}
             </el-tag>
           </div>
 
           <el-row :gutter="16" class="stat-row">
-            <el-col :xs="12" :md="6">
-              <div class="stat-card">
-                <span class="stat-value">
-                  {{
-                    commitCountLabel(
-                      compareResult.summary.old_commit_count ?? 0,
-                      compareResult.old_commits_truncated,
-                    )
-                  }}
-                </span>
-                <span class="stat-label">{{ t('releaseDiff.old_commit_count') }}</span>
-              </div>
-            </el-col>
-            <el-col :xs="12" :md="6">
-              <div class="stat-card">
-                <span class="stat-value">
-                  {{
-                    commitCountLabel(
-                      compareResult.summary.new_commit_count ?? 0,
-                      compareResult.new_commits_truncated,
-                    )
-                  }}
-                </span>
-                <span class="stat-label">{{ t('releaseDiff.new_commit_count') }}</span>
-              </div>
-            </el-col>
-            <el-col :xs="12" :md="4">
+            <el-col :xs="12" :md="8">
               <div class="stat-card danger">
-                <span class="stat-value">{{ compareResult.summary.missing_count ?? 0 }}</span>
+                <span class="stat-value">
+                  {{ commitCountLabel(compareResult.missing_count, !compareResult.scan_complete) }}
+                </span>
                 <span class="stat-label">{{ t('releaseDiff.missing_count') }}</span>
               </div>
             </el-col>
-            <el-col :xs="12" :md="4">
+            <el-col :xs="12" :md="8">
               <div class="stat-card success">
-                <span class="stat-value">{{ compareResult.summary.added_count ?? 0 }}</span>
+                <span class="stat-value">
+                  {{ commitCountLabel(compareResult.added_count, !compareResult.added_complete) }}
+                </span>
                 <span class="stat-label">{{ t('releaseDiff.added_count') }}</span>
               </div>
             </el-col>
-            <el-col :xs="12" :md="4">
+            <el-col :xs="12" :md="8">
               <div class="stat-card">
-                <span class="stat-value">{{ compareResult.summary.common_count ?? 0 }}</span>
-                <span class="stat-label">{{ t('releaseDiff.common_count') }}</span>
+                <span class="stat-value">{{ compareResult.filtered_by_baseline_count ?? 0 }}</span>
+                <span class="stat-label">{{ t('releaseDiff.filtered_by_baseline_count') }}</span>
               </div>
             </el-col>
           </el-row>
@@ -481,25 +455,17 @@
             >
               <commit-table :commits="compareResult.added_commits" />
             </el-collapse-item>
-            <el-collapse-item
-              :title="`${t('releaseDiff.old_release_commits_title')} (${commitCountLabel(
-                compareResult.old_release_commits.length,
-                compareResult.old_commits_truncated,
-              )})`"
-              name="old"
-            >
-              <commit-table :commits="compareResult.old_release_commits" />
-            </el-collapse-item>
-            <el-collapse-item
-              :title="`${t('releaseDiff.new_release_commits_title')} (${commitCountLabel(
-                compareResult.new_release_commits.length,
-                compareResult.new_commits_truncated,
-              )})`"
-              name="new"
-            >
-              <commit-table :commits="compareResult.new_release_commits" />
-            </el-collapse-item>
           </el-collapse>
+
+          <p v-if="compareResult.rendered_truncated" class="scope-preview">
+            {{
+              t('releaseDiff.missing_render_truncated', {
+                rendered:
+                  compareResult.missing_commits.length + compareResult.added_commits.length,
+                count: compareResult.missing_count + compareResult.added_count,
+              })
+            }}
+          </p>
         </div>
 
         <el-empty v-else :description="t('releaseDiff.empty_result')" />
@@ -616,7 +582,9 @@
           <el-alert
             v-if="checkResult.truncated"
             type="warning"
-            :title="t('releaseDiff.truncated_warning')"
+            show-icon
+            :title="t('releaseDiff.check_truncated_title')"
+            :description="t('releaseDiff.check_truncated_note')"
             :closable="false"
             class="status-alert"
           />
@@ -731,6 +699,8 @@
       </el-card>
     </div>
     </el-col>
+
+
     </el-row>
   </div>
 </template>
@@ -738,12 +708,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Camera, Download, QuestionFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
 import { useJira } from '@/composables/useJira'
 import { jiraTicketSegments } from '@/utils/jira'
+import { useAuthStore } from '@/stores/auth'
 import { projectsApi } from '@/api/projects'
 import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/api/projects'
 import {
@@ -762,6 +734,7 @@ import {
 } from '@/utils/screenshot'
 import {
   releaseDiffApi,
+  type ReleaseBaseline,
   type ReleaseCommitCheckResponse,
   type ReleaseCompareResponse,
 } from '@/api/releaseDiff'
@@ -794,7 +767,6 @@ const compareSection = ref<HTMLElement | null>(null)
 const checkSection = ref<HTMLElement | null>(null)
 const compareLoading = ref(false)
 const checkLoading = ref(false)
-const compareScopeEnabled = ref(false)
 const checkScopeEnabled = ref(false)
 const includeCommits = ref(true)
 const maxCommits = ref(1000)
@@ -808,11 +780,11 @@ const repo = ref({
   workspace_slug: '' as string,
 })
 
+// One comparison, one vocabulary: source / target / baseline
 const compareForm = ref({
-  old_release_ref: '',
-  new_release_ref: '',
-  old_release_base_ref: '',
-  new_release_base_ref: '',
+  source_ref: '',
+  target_ref: '',
+  baseline_ref: '',
 })
 
 const checkForm = ref({
@@ -823,6 +795,18 @@ const checkForm = ref({
 const commitsInput = ref('')
 const compareResult = ref<ReleaseCompareResponse | null>(null)
 const checkResult = ref<ReleaseCommitCheckResponse | null>(null)
+
+// The stored baseline is team configuration: only the roles that may edit it see the buttons
+const MANAGE_ROLES = ['review_admin', 'system_admin']
+const authStore = useAuthStore()
+const canManageReleases = computed(() =>
+  (authStore.user?.roles ?? []).some((role) => MANAGE_ROLES.includes(role)),
+)
+const storedBaseline = ref<ReleaseBaseline | null>(null)
+const baselineSaving = ref(false)
+
+const route = useRoute()
+const router = useRouter()
 
 // Report / screenshot sharing
 const shareSupported = canShareImage()
@@ -841,28 +825,31 @@ const reportContext = computed(() => ({
 }))
 const bothSections = computed(() => document.querySelector<HTMLElement>('.tool-sections'))
 
-// A missing release commit set is a defect, not a notice: highlight it in red
-const compareAlertType = computed<'success' | 'error' | 'info'>(() => {
-  if (!compareResult.value) return 'info'
-  if (compareResult.value.status === 'identical') return 'info'
-  return compareResult.value.old_commits_included ? 'success' : 'error'
+// The verdict decides the colour: an inconclusive scan must never look like a pass.
+const compareAlertType = computed<'success' | 'error' | 'warning' | 'info'>(() => {
+  const result = compareResult.value
+  if (!result) return 'info'
+  if (result.verdict === 'inconclusive') return 'warning'
+  return result.verdict === 'contained' ? 'success' : 'error'
 })
 
-// A multi-year repository can hold tens of thousands of commits: the old / new
-// release commit sets are therefore only loaded as a bounded preview.
-const commitSetsTruncated = computed(
-  () =>
-    Boolean(
-      compareResult.value?.old_commits_truncated || compareResult.value?.new_commits_truncated,
-    ),
-)
-
 const compareStatusText = computed(() => {
-  if (!compareResult.value) return ''
-  if (compareResult.value.status === 'identical') return t('releaseDiff.status_identical')
-  return compareResult.value.old_commits_included
-    ? t('releaseDiff.status_included')
-    : t('releaseDiff.status_missing')
+  const result = compareResult.value
+  if (!result) return ''
+  if (result.verdict === 'inconclusive') return t('releaseDiff.status_inconclusive')
+  if (result.verdict === 'contained') {
+    return result.source_ref === result.target_ref
+      ? t('releaseDiff.status_identical')
+      : t('releaseDiff.missing_contained', {
+          source: result.source_ref,
+          target: result.target_ref,
+        })
+  }
+  return t('releaseDiff.missing_found', {
+    count: result.missing_count,
+    source: result.source_ref,
+    target: result.target_ref,
+  })
 })
 
 // el-select emits undefined when cleared - always work with trimmed strings
@@ -1064,9 +1051,11 @@ watch(isCloudProvider, (isCloud) => {
   }
 })
 
-onMounted(() => {
-  void loadProjects()
+onMounted(async () => {
   void loadJiraSettings()
+  await loadProjects()
+  await applyUrlState()
+  await loadBaseline()
 })
 
 function basePayload() {
@@ -1092,32 +1081,16 @@ function scopeText(baseRef: string | null | undefined, releaseRef: string): stri
   return base ? `${base}..${release}` : t('releaseDiff.scope_full_history', { ref: release })
 }
 
-function onCompareScopeToggle(enabled: boolean) {
-  if (!enabled) {
-    compareForm.value.old_release_base_ref = ''
-    compareForm.value.new_release_base_ref = ''
-  }
-}
-
 function onCheckScopeToggle(enabled: boolean) {
   if (!enabled) {
     checkForm.value.target_release_base_ref = ''
   }
 }
 
-function useOldAsNewBase() {
-  compareForm.value.new_release_base_ref = compareForm.value.old_release_ref.trim()
-}
-
 function resetCompare() {
-  compareForm.value = {
-    old_release_ref: '',
-    new_release_ref: '',
-    old_release_base_ref: '',
-    new_release_base_ref: '',
-  }
-  compareScopeEnabled.value = false
+  compareForm.value = { source_ref: '', target_ref: '', baseline_ref: '' }
   compareResult.value = null
+  syncUrlState()
 }
 
 function resetCheck() {
@@ -1217,8 +1190,8 @@ async function runCompare() {
   if (
     !selectedProjectKey.value ||
     !selectedRepositorySlug.value ||
-    !compareForm.value.old_release_ref.trim() ||
-    !compareForm.value.new_release_ref.trim()
+    !compareForm.value.source_ref.trim() ||
+    !compareForm.value.target_ref.trim()
   ) {
     ElMessage.warning(t('releaseDiff.validation_required'))
     return
@@ -1226,19 +1199,17 @@ async function runCompare() {
 
   compareLoading.value = true
   try {
+    const baseline = compareForm.value.baseline_ref.trim()
     compareResult.value = await releaseDiffApi.compare({
       ...basePayload(),
-      old_release_ref: compareForm.value.old_release_ref.trim(),
-      new_release_ref: compareForm.value.new_release_ref.trim(),
-      old_release_base_ref: compareScopeEnabled.value
-        ? optionalRef(compareForm.value.old_release_base_ref)
-        : undefined,
-      new_release_base_ref: compareScopeEnabled.value
-        ? optionalRef(compareForm.value.new_release_base_ref)
-        : undefined,
+      source_ref: compareForm.value.source_ref.trim(),
+      target_ref: compareForm.value.target_ref.trim(),
+      baseline_ref: baseline || undefined,
+      // an empty field still narrows against the baseline stored for the repository
+      use_stored_baseline: !baseline,
       include_commits: includeCommits.value,
-      max_commits: maxCommits.value,
     })
+    syncUrlState()
   } catch {
     ElMessage.error(t('releaseDiff.compare_failed'))
   } finally {
@@ -1279,6 +1250,122 @@ async function runCheck() {
     checkLoading.value = false
   }
 }
+
+// ------------------------------------------------------------------ #
+// Baseline: the shared starting point both directions are narrowed against
+// ------------------------------------------------------------------ #
+
+const canStoreBaseline = computed(() =>
+  Boolean(
+    selectedProjectKey.value &&
+      selectedRepositorySlug.value &&
+      compareForm.value.baseline_ref.trim(),
+  ),
+)
+
+async function loadBaseline() {
+  if (!selectedProjectKey.value || !selectedRepositorySlug.value) {
+    storedBaseline.value = null
+    return
+  }
+
+  try {
+    storedBaseline.value = await releaseDiffApi.getBaseline({
+      project_key: selectedProjectKey.value,
+      repository_slug: selectedRepositorySlug.value,
+      git_provider: repo.value.git_provider || undefined,
+    })
+  } catch {
+    // a missing baseline is not an error state
+    storedBaseline.value = null
+  }
+}
+
+async function saveBaseline() {
+  if (!canStoreBaseline.value) {
+    ElMessage.warning(t('releaseDiff.validation_missing_required'))
+    return
+  }
+
+  baselineSaving.value = true
+  try {
+    storedBaseline.value = await releaseDiffApi.saveBaseline({
+      project_key: selectedProjectKey.value,
+      repository_slug: selectedRepositorySlug.value,
+      git_provider: repo.value.git_provider || undefined,
+      baseline_ref: compareForm.value.baseline_ref.trim(),
+    })
+    ElMessage.success(t('releaseDiff.baseline_saved'))
+  } catch {
+    ElMessage.error(t('releaseDiff.baseline_save_failed'))
+  } finally {
+    baselineSaving.value = false
+  }
+}
+
+async function clearBaseline() {
+  baselineSaving.value = true
+  try {
+    storedBaseline.value = await releaseDiffApi.clearBaseline({
+      project_key: selectedProjectKey.value,
+      repository_slug: selectedRepositorySlug.value,
+      git_provider: repo.value.git_provider || undefined,
+    })
+    ElMessage.success(t('releaseDiff.baseline_cleared'))
+  } catch {
+    ElMessage.error(t('releaseDiff.baseline_clear_failed'))
+  } finally {
+    baselineSaving.value = false
+  }
+}
+
+
+
+// ------------------------------------------------------------------ #
+// URL state: the merge check is a routine, so a link reopens the same check
+// ------------------------------------------------------------------ #
+
+function readQueryValue(key: string): string {
+  const value = route.query[key]
+  return typeof value === 'string' ? value : ''
+}
+
+function syncUrlState() {
+  const query: Record<string, string> = {}
+  if (selectedProjectKey.value) query.project_key = selectedProjectKey.value
+  if (selectedRepositorySlug.value) query.repository_slug = selectedRepositorySlug.value
+  if (compareForm.value.source_ref.trim()) query.source = compareForm.value.source_ref.trim()
+  if (compareForm.value.target_ref.trim()) query.target = compareForm.value.target_ref.trim()
+  if (compareForm.value.baseline_ref.trim()) {
+    query.baseline = compareForm.value.baseline_ref.trim()
+  }
+  void router.replace({ query })
+}
+
+async function applyUrlState() {
+  const projectKey = readQueryValue('project_key')
+  const repositorySlug = readQueryValue('repository_slug')
+
+  if (projectKey) {
+    repo.value.project_key = projectKey
+    repo.value.repository_slug = repositorySlug
+    // the project watcher clears the slug while it reloads the repository catalog
+    await nextTick()
+    repo.value.repository_slug = repositorySlug
+  }
+
+  compareForm.value.source_ref = readQueryValue('source')
+  compareForm.value.target_ref = readQueryValue('target')
+  compareForm.value.baseline_ref = readQueryValue('baseline')
+}
+
+// The stored baseline belongs to a repository: reload it when the coordinates change
+watch(
+  () => [selectedProjectKey.value, selectedRepositorySlug.value],
+  () => {
+    void loadBaseline()
+  },
+)
 
 function formatTimestamp(value?: number | null): string {
   if (!value) return '-'
@@ -1521,6 +1608,12 @@ async function copySha(value: string) {
 .scope-preview code {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   color: var(--el-color-primary);
+}
+
+.baseline-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .scope-used {

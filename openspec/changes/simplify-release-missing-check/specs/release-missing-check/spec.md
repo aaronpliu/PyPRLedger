@@ -65,28 +65,43 @@ When the caller supplies commit ids to check against a target release, the syste
 - **WHEN** a supplied commit id is a short SHA
 - **THEN** the provider SHALL resolve it and the containment result SHALL be reported for the resolved commit
 
-### Requirement: The routine check is cheap and payload-free by default
+### Requirement: One comparison answers the containment question and the target-side additions
 
-The check SHALL be executable without fetching commit payloads: the default mode SHALL collect commit ids only and SHALL NOT compute the reverse direction. Commit details SHALL be fetched only when requested, and only for the difference set, capped for rendering while the counts stay complete.
+The system SHALL expose a single comparison operation that, for a source release and a target release, returns the containment verdict, the commits the target is missing and the commits the target adds. It MUST NOT require a second endpoint (or a separate "merge check" step) to answer either part, and the added direction SHALL NOT influence the verdict.
 
-#### Scenario: Verdict-only run
-- **WHEN** the caller requests a verdict without commit details
-- **THEN** no commit details SHALL be fetched
-- **AND** the number of missing commits SHALL still be complete or explicitly inconclusive
+#### Scenario: One request returns everything
+- **WHEN** a user compares two releases
+- **THEN** the response SHALL contain the verdict, the missing commits and the added commits
+- **AND** no second request SHALL be needed to obtain them
 
-#### Scenario: Enriched run
-- **WHEN** the caller requests commit details
-- **THEN** details SHALL be fetched for the difference set only
-- **AND** the response SHALL distinguish the complete missing count from the number of entries rendered in a capped preview
+#### Scenario: The added direction does not decide the verdict
+- **WHEN** the target adds commits while containing everything from the source
+- **THEN** the verdict SHALL still be contained
+- **AND** the added commits SHALL carry their own completeness flag
 
-### Requirement: The routine per-build check is a preset with a saved baseline
+#### Scenario: Details are capped, counts are not
+- **WHEN** a comparison has more difference commits than the render limit
+- **THEN** the rendered lists SHALL be capped and flagged
+- **AND** the reported counts SHALL remain complete or explicitly inconclusive
 
-The release comparison page SHALL provide a merge check preset that takes a source release ref, a baseline ref and a target release ref and presents a single verdict card with the missing commits as the actionable list. The baseline SHALL be stored per repository on the server and SHALL be editable from the preset, so the routine check does not require re-entering it.
+### Requirement: The baseline is part of the comparison and stored per repository
 
-#### Scenario: Saved baseline drives the routine check
-- **WHEN** a baseline is stored for the repository and the user selects a source release and a target release
-- **THEN** the preset SHALL run the check using the stored baseline without further input
-- **AND** the verdict card SHALL state which baseline was used and whether the check was narrowed by it
+The comparison SHALL accept one optional baseline ref. When it is omitted, the baseline stored for the repository SHALL be used unless the caller opts out, and the response SHALL state the effective baseline, whether it came from storage, and how many difference commits it filtered out. The baseline SHALL narrow both the missing and the added direction. Storing and clearing it SHALL require the management permission, and both SHALL be available from the same tool that runs the comparison.
+
+#### Scenario: Baseline narrows both directions
+- **WHEN** a baseline is applied
+- **THEN** difference commits that already existed at that baseline SHALL be excluded from missing and from added
+- **AND** the response SHALL report how many were filtered out
+
+#### Scenario: Stored baseline drives the routine comparison
+- **WHEN** a baseline is stored for the repository and the caller supplies none
+- **THEN** the comparison SHALL use the stored baseline
+- **AND** the response SHALL mark it as coming from storage
+
+#### Scenario: Narrowing can be declined
+- **WHEN** the caller opts out of the stored baseline and supplies none
+- **THEN** the comparison SHALL run over the whole history of both refs
+- **AND** the response SHALL report that no baseline was applied
 
 #### Scenario: Missing commits are actionable
 - **WHEN** the verdict is missing
@@ -95,18 +110,23 @@ The release comparison page SHALL provide a merge check preset that takes a sour
 
 #### Scenario: Inconclusive verdict guides the user
 - **WHEN** the verdict is inconclusive
-- **THEN** the card SHALL show the limit that was hit and how to raise it
+- **THEN** the tool SHALL show the limit that was hit and how to raise it
 - **AND** it SHALL NOT suggest that the release is verified
 
-### Requirement: Comparison responses separate display previews from the verdict
+#### Scenario: Management permission to edit the baseline
+- **WHEN** a user without the management permission tries to store or clear a baseline
+- **THEN** the request SHALL be rejected with `403`
 
-Comparison and check responses SHALL keep the verdict independent of any commit preview: commit lists that are capped for display MUST NOT influence the verdict, and the response SHALL state explicitly whether the verdict is complete.
+### Requirement: Rendered detail never decides the verdict
 
-#### Scenario: Truncated preview with a definitive verdict
-- **WHEN** a response includes commit lists capped for display while the difference scan completed
+Commit lists SHALL be treated as rendered material: the response SHALL cap them for display and flag the cap, while the verdict and the counts MUST NOT depend on them. Every reported count SHALL either be complete or explicitly marked as incomplete.
+
+#### Scenario: Capped detail with a definitive verdict
+- **WHEN** a response includes detail lists capped for display while both difference scans completed
 - **THEN** the verdict SHALL remain definitive
-- **AND** the truncation SHALL apply only to the rendered lists
+- **AND** the cap SHALL apply only to the rendered lists
 
-#### Scenario: Existing status field
-- **WHEN** a comparison is served with the new verdict alongside the existing status field
-- **THEN** the status SHALL remain consistent with the verdict, and the inconclusive case SHALL be expressed as its own value rather than as a pass
+#### Scenario: An incomplete scan is never a pass
+- **WHEN** the missing direction could not be enumerated completely
+- **THEN** the verdict SHALL be inconclusive
+- **AND** the added direction's completeness SHALL be reported separately without turning the verdict into a pass

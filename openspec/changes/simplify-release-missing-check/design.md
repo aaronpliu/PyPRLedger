@@ -84,32 +84,47 @@ Because the missing direction is small by construction, completeness is normally
 
 | Provider | Call | Contained when |
 |---|---|---|
-| Bitbucket Server | `compare/commits?from={commit}&to={target}` | the result page is empty |
-| Bitbucket Cloud | `commits?include={target}&exclude={commit}` | the result page is empty |
-| GitHub | `compare/{commit}...{target}` | `behind_by == 0` (target is ahead of, or identical to, the commit) |
+| Bitbucket Server | `compare/commits?from={target}&to={commit}` | the result page is empty |
+| Bitbucket Cloud | `commits?include={commit}&exclude={target}` | the result page is empty |
+| GitHub | `compare/{target}...{commit}` | `ahead_by == 0` (the commit adds nothing the target lacks; status is then `behind` or `identical`) |
+
+> Implementation note: the containment test is `commits(commit) \ commits(target)`
+> being empty, i.e. the commit is an ancestor of the target. Both compare sides
+> matter - the first draft of this table had them swapped, which would have
+> answered "is the target an ancestor of the commit" instead.
 
 This is exact regardless of how large the target release is, answers short SHAs (the provider resolves them), and removes the `_build_commit_lookup` / `_match_commit` path from the verdict. Commit details for the *matched* ones are fetched only when the caller asks for them (`include_commits`), in one enriched difference call rather than a release listing.
 
 *Alternative rejected:* keep the in-memory lookup and raise `max_commits` — that is exactly the false-`not_found_in_release_scope` bug reported by the users.
 
-### D5. Two modes: verdict-only, and enriched
+### D5. One operation: verdict, missing, and added in a single comparison
 
-- **Verdict-only** (the per-build routine): ids only, no commit payloads, no `new \ old` direction at all → one paginated scan plus (optionally) the narrowing base.
-- **Enriched**: after a verdict, fetch the difference commits with details for display, capped by the existing preview limit *for rendering only* — the verdict stays complete and the response distinguishes `missing_count` (complete) from the number of entries rendered in a truncated preview.
+There is exactly **one** tool and one endpoint. A comparison takes a source release, a target release and an optional baseline, and returns:
 
-The response therefore never mixes "how many are missing" with "how many we chose to render".
+- the **verdict** (`contained` / `missing` / `inconclusive`) from the missing direction `source \ target`;
+- the **missing commits** (source side work absent from the target);
+- the **added commits** (`target \ source`, i.e. what the target has that the source does not) with their own completeness flag;
+- the effective baseline, whether it came from the repository store, and how many difference commits it filtered out.
 
-### D6. The baseline is stored per repository, server-side
+Both directions are two provider compares; neither needs a release commit listing, so the old scoped previews (`old_release_commits` / `new_release_commits`, capped at 200 with `*_truncated` flags) are **removed** rather than kept for display. Commit details come with the compare payloads, so `include_commits` only decides whether they are serialized, and the rendered detail lists are capped by `render_limit` while the counts stay complete.
 
-A new table `release_check_baseline` keyed by `(git_provider, project_key, repository_slug)` holding `baseline_ref`, `note`, `updated_by`, timestamps. The preset uses it so the routine is: pick the source release tag → pick the target release tag → verdict. Storing it server-side (rather than in the browser) makes the routine identical for every release engineer on the team, and the baseline is visible in the UI.
+*Why merged:* a separate "merge check" endpoint and card answered a question that the comparison already answers (it is the same difference scan, in one direction), and users could not tell the two apart. One vocabulary - source / target / baseline / verdict - replaces "old / new / old base / new base / missing check".
+
+*Alternatives rejected:* a `mode` flag on the comparison (still two behaviours to understand, and the cheap mode is not actually different - it is the same two scans); keeping the scoped previews (they cost two extra provider calls per comparison and only exist for a report section that the missing / added lists render better).
+
+### D6. The baseline is a field of the comparison, stored per repository
+
+The comparison accepts **one** optional `baseline_ref`. When it is omitted and `use_stored_baseline` is true, the baseline stored for the repository is used, and the response says so (`baseline_ref` + `baseline_stored`). Narrowing is symmetric: the baseline drops difference commits that already existed at it, in **both** directions, which is what "the work this line did since the fork point" means.
+
+The baseline is stored in `release_check_baseline`, keyed by `(git_provider, project_key, repository_slug)`, holding `baseline_ref`, `note`, `updated_by`, timestamps, and is editable from the tool itself with the manage permission. Storing it server-side (rather than in the browser) makes the routine identical for every release engineer on the team.
 
 *Alternative considered:* a `system_settings` key per repository (zero migration) — rejected because the value would be unqueryable and awkward to list per repository.
 
 ### D7. Response and cache compatibility
 
-- New fields are additive: `verdict`, `missing_scan_complete`, `missing_scan_limit`, `mode`, `baseline_ref`; `missing_commits` keeps its meaning (now complete), `status` keeps its existing values plus the new `inconclusive` semantics documented.
-- The cache key gains the mode and the scan limit; the cache version segment is bumped so pre-existing entries computed with the old capped logic cannot be served.
-- Metrics: `release_diff` counters gain the `inconclusive` verdict so a silently failing check is visible in monitoring.
+- The comparison payload is deliberately **not** backward compatible with the old compare response: `status`, `old_commits_included`, `summary`, the scoped commit sets and the `*_truncated` display flags are gone, replaced by `verdict`, `missing_count` / `added_count` and per-direction completeness flags. The only consumers are the releases page (updated in this change) and the HTML report builder.
+- The cache key is rebuilt around `(source, target, effective baseline, scan limit, render limit, include_commits)` and the version segment is bumped to `release_diff:v3:`, so entries written by either earlier implementation are never served with a different meaning.
+- Metrics: the `release_diff` counters carry the verdict, so an inconclusive comparison is visible in monitoring instead of looking like a pass.
 
 ## Risks / Trade-offs
 

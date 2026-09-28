@@ -31,19 +31,16 @@ const COMPARE: ReleaseCompareResponse = {
   project_key: 'AI',
   repository_slug: 'pylang',
   git_provider: 'bitbucket_cloud',
-  old_release_ref: 'v1.0.0',
-  new_release_ref: 'v1.1.0',
-  old_release_base_ref: null,
-  new_release_base_ref: null,
-  old_commits_included: false,
-  status: 'missing_commits',
-  summary: {
-    old_commit_count: 2,
-    new_commit_count: 3,
-    missing_count: 1,
-    added_count: 1,
-    common_count: 1,
-  },
+  source_ref: 'v1.0.0',
+  target_ref: 'v1.1.0',
+  baseline_ref: 'v0.9.0',
+  baseline_stored: true,
+  narrowed: true,
+  verdict: 'missing',
+  scan_complete: true,
+  scan_limit: 2000,
+  filtered_by_baseline_count: 1,
+  missing_count: 1,
   missing_commits: [
     {
       id: C1,
@@ -55,10 +52,10 @@ const COMPARE: ReleaseCompareResponse = {
       url: 'https://bitbucket.org/aaronpliu/pylang/commits/1111111',
     },
   ],
+  added_count: 1,
   added_commits: [{ id: C2, display_id: '2222222', message: 'feat: dashboard' }],
-  old_release_commits: [],
-  new_release_commits: [],
-  truncated: true,
+  added_complete: true,
+  rendered_truncated: false,
 }
 
 const CHECK: ReleaseCommitCheckResponse = {
@@ -155,25 +152,36 @@ describe('buildCompareSectionHtml', () => {
     expect(html).toContain('v1.1.0')
     expect(html).toContain('https://bitbucket.org/aaronpliu/pylang/commits/v1.0.0')
     expect(html).toContain('https://bitbucket.org/aaronpliu/pylang/commits/v1.1.0')
-    // scope row shows both release scopes
-    expect(html).toContain('full history of v1.0.0')
-    expect(html).toContain('full history of v1.1.0')
+    // the effective baseline is part of the report, not the two old scopes
+    expect(html).toContain('Stored baseline: v0.9.0')
+    // scope row names the compared pair
+    expect(html).toContain('v1.0.0 → v1.1.0')
     // commit url column
     expect(html).toContain('https://bitbucket.org/aaronpliu/pylang/commits/1111111')
-    expect(html.match(/No commits/g)).toHaveLength(2)
   })
 
   it('highlights missing commits in red instead of amber', () => {
     const html = buildCompareSectionHtml(COMPARE, CONTEXT)
 
-    // the status banner and the missing stat use the missing (red) variants
+    // the verdict banner and the missing stat use the missing (red) variants
     expect(html).toContain('class="status status-missing"')
     expect(html).toContain('class="stat stat-missing"')
     expect(html).toContain('<h3 class="section-missing">')
     expect(html).not.toContain('status-warn')
     expect(html).not.toContain('stat-warn')
-    // the truncated notice stays amber
+    // the cherry-pick caveat is part of the report
+    expect(html).toContain('cherry-picked')
+  })
+
+  it('renders an inconclusive verdict with the warning colour', () => {
+    const html = buildCompareSectionHtml(
+      { ...COMPARE, verdict: 'inconclusive', scan_complete: false, scan_limit: 1 },
+      CONTEXT,
+    )
+
+    expect(html).toContain('class="status status-warn"')
     expect(html).toContain('class="warning"')
+    expect(html).not.toContain('class="status status-ok"')
   })
 
   it('escapes commit messages coming from the git provider', () => {

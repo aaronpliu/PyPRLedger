@@ -77,7 +77,10 @@ class StubDiffService:
         return type(
             "Comparison",
             (),
-            {"added_commits": self._added, "truncated": self._truncated},
+            {
+                "added_commits": self._added,
+                "added_complete": not self._truncated,
+            },
         )()
 
     async def list_release_commits(self, **kwargs: Any) -> tuple[list[CommitInfo], bool]:
@@ -614,8 +617,8 @@ async def test_preview_uses_the_compare_scope_when_a_previous_version_exists(
 
     assert preview.commit_count == 1
     assert "add login page" in preview.body
-    assert diff.compare_calls[0].old_release_ref == "v1.0.0"
-    assert diff.compare_calls[0].new_release_ref == "v1.1.0"
+    assert diff.compare_calls[0].source_ref == "v1.0.0"
+    assert diff.compare_calls[0].target_ref == "v1.1.0"
     assert diff.list_calls == []
 
 

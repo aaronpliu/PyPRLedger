@@ -37,11 +37,12 @@ export interface ReleaseReportInput {
 
 export type ReleaseReportKind = 'compare' | 'check' | 'both'
 
-// "missing" states are rendered in red (they are defects, not notices)
-const STATUS_CLASS: Record<string, string> = {
-  included: 'ok',
-  missing_commits: 'missing',
-  identical: 'info',
+// "missing" is rendered in red (a defect, not a notice); an inconclusive verdict
+// gets the warning colour so it is never mistaken for a pass
+const VERDICT_CLASS: Record<string, string> = {
+  contained: 'ok',
+  missing: 'missing',
+  inconclusive: 'warn',
 }
 
 export function escapeHtml(value: unknown): string {
@@ -217,70 +218,75 @@ function commitTable(
   </table>`
 }
 
-function scopeText(baseRef: string | null | undefined, releaseRef: string): string {
-  const base = (baseRef ?? '').trim()
-  const release = (releaseRef ?? '').trim() || '?'
-  return base ? `${base}..${release}` : t('releaseDiff.scope_full_history', { ref: release })
+function baselineText(result: ReleaseCompareResponse): string {
+  if (!result.baseline_ref) return t('releaseDiff.baseline_none_applied')
+  return result.baseline_stored
+    ? t('releaseDiff.baseline_stored', { ref: result.baseline_ref, user: '-' })
+    : result.baseline_ref
 }
 
 function compareStatusText(result: ReleaseCompareResponse): string {
-  if (result.status === 'identical') return t('releaseDiff.status_identical')
-  return result.old_commits_included
-    ? t('releaseDiff.status_included')
-    : t('releaseDiff.status_missing')
+  if (result.verdict === 'inconclusive') return t('releaseDiff.status_inconclusive')
+  if (result.verdict === 'contained') {
+    return result.source_ref === result.target_ref
+      ? t('releaseDiff.status_identical')
+      : t('releaseDiff.missing_contained', {
+          source: result.source_ref,
+          target: result.target_ref,
+        })
+  }
+  return t('releaseDiff.missing_found', {
+    count: result.missing_count,
+    source: result.source_ref,
+    target: result.target_ref,
+  })
 }
 
 export function buildCompareSectionHtml(
   result: ReleaseCompareResponse,
   context: ReleaseReportContext,
 ): string {
-  const summary = result.summary ?? {}
-  const statusClass = STATUS_CLASS[result.status] ?? 'info'
+  const statusClass = VERDICT_CLASS[result.verdict] ?? 'info'
+  // counts carry a lower bound marker when the direction could not be enumerated
+  const missingLabel = result.scan_complete
+    ? String(result.missing_count)
+    : `≥${result.missing_count}`
+  const addedLabel = result.added_complete ? String(result.added_count) : `≥${result.added_count}`
 
   const meta = metaTable([
     metaRow(
-      t('releaseDiff.old_release_ref'),
-      result.old_release_ref,
-      releaseRefUrl(context, result.old_release_ref),
+      t('releaseDiff.missing_source_ref'),
+      result.source_ref,
+      releaseRefUrl(context, result.source_ref),
     ),
     metaRow(
-      t('releaseDiff.old_release_base_ref'),
-      result.old_release_base_ref || t('releaseDiff.scope_full_history', { ref: result.old_release_ref }),
+      t('releaseDiff.missing_target_ref'),
+      result.target_ref,
+      releaseRefUrl(context, result.target_ref),
     ),
-    metaRow(
-      t('releaseDiff.new_release_ref'),
-      result.new_release_ref,
-      releaseRefUrl(context, result.new_release_ref),
-    ),
-    metaRow(
-      t('releaseDiff.new_release_base_ref'),
-      result.new_release_base_ref || t('releaseDiff.scope_full_history', { ref: result.new_release_ref }),
-    ),
-    metaRow(
-      t('releaseDiff.report_scope'),
-      `${scopeText(result.old_release_base_ref, result.old_release_ref)} → ${scopeText(
-        result.new_release_base_ref,
-        result.new_release_ref,
-      )}`,
-    ),
+    metaRow(t('releaseDiff.missing_baseline_ref'), baselineText(result)),
+    metaRow(t('releaseDiff.report_scope'), `${result.source_ref} → ${result.target_ref}`),
   ])
 
   return `<section class="report-section">
   <h2>1. ${escapeHtml(t('releaseDiff.tab_compare'))}</h2>
   <p class="status status-${statusClass}">${escapeHtml(compareStatusText(result))}</p>
   ${
-    result.truncated
-      ? `<p class="warning">${escapeHtml(t('releaseDiff.truncated_warning'))}</p>`
+    result.verdict === 'inconclusive'
+      ? `<p class="warning">${escapeHtml(
+          t('releaseDiff.inconclusive_help', {
+            limit: result.scan_limit,
+            count: result.missing_count,
+          }),
+        )}</p>`
       : ''
   }
   ${meta}
 
   <div class="stats">
-    ${stat(t('releaseDiff.old_commit_count'), summary.old_commit_count ?? 0)}
-    ${stat(t('releaseDiff.new_commit_count'), summary.new_commit_count ?? 0)}
-    ${stat(t('releaseDiff.missing_count'), summary.missing_count ?? 0, 'missing')}
-    ${stat(t('releaseDiff.added_count'), summary.added_count ?? 0, 'ok')}
-    ${stat(t('releaseDiff.common_count'), summary.common_count ?? 0)}
+    ${stat(t('releaseDiff.missing_count'), missingLabel, 'missing')}
+    ${stat(t('releaseDiff.added_count'), addedLabel, 'ok')}
+    ${stat(t('releaseDiff.filtered_by_baseline_count'), result.filtered_by_baseline_count ?? 0)}
   </div>
 
   <h3 class="section-missing">
@@ -291,12 +297,24 @@ export function buildCompareSectionHtml(
   <h3>${escapeHtml(t('releaseDiff.added_commits_title'))} (${result.added_commits?.length ?? 0})</h3>
   ${commitTable(result.added_commits, false, context)}
 
-  <h3>${escapeHtml(t('releaseDiff.old_release_commits_title'))} (${result.old_release_commits?.length ?? 0})</h3>
-  ${commitTable(result.old_release_commits, Boolean(result.old_commits_truncated), context)}
-
-  <h3>${escapeHtml(t('releaseDiff.new_release_commits_title'))} (${result.new_release_commits?.length ?? 0})</h3>
-  ${commitTable(result.new_release_commits, Boolean(result.new_commits_truncated), context)}
+  ${
+    result.rendered_truncated
+      ? `<p class="muted">${escapeHtml(
+          t('releaseDiff.missing_render_truncated', {
+            rendered: (result.missing_commits?.length ?? 0) + (result.added_commits?.length ?? 0),
+            count: result.missing_count + result.added_count,
+          }),
+        )}</p>`
+      : ''
+  }
+  <p class="muted">${escapeHtml(t('releaseDiff.missing_cherry_pick_note'))}</p>
 </section>`
+}
+
+function scopeText(baseRef: string | null | undefined, releaseRef: string): string {
+  const base = (baseRef ?? '').trim()
+  const release = (releaseRef ?? '').trim() || '?'
+  return base ? `${base}..${release}` : t('releaseDiff.scope_full_history', { ref: release })
 }
 
 export function buildCheckSectionHtml(
@@ -421,6 +439,7 @@ const REPORT_STYLE = `
   .status-info { background: #e0e7ff; color: #3730a3; }
   /* Missing commits are defects - highlighted in red, not amber */
   .status-missing { background: #fee2e2; color: #991b1b; box-shadow: inset 0 0 0 1px #fca5a5; }
+  .status-warn { background: #fef3c7; color: #92400e; box-shadow: inset 0 0 0 1px #fcd34d; }
   .warning { margin: 0 0 12px; color: #92400e; font-size: 13px; }
   .stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 4px; }
   .stat { flex: 1 1 120px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; text-align: center; background: #fafafa; }
@@ -429,6 +448,7 @@ const REPORT_STYLE = `
   .stat-ok { border-color: #bbf7d0; background: #f0fdf4; }
   .stat-missing { border-color: #fca5a5; border-left: 4px solid #dc2626; background: #fef2f2; }
   .stat-missing .stat-value { color: #dc2626; }
+  .stat-warn { border-color: #fcd34d; background: #fffbeb; }
   .section-missing { color: #b91c1c; }
   .section-missing::after { content: ''; display: block; margin-top: 6px; height: 2px; width: 72px; background: #dc2626; }
   .cell-ok { color: #15803d; font-weight: 600; }

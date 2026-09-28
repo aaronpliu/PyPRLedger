@@ -83,6 +83,90 @@ class BaseGitProvider(ABC):
         """
         raise NotImplementedError(f"Provider '{self.name}' does not implement compare_commits()")
 
+    async def compare_commits_complete(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+        limit: int = 1000,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Return a commit difference together with a completeness flag.
+
+        The difference is the commits reachable from ``to_ref`` but not from
+        ``from_ref`` - the same set :meth:`compare_commits` returns. Providers
+        that can prove completeness from their own paging signal override this;
+        the default is deliberately conservative: a full page may have been cut
+        short, so the enumeration is reported as incomplete.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            from_ref: Base ref (exclusive)
+            to_ref: Target ref (inclusive)
+            limit: Maximum number of commits to enumerate
+
+        Returns:
+            Tuple of (commits, complete). ``complete`` is True only when the whole
+            difference was enumerated, so a caller may conclude that nothing is
+            missing instead of admitting that it cannot tell.
+        """
+        commits = await self.compare_commits(
+            project_key=project_key,
+            repository_slug=repository_slug,
+            from_ref=from_ref,
+            to_ref=to_ref,
+            limit=limit,
+        )
+        return commits, len(commits) < limit
+
+    async def contains_commit(
+        self,
+        project_key: str,
+        repository_slug: str,
+        ref: str,
+        commit: str,
+    ) -> bool:
+        """Whether ``commit`` is reachable from ``ref`` (one provider call).
+
+        The answer comes from the provider's difference computation rather than
+        from an enumeration of the release, so it stays exact no matter how many
+        commits the release holds. The test is "does the commit introduce anything
+        the ref lacks", i.e. ``commits(commit) \\ commits(ref)`` is empty:
+
+        * Bitbucket Server - ``compare/commits?from={ref}&to={commit}`` is empty
+        * Bitbucket Cloud - ``commits?include={commit}&exclude={ref}`` is empty
+        * GitHub Enterprise - overridden: ``compare/{ref}...{commit}`` reports
+          ``ahead_by == 0``
+
+        Short SHAs are resolved by the provider. A blank or unknown commit
+        answers False; a commit equal to the ref itself answers True.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            ref: Ref the commit should be reachable from
+            commit: Commit SHA (full or short)
+
+        Returns:
+            True when the ref contains the commit.
+        """
+        target = (ref or "").strip()
+        candidate = (commit or "").strip()
+        if not target or not candidate:
+            return False
+        if target.lower() == candidate.lower():
+            return True
+
+        difference = await self.compare_commits(
+            project_key=project_key,
+            repository_slug=repository_slug,
+            from_ref=target,
+            to_ref=candidate,
+            limit=1,
+        )
+        return not difference
+
     async def list_commits_until(
         self,
         project_key: str,

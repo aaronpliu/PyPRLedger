@@ -39,41 +39,77 @@ export interface ReleaseCompareRequest {
   git_provider?: string | null
   /** Bitbucket Cloud only: workspace holding the repository (falls back to project_key). */
   workspace_slug?: string | null
-  old_release_ref: string
-  new_release_ref: string
-  old_release_base_ref?: string | null
-  new_release_base_ref?: string | null
+  /** Bypass the backend cache; used by the Refresh action. */
+  refresh?: boolean
+  /** Release whose commits must be contained in the target */
+  source_ref: string
+  /** Release that should contain them and whose additions are reported */
+  target_ref: string
+  /**
+   * Optional baseline narrowing **both** directions: difference commits that already
+   * existed at it are ignored (the work a line did since the fork point).
+   */
+  baseline_ref?: string | null
+  /** Use the baseline stored for the repository when baseline_ref is empty (default true) */
+  use_stored_baseline?: boolean
+  /** Difference commits enumerated per direction before the verdict turns inconclusive */
+  scan_limit?: number
+  /** Maximum number of difference commits returned with details per direction */
+  render_limit?: number
   include_commits?: boolean
-  max_commits?: number
-  /** Maximum number of commits returned per release commit set (default 200) */
-  commit_preview_limit?: number
 }
+
+/** Verdict of a containment check. `inconclusive` is never a pass. */
+export type ReleaseVerdict = 'contained' | 'missing' | 'inconclusive'
 
 export interface ReleaseCompareResponse {
   project_key: string
   repository_slug: string
   git_provider: string
-  old_release_ref: string
-  new_release_ref: string
-  old_release_base_ref?: string | null
-  new_release_base_ref?: string | null
-  old_commits_included: boolean
-  status: 'included' | 'missing_commits' | 'identical'
-  summary: {
-    old_commit_count?: number
-    new_commit_count?: number
-    missing_count?: number
-    added_count?: number
-    common_count?: number
-  }
+  source_ref: string
+  target_ref: string
+  /** Effective baseline both directions were narrowed against */
+  baseline_ref?: string | null
+  /** True when the effective baseline came from the repository baseline store */
+  baseline_stored?: boolean
+  narrowed: boolean
+  /**
+   * Containment verdict, derived from the provider difference alone: rendered (and
+   * capped) commit lists can never turn it into a pass.
+   */
+  verdict: ReleaseVerdict
+  /** True when the whole missing direction was enumerated (false ⇒ inconclusive) */
+  scan_complete: boolean
+  scan_limit: number
+  /** Difference commits (both directions) ignored because they existed at the baseline */
+  filtered_by_baseline_count: number
+  missing_count: number
   missing_commits: CommitInfo[]
+  added_count: number
   added_commits: CommitInfo[]
-  old_release_commits: CommitInfo[]
-  new_release_commits: CommitInfo[]
-  /** The old / new release commit sets hit the commit_preview_limit (long history) */
-  old_commits_truncated?: boolean
-  new_commits_truncated?: boolean
-  truncated: boolean
+  /** True when the whole added direction was enumerated */
+  added_complete: boolean
+  /** True when more difference commits exist than the rendered lists carry */
+  rendered_truncated: boolean
+}
+
+export interface ReleaseBaselineRequest {
+  project_key: string
+  repository_slug: string
+  git_provider?: string | null
+  baseline_ref: string
+  note?: string | null
+}
+
+export interface ReleaseBaseline {
+  project_key: string
+  repository_slug: string
+  git_provider: string
+  baseline_ref?: string | null
+  note?: string | null
+  updated_by?: string | null
+  updated_date?: string | null
+  exists: boolean
 }
 
 export interface ReleaseCommitCheckRequest {
@@ -119,7 +155,10 @@ export const releaseDiffApi = {
     return request.post('/release/diff/refs', payload)
   },
 
-  /** Compare two releases and report whether the old release is contained in the new one. */
+  /**
+   * The single comparison: is everything from the source release contained in the
+   * target release (the verdict), and what does the target add on top of it?
+   */
   compare(payload: ReleaseCompareRequest): Promise<ReleaseCompareResponse> {
     return request.post('/release/diff/compare', payload)
   },
@@ -127,5 +166,26 @@ export const releaseDiffApi = {
   /** Check whether the given commits belong to the target release. */
   check(payload: ReleaseCommitCheckRequest): Promise<ReleaseCommitCheckResponse> {
     return request.post('/release/diff/check', payload)
+  },
+
+  /** Baseline stored for a repository (shared, so the routine check is two clicks). */
+  getBaseline(params: {
+    project_key: string
+    repository_slug: string
+    git_provider?: string | null
+  }): Promise<ReleaseBaseline> {
+    return request.get('/release/diff/baseline', { params })
+  },
+
+  saveBaseline(payload: ReleaseBaselineRequest): Promise<ReleaseBaseline> {
+    return request.put('/release/diff/baseline', payload)
+  },
+
+  clearBaseline(params: {
+    project_key: string
+    repository_slug: string
+    git_provider?: string | null
+  }): Promise<ReleaseBaseline> {
+    return request.delete('/release/diff/baseline', { params })
   },
 }

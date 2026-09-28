@@ -320,6 +320,27 @@ class BitbucketServerProvider(BaseGitProvider):
         commits, _ = await self._fetch_paged_commits(url, {"from": from_ref, "to": to_ref}, limit)
         return self._with_commit_urls(commits, project_key, repository_slug)
 
+    async def compare_commits_complete(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+        limit: int = 1000,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Difference plus completeness, taken from ``isLastPage`` / ``nextPageStart``.
+
+        ``_fetch_paged_commits`` stops either because the provider reported the
+        last page or because the limit was reached; only the former proves that
+        the difference was enumerated completely.
+        """
+        url = f"{self._base_url}/projects/{project_key}/repos/{repository_slug}/compare/commits"
+        commits, truncated = await self._fetch_paged_commits(
+            url, {"from": from_ref, "to": to_ref}, limit
+        )
+        complete = not truncated and len(commits) < limit
+        return self._with_commit_urls(commits, project_key, repository_slug), complete
+
     async def list_commits_until(
         self,
         project_key: str,

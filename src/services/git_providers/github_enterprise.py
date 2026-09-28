@@ -363,6 +363,75 @@ class GitHubEnterpriseProvider(BaseGitProvider):
         commits = payload.get("commits") or []
         return commits[:limit]
 
+    async def compare_commits_complete(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+        limit: int = 1000,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Difference plus completeness, using ``total_commits`` while paging.
+
+        The compare endpoint returns at most 250 commits per page, so the pages
+        are followed here: a difference larger than a single page would otherwise
+        look complete while silently dropping commits.
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/compare/{from_ref}...{to_ref}"
+        page_size = max(1, min(limit, 100))
+        commits: list[dict[str, Any]] = []
+        total: int | None = None
+        page = 1
+
+        while len(commits) < limit:
+            payload = await self._request(url, {"per_page": page_size, "page": page})
+            if page == 1 and isinstance(payload.get("total_commits"), int):
+                total = payload["total_commits"]
+
+            page_commits = payload.get("commits") or []
+            if not page_commits:
+                break
+
+            commits.extend(page_commits[: limit - len(commits)])
+            if len(page_commits) < page_size:
+                break
+            page += 1
+
+        complete = len(commits) < limit and (total is None or len(commits) >= total)
+        return commits[:limit], complete
+
+    async def contains_commit(
+        self,
+        project_key: str,
+        repository_slug: str,
+        ref: str,
+        commit: str,
+    ) -> bool:
+        """Whether the commit is an ancestor of the ref, via ``ahead_by``.
+
+        ``compare/{ref}...{commit}`` puts the ref on the base side, so the commit
+        is contained when it contributes nothing the ref lacks - ``ahead_by == 0``
+        (the compare status is then ``behind`` or ``identical``).
+        """
+        target = (ref or "").strip()
+        candidate = (commit or "").strip()
+        if not target or not candidate:
+            return False
+        if target.lower() == candidate.lower():
+            return True
+
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/compare/{target}...{candidate}"
+        try:
+            payload = await self._request(url, {"per_page": 1})
+        except NotFoundException:
+            # an unknown commit is simply not contained
+            return False
+
+        ahead_by = payload.get("ahead_by")
+        if isinstance(ahead_by, int):
+            return ahead_by == 0
+        return payload.get("status") in ("behind", "identical")
+
     async def list_commits_until(
         self,
         project_key: str,

@@ -655,20 +655,25 @@ class ReleaseNoteService:
         truncated = False
 
         if request.previous_version:
+            # The release's own commits are exactly the ones the new version adds on
+            # top of its predecessor, asked as one provider difference. The repository
+            # baseline is deliberately ignored: notes are scoped by previous_version.
             comparison = await self._diff_service.compare_releases(
                 ReleaseCompareRequest(
                     project_key=request.project_key,
                     repository_slug=request.repository_slug,
                     workspace_slug=request.workspace_slug,
                     git_provider=request.git_provider,
-                    old_release_ref=request.previous_version,
-                    new_release_ref=request.version,
+                    source_ref=request.previous_version,
+                    target_ref=request.version,
                     include_commits=True,
-                    max_commits=request.max_commits,
+                    use_stored_baseline=False,
+                    scan_limit=min(max(request.max_commits, 1), 10000),
+                    render_limit=min(max(request.max_commits, 1), 2000),
                 )
             )
             commits = [commit.model_dump() for commit in comparison.added_commits]
-            truncated = comparison.truncated
+            truncated = not comparison.added_complete
         else:
             version_commits, truncated = await self._diff_service.list_release_commits(
                 project_key=request.project_key,
