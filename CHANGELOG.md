@@ -5,6 +5,35 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.23.0] - 2026-09-28
+
+**Backend Version**: 1.23.0
+**Frontend Version**: 1.18.0
+
+### Added
+- Resolve the release scope of a tag on the server: the predecessor is taken from the repository's tags (verified as an ancestor when one is found, otherwise the previous tag in version order), so the commits of a tag are a provider *difference* instead of everything reachable from it
+- Add `list_tags_with_commits()` to every git provider (Bitbucket Server, Bitbucket Cloud, GitHub Enterprise), returning each tag with the commit it points to and, when the provider reports one, the commit date; an annotated tag is dereferenced by the provider so the tag object is never mistaken for a commit
+- Report the scope behind a release preview (`previous_source`, `previous_verified`, `scope_reason`, `previous_sha`, `version_sha`) and show the short revision next to each ref of the tags panel
+- Store the comparison baseline per repository (`release_check_baseline`, migration 033) and narrow a comparison against it, so a merge check only inspects the work of the release being checked
+- Answer "does this commit belong to that release?" one commit at a time through the provider (`contains_commit`), so a release holding more commits than any listing cap is still judged exactly
+
+### Fixed
+- Report the merge check with a three-state verdict (`contained` / `missing` / `inconclusive`) derived from the provider-side difference: a comparison that was cut short is no longer presented as a pass
+- Compute the missing direction as `source \ target`, so shared history cancels out and a repository with years of history no longer needs a commit listing to answer "was this merged?"
+- Label a tag that has no predecessor as a first release (and an undeterminable scope as such) instead of reporting "the commit list reached Max Commits" - the old message described a listing limit, not the scope question that had actually gone unanswered
+- Warn in the tags panel when the predecessor could only be inferred from the tag order, while still using that scope
+- Ask the notes comparison with the resolved revisions, so a tag moved between resolving the scope and comparing cannot change what a release note was built from
+
+### Improved
+- Report the trimmed commit list of a release as a display limit ("showing the first N of M"): the count is the scope, and a scan that hit its cap is reported separately
+- Prefill a drafted release with the predecessor the server resolved, and re-resolve the scope of the selected tag when the tag list is refreshed
+- Restyle the reminder message shown in the release notes panel
+
+### Documentation
+- Add the OpenSpec changes `simplify-release-missing-check`, `enhance-release-note-scope` and `add-app-release-diff`
+
+---
+
 ## [1.22.2] - 2026-09-27
 
 **Backend Version**: 1.22.2
