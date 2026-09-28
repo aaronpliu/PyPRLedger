@@ -344,6 +344,38 @@ class GitHubEnterpriseProvider(BaseGitProvider):
                 names.append(name)
         return names
 
+    async def list_tags_with_commits(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Fetch tags with the commit each one points at.
+
+        Maps to GET /repos/{owner}/{repo}/tags, which reports ``commit.sha`` - the
+        commit the tag resolves to, annotated tags included. The listing carries
+        neither the commit date nor the tag type, so both stay unknown instead of
+        being guessed: the caller orders by name, and the ancestry check still
+        decides whether a candidate is a real predecessor.
+        """
+        url = f"{self.api_url}/repos/{project_key}/{repository_slug}/tags"
+        logger.info(f"Listing tags with commits on GitHub: {project_key}/{repository_slug}")
+
+        values = await self._fetch_paged_values(url, limit)
+        entries: list[dict[str, Any]] = []
+        for value in values:
+            commit = value.get("commit") or {}
+            entries.append(
+                {
+                    "name": value.get("name") or value.get("ref"),
+                    "sha": commit.get("sha") or value.get("sha"),
+                    "date": None,
+                    "is_annotated": None,
+                }
+            )
+
+        return self.normalize_tag_entries(entries)
+
     async def compare_commits(
         self,
         project_key: str,

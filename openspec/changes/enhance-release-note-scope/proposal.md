@@ -34,7 +34,7 @@ The fix belongs on the server: the git provider already knows the tags and their
 
 ## Impact
 
-- **Providers**: `GitProviderBase` + `bitbucket_server` / `bitbucket_cloud` / `github_enterprise` gain `list_tags_with_commits()`; `contains_commit()` (added by `simplify-release-missing-check`) is reused for verification.
+- **Providers**: `BaseGitProvider` + `bitbucket_server` / `bitbucket_cloud` / `github_enterprise` gain `list_tags_with_commits()`; `contains_commit()` (added by `simplify-release-missing-check`) is reused for verification.
 - **Backend services**: `ReleaseNoteService` gains release scope resolution (with Redis caching) and `generate_preview()` consumes it instead of the caller's guess.
 - **API / schemas**: `ReleaseNotePreviewResponse` gains `previous_source`, `previous_verified` and `scope_reason`; `ReleaseNotePreviewRequest.max_commits` keeps its meaning as the render cap. The endpoint contract stays backward compatible (new fields are additive).
 - **Frontend**: `ReleaseNotesView.vue` (tag commits panel, draft prefill, scope-aware warning), `frontend/src/api/releaseNotes.ts` types, three locale files.

@@ -75,9 +75,12 @@ export interface ReleaseNoteImportResponse {
 
 export interface ReleaseNotePreviewRequest extends ReleaseNoteCoordinates {
   version: string
+  /** Leave it out to let the server resolve the predecessor from the repository tags */
   previous_version?: string | null
   max_commits?: number
   include_authors?: boolean
+  /** Re-resolve the release scope instead of reusing the cached resolution */
+  refresh?: boolean
 }
 
 export interface PreviewCommit {
@@ -92,11 +95,27 @@ export interface PreviewCommit {
   url?: string | null
 }
 
+/** How the release scope base was obtained: proven ('ancestor'), inferred from the tag order, or supplied. */
+export type ReleaseScopeSource = 'explicit' | 'ancestor' | 'name_order' | 'none'
+
+/** Why the scope looks the way it does; the last two mean the commits come from the full history. */
+export type ReleaseScopeReason = 'provided' | 'resolved' | 'first_release' | 'unresolved'
+
 export interface ReleaseNotePreviewResponse {
   version: string
+  /** Scope base: what was supplied, or the predecessor the server resolved */
   previous_version?: string | null
+  /** Revision the scope base was pinned to (when known) */
+  previous_sha?: string | null
+  /** Revision the released ref was pinned to (when known) */
+  version_sha?: string | null
+  previous_source?: ReleaseScopeSource
+  /** True only for a supplied base or one proven to be an ancestor */
+  previous_verified?: boolean
+  scope_reason?: ReleaseScopeReason
   suggested_name: string
   body: string
+  /** Size of the release scope (a lower bound when a scan was capped) */
   commit_count: number
   commits: PreviewCommit[]
   truncated: boolean

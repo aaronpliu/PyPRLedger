@@ -300,6 +300,53 @@ class BitbucketServerProvider(BaseGitProvider):
                 names.append(name)
         return names
 
+    async def list_tags_with_commits(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Fetch tags with the commit each one points at.
+
+        Maps to GET /rest/api/latest/projects/{key}/repos/{slug}/tags. Bitbucket
+        reports ``latestCommit`` - the commit the tag resolves to, so an annotated
+        tag object is dereferenced server side - and ``type`` says whether the tag
+        is annotated or lightweight.
+
+        ``orderBy`` is deliberately not sent: the scope resolver orders the entries
+        itself, and a listing capped by ``limit`` must not silently depend on an
+        ordering the server picks.
+        """
+        url = f"{self._base_url}/projects/{project_key}/repos/{repository_slug}/tags"
+        logger.info(
+            f"Listing tags with commits on Bitbucket Server: {project_key}/{repository_slug}"
+        )
+
+        values = await self._fetch_paged_values(url, limit)
+        entries: list[dict[str, Any]] = []
+        for value in values:
+            tag_type = str(value.get("type") or "").strip().upper()
+            entries.append(
+                {
+                    "name": value.get("displayId") or value.get("name") or value.get("id"),
+                    "sha": value.get("latestCommit") or value.get("hash"),
+                    "date": self._to_epoch_ms(value.get("latestCommitTimestamp")),
+                    "is_annotated": (tag_type == "ANNOTATED") if tag_type else None,
+                }
+            )
+
+        return self.normalize_tag_entries(entries)
+
+    @staticmethod
+    def _to_epoch_ms(value: Any) -> int | None:
+        """Read a Bitbucket Server timestamp (epoch milliseconds) defensively."""
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
     async def compare_commits(
         self,
         project_key: str,

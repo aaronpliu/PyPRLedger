@@ -147,16 +147,30 @@ const PREVIEW_COMMIT = {
   url: 'https://git.local/commits/abc1234',
 }
 
+/** The scope of a tag whose predecessor the server resolved and verified. */
+const RESOLVED_SCOPE = {
+  previous_version: 'v1.1.0' as string | null,
+  previous_sha: null as string | null,
+  version_sha: null as string | null,
+  previous_source: 'ancestor' as const,
+  previous_verified: true,
+  scope_reason: 'resolved' as const,
+}
+
 /** Preview payload (the note body is irrelevant for the tag -> commits view). */
-function preview(commits: (typeof PREVIEW_COMMIT)[] = []) {
+function preview(
+  commits: (typeof PREVIEW_COMMIT)[] = [],
+  overrides: Record<string, unknown> = {},
+) {
   return {
     version: 'v1.2.0',
-    previous_version: 'v1.1.0' as string | null,
+    ...RESOLVED_SCOPE,
     suggested_name: 'v1.2.0',
     body: '## What’s Changed',
     commit_count: commits.length,
     commits,
     truncated: false,
+    ...overrides,
   }
 }
 
@@ -705,14 +719,17 @@ describe('ReleaseNotesView', () => {
 
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
 
-    // the newest tag is selected and scoped against the next older one
+    // The tag is scoped by the server: the browser only holds a page of tags, so
+    // it must not decide the predecessor itself.
     expect(releaseNotesApi.preview).toHaveBeenCalledWith(
       expect.objectContaining({
         project_key: 'ALPHA',
         repository_slug: 'alpha-api',
         version: 'v1.2.0',
-        previous_version: 'v1.1.0',
       }),
+    )
+    expect(vi.mocked(releaseNotesApi.preview).mock.calls[0][0]).not.toHaveProperty(
+      'previous_version',
     )
     expect(wrapper.text()).toContain(
       enMessages.releaseNotes.tag_commits_title.replace('{tag}', 'v1.2.0'),
@@ -722,7 +739,16 @@ describe('ReleaseNotesView', () => {
     )
     expect(wrapper.find('.commit-table').text()).toContain('abc1234')
 
-    // the oldest tag has no predecessor: its full history is listed
+    // the oldest tag has no predecessor: the scope says so instead of reporting a
+    // repository limit
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([], {
+        previous_version: null,
+        previous_source: 'none',
+        previous_verified: false,
+        scope_reason: 'first_release',
+      }),
+    )
     const oldest = wrapper
       .findAll('.tag-item')
       .find((item) => item.text() === 'v1.0.0')!
@@ -730,10 +756,100 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
 
     expect(releaseNotesApi.preview).toHaveBeenLastCalledWith(
-      expect.objectContaining({ version: 'v1.0.0', previous_version: undefined }),
+      expect.objectContaining({ version: 'v1.0.0' }),
+    )
+    expect(vi.mocked(releaseNotesApi.preview).mock.calls[1][0]).not.toHaveProperty(
+      'previous_version',
     )
     expect(wrapper.text()).toContain(
-      enMessages.releaseNotes.full_history.replace('{tag}', 'v1.0.0'),
+      enMessages.releaseNotes.scope_first_release.replace('{tag}', 'v1.0.0'),
+    )
+  })
+
+  it('shows the revisions the scope was pinned to next to the refs', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([], {
+        previous_sha: '1111111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        version_sha: '2222222bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    expect(wrapper.text()).toContain('v1.1.0 (1111111)...v1.2.0 (2222222)')
+  })
+
+  it('warns when the predecessor was inferred from the tag order', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([], { previous_source: 'name_order', previous_verified: false }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    // the scope is still used, but the panel says it was not proven
+    expect(wrapper.text()).toContain('v1.1.0...v1.2.0')
+    expect(wrapper.find('.el-alert').text()).toContain(
+      enMessages.releaseNotes.scope_inferred.replace('{from}', 'v1.1.0'),
+    )
+  })
+
+  it('reports an unresolved scope instead of the repository history', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([PREVIEW_COMMIT], {
+        previous_version: null,
+        previous_source: 'none',
+        previous_verified: false,
+        scope_reason: 'unresolved',
+      }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    expect(wrapper.text()).toContain(
+      enMessages.releaseNotes.scope_unresolved.replace('{tag}', 'v1.2.0'),
+    )
+    expect(wrapper.find('.el-alert').exists()).toBe(false)
+  })
+
+  it('reports a trimmed listing as a display limit of the scope', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([PREVIEW_COMMIT], { commit_count: 12, truncated: true }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    expect(wrapper.find('.el-alert').text()).toContain(
+      enMessages.releaseNotes.commits_trimmed
+        .replace('{shown}', '1')
+        .replace('{count}', '12'),
     )
   })
 
@@ -886,6 +1002,13 @@ describe('ReleaseNotesView', () => {
 
     const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
     expect(tagSelect.props('modelValue')).toBe('v1.2.0')
+
+    // the draft inherits the scope the server resolved for the selected tag
+    const previousSelect = selectByPlaceholder(
+      wrapper,
+      enMessages.releaseNotes.previous_tag_placeholder,
+    )
+    expect(previousSelect.props('modelValue')).toBe('v1.1.0')
   })
 
   it('paginates the releases on the server', async () => {

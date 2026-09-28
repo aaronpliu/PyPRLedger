@@ -13,6 +13,26 @@ from src.core.git_provider import GitProvider
 MAX_BODY_LENGTH = 60000
 
 
+# How the release scope base of a tag was obtained.
+#
+# ``ancestor`` is the only resolved value that was *proven* (the base is an
+# ancestor of the released ref); ``name_order`` is inferred from the tag order.
+SOURCE_EXPLICIT = "explicit"
+SOURCE_ANCESTOR = "ancestor"
+SOURCE_NAME_ORDER = "name_order"
+SOURCE_NONE = "none"
+
+# Why a scope looks the way it does.
+#
+# ``first_release`` and ``unresolved`` are the two cases where the commits come
+# from the whole history reachable from the version instead of a release scope:
+# the tag has no predecessor, or its predecessor could not be determined.
+REASON_PROVIDED = "provided"
+REASON_RESOLVED = "resolved"
+REASON_FIRST_RELEASE = "first_release"
+REASON_UNRESOLVED = "unresolved"
+
+
 class ReleaseNoteCoordinates(BaseModel):
     """Repository coordinates shared by the release note endpoints."""
 
@@ -134,10 +154,25 @@ class ReleaseNotePreviewRequest(ReleaseNoteCoordinates):
     previous_version: str | None = Field(
         default=None,
         max_length=255,
-        description="Previous version; every commit after it belongs to this release",
+        description=(
+            "Previous version; every commit after it belongs to this release. Leave it out "
+            "to let the server resolve the predecessor from the repository's tags."
+        ),
     )
-    max_commits: int = Field(default=500, ge=1, le=5000)
+    max_commits: int = Field(
+        default=500,
+        ge=1,
+        le=5000,
+        description="Cap for the returned commit list (and for the scan behind it)",
+    )
     include_authors: bool = Field(default=True)
+    refresh: bool = Field(
+        default=False,
+        description=(
+            "Re-resolve the release scope instead of reusing the cached resolution, for when "
+            "a tag has just been created or moved"
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_versions(self) -> ReleaseNotePreviewRequest:
@@ -183,9 +218,48 @@ class ReleaseNotePreviewResponse(BaseModel):
     """Generated release notes (markdown) plus the commits they were built from."""
 
     version: str
-    previous_version: str | None = None
+    previous_version: str | None = Field(
+        default=None,
+        description=(
+            "Release scope base: what the caller supplied, or the predecessor the server "
+            "resolved from the repository's tags"
+        ),
+    )
+    previous_sha: str | None = Field(
+        default=None, description="Revision the scope base was pinned to (when known)"
+    )
+    version_sha: str | None = Field(
+        default=None, description="Revision the released ref was pinned to (when known)"
+    )
+    previous_source: str = Field(
+        default=SOURCE_NONE,
+        description="How the base was obtained: 'explicit' | 'ancestor' | 'name_order' | 'none'",
+    )
+    previous_verified: bool = Field(
+        default=False,
+        description=(
+            "True only for a caller-supplied base or one proven to be an ancestor; a base "
+            "inferred from the tag order is reported as unverified"
+        ),
+    )
+    scope_reason: str = Field(
+        default=REASON_UNRESOLVED,
+        description=(
+            "'provided' | 'resolved' | 'first_release' | 'unresolved'. The last two mean the "
+            "commits come from the history reachable from the version rather than from a "
+            "release scope - a statement about the scope, never about the repository size"
+        ),
+    )
     suggested_name: str
     body: str
-    commit_count: int
+    commit_count: int = Field(
+        description=(
+            "Size of the release scope: exact when it was resolved completely, a lower bound "
+            "when a scan or the history listing hit its cap"
+        )
+    )
     commits: list[dict[str, Any]] = Field(default_factory=list)
-    truncated: bool = False
+    truncated: bool = Field(
+        default=False,
+        description="True when the returned commits are only part of that scope",
+    )

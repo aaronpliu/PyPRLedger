@@ -495,22 +495,24 @@
           <!-- Commits released by the selected tag (mapping tag -> commits) -->
           <template v-else-if="tabIsTags && selectedTag">
             <div class="release-meta">
-              <span>
-                {{
-                  tagPrevious
-                    ? t('releaseNotes.range', { from: tagPrevious, to: selectedTag })
-                    : t('releaseNotes.full_history', { tag: selectedTag })
-                }}
-              </span>
+              <span>{{ tagScopeHint }}</span>
               <span v-if="!tagCommitsLoading"> · {{ t('releaseNotes.commit_count', { count: tagCommitCount }) }}</span>
             </div>
 
             <el-alert
-              v-if="tagTruncated"
+              v-if="tagScopeInferred"
               class="status-alert"
               type="warning"
               :closable="false"
-              :title="t('releaseNotes.commits_truncated')"
+              :title="t('releaseNotes.scope_inferred', { from: tagScope?.previous ?? '' })"
+            />
+
+            <el-alert
+              v-if="tagScopeTrimmed"
+              class="status-alert"
+              type="warning"
+              :closable="false"
+              :title="tagTrimNotice"
             />
 
             <el-skeleton v-if="tagCommitsLoading" class="loading-block" :rows="5" animated />
@@ -583,6 +585,7 @@ import UserAvatar from '@/components/user/UserAvatar.vue'
 import { useJira } from '@/composables/useJira'
 import { linkifyJiraMarkdown } from '@/utils/jira'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
+import type { ReleaseScopeReason, ReleaseScopeSource } from '@/api/releaseNotes'
 import { useAuthStore } from '@/stores/auth'
 
 type NavigatorTab = 'releases' | 'tags'
@@ -652,6 +655,17 @@ const tagCommits = ref<CommitInfo[]>([])
 const tagCommitCount = ref(0)
 const tagCommitsLoading = ref(false)
 const tagTruncated = ref(false)
+// Release scope of the selected tag as the server resolved it: the predecessor it
+// found, the revisions the comparison was pinned to, and whether the answer was
+// proven (an ancestor) or inferred from the tag order
+const tagScope = ref<{
+  previous: string | null
+  previousSha: string | null
+  versionSha: string | null
+  source: ReleaseScopeSource
+  verified: boolean
+  reason: ReleaseScopeReason
+} | null>(null)
 // tag name -> release (id + position in the full list), loaded for the tags tab
 const releaseTagIndex = ref<Map<string, { id: number; position: number }>>(new Map())
 const releaseTagIndexLoaded = ref(false)
@@ -728,10 +742,69 @@ const visibleTags = computed(() => {
   const start = (tagPage.value - 1) * tagPageSize.value
   return sortedTags.value.slice(start, start + tagPageSize.value)
 })
-// The release scope of a tag runs from the next older tag to the tag itself
-const tagPrevious = computed(() =>
-  selectedTag.value ? previousTagFor(selectedTag.value) : null,
+/** Short revision, or an empty string when the server resolved none. */
+function shortRevision(sha?: string | null): string {
+  return (sha ?? '').trim().slice(0, 7)
+}
+
+/** A ref with its revision when one is known: ``v1.0.0 (3f2a1b)``. */
+function labelWithRevision(ref: string, sha?: string | null): string {
+  const short = shortRevision(sha)
+  return short ? `${ref} (${short})` : ref
+}
+
+// The release scope of a tag is resolved by the server: the browser only holds a
+// page of tags, so guessing the predecessor here used to lose the scope of every
+// tag beyond that page and list the whole history instead.
+const tagScopeResolved = computed(() => tagScope.value?.reason === 'resolved')
+
+const tagScopeRange = computed(() => {
+  const scope = tagScope.value
+  if (!scope || !scope.previous || !tagScopeResolved.value) return null
+  return t('releaseNotes.range', {
+    from: labelWithRevision(scope.previous, scope.previousSha),
+    to: labelWithRevision(selectedTag.value ?? '', scope.versionSha),
+  })
+})
+
+// A scope inferred from the tag order is a legitimate answer, just not a proven one
+const tagScopeInferred = computed(
+  () => Boolean(tagScope.value) && tagScopeResolved.value && !tagScope.value?.verified,
 )
+
+// A capped listing borrows its meaning from the scope: for a resolved scope it is
+// a display limit, and the panel must not present it as a repository limit
+const tagScopeTrimmed = computed(() => tagTruncated.value && tagScopeResolved.value)
+
+const tagTrimNotice = computed(() =>
+  tagCommits.value.length < tagCommitCount.value
+    ? t('releaseNotes.commits_trimmed', {
+        shown: tagCommits.value.length,
+        count: tagCommitCount.value,
+      })
+    : t('releaseNotes.commits_scan_capped'),
+)
+
+/** Scope line of the tags panel: the range when resolved, why otherwise. */
+const tagScopeHint = computed(() => {
+  const tag = selectedTag.value ?? ''
+  const scope = tagScope.value
+
+  if (scope?.reason === 'first_release') {
+    return t('releaseNotes.scope_first_release', { tag })
+  }
+  if (scope?.reason === 'unresolved') {
+    return t('releaseNotes.scope_unresolved', { tag })
+  }
+  if (scope) {
+    return tagScopeRange.value ?? t('releaseNotes.full_history', { tag })
+  }
+  // no answer yet: the local tag order is only a placeholder for the label
+  const guess = previousTagFor(tag)
+  return guess
+    ? t('releaseNotes.range', { from: guess, to: tag })
+    : t('releaseNotes.full_history', { tag })
+})
 
 // Header of the right column: the editor, the selected release or the tag commits
 const detailTitle = computed(() => {
@@ -974,6 +1047,12 @@ async function loadRefs(force = false) {
     }
     if (force) {
       ElMessage.success(t('releaseNotes.refresh_tags_ok'))
+      // A refreshed tag list is the moment a new tag may exist or an old one may
+      // have been moved, so the scope of the current selection is re-resolved
+      // instead of being served from the cache.
+      if (selectedTag.value) {
+        void loadTagCommits(selectedTag.value, true)
+      }
     }
   } catch {
     // refs are only suggestions - typing the tag manually stays possible
@@ -1014,25 +1093,37 @@ async function loadNotes() {
  * This is the tag -> commits mapping shown in the tags tab; the generated note
  * body of the same scope is ignored on purpose.
  */
-async function loadTagCommits(tag: string) {
+async function loadTagCommits(tag: string, refresh = false) {
   tagCommits.value = []
   tagCommitCount.value = 0
   tagTruncated.value = false
+  tagScope.value = null
   if (!hasCoordinates.value) return
 
   tagCommitsLoading.value = true
   try {
+    // The predecessor is resolved on the server: the browser only holds a page of
+    // tags, and guessing it here used to lose the scope of every tag beyond that
+    // page (the whole history was listed instead).
     const response = await releaseNotesApi.preview({
       ...coordinates(),
       version: tag,
-      previous_version: previousTagFor(tag) ?? undefined,
       max_commits: PREVIEW_MAX_COMMITS,
+      refresh,
     })
     // a newer click may have overtaken this response
     if (selectedTag.value !== tag) return
     tagCommits.value = (response.commits ?? []) as CommitInfo[]
     tagCommitCount.value = response.commit_count ?? tagCommits.value.length
     tagTruncated.value = Boolean(response.truncated)
+    tagScope.value = {
+      previous: response.previous_version ?? null,
+      previousSha: response.previous_sha ?? null,
+      versionSha: response.version_sha ?? null,
+      source: response.previous_source ?? 'none',
+      verified: Boolean(response.previous_verified),
+      reason: response.scope_reason ?? 'unresolved',
+    }
   } catch {
     ElMessage.error(t('releaseNotes.commits_load_failed'))
   } finally {
@@ -1101,6 +1192,11 @@ function startNewRelease(tag?: string) {
   const initial = tag ?? selected ?? sortedTags.value[0] ?? tags.value[0]
   if (initial) {
     form.value.tag_name = initial
+    // The draft inherits the scope the server resolved for that tag, so the editor
+    // generates the same commit set the tags panel shows. The local tag order is
+    // only a fallback for a tag the resolver has not looked at.
+    const scope = initial === selectedTag.value ? tagScope.value : null
+    form.value.previous_tag = (scope ? scope.previous : previousTagFor(initial)) ?? ''
   }
   formCard.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }

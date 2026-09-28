@@ -22,6 +22,10 @@ from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
 from src.schemas.release_diff import ReleaseCompareRequest
 from src.schemas.release_note import (
+    REASON_PROVIDED,
+    REASON_UNRESOLVED,
+    SOURCE_EXPLICIT,
+    SOURCE_NONE,
     ReleaseNoteCreateRequest,
     ReleaseNoteImportRequest,
     ReleaseNotePreviewRequest,
@@ -35,6 +39,7 @@ from src.services.release_diff_service import (
     resolve_provider_name,
     resolve_remote_project_key,
 )
+from src.services.release_note_scope_service import ReleaseNoteScopeService
 from src.utils.timezone import get_current_time, utc_to_local
 
 
@@ -266,10 +271,14 @@ class ReleaseNoteService:
         self,
         db: AsyncSession,
         diff_service: ReleaseDiffService | None = None,
+        scope_service: ReleaseNoteScopeService | None = None,
         provider_factory: Callable[[str], BaseGitProvider] = get_git_provider,
     ) -> None:
         self.db = db
         self._diff_service = diff_service or ReleaseDiffService()
+        self._scope_service = scope_service or ReleaseNoteScopeService(
+            provider_factory=provider_factory
+        )
         self._provider_factory = provider_factory
 
     # ------------------------------------------------------------------ #
@@ -650,22 +659,54 @@ class ReleaseNoteService:
     async def generate_preview(
         self, request: ReleaseNotePreviewRequest
     ) -> ReleaseNotePreviewResponse:
-        """Draft release notes from the commits of the release scope."""
+        """Draft release notes from the commits of the release scope.
+
+        The scope base is what the caller supplies, or - when none is supplied -
+        the predecessor the server resolves from the repository's tags. Resolving it
+        here is what keeps the notes of a tag in the middle of a long history from
+        falling back to an enumeration of everything reachable from the tag.
+        """
+        previous_ref = (request.previous_version or "").strip() or None
+        previous_sha: str | None = None
+        version_sha: str | None = None
+        previous_source = SOURCE_EXPLICIT if previous_ref else SOURCE_NONE
+        previous_verified = bool(previous_ref)
+        scope_reason = REASON_PROVIDED if previous_ref else REASON_UNRESOLVED
+
+        if not previous_ref:
+            scope = await self._scope_service.resolve(
+                project_key=request.project_key,
+                repository_slug=request.repository_slug,
+                version=request.version,
+                git_provider=request.git_provider,
+                workspace_slug=request.workspace_slug,
+                refresh=request.refresh,
+            )
+            previous_ref = scope.previous_ref
+            previous_sha = scope.previous_sha
+            version_sha = scope.version_sha
+            previous_source = scope.source
+            previous_verified = scope.verified
+            scope_reason = scope.reason
+
         commits: list[dict[str, Any]] = []
+        commit_count = 0
         truncated = False
 
-        if request.previous_version:
+        if previous_ref:
             # The release's own commits are exactly the ones the new version adds on
             # top of its predecessor, asked as one provider difference. The repository
-            # baseline is deliberately ignored: notes are scoped by previous_version.
+            # baseline is deliberately ignored: notes are scoped by the predecessor.
+            # The revisions are used when known so a tag moved between resolving the
+            # scope and comparing cannot change what the notes are built from.
             comparison = await self._diff_service.compare_releases(
                 ReleaseCompareRequest(
                     project_key=request.project_key,
                     repository_slug=request.repository_slug,
                     workspace_slug=request.workspace_slug,
                     git_provider=request.git_provider,
-                    source_ref=request.previous_version,
-                    target_ref=request.version,
+                    source_ref=previous_sha or previous_ref,
+                    target_ref=version_sha or request.version,
                     include_commits=True,
                     use_stored_baseline=False,
                     scan_limit=min(max(request.max_commits, 1), 10000),
@@ -673,9 +714,16 @@ class ReleaseNoteService:
                 )
             )
             commits = [commit.model_dump() for commit in comparison.added_commits]
-            truncated = not comparison.added_complete
+            # the scope size is exact when the difference was scanned completely;
+            # the returned list may still be trimmed for display
+            commit_count = max(comparison.added_count, len(commits))
+            truncated = len(commits) < commit_count or not comparison.added_complete
         else:
-            version_commits, truncated = await self._diff_service.list_release_commits(
+            # No predecessor to difference against: either the tag is the first
+            # release of its line, or the scope could not be resolved. The history
+            # is listed as the fallback, and the response says which of the two it is
+            # so a capped listing is not read as a repository problem.
+            version_commits, capped = await self._diff_service.list_release_commits(
                 project_key=request.project_key,
                 repository_slug=request.repository_slug,
                 git_provider=request.git_provider,
@@ -684,17 +732,19 @@ class ReleaseNoteService:
                 limit=request.max_commits,
             )
             commits = [commit.model_dump() for commit in version_commits]
+            commit_count = len(commits)
+            truncated = capped
 
         compare_url = (
             self.compare_url(
                 project_key=request.project_key,
                 repository_slug=request.repository_slug,
-                from_ref=request.previous_version,
+                from_ref=previous_ref,
                 to_ref=request.version,
                 git_provider=request.git_provider,
                 workspace_slug=request.workspace_slug,
             )
-            if request.previous_version
+            if previous_ref
             else None
         )
 
@@ -704,7 +754,7 @@ class ReleaseNoteService:
         body = build_release_notes_markdown(
             commits,
             version=request.version,
-            previous_version=request.previous_version,
+            previous_version=previous_ref,
             include_authors=request.include_authors,
             compare_url=compare_url,
             jira_base_url=jira_base_url,
@@ -713,10 +763,15 @@ class ReleaseNoteService:
 
         return ReleaseNotePreviewResponse(
             version=request.version,
-            previous_version=request.previous_version,
+            previous_version=previous_ref,
+            previous_sha=previous_sha,
+            version_sha=version_sha,
+            previous_source=previous_source,
+            previous_verified=previous_verified,
+            scope_reason=scope_reason,
             suggested_name=request.version,
             body=body,
-            commit_count=len(commits),
+            commit_count=commit_count,
             commits=commits,
             truncated=truncated,
         )

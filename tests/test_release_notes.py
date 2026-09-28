@@ -21,6 +21,14 @@ from src.main import app
 from src.models.auth_user import AuthUser
 from src.schemas.release_diff import CommitInfo
 from src.schemas.release_note import (
+    REASON_FIRST_RELEASE,
+    REASON_PROVIDED,
+    REASON_RESOLVED,
+    REASON_UNRESOLVED,
+    SOURCE_ANCESTOR,
+    SOURCE_EXPLICIT,
+    SOURCE_NAME_ORDER,
+    SOURCE_NONE,
     ReleaseNoteCreateRequest,
     ReleaseNoteImportRequest,
     ReleaseNotePreviewRequest,
@@ -28,6 +36,7 @@ from src.schemas.release_note import (
     ReleaseNoteUpdateRequest,
 )
 from src.services.git_providers.base import BaseGitProvider
+from src.services.release_note_scope_service import ReleaseScope
 from src.services.release_note_service import (
     NOTE_SECTIONS,
     OTHER_SECTION,
@@ -66,9 +75,16 @@ def commit(
 class StubDiffService:
     """Stands in for ReleaseDiffService (no provider traffic)."""
 
-    def __init__(self, added: list[CommitInfo] | None = None, truncated: bool = False) -> None:
+    def __init__(
+        self,
+        added: list[CommitInfo] | None = None,
+        truncated: bool = False,
+        added_count: int | None = None,
+    ) -> None:
         self._added = added or []
         self._truncated = truncated
+        # the size of the scope, which can exceed the returned (trimmed) list
+        self._added_count = len(self._added) if added_count is None else added_count
         self.compare_calls: list[Any] = []
         self.list_calls: list[dict[str, Any]] = []
 
@@ -79,6 +95,7 @@ class StubDiffService:
             (),
             {
                 "added_commits": self._added,
+                "added_count": self._added_count,
                 "added_complete": not self._truncated,
             },
         )()
@@ -215,13 +232,54 @@ def build_service(
     db: AsyncSession,
     diff: StubDiffService | None = None,
     provider: StubProvider | None = None,
+    scope: Any | None = None,
 ) -> ReleaseNoteService:
     stub = provider or StubProvider()
     return ReleaseNoteService(
         db,
         diff_service=diff or StubDiffService(),  # type: ignore[arg-type]
+        scope_service=scope,
         provider_factory=lambda _name: stub,
     )
+
+
+class StubScopeService:
+    """Stands in for ReleaseNoteScopeService (fixed answer, no provider traffic)."""
+
+    def __init__(self, scope: ReleaseScope) -> None:
+        self.scope = scope
+        self.calls: list[dict[str, Any]] = []
+
+    async def resolve(self, **kwargs: Any) -> ReleaseScope:
+        self.calls.append(kwargs)
+        return self.scope
+
+
+class TagListingProvider(ComparingProvider):
+    """Stub provider that can list tags with their revisions and verify ancestry."""
+
+    def __init__(
+        self,
+        tags: list[dict[str, Any]] | None = None,
+        ancestors: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__()
+        self.tags = tags or []
+        self.ancestors = set(ancestors)
+        self.tag_calls = 0
+        self.probes: list[tuple[str, str]] = []
+
+    async def list_tags_with_commits(
+        self, project_key: str, repository_slug: str, limit: int = 1000
+    ) -> list[dict[str, Any]]:
+        self.tag_calls += 1
+        return self.tags[:limit]
+
+    async def contains_commit(
+        self, project_key: str, repository_slug: str, ref: str, commit: str
+    ) -> bool:
+        self.probes.append((ref, commit))
+        return commit in self.ancestors
 
 
 def create_payload(**overrides: Any) -> ReleaseNoteCreateRequest:
@@ -809,6 +867,177 @@ async def test_preview_rejects_identical_versions() -> None:
             version="v1.0.0",
             previous_version="v1.0.0",
         )
+
+
+# --------------------------------------------------------------------------- #
+# Release scope resolution: the server answers "what came before this tag?"
+# --------------------------------------------------------------------------- #
+
+
+def tag_entry(name: str, sha: str, date: int | None = 100) -> dict[str, Any]:
+    return {"name": name, "sha": sha, "date": date, "is_annotated": False}
+
+
+def preview_request(**overrides: Any) -> ReleaseNotePreviewRequest:
+    payload: dict[str, Any] = {
+        "project_key": "PROJ",
+        "repository_slug": "my-repo",
+        "version": "v1.1.0",
+    }
+    payload.update(overrides)
+    return ReleaseNotePreviewRequest(**payload)
+
+
+async def test_preview_resolves_the_scope_from_the_repository_tags(
+    db_session: AsyncSession,
+) -> None:
+    """No previous version supplied: the server resolves and verifies it."""
+    diff = StubDiffService([commit(C2, "feat: add login")])
+    provider = TagListingProvider(
+        tags=[tag_entry("v1.0.0", C1), tag_entry("v1.1.0", C2, 200)],
+        ancestors=(C1,),
+    )
+    service = build_service(db_session, diff, provider=provider)
+
+    preview = await service.generate_preview(preview_request())
+
+    assert preview.previous_version == "v1.0.0"
+    assert preview.previous_sha == C1
+    assert preview.version_sha == C2
+    assert preview.previous_source == SOURCE_ANCESTOR
+    assert preview.previous_verified is True
+    assert preview.scope_reason == REASON_RESOLVED
+    # the difference is asked with the resolved revisions, not with the tag names
+    assert diff.compare_calls[0].source_ref == C1
+    assert diff.compare_calls[0].target_ref == C2
+    # the resolved scope reaches the generated body as well
+    assert "Full Changelog" in preview.body
+
+
+async def test_preview_labels_a_first_release(db_session: AsyncSession) -> None:
+    """The oldest tag has no predecessor - the commits come from the history."""
+    diff = StubDiffService([commit(C1, "feat: initial import")], truncated=True)
+    provider = TagListingProvider(tags=[tag_entry("v1.0.0", C1)])
+    service = build_service(db_session, diff, provider=provider)
+
+    preview = await service.generate_preview(preview_request(version="v1.0.0"))
+
+    assert preview.scope_reason == REASON_FIRST_RELEASE
+    assert preview.previous_version is None
+    assert preview.version_sha == C1
+    assert diff.compare_calls == []
+    assert diff.list_calls[0]["ref"] == "v1.0.0"
+
+
+async def test_preview_reports_an_unresolvable_scope(db_session: AsyncSession) -> None:
+    """A provider that cannot list tags degrades instead of failing the request."""
+    diff = StubDiffService([commit(C1, "feat: initial import")])
+    service = build_service(db_session, diff, provider=StubProvider())
+
+    preview = await service.generate_preview(preview_request(version="v1.0.0"))
+
+    assert preview.scope_reason == REASON_UNRESOLVED
+    assert preview.previous_version is None
+    assert preview.previous_source == SOURCE_NONE
+    assert preview.previous_verified is False
+    assert diff.compare_calls == []
+    assert len(diff.list_calls) == 1
+
+
+async def test_preview_keeps_a_supplied_previous_version(db_session: AsyncSession) -> None:
+    """An explicit predecessor is authoritative - the resolver is not consulted."""
+    diff = StubDiffService([commit(C1, "feat: add login")])
+    scope = StubScopeService(ReleaseScope(version="v1.1.0", reason=REASON_UNRESOLVED))
+    service = build_service(db_session, diff, scope=scope)
+
+    preview = await service.generate_preview(preview_request(previous_version="v1.0.0"))
+
+    assert preview.previous_version == "v1.0.0"
+    assert preview.previous_source == SOURCE_EXPLICIT
+    assert preview.previous_verified is True
+    assert preview.scope_reason == REASON_PROVIDED
+    assert scope.calls == []
+
+
+async def test_preview_reports_an_inferred_scope_as_unverified(
+    db_session: AsyncSession,
+) -> None:
+    """A scope resolved by tag order is used, but never presented as proven."""
+    diff = StubDiffService([commit(C1, "feat: add login")])
+    scope = StubScopeService(
+        ReleaseScope(
+            version="v1.1.0",
+            previous_ref="v1.0.0",
+            source=SOURCE_NAME_ORDER,
+            verified=False,
+            reason=REASON_RESOLVED,
+        )
+    )
+    service = build_service(db_session, diff, scope=scope)
+
+    preview = await service.generate_preview(preview_request())
+
+    assert preview.previous_source == SOURCE_NAME_ORDER
+    assert preview.previous_verified is False
+    assert preview.scope_reason == REASON_RESOLVED
+
+
+async def test_preview_passes_the_refresh_flag_to_the_resolver(
+    db_session: AsyncSession,
+) -> None:
+    scope = StubScopeService(
+        ReleaseScope(version="v1.1.0", previous_ref="v1.0.0", reason=REASON_RESOLVED)
+    )
+    service = build_service(db_session, StubDiffService([commit(C1, "feat")]), scope=scope)
+
+    await service.generate_preview(preview_request(refresh=True))
+
+    assert scope.calls[0]["refresh"] is True
+
+
+async def test_preview_reports_the_scope_size_when_the_list_is_trimmed(
+    db_session: AsyncSession,
+) -> None:
+    """The count is the scope, and the trimming is reported separately."""
+    diff = StubDiffService([commit(C1, "feat: add login")], added_count=40)
+    scope = StubScopeService(
+        ReleaseScope(
+            version="v1.1.0",
+            previous_ref="v1.0.0",
+            previous_sha=C1,
+            source=SOURCE_ANCESTOR,
+            verified=True,
+            reason=REASON_RESOLVED,
+        )
+    )
+    service = build_service(db_session, diff, scope=scope)
+
+    preview = await service.generate_preview(preview_request())
+
+    assert preview.commit_count == 40
+    assert len(preview.commits) == 1
+    assert preview.truncated is True
+
+
+async def test_preview_flags_a_capped_scope_scan(db_session: AsyncSession) -> None:
+    """A scan that hit its cap is reported, even when nothing was trimmed."""
+    diff = StubDiffService([commit(C1, "feat: add login")], truncated=True)
+    scope = StubScopeService(
+        ReleaseScope(
+            version="v1.1.0",
+            previous_ref="v1.0.0",
+            previous_sha=C1,
+            source=SOURCE_ANCESTOR,
+            verified=True,
+            reason=REASON_RESOLVED,
+        )
+    )
+    service = build_service(db_session, diff, scope=scope)
+
+    preview = await service.generate_preview(preview_request())
+
+    assert preview.commit_count == 1
+    assert preview.truncated is True
 
 
 # --------------------------------------------------------------------------- #

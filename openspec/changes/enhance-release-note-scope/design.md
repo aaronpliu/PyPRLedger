@@ -15,9 +15,9 @@ So the warning is a symptom: the scope question was never answered, and an unbou
 
 Relevant existing primitives:
 
-- `GitProviderBase.list_refs()` — tag / branch **names** only.
-- `GitProviderBase.compare_commits()` / `compare_commits_complete()` — differences.
-- `GitProviderBase.contains_commit(ref, commit)` — one-call ancestry test (added by `simplify-release-missing-check`).
+- `BaseGitProvider.list_refs()` — tag / branch **names** only.
+- `BaseGitProvider.compare_commits()` / `compare_commits_complete()` — differences.
+- `BaseGitProvider.contains_commit(ref, commit)` — one-call ancestry test (added by `simplify-release-missing-check`).
 
 There is no tag → revision call yet, so the server cannot currently order tags by anything but their names.
 
@@ -45,12 +45,12 @@ One call per repository returns every tag with its revision and date:
 
 ```
 list_tags_with_commits(project_key, repository_slug, limit) ->
-    [{"name": str, "sha": str, "date": datetime | None, "is_annotated": bool}]
+    [{"name": str, "sha": str, "date": int | None, "is_annotated": bool | None}]
 ```
 
 | Provider | Call | Revision source |
 |---|---|---|
-| Bitbucket Server | `GET /projects/{k}/repos/{r}/tags?orderBy=MODIFICATION` | `latestCommit.id` (already a commit) |
+| Bitbucket Server | `GET /projects/{k}/repos/{r}/tags` (no `orderBy`: we order ourselves) | `latestCommit` (already a commit) |
 | Bitbucket Cloud | `GET /repositories/{ws}/{r}/refs/tags` | `target.hash` (dereferenced) |
 | GitHub Enterprise | `GET /repos/{o}/{r}/tags` (paged) | `commit.sha`; when the payload points at a tag object, resolve with `/commits/{ref}` |
 
