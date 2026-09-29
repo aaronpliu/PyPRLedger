@@ -5,10 +5,13 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.23.2] - 2026-09-29
+
+**Backend Version**: 1.23.2
+**Frontend Version**: 1.18.2
 
 ### Added
-- Report why an AI summary did not happen instead of falling back silently: a preview that was asked for one answers with `summary_notice` (`not_configured` when the deployment has no usable LLM, `failed` when the call or its answer could not be used), and the notes form says under the switch that the sections came from the commit subjects
+- Report why an AI summary did not happen instead of falling back silently: a preview that was asked for one answers with `summary_notice`, and the notes form says under the switch that the sections came from the commit subjects
 
 ### Fixed
 - Call the configured LLM when it has no API key: a model served on localhost takes no credential, and demanding one kept the request from being made at all - the summary was skipped as "not configured" while the provider logged nothing; the `Authorization` header is now sent only when a key is set (an empty `Bearer ` is something providers refuse), and a pass that cannot be made names the piece of configuration that is missing
