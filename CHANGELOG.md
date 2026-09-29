@@ -5,6 +5,13 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Reverse the Bitbucket Server comparison direction: `/compare/commits` streams the commits reachable from `from` but not from `to` (`git log to..from`), so the provider now exchanges the two refs in the query to honour the documented `to_ref \ from_ref` contract; a newer release was previously reported as missing the commits it added, and a release note was built from the empty `previous \ version` difference ("No commits found")
+
+---
+
 ## [1.23.0] - 2026-09-28
 
 **Backend Version**: 1.23.0

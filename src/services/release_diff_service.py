@@ -44,7 +44,9 @@ SHORT_SHA_LENGTH = 7
 # Bumped whenever the meaning of a cached response changes. Entries written by the
 # previous implementation (which derived "missing" by intersecting two capped
 # commit sets) must never be served as if they carried a trustworthy verdict.
-CACHE_KEY_VERSION = "v2"
+# "v3" also discards entries produced while the Bitbucket Server comparison ran
+# in the reversed direction.
+CACHE_KEY_VERSION = "v3"
 
 
 def resolve_remote_project_key(

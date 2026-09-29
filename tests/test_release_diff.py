@@ -880,10 +880,12 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
             )
 
         if parsed.path.endswith("/compare/commits"):
+            # Bitbucket Server streams the commits reachable from "from" that are
+            # not reachable from "to" (git log to..from).
             from_ref = query["from"][0]
             to_ref = query["to"][0]
-            reachable_from = set(reachable(from_ref))
-            ids = [sha for sha in reachable(to_ref) if sha not in reachable_from]
+            reachable_to = set(reachable(to_ref))
+            ids = [sha for sha in reachable(from_ref) if sha not in reachable_to]
             return page([COMMITS[sha] for sha in ids], 0)
 
         if parsed.path.endswith("/commits"):
@@ -949,6 +951,9 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
     assert compare_body["missing_count"] == 1
     assert [commit["id"] for commit in compare_body["missing_commits"]] == [C3]
     assert compare_body["missing_commits"][0]["url"].startswith("http")
+    # The newer release adds its own work; it must not be reported as missing it.
+    assert compare_body["added_count"] == 1
+    assert [commit["id"] for commit in compare_body["added_commits"]] == [C4]
 
     assert check_response.status_code == 200
     check_body = check_response.json()

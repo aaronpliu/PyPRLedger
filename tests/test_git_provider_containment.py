@@ -70,6 +70,27 @@ def server_page(values: list[dict[str, Any]], *, last: bool) -> httpx.Response:
 # --------------------------------------------------------------------------- #
 
 
+async def test_server_compare_asks_for_the_difference_in_provider_direction(monkeypatch) -> None:
+    """The query must ask for git log from_ref..to_ref, which the API inverts.
+
+    Bitbucket Server streams ``from`` \\ ``to``, so ``from_ref`` has to be sent
+    as the ``to`` parameter and ``to_ref`` as the ``from`` parameter.
+    """
+    seen: list[dict[str, list[str]]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(parse_qs(urlparse(str(request.url)).query))
+        return server_page([], last=True)
+
+    install_transport(monkeypatch, bitbucket_server, handler)
+    provider = bitbucket_server.BitbucketServerProvider()
+
+    await provider.compare_commits_complete(PROJECT, REPO, "v1.0.0", "v2.0.0", limit=10)
+
+    assert seen[0]["from"] == ["v2.0.0"]
+    assert seen[0]["to"] == ["v1.0.0"]
+
+
 async def test_server_contains_commit_asks_in_the_containment_direction(monkeypatch) -> None:
     """The difference must be commits(commit) \\ commits(ref), not the other way around."""
     seen: list[dict[str, list[str]]] = []
@@ -82,8 +103,9 @@ async def test_server_contains_commit_asks_in_the_containment_direction(monkeypa
     provider = bitbucket_server.BitbucketServerProvider()
 
     assert await provider.contains_commit(PROJECT, REPO, "v1.1.0", C1) is True
-    assert seen[0]["from"] == ["v1.1.0"]
-    assert seen[0]["to"] == [C1]
+    # Bitbucket Server returns from \ to, so the commit goes into "from".
+    assert seen[0]["from"] == [C1]
+    assert seen[0]["to"] == ["v1.1.0"]
 
 
 async def test_server_contains_commit_is_false_when_work_is_missing(monkeypatch) -> None:

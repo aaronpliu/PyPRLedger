@@ -59,7 +59,9 @@ TAGS_PER_PROBE = 5
 # exercise: a generous cap keeps the resolver correct on most repositories.
 TAG_LIST_LIMIT = 1000
 
-CACHE_KEY_VERSION = "v1"
+# Bumped when the Bitbucket Server comparison direction was corrected: the
+# ancestry probes behind a cached resolution used the reversed direction too.
+CACHE_KEY_VERSION = "v2"
 
 
 def probe_budget(tag_count: int) -> int:

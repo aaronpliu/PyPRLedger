@@ -347,6 +347,17 @@ class BitbucketServerProvider(BaseGitProvider):
         except (TypeError, ValueError):
             return None
 
+    @staticmethod
+    def _compare_params(from_ref: str, to_ref: str) -> dict[str, str]:
+        """Query pair for ``compare/commits`` expressed in provider terms.
+
+        Bitbucket Server answers the resource with the commits reachable from
+        the ``from`` ref but not from the ``to`` ref (``git log to..from``),
+        while the provider contract is the opposite (``git log from..to``), so
+        the two refs are exchanged in the query.
+        """
+        return {"from": to_ref, "to": from_ref}
+
     async def compare_commits(
         self,
         project_key: str,
@@ -364,7 +375,9 @@ class BitbucketServerProvider(BaseGitProvider):
             f"Comparing commits on Bitbucket Server: {project_key}/{repository_slug} "
             f"({from_ref} -> {to_ref})"
         )
-        commits, _ = await self._fetch_paged_commits(url, {"from": from_ref, "to": to_ref}, limit)
+        commits, _ = await self._fetch_paged_commits(
+            url, self._compare_params(from_ref, to_ref), limit
+        )
         return self._with_commit_urls(commits, project_key, repository_slug)
 
     async def compare_commits_complete(
@@ -383,7 +396,7 @@ class BitbucketServerProvider(BaseGitProvider):
         """
         url = f"{self._base_url}/projects/{project_key}/repos/{repository_slug}/compare/commits"
         commits, truncated = await self._fetch_paged_commits(
-            url, {"from": from_ref, "to": to_ref}, limit
+            url, self._compare_params(from_ref, to_ref), limit
         )
         complete = not truncated and len(commits) < limit
         return self._with_commit_urls(commits, project_key, repository_slug), complete
