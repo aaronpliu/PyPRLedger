@@ -1066,6 +1066,8 @@
     "ai_summary_help": "Adds a summary paragraph and re-groups the commits whose subjects carry no conventional prefix. Commit messages are sent to the configured LLM.",
     "ai_summary_unavailable": "Enable the LLM integration in System Settings to summarize with AI.",
     "generated_with_ai": "summary written by AI",
+    "ai_summary_fallback_not_configured": "No LLM is configured, so the AI summary was skipped - the sections come from the commit subjects.",
+    "ai_summary_fallback_failed": "The AI summary did not come back - the sections come from the commit subjects.",
     "generate_truncated": "The commit list was truncated - raise Max Commits for complete notes",
     "generate_failed": "Failed to generate the release notes",
     "prerelease": "Set as a pre-release",

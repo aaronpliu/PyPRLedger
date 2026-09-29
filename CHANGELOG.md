@@ -5,6 +5,16 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Report why an AI summary did not happen instead of falling back silently: a preview that was asked for one answers with `summary_notice` (`not_configured` when the deployment has no usable LLM, `failed` when the call or its answer could not be used), and the notes form says under the switch that the sections came from the commit subjects
+
+### Fixed
+- Leave merge commits out of the generated release notes: an integration is not a change of its own - what the release added is listed through the commits the merge brought in, in the same scope - so "Merge branch" and "Merge pull request" subjects no longer fill the "Other Changes" section; they are left out of the AI prompt for the same reason, and a scope that holds nothing else renders as the empty scope it is
+
+---
+
 ## [1.23.1] - 2026-09-29
 
 **Backend Version**: 1.23.1

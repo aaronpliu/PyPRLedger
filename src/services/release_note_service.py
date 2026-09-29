@@ -28,6 +28,7 @@ from src.schemas.release_note import (
     SOURCE_NONE,
     SUMMARY_DETERMINISTIC,
     SUMMARY_LLM,
+    SUMMARY_NOTICE_FAILED,
     ReleaseNoteCreateRequest,
     ReleaseNoteImportRequest,
     ReleaseNotePreviewRequest,
@@ -237,8 +238,10 @@ NOISE_PREFIXES: tuple[re.Pattern[str], ...] = (
 NOISE_PREFIX_PASSES = 3
 
 # A merge commit is history bookkeeping: its subject describes the integration,
-# not the change, so it is never classified from its wording.
-MERGE_SUBJECT_RE = re.compile(r"^merge\b", re.IGNORECASE)
+# while the commits it merged - which carry the change - are in the same scope.
+# The patterns cover the messages git and the platforms write: "Merge branch 'x'",
+# "Merge pull request #1 from ..." and "Merged in x (pull request #1)".
+MERGE_SUBJECT_RE = re.compile(r"^merged?\b", re.IGNORECASE)
 
 # Emoji each section is rendered with (one per Keep a Changelog category)
 SECTION_EMOJI: dict[str, str] = {
@@ -307,6 +310,18 @@ def strip_subject_noise(header: str) -> str:
     return stripped
 
 
+def is_merge_commit(message: str | None) -> bool:
+    """Whether a commit is a merge, which a release note never lists.
+
+    The integration a merge performs is not a change of its own: what the release
+    added is in the commits it merged, and those are in the same scope.
+    """
+    if not message:
+        return False
+    header = strip_subject_noise(message.split("\n", 1)[0].strip())
+    return bool(MERGE_SUBJECT_RE.match(header))
+
+
 def keyword_section(header: str) -> str | None:
     """Section implied by the wording of a subject.
 
@@ -347,7 +362,7 @@ def commit_section(message: str | None) -> str:
     if not message:
         return OTHER_SECTION
     header = strip_subject_noise(message.split("\n", 1)[0].strip())
-    if not header or MERGE_SUBJECT_RE.match(header):
+    if not header or is_merge_commit(header):
         return OTHER_SECTION
 
     # "feat(scope): add x" / "feat!: breaking change" -> "feat"
@@ -459,11 +474,17 @@ def build_release_notes_markdown(
     list - rendered right under the heading. A commit may carry a ``section`` of
     its own, which is how a caller-supplied grouping (an LLM's, say) is honoured:
     the commit list itself stays the source of truth.
+
+    Merge commits are left out: they are the integration of work that is listed
+    through the commits they merged. A scope that holds nothing else renders as
+    the empty scope it is.
     """
     grouped: dict[str, list[str]] = {}
     known_sections = {title for title, _ in NOTE_SECTIONS} | {OTHER_SECTION}
 
     for commit in commits:
+        if is_merge_commit(commit.get("message")):
+            continue
         section = commit.get("section")
         if section not in known_sections:
             section = commit_section(commit.get("message"))
@@ -486,7 +507,7 @@ def build_release_notes_markdown(
     if summary and summary.strip():
         lines.extend([summary.strip(), ""])
 
-    if not commits:
+    if not grouped:
         lines.append(section_label("_No commits found in this release scope._", language))
         lines.append("")
     else:
@@ -1019,7 +1040,9 @@ class ReleaseNoteService:
 
         self.resolve_author_urls(commits, git_provider=request.git_provider)
 
-        summary, summary_source = await self._summarize(request, commits, previous_ref)
+        summary, summary_source, summary_notice = await self._summarize(
+            request, commits, previous_ref
+        )
 
         jira_base_url, jira_project_keys = jira_settings()
 
@@ -1050,6 +1073,7 @@ class ReleaseNoteService:
             truncated=truncated,
             summary=summary,
             summary_source=summary_source,
+            summary_notice=summary_notice,
         )
 
     async def _summarize(
@@ -1057,18 +1081,20 @@ class ReleaseNoteService:
         request: ReleaseNotePreviewRequest,
         commits: list[dict[str, Any]],
         previous_ref: str | None,
-    ) -> tuple[str | None, str]:
+    ) -> tuple[str | None, str, str | None]:
         """Optional LLM pass: a summary paragraph and a section per commit.
 
-        The commit list stays the source of truth - the model only answers about
-        the ids it was given - and anything that goes wrong is answered with the
-        deterministic notes rather than with an error.
+        Answers ``(summary, source, notice)``. The commit list stays the source of
+        truth - the model only answers about the ids it was given - and anything
+        that goes wrong is answered with the deterministic notes rather than with
+        an error. ``notice`` says why there is no summary, so that a pass that was
+        asked for and failed is not mistaken for one that was never asked for.
         """
         if not request.summarize:
-            return None, SUMMARY_DETERMINISTIC
+            return None, SUMMARY_DETERMINISTIC, None
 
         try:
-            summary = await self._llm_service.summarize(
+            outcome = await self._llm_service.summarize(
                 project_key=request.project_key,
                 repository_slug=request.repository_slug,
                 version=request.version,
@@ -1078,13 +1104,14 @@ class ReleaseNoteService:
             )
         except Exception as e:  # noqa: BLE001 - an optional pass must never fail the notes
             logger.warning(f"Release note summarization failed: {e}")
-            return None, SUMMARY_DETERMINISTIC
+            return None, SUMMARY_DETERMINISTIC, SUMMARY_NOTICE_FAILED
 
+        summary = outcome.summary
         if summary is None:
-            return None, SUMMARY_DETERMINISTIC
+            return None, SUMMARY_DETERMINISTIC, outcome.notice
 
         for commit in commits:
             section = summary.sections.get(str(commit.get("id")))
             if section:
                 commit["section"] = section
-        return summary.summary or None, SUMMARY_LLM
+        return summary.summary or None, SUMMARY_LLM, None

@@ -41,6 +41,15 @@ REASON_UNRESOLVED = "unresolved"
 SUMMARY_DETERMINISTIC = "deterministic"
 SUMMARY_LLM = "llm"
 
+# Why an asked-for summary stayed ``deterministic``. A fallback that is reported
+# silently looks the same as one that was never asked for, so the reason travels
+# with the notes and the caller can say which of the two is on screen.
+# ``not_configured`` is a deployment without a usable LLM - an administrator can
+# change that; ``failed`` is one that is configured but did not answer anything
+# readable, where asking again may help.
+SUMMARY_NOTICE_NOT_CONFIGURED = "not_configured"
+SUMMARY_NOTICE_FAILED = "failed"
+
 
 class ReleaseNoteCoordinates(BaseModel):
     """Repository coordinates shared by the release note endpoints."""
@@ -297,5 +306,12 @@ class ReleaseNotePreviewResponse(BaseModel):
         description=(
             "'deterministic' | 'llm': whether the prose was derived from the commit subjects "
             "alone or was written by the configured LLM"
+        ),
+    )
+    summary_notice: str | None = Field(
+        default=None,
+        description=(
+            "Why 'summary_source' stayed 'deterministic' although a summary was asked for: "
+            "'not_configured' | 'failed'. Null when no summary was asked for"
         ),
     )

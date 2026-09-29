@@ -8,7 +8,9 @@ whose subjects carry no conventional prefix.
 The model only ever answers *about* the commits it was given - never with a
 commit list of its own - so the notes cannot gain or lose a commit, and every
 failure (disabled, unreachable, unparsable) falls back to the deterministic
-notes rather than failing the request.
+notes rather than failing the request. The failure is reported rather than
+swallowed: a caller that asked for AI prose can tell the reader which of the two
+it ended up with.
 """
 
 from __future__ import annotations
@@ -22,8 +24,13 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.schemas.release_note import SUMMARY_NOTICE_FAILED, SUMMARY_NOTICE_NOT_CONFIGURED
 from src.services.llm_service import REQUEST_TIMEOUT_SECONDS, LlmService, load_llm_config
-from src.services.release_note_service import NOTE_SECTIONS, OTHER_SECTION
+from src.services.release_note_service import (
+    NOTE_SECTIONS,
+    OTHER_SECTION,
+    is_merge_commit,
+)
 from src.utils.log import get_logger
 from src.utils.redis import RedisCache
 
@@ -53,6 +60,19 @@ SYSTEM_PROMPT = (
     "them; never invent a commit, never invent a feature that no commit shows. "
     'When the subject of a commit is ambiguous, use "Other Changes".'
 )
+
+
+@dataclass(frozen=True)
+class SummaryOutcome:
+    """What came of the optional pass: a summary, or the reason there is none.
+
+    ``notice`` is ``None`` when there was nothing to summarize - a scope without
+    commits is not a failure - and one of the ``SUMMARY_NOTICE_*`` codes when the
+    pass was asked for and could not be made.
+    """
+
+    summary: ReleaseNoteSummary | None = None
+    notice: str | None = None
 
 
 @dataclass(frozen=True)
@@ -140,15 +160,24 @@ class ReleaseNoteLlmService:
         previous_version: str | None,
         commits: list[dict[str, Any]],
         language: str | None = None,
-    ) -> ReleaseNoteSummary | None:
-        """Summary and section hints for one release scope, or ``None``.
+    ) -> SummaryOutcome:
+        """Summary and section hints for one release scope.
 
-        ``None`` means "no LLM pass": not configured, nothing to summarize, or a
-        call that failed. The caller then renders the deterministic notes.
+        The outcome says which it is: the model's answer, or why there is none -
+        not configured, a call that failed, an answer that could not be read. The
+        caller renders the deterministic notes either way.
         """
-        entries = commits[:MAX_PROMPT_COMMITS]
+        # A merge is not a change to summarize - the commits it brought in carry
+        # that - so it is left out of the prompt as well as out of the notes.
+        entries: list[dict[str, Any]] = []
+        for commit in commits:
+            if is_merge_commit(commit.get("message")):
+                continue
+            if len(entries) == MAX_PROMPT_COMMITS:
+                break
+            entries.append(commit)
         if not entries:
-            return None
+            return SummaryOutcome()
 
         config = await load_llm_config(self._db)
         client = LlmService(config, timeout=self._timeout)
@@ -164,10 +193,10 @@ class ReleaseNoteLlmService:
 
         cached = await self._read_cache(cache_key)
         if cached is not None:
-            return cached
+            return SummaryOutcome(summary=cached)
 
         if not config.usable:
-            return None
+            return SummaryOutcome(notice=SUMMARY_NOTICE_NOT_CONFIGURED)
 
         answer = await client.complete(
             [
@@ -182,7 +211,7 @@ class ReleaseNoteLlmService:
         )
         summary = parse_summary_answer(answer, {str(entry.get("id")) for entry in entries})
         if summary is None:
-            return None
+            return SummaryOutcome(notice=SUMMARY_NOTICE_FAILED)
 
         await self._write_cache(cache_key, summary)
         logger.info(
@@ -195,7 +224,7 @@ class ReleaseNoteLlmService:
                 "grouped": len(summary.sections),
             },
         )
-        return summary
+        return SummaryOutcome(summary=summary)
 
     # ------------------------------------------------------------------ #
     # Prompt and cache

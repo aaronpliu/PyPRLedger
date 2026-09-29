@@ -1067,6 +1067,8 @@
     "ai_summary_help": "额外生成一段概述，并对没有 conventional 前缀的提交重新归类。提交信息会发送给已配置的 LLM。",
     "ai_summary_unavailable": "如需 AI 摘要，请在「系统设置」中启用 LLM 集成。",
     "generated_with_ai": "概述由 AI 撰写",
+    "ai_summary_fallback_not_configured": "未配置 LLM，已跳过 AI 摘要 —— 小节由提交信息归类。",
+    "ai_summary_fallback_failed": "AI 摘要生成失败 —— 小节由提交信息归类。",
     "generate_truncated": "提交列表被截断，如需完整说明请调大 Max Commits",
     "generate_failed": "生成版本说明失败",
     "prerelease": "标记为预发布",

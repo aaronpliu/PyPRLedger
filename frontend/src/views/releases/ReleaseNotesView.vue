@@ -457,6 +457,15 @@
                 <div v-if="!llmEnabled" class="field-hint">
                   {{ t('releaseNotes.ai_summary_unavailable') }}
                 </div>
+                <!-- the pass was asked for and could not be made: the notes on
+                     screen came from the commit subjects, and this says so -->
+                <div v-else-if="aiFallback" class="field-hint ai-summary-fallback">
+                  {{
+                    aiFallback === 'not_configured'
+                      ? t('releaseNotes.ai_summary_fallback_not_configured')
+                      : t('releaseNotes.ai_summary_fallback_failed')
+                  }}
+                </div>
                 <div v-else-if="aiSummary" class="field-hint">
                   {{ t('releaseNotes.ai_summary_help') }}
                 </div>
@@ -704,6 +713,16 @@ const generatedCount = ref<number | null>(null)
 const llmEnabled = ref(false)
 const aiSummary = ref(false)
 const summarizedByAi = ref(false)
+const summaryNotice = ref<string | null>(null)
+// A pass that was asked for and could not be made is answered with the
+// deterministic notes, so say which one is on screen instead of leaving the
+// reader to guess whether the sections came from the AI or from the subjects.
+const aiFallback = computed(() => {
+  if (!aiSummary.value || summarizedByAi.value) return null
+  if (summaryNotice.value === 'not_configured') return 'not_configured'
+  if (summaryNotice.value === 'failed') return 'failed'
+  return null
+})
 const formCard = ref<HTMLElement | null>(null)
 
 const repo = ref({
@@ -1283,6 +1302,7 @@ async function generateNotes() {
     // The server falls back to the deterministic notes when the LLM call fails,
     // so the answer says which one is on screen rather than assuming the switch
     summarizedByAi.value = preview.summary_source === 'llm'
+    summaryNotice.value = preview.summary_notice ?? null
     if (preview.truncated) {
       ElMessage.warning(t('releaseNotes.generate_truncated'))
     }
@@ -1802,6 +1822,11 @@ onBeforeUnmount(() => {
   margin-top: 4px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+/* a summary that was asked for and could not be made is not a help text */
+.ai-summary-fallback {
+  color: var(--el-color-warning);
 }
 
 .form-actions {

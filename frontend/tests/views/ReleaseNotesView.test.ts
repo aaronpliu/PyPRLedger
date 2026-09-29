@@ -471,6 +471,48 @@ describe('ReleaseNotesView', () => {
     expect(wrapper.text()).toContain(enMessages.releaseNotes.generated_with_ai)
   })
 
+  it('says so when the AI summary it asked for could not be made', async () => {
+    vi.mocked(llmApi.getConfig).mockResolvedValue({
+      enabled: true,
+      model: 'test-model',
+      base_url: 'https://llm.local/v1',
+    })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue({
+      ...preview([], { version: 'v1.1.0', commit_count: 3 }),
+      summary: null,
+      summary_source: 'deterministic',
+      summary_notice: 'not_configured',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const aiSummary = wrapper
+      .findAllComponents({ name: 'ElCheckbox' })
+      .find((box: AnyWrapper) => box.text() === enMessages.releaseNotes.ai_summary)
+    await aiSummary!.vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    // nothing has been asked of the server yet, so the switch explains itself
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.ai_summary_help)
+    expect(wrapper.text()).not.toContain(
+      enMessages.releaseNotes.ai_summary_fallback_not_configured,
+    )
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.generate_notes)[0].trigger('click')
+    await flushPromises()
+
+    // the notes on screen came from the commit subjects, and the form says why
+    expect(wrapper.text()).toContain(
+      enMessages.releaseNotes.ai_summary_fallback_not_configured,
+    )
+    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.generated_with_ai)
+  })
+
   it('edits the notes with the rendered markdown beside them', async () => {
     const wrapper = mountView()
     await flushPromises()

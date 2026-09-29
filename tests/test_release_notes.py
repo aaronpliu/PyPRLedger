@@ -46,6 +46,7 @@ from src.services.release_note_service import (
     build_release_notes_markdown,
     commit_section,
     commit_subject,
+    is_merge_commit,
     jira_settings,
     linkify_jira_tickets,
     parse_provider_datetime,
@@ -362,6 +363,24 @@ def test_commit_section_keeps_merge_commits_ungrouped() -> None:
     """A merge subject describes the integration, not the change it carries."""
     assert commit_section("Merge pull request #42 from acme/feature/sso") == "Other Changes"
     assert commit_section("Merge branch 'release/1.0' into main") == "Other Changes"
+
+
+def test_is_merge_commit_reads_the_messages_git_and_the_platforms_write() -> None:
+    """Every wording a merge commit is given describes an integration."""
+    assert is_merge_commit("Merge branch 'release/1.0' into main")
+    assert is_merge_commit("Merge remote-tracking branch 'origin/main'")
+    assert is_merge_commit("Merge pull request #42 from acme/feature/sso")
+    # Bitbucket Server writes the merge the other way around
+    assert is_merge_commit("Merged in feature/sso (pull request #42)")
+    # a ticket key in front of it does not hide it
+    assert is_merge_commit("PRL-123: Merge branch 'main'")
+    assert is_merge_commit("[PRL-123] Merge branch 'main'")
+    assert is_merge_commit("Merge branch 'main' into feature/sso\n\nSome body")
+
+    assert not is_merge_commit("feat: merge the two report makers")
+    assert not is_merge_commit("Merger of the export pipelines")
+    assert not is_merge_commit("")
+    assert not is_merge_commit(None)
 
 
 def test_section_emoji_covers_every_produced_section() -> None:
@@ -740,6 +759,32 @@ def test_build_markdown_ignores_a_section_it_does_not_know() -> None:
     body = build_release_notes_markdown([payload], version="v1.1.0")
 
     assert "### 📝 Other Changes" in body
+
+
+def test_build_markdown_leaves_the_merges_out() -> None:
+    """What a merge integrated is listed through the commits it merged."""
+    commits = [
+        commit(C1, "feat: add login page").model_dump(),
+        commit(C2, "Merge pull request #42 from acme/feature/sso").model_dump(),
+        commit(C3, "Merged in feature/sso (pull request #42)").model_dump(),
+    ]
+
+    body = build_release_notes_markdown(commits, version="v1.1.0")
+
+    assert "add login page" in body
+    assert "Merge" not in body
+    assert "### 📝 Other Changes" not in body
+
+
+def test_build_markdown_of_a_scope_that_holds_nothing_but_merges() -> None:
+    """A release that only integrated work has no change of its own to list."""
+    commits = [commit(C2, "Merge branch 'main' into feature/sso").model_dump()]
+
+    body = build_release_notes_markdown(commits, version="v1.1.0")
+
+    assert "Merge" not in body
+    assert "### 📝 Other Changes" not in body
+    assert "_No commits found in this release scope._" in body
 
 
 # --------------------------------------------------------------------------- #
