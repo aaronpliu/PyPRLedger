@@ -215,6 +215,13 @@ function selectByPlaceholder(wrapper: AnyWrapper, placeholder: string) {
     .find((select: AnyWrapper) => select.props('placeholder') === placeholder)
 }
 
+/** The pager of the reading column (the navigator carries one of its own). */
+function detailPager(wrapper: AnyWrapper) {
+  return wrapper
+    .findAllComponents({ name: 'ElPagination' })
+    .find((pager: AnyWrapper) => pager.classes().includes('detail-pagination'))
+}
+
 /** Switch the navigator between the releases and the tags tab. */
 async function selectTab(wrapper: AnyWrapper, label: string) {
   const tab = wrapper
@@ -690,7 +697,7 @@ describe('ReleaseNotesView', () => {
     expect(columns[1].find('.md-preview-stub').exists()).toBe(true)
   })
 
-  it('shows the notes of the selected release in the second column', async () => {
+  it('shows every release of the page and marks the one in focus', async () => {
     vi.mocked(releaseNotesApi.list).mockResolvedValue({
       total: 2,
       items: [
@@ -703,9 +710,12 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    // the newest release is selected by default
+    // the newest release is in focus, and both releases of the page are rendered
     expect(wrapper.find('.nav-item.active').text()).toContain('v1.1.0')
-    expect(wrapper.find('.md-preview-stub').text()).toContain('add login page')
+    const entries = wrapper.findAll('.note-entry')
+    expect(entries).toHaveLength(2)
+    expect(entries[0].find('.md-preview-stub').text()).toContain('add login page')
+    expect(entries[1].find('.md-preview-stub').text()).toContain('Later release')
 
     const items = wrapper.findAll('.nav-item')
     const later = items.find((item) => item.text().includes('v1.2.0'))!
@@ -713,8 +723,11 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
 
     expect(wrapper.find('.nav-item.active').text()).toContain('v1.2.0')
-    expect(wrapper.find('.md-preview-stub').text()).toContain('Later release')
-    // the released meta of the selection is shown above the notes
+    // the navigator brings the entry into focus instead of replacing the others
+    expect(wrapper.findAll('.note-entry')).toHaveLength(2)
+    expect(wrapper.findAll('.note-entry.focused')).toHaveLength(1)
+    expect(wrapper.find('.note-entry.focused').attributes('data-note-id')).toBe('2')
+    // the released meta of a release is shown above its notes
     expect(wrapper.text()).toContain(
       enMessages.releaseNotes.released_by.replace('{author}', 'alice'),
     )
@@ -1089,7 +1102,10 @@ describe('ReleaseNotesView', () => {
       expect.objectContaining({ limit: 10, offset: 20 }),
     )
     expect(wrapper.find('.nav-item.active').text()).toContain(wanted.tag_name)
-    expect(wrapper.find('.md-preview-stub').text()).toContain(wanted.body)
+    // the release is rendered as one entry of that page, with its notes
+    const entry = wrapper.find(`[data-note-id="${wanted.id}"]`)
+    expect(entry.exists()).toBe(true)
+    expect(entry.find('.md-preview-stub').text()).toContain(wanted.body)
   })
 
   it('walks the capped pages of the release list when indexing the tags', async () => {
@@ -1457,6 +1473,174 @@ describe('ReleaseNotesView', () => {
       1,
       expect.objectContaining({ status: 'published', previous_tag: 'v1.0.0' }),
     )
+  })
+
+  it('carries the badges of each release on its own entry', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 3,
+      items: [
+        release({
+          id: 1,
+          tag_name: 'v3.0.0-rc.1',
+          name: 'Candidate',
+          is_latest: false,
+          is_prerelease: true,
+        }),
+        release({
+          id: 2,
+          tag_name: 'v2.0.0',
+          name: 'DraftTwo',
+          is_latest: false,
+          status: 'draft',
+        }),
+        release({ id: 3, tag_name: 'v1.0.0', name: 'LatestOne', is_latest: true }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const entries = wrapper.findAll('.note-entry')
+    expect(entries[0].text()).toContain(enMessages.releaseNotes.badge_prerelease)
+    expect(entries[0].text()).not.toContain(enMessages.releaseNotes.badge_draft)
+    expect(entries[1].text()).toContain(enMessages.releaseNotes.badge_draft)
+    expect(entries[2].text()).toContain(enMessages.releaseNotes.badge_latest)
+  })
+
+  it('acts on the release of the entry that was clicked', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 2,
+      items: [
+        release({ id: 11, tag_name: 'v1.1.0', name: 'Newer' }),
+        release({ id: 10, tag_name: 'v1.0.0', name: 'Older', is_latest: false }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const older = wrapper.findAll('.note-entry')[1]
+    const edit = older
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseNotes.edit_release)!
+    await edit.trigger('click')
+    await flushPromises()
+
+    // the entry's own release is edited, not the one in focus
+    const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
+    expect(tagSelect.props('modelValue')).toBe('v1.0.0')
+  })
+
+  it('pages the releases from the reading column too', async () => {
+    const many = Array.from({ length: 25 }, (_, index) =>
+      release({ id: index + 1, tag_name: `v1.${25 - index}.0`, name: `v1.${25 - index}.0` }),
+    )
+    vi.mocked(releaseNotesApi.list).mockImplementation(async (params) => {
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 10
+      return { total: many.length, items: many.slice(offset, offset + limit) }
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const pager = detailPager(wrapper)
+    expect(pager).toBeDefined()
+    pager!.vm.$emit('update:current-page', 2)
+    await flushPromises()
+
+    expect(releaseNotesApi.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 10, limit: 10 }),
+    )
+    expect(wrapper.findAll('.note-entry')).toHaveLength(10)
+  })
+
+  it('collapses a long note and expands it on demand', async () => {
+    const longBody = Array.from({ length: 30 }, (_, index) => `- line ${index}`).join('\n')
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 2,
+      items: [
+        release({ id: 1, tag_name: 'v2.0.0', name: 'Long', body: longBody }),
+        release({
+          id: 2,
+          tag_name: 'v1.0.0',
+          name: 'Short',
+          body: '- one line',
+          is_latest: false,
+        }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const longEntry = wrapper.findAll('.note-entry')[0]
+    const shortEntry = wrapper.findAll('.note-entry')[1]
+
+    expect(longEntry.find('.release-body').classes()).toContain('collapsed')
+    expect(longEntry.find('.note-expand').text()).toBe(enMessages.releaseNotes.show_more)
+    // a note that fits needs no control
+    expect(shortEntry.find('.note-expand').exists()).toBe(false)
+    expect(shortEntry.find('.release-body').classes()).not.toContain('collapsed')
+
+    await longEntry.find('.note-expand').trigger('click')
+    await flushPromises()
+
+    expect(longEntry.find('.release-body').classes()).not.toContain('collapsed')
+    expect(longEntry.find('.note-expand').text()).toBe(enMessages.releaseNotes.show_less)
+  })
+
+  it('invites the reader to draft the first release of an empty repository', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({ total: 0, items: [] })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    expect(wrapper.find('.detail-card .el-empty').text()).toContain(
+      enMessages.releaseNotes.empty,
+    )
+  })
+
+  it('steps back a page when the last release of a page is deleted', async () => {
+    const many = Array.from({ length: 11 }, (_, index) =>
+      release({ id: index + 1, tag_name: `v1.${11 - index}.0`, name: `v1.${11 - index}.0` }),
+    )
+    vi.mocked(releaseNotesApi.list).mockImplementation(async (params) => {
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 10
+      return { total: many.length, items: many.slice(offset, offset + limit) }
+    })
+    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as any)
+
+    try {
+      const wrapper = mountView()
+      await flushPromises()
+      await selectRepository(wrapper)
+
+      detailPager(wrapper)!.vm.$emit('update:current-page', 2)
+      await flushPromises()
+      expect(wrapper.findAll('.note-entry')).toHaveLength(1)
+
+      const remove = wrapper
+        .find('.note-entry')
+        .findAll('button')
+        .find((button) => button.text() === enMessages.releaseNotes.delete)!
+      await remove.trigger('click')
+      await flushPromises()
+
+      // page 2 held nothing else: the reader steps back instead of facing an empty list
+      expect(releaseNotesApi.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ offset: 0 }),
+      )
+      expect(wrapper.findAll('.note-entry').length).toBeGreaterThan(0)
+    } finally {
+      confirmSpy.mockRestore()
+    }
   })
 })
 

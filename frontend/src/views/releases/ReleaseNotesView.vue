@@ -324,20 +324,17 @@
             <div class="section-header">
               <div class="section-title">
                 <h3>{{ detailTitle }}</h3>
-                <!-- The badges describe the selection of the active tab: a release
-                     kept from the releases tab must not decorate a tag. -->
-                <template v-if="tabIsReleases && selectedNote && !editorOpen">
-                  <el-tag size="small" effect="plain">{{ selectedNote.tag_name }}</el-tag>
-                  <el-tag v-if="selectedNote.is_latest" size="small" type="success" round>
-                    {{ t('releaseNotes.badge_latest') }}
-                  </el-tag>
-                  <el-tag v-if="selectedNote.is_prerelease" size="small" type="warning" round>
-                    {{ t('releaseNotes.badge_prerelease') }}
-                  </el-tag>
-                  <el-tag v-if="selectedNote.status === 'draft'" size="small" type="info" round>
-                    {{ t('releaseNotes.badge_draft') }}
-                  </el-tag>
-                </template>
+                <!-- The badges and the actions now live on each entry, so the
+                     header describes the page (or the tag) and not a selection. -->
+                <el-tag
+                  v-if="tabIsReleases && !editorOpen && notesTotal"
+                  size="small"
+                  type="info"
+                  round
+                  data-test="page-count"
+                >
+                  {{ notesTotal }}
+                </el-tag>
                 <el-tag v-else-if="tabIsTags && selectedTag && !editorOpen" size="small" effect="plain">
                   {{ selectedTag }}
                 </el-tag>
@@ -362,64 +359,6 @@
                 >
                   {{ t('releaseNotes.draft_for_tag') }}
                 </el-button>
-                <template v-else-if="tabIsReleases && selectedNote">
-                  <el-button
-                    v-if="selectedNote.external_url"
-                    link
-                    size="small"
-                    tag="a"
-                    :href="selectedNote.external_url"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    {{ t('releaseNotes.view_on_provider') }}
-                  </el-button>
-                  <!-- Exporting reads, so any reader can take the notes out -->
-                  <el-button
-                    link
-                    type="primary"
-                    size="small"
-                    :loading="exportingNotes"
-                    @click="exportNotes([selectedNote.id])"
-                  >
-                    {{ t('releaseNotes.export_one') }}
-                  </el-button>
-                  <el-button
-                    link
-                    type="primary"
-                    size="small"
-                    :loading="copyingNote"
-                    @click="copyNote(selectedNote)"
-                  >
-                    {{ t('releaseNotes.copy_one') }}
-                  </el-button>
-                  <template v-if="canManage">
-                    <el-button link type="primary" size="small" @click="editNote(selectedNote)">
-                      {{ t('releaseNotes.edit_release') }}
-                    </el-button>
-                    <el-button
-                      v-if="selectedNote.status === 'draft'"
-                      link
-                      type="success"
-                      size="small"
-                      @click="publishNote(selectedNote)"
-                    >
-                      {{ t('releaseNotes.publish') }}
-                    </el-button>
-                    <el-button
-                      v-if="canImportFromProvider"
-                      link
-                      type="primary"
-                      size="small"
-                      @click="pushNote(selectedNote)"
-                    >
-                      {{ t('releaseNotes.push_to_provider') }}
-                    </el-button>
-                    <el-button link type="danger" size="small" @click="confirmDelete(selectedNote)">
-                      {{ t('releaseNotes.delete') }}
-                    </el-button>
-                  </template>
-                </template>
               </div>
             </div>
           </template>
@@ -593,47 +532,173 @@
             <commit-table v-else :commits="tagCommits" :empty-text="t('releaseNotes.commits_empty')" />
           </template>
 
-          <!-- Read-only notes of the selected release -->
-          <template v-else-if="tabIsReleases && selectedNote">
-            <div class="release-meta">
-              <span v-if="selectedNote.author" class="release-author">
-                <UserAvatar
-                  v-if="selectedNote.author_avatar_url"
-                  class="release-author-avatar"
-                  :username="selectedNote.author"
-                  :avatar-url="selectedNote.author_avatar_url"
-                  :size="22"
-                />
-                {{ t('releaseNotes.released_by', { author: selectedNote.author }) }}
-              </span>
-              <span v-if="selectedNote.published_date">
-                · {{ formatDate(selectedNote.published_date) }}
-              </span>
-              <span v-else-if="selectedNote.updated_date">
-                · {{ t('releaseNotes.updated_at', { date: formatDate(selectedNote.updated_date) }) }}
-              </span>
-              <span v-if="selectedNote.previous_tag" class="release-range">
-                ·
-                {{
-                  t('releaseNotes.range', {
-                    from: selectedNote.previous_tag,
-                    to: selectedNote.tag_name,
-                  })
-                }}
-              </span>
-            </div>
+          <!-- Every release of the current page, one entry each -->
+          <template v-else-if="tabIsReleases && notes.length">
+            <article
+              v-for="note in notes"
+              :key="note.id"
+              class="note-entry"
+              :class="{ focused: selectedNote?.id === note.id }"
+              :data-note-id="note.id"
+            >
+              <header class="note-entry-header">
+                <div class="note-entry-title">
+                  <h4 class="note-entry-name">{{ note.name }}</h4>
+                  <el-tag size="small" effect="plain">{{ note.tag_name }}</el-tag>
+                  <el-tag v-if="note.is_latest" size="small" type="success" round>
+                    {{ t('releaseNotes.badge_latest') }}
+                  </el-tag>
+                  <el-tag v-if="note.is_prerelease" size="small" type="warning" round>
+                    {{ t('releaseNotes.badge_prerelease') }}
+                  </el-tag>
+                  <el-tag v-if="note.status === 'draft'" size="small" type="info" round>
+                    {{ t('releaseNotes.badge_draft') }}
+                  </el-tag>
+                </div>
 
-            <div v-if="selectedNote.body" class="release-body" @click="openNoteLink">
-              <MdPreview :model-value="noteBody(selectedNote.body)" :theme="mdTheme" preview-theme="github" />
-            </div>
-            <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
+                <!-- The actions belong to the entry they sit on, so a release can
+                     be acted on without selecting it first -->
+                <div class="note-entry-actions">
+                  <el-button
+                    v-if="note.external_url"
+                    link
+                    size="small"
+                    tag="a"
+                    :href="note.external_url"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    {{ t('releaseNotes.view_on_provider') }}
+                  </el-button>
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :loading="exportingNotes"
+                    @click="exportNotes([note.id])"
+                  >
+                    {{ t('releaseNotes.export_one') }}
+                  </el-button>
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :loading="copyingNote"
+                    @click="copyNote(note)"
+                  >
+                    {{ t('releaseNotes.copy_one') }}
+                  </el-button>
+                  <template v-if="canManage">
+                    <el-button link type="primary" size="small" @click="editNote(note)">
+                      {{ t('releaseNotes.edit_release') }}
+                    </el-button>
+                    <el-button
+                      v-if="note.status === 'draft'"
+                      link
+                      type="success"
+                      size="small"
+                      @click="publishNote(note)"
+                    >
+                      {{ t('releaseNotes.publish') }}
+                    </el-button>
+                    <el-button
+                      v-if="canImportFromProvider"
+                      link
+                      type="primary"
+                      size="small"
+                      @click="pushNote(note)"
+                    >
+                      {{ t('releaseNotes.push_to_provider') }}
+                    </el-button>
+                    <el-button link type="danger" size="small" @click="confirmDelete(note)">
+                      {{ t('releaseNotes.delete') }}
+                    </el-button>
+                  </template>
+                </div>
+              </header>
+
+              <div class="release-meta">
+                <span v-if="note.author" class="release-author">
+                  <UserAvatar
+                    v-if="note.author_avatar_url"
+                    class="release-author-avatar"
+                    :username="note.author"
+                    :avatar-url="note.author_avatar_url"
+                    :size="22"
+                  />
+                  {{ t('releaseNotes.released_by', { author: note.author }) }}
+                </span>
+                <span v-if="note.published_date">
+                  · {{ formatDate(note.published_date) }}
+                </span>
+                <span v-else-if="note.updated_date">
+                  · {{ t('releaseNotes.updated_at', { date: formatDate(note.updated_date) }) }}
+                </span>
+                <span v-if="note.previous_tag" class="release-range">
+                  ·
+                  {{
+                    t('releaseNotes.range', {
+                      from: note.previous_tag,
+                      to: note.tag_name,
+                    })
+                  }}
+                </span>
+              </div>
+
+              <div
+                v-if="note.body"
+                class="release-body"
+                :class="{ collapsed: isNoteCollapsed(note) }"
+                @click="openNoteLink"
+              >
+                <MdPreview :model-value="noteBody(note.body)" :theme="mdTheme" preview-theme="github" />
+                <div v-if="isNoteCollapsed(note)" class="note-fade" />
+              </div>
+              <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
+
+              <!-- Collapsing is a reading aid: the notes stay whole in the release
+                   and in an export -->
+              <el-button
+                v-if="isLongNote(note)"
+                link
+                type="primary"
+                size="small"
+                class="note-expand"
+                @click="toggleNoteExpanded(note.id)"
+              >
+                {{
+                  isNoteCollapsed(note)
+                    ? t('releaseNotes.show_more')
+                    : t('releaseNotes.show_less')
+                }}
+              </el-button>
+            </article>
+
+            <el-pagination
+              v-if="notesTotal > notesPageSize"
+              v-model:current-page="notesPage"
+              v-model:page-size="notesPageSize"
+              class="detail-pagination"
+              :page-sizes="[5, 10, 20, 50]"
+              :total="notesTotal"
+              layout="total, sizes, prev, pager, next"
+              background
+            />
           </template>
 
           <el-skeleton v-else-if="notesLoading" :rows="6" animated />
 
           <el-empty
             v-else
-            :description="t(hasCoordinates ? 'releaseNotes.select_hint' : 'releaseNotes.needs_repository')"
+            :description="
+              t(
+                !hasCoordinates
+                  ? 'releaseNotes.needs_repository'
+                  : notesTotal === 0
+                    ? 'releaseNotes.empty'
+                    : 'releaseNotes.select_hint',
+              )
+            "
           />
         </el-card>
         </div>
@@ -643,7 +708,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Close, Document, InfoFilled, Refresh } from '@element-plus/icons-vue'
@@ -734,6 +799,39 @@ const copyingNote = ref(false)
 const exportCount = computed(() =>
   exportAll.value ? notesTotal.value : exportSelection.value.size,
 )
+
+// Notes long enough to be collapsed are expanded one entry at a time; the state
+// is dropped when the page changes.
+const NOTE_COLLAPSE_LINES = 20
+const NOTE_COLLAPSE_CHARS = 1500
+const expandedNotes = ref<Set<number>>(new Set())
+
+/**
+ * Whether the notes of a release are long enough to be worth collapsing.
+ *
+ * The decision is taken from the text rather than from the rendered height: the
+ * test environment has no layout engine, so a measured overflow check could never
+ * be asserted, and it would also depend on the renderer and the font.
+ */
+function isLongNote(note: ReleaseNote): boolean {
+  const body = note.body ?? ''
+  return body.length > NOTE_COLLAPSE_CHARS || body.split('\n').length > NOTE_COLLAPSE_LINES
+}
+
+/** Whether the notes are rendered collapsed (long, and not expanded by hand). */
+function isNoteCollapsed(note: ReleaseNote): boolean {
+  return isLongNote(note) && !expandedNotes.value.has(note.id)
+}
+
+function toggleNoteExpanded(noteId: number) {
+  const next = new Set(expandedNotes.value)
+  if (next.has(noteId)) {
+    next.delete(noteId)
+  } else {
+    next.add(noteId)
+  }
+  expandedNotes.value = next
+}
 
 function isExportSelected(noteId: number): boolean {
   return exportAll.value || exportSelection.value.has(noteId)
@@ -982,10 +1080,9 @@ const detailTitle = computed(() => {
       ? t('releaseNotes.tag_commits_title', { tag: selectedTag.value })
       : t('releaseNotes.select_title')
   }
-  if (selectedNote.value) {
-    return selectedNote.value.name
-  }
-  return t('releaseNotes.select_title')
+  // The column holds a page of releases, so its title describes the list rather
+  // than one selection (the badges and the actions moved into the entries).
+  return t('releaseNotes.list_title')
 })
 
 function secondaryName(value: string, name?: string | null): string | undefined {
@@ -1020,6 +1117,27 @@ function uniqueRefs(values: string[] | null | undefined): string[] {
 function selectNote(note: ReleaseNote) {
   closeForm()
   selectedId.value = note.id
+  void scrollToNoteEntry(note.id)
+}
+
+/**
+ * Bring the entry of a release into view in the reading column.
+ *
+ * The column lists the whole page, so picking a release scrolls to it instead of
+ * replacing what is rendered. The wait is bounded and repeated: jumping from the
+ * tags tab can change the page first, and that reload is started by a watcher
+ * rather than awaited here.
+ */
+async function scrollToNoteEntry(noteId: number) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await nextTick()
+    const target = document.querySelector(`[data-note-id="${noteId}"]`)
+    if (target) {
+      target.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
 }
 
 /** Select a tag and show the commits it released. */
@@ -1127,6 +1245,8 @@ async function openNoteForTag(tag: string) {
   if (page !== notesPage.value) {
     notesPage.value = page
   }
+  // the entry may only exist once the page it belongs to has loaded
+  void scrollToNoteEntry(entry.id)
 }
 
 function coordinates() {
@@ -1230,6 +1350,8 @@ async function loadRefs(force = false) {
 async function loadNotes() {
   notes.value = []
   notesTotal.value = 0
+  // an expanded note belongs to the page it was expanded on
+  expandedNotes.value = new Set()
   if (!hasCoordinates.value) return
 
   notesLoading.value = true
@@ -1626,7 +1748,13 @@ async function confirmDelete(note: ReleaseNote) {
     if (editingId.value === note.id) {
       closeForm()
     }
-    await loadNotes()
+    // This page may have held nothing but the release just deleted: step back on
+    // to the last page that still has releases instead of showing an empty list.
+    if (notes.value.length <= 1 && notesPage.value > 1) {
+      notesPage.value -= 1
+    } else {
+      await loadNotes()
+    }
     refreshReleaseTagIndex()
   } catch {
     ElMessage.error(t('releaseNotes.delete_failed'))
@@ -1937,6 +2065,80 @@ onBeforeUnmount(() => {
 
 .detail-card .release-body {
   margin-top: 12px;
+}
+
+/* Reading column: one entry per release of the page */
+.note-entry {
+  padding: 4px 0 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.note-entry:last-of-type {
+  border-bottom: 0;
+}
+
+.note-entry.focused {
+  margin-left: -12px;
+  padding-left: 10px;
+  border-left: 2px solid var(--el-color-primary);
+}
+
+.note-entry-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.note-entry-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.note-entry-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.note-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+/* A long note is clamped with a fade; the expand control follows it */
+.release-body.collapsed {
+  max-height: 24rem;
+  overflow: hidden;
+}
+
+.note-fade {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3rem;
+  background: linear-gradient(transparent, var(--el-bg-color));
+  pointer-events: none;
+}
+
+.note-expand {
+  margin-top: 4px;
+}
+
+.detail-pagination {
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.detail-pagination :deep(.el-pagination__total),
+.detail-pagination :deep(.el-pagination__sizes) {
+  margin-right: auto;
 }
 
 .release-meta {

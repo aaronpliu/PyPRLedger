@@ -1071,6 +1071,8 @@
     "notes": "版本说明",
     "notes_placeholder": "使用 Markdown 编写版本说明，或按提交自动生成",
     "notes_empty": "暂无说明",
+    "show_more": "展开全文",
+    "show_less": "收起",
     "generate_notes": "生成说明",
     "generated": "本次发布范围包含 {count} 个提交",
     "ai_summary": "AI 摘要",

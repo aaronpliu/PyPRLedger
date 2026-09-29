@@ -1070,6 +1070,8 @@
     "notes": "Release notes",
     "notes_placeholder": "Write the release notes in markdown, or generate them from the commits",
     "notes_empty": "No notes yet",
+    "show_more": "Show more",
+    "show_less": "Show less",
     "generate_notes": "Generate notes",
     "generated": "{count} commit(s) in this release scope",
     "ai_summary": "AI summary",

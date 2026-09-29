@@ -91,15 +91,16 @@ While a release is being drafted or edited the reading column SHALL render the e
 
 ### Requirement: A page never ends up empty while releases exist
 
-After a release is deleted, or the page size changes while a later page is shown, the page SHALL be adjusted so that the reader does not land on an empty list while the repository still holds releases.
+After a release is deleted the page SHALL be adjusted so that the reader does not land on an empty list while the repository still holds releases, and changing the page size SHALL return the reader to the first page instead of a page that may no longer exist.
 
 #### Scenario: Deleting the last release of the last page
 - **WHEN** deleting the only release of the last page leaves no releases on it
 - **THEN** the previous page that holds releases SHALL be shown
 
-#### Scenario: Shrinking the page size
-- **WHEN** the page size changes so that the current page no longer exists
-- **THEN** the last page that holds releases SHALL be shown
+#### Scenario: Changing the page size
+- **WHEN** the page size changes
+- **THEN** the first page of the new size SHALL be shown
+- **AND** the reader SHALL never be left on a page that no longer exists
 
 ### Requirement: The tags tab is unchanged
 
