@@ -1108,6 +1108,37 @@ describe('ReleaseNotesView', () => {
     expect(entry.find('.md-preview-stub').text()).toContain(wanted.body)
   })
 
+  it('links the version title of a release back to its tag', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 2,
+      items: [
+        release(),
+        release({ id: 2, tag_name: 'v1.0.0', name: 'v1.0.0', is_latest: false }),
+      ],
+    })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const link = wrapper.findAll('.note-entry')[1].find('.note-entry-tag-link')
+    expect(link.text()).toBe('v1.0.0')
+
+    await link.trigger('click')
+    await flushPromises()
+
+    // the title is the mirror of the note icon: it opens the tags tab on that tag
+    expect(activeTabLabel(wrapper)).toBe(enMessages.releaseNotes.panel_tags)
+    const active = wrapper.find('.nav-item.active')
+    expect(active.classes()).toContain('tag-item')
+    expect(active.text()).toContain('v1.0.0')
+    // selecting it loads the commits the tag released
+    expect(releaseNotesApi.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ version: 'v1.0.0' }),
+    )
+  })
+
   it('walks the capped pages of the release list when indexing the tags', async () => {
     const allNotes = Array.from({ length: 450 }, (_, index) =>
       release({

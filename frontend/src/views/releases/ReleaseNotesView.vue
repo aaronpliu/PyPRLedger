@@ -268,12 +268,13 @@
               />
 
               <template v-else>
-                <ul class="nav-list">
+                <ul ref="tagListRef" class="nav-list">
                   <li
                     v-for="tag in visibleTags"
                     :key="tag"
                     class="nav-item tag-item"
                     :class="{ active: selectedTag === tag && !editorOpen }"
+                    :data-tag-name="tag"
                     @click="selectTag(tag)"
                   >
                     <div class="nav-item-main">
@@ -543,8 +544,20 @@
             >
               <header class="note-entry-header">
                 <div class="note-entry-title">
-                  <h4 class="note-entry-name">{{ note.name }}</h4>
-                  <el-tag size="small" effect="plain">{{ note.tag_name }}</el-tag>
+                  <h4 class="note-entry-name">
+                    <!-- The title links back to the tag the release was cut from:
+                         the mirror of the note icon in the tag navigator -->
+                    <a
+                      class="note-entry-tag-link"
+                      href="#"
+                      @click.prevent="openTagForNote(note.tag_name)"
+                    >
+                      {{ note.name }}
+                    </a>
+                  </h4>
+                  <!-- the tag is the version's identity: it reads at the same
+                       weight as the title, while the status badges stay small -->
+                  <el-tag effect="plain">{{ note.tag_name }}</el-tag>
                   <el-tag v-if="note.is_latest" size="small" type="success" round>
                     {{ t('releaseNotes.badge_latest') }}
                   </el-tag>
@@ -875,6 +888,8 @@ const notesPage = ref(1)
 const notesPageSize = ref(10)
 const tagPage = ref(1)
 const tagPageSize = ref(20)
+// the rendered page of the tag navigator, used to bring a tag into view
+const tagListRef = ref<HTMLElement | null>(null)
 // Either a stored release or a tag is selected, depending on the active tab
 const selectedId = ref<number | null>(null)
 const selectedTag = ref<string | null>(null)
@@ -1140,6 +1155,20 @@ async function scrollToNoteEntry(noteId: number) {
   }
 }
 
+/** Scroll the tag of the navigator into view (the list is paginated). */
+async function scrollToTagItem(tag: string) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await nextTick()
+    const items = tagListRef.value?.querySelectorAll<HTMLElement>('.tag-item') ?? []
+    const target = Array.from(items).find((item) => item.dataset.tagName === tag)
+    if (target) {
+      target.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' })
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+}
+
 /** Select a tag and show the commits it released. */
 function selectTag(tag: string) {
   closeForm()
@@ -1247,6 +1276,29 @@ async function openNoteForTag(tag: string) {
   }
   // the entry may only exist once the page it belongs to has loaded
   void scrollToNoteEntry(entry.id)
+}
+
+/**
+ * Mirror of openNoteForTag: from a release to the tag it was cut from.
+ *
+ * The tag navigator is paginated in the browser, so the page holding the tag is
+ * opened before the item is scrolled to; selecting it also loads the commits it
+ * released, which is where the release's scope can be inspected.
+ */
+function openTagForNote(tag: string) {
+  activeTab.value = 'tags'
+
+  const position = sortedTags.value.indexOf(tag)
+  if (position >= 0) {
+    const page = Math.floor(position / tagPageSize.value) + 1
+    if (page !== tagPage.value) {
+      tagPage.value = page
+    }
+  }
+
+  // selects the tag (and closes an open editor) and loads its commits
+  selectTag(tag)
+  void scrollToTagItem(tag)
 }
 
 function coordinates() {
@@ -2069,8 +2121,8 @@ onBeforeUnmount(() => {
 
 /* Reading column: one entry per release of the page */
 .note-entry {
-  padding: 4px 0 14px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding: 16px 0 20px;
+  border-bottom: 1px solid var(--el-border-color);
 }
 
 .note-entry:last-of-type {
@@ -2099,10 +2151,28 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+/* The release name is the line that identifies a version on a page holding
+   several of them, so nothing inside the notes may compete with it. */
 .note-entry-name {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--el-text-color-primary);
+}
+
+/* The title is the anchor onto the tag it was cut from, so it keeps the weight of
+   the entry while behaving like a link on hover and on focus. */
+.note-entry-tag-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.note-entry-tag-link:hover,
+.note-entry-tag-link:focus-visible {
+  color: var(--el-color-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .note-entry-actions {
@@ -2163,6 +2233,40 @@ onBeforeUnmount(() => {
 .release-body {
   position: relative;
   margin-top: 12px;
+}
+
+/* The rendered notes must not outrank the release name (20px).
+   md-editor's github theme renders a level-2 heading - which is what a generated
+   body opens with ("## What's Changed") - at 1.5em with 24px/16px block margins,
+   and inherits its base size from the page. The scale is therefore pinned here
+   instead of being left to the ambient font size: the notes are the content of a
+   release, so 14px text with a 16px top heading, below the release name. */
+.release-body :deep(.github-theme) {
+  font-size: 14px;
+}
+
+.release-body :deep(h1),
+.release-body :deep(h2) {
+  font-size: 16px;
+}
+
+.release-body :deep(h3) {
+  font-size: 15px;
+}
+
+.release-body :deep(h4),
+.release-body :deep(h5),
+.release-body :deep(h6) {
+  font-size: 14px;
+}
+
+.release-body :deep(h1),
+.release-body :deep(h2),
+.release-body :deep(h3),
+.release-body :deep(h4),
+.release-body :deep(h5),
+.release-body :deep(h6) {
+  margin-block: 14px 8px;
 }
 
 /* The card already provides the surface: keep the rendered markdown on it instead
