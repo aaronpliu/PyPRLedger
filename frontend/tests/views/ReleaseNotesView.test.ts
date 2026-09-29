@@ -60,7 +60,7 @@ vi.mock('@/api/releaseNotes', () => ({
 vi.mock('md-editor-v3', () => ({
   MdEditor: {
     name: 'MdEditor',
-    props: ['modelValue', 'theme'],
+    props: ['modelValue', 'theme', 'toolbars', 'previewTheme', 'language'],
     emits: ['update:modelValue'],
     template:
       '<textarea class="md-editor-stub" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
@@ -469,6 +469,25 @@ describe('ReleaseNotesView', () => {
       expect.objectContaining({ summarize: true }),
     )
     expect(wrapper.text()).toContain(enMessages.releaseNotes.generated_with_ai)
+  })
+
+  it('edits the notes with the rendered markdown beside them', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const editor = wrapper.findComponent({ name: 'MdEditor' })
+    // the toolbar offers the preview: what is being typed can be read as it will
+    // be published, and the markdown can be put aside for a moment
+    expect(editor.props('toolbars')).toEqual(
+      expect.arrayContaining(['preview', 'previewOnly', 'catalog']),
+    )
+    // the preview is the one a reader gets, not a second rendering of its own
+    expect(editor.props('previewTheme')).toBe('github')
+    expect(editor.props('language')).toBe('en-US')
   })
 
   it('deletes a release after confirmation', async () => {

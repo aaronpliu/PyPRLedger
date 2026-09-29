@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Preview the release notes while writing them: the editor toolbar toggles the rendered note (`preview`), the note alone (`preview-only`) and a table of contents, rendered with the same theme as a published note
 - Group release notes into Keep a Changelog sections from the wording of a commit subject: a ticket key, a pull request number or a bracketed tag in front of it no longer hides the wording, and subjects that are not conventional commits (or not in English) are grouped instead of landing in "Other Changes" as one flat list
 - Summarize a release with the configured LLM: an opt-in "AI summary" on the notes form adds a summary paragraph and a section per commit, answered through the existing LLM proxy configuration (System Settings -> LLM) and falling back to the deterministic notes when no LLM is enabled or the call fails
 - Write the generated notes in the language of the caller (section titles and the summary; English, 简体中文, 繁體中文)

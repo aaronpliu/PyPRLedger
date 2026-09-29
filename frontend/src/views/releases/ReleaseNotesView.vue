@@ -464,8 +464,9 @@
                   v-model="form.body"
                   :toolbars="toolbars"
                   :theme="mdTheme"
-                  :preview="false"
-                  :style="{ height: '320px' }"
+                  :language="mdLanguage"
+                  preview-theme="github"
+                  :style="{ height: '420px' }"
                   :placeholder="t('releaseNotes.notes_placeholder')"
                 />
               </div>
@@ -639,6 +640,11 @@ const toolbars: ToolbarNames[] = [
   '-',
   'revoke',
   'next',
+  '-',
+  // reading the note as it will be published, next to the markdown being typed
+  'preview',
+  'previewOnly',
+  'catalog',
 ]
 
 const projects = ref<ProjectSummary[]>([])
@@ -734,6 +740,9 @@ const isDarkTheme = computed(() => {
   return document.documentElement.getAttribute('data-theme') === 'dark'
 })
 const mdTheme = computed<'dark' | 'light'>(() => (isDarkTheme.value ? 'dark' : 'light'))
+// The library only ships zh-CN and en-US tooltips, and answers an unknown
+// language with English - closer to zh-CN than that for a Chinese UI
+const mdLanguage = computed(() => (locale.value.startsWith('zh') ? 'zh-CN' : 'en-US'))
 
 let themeObserver: MutationObserver | null = null
 
