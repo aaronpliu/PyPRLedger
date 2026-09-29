@@ -5,6 +5,23 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.24.0] - 2026-09-29
+
+**Backend Version**: 1.24.0
+**Frontend Version**: 1.19.0
+
+### Added
+- Export release notes as one markdown document: `POST /release/notes/export` builds it from the stored releases and answers with the document, a suggested filename, how many releases it holds and an explicit report of anything it had to skip or cut. A selection is either explicit ids (what the page has ticked) or the whole filtered set, so exporting every published version of a repository no longer means paging the list in the browser first; the document has one shape and one author - the server writes the title, a summary line and one section per release (its heading, plus a draft / pre-release marker when one applies) with the stored body verbatim - so the page, an API consumer and CI produce byte-identical files. Bodies are copied as written: JIRA keys and author mentions are not rewritten, because linking them is a display concern the screen already handles. One export holds at most 200 releases, and reaching that bound is reported instead of quietly producing a partial document. The page gains a checkbox per release, "select all (filtered)" and "Export selected (N)" in the header, and "Export markdown" for the release that is open.
+- Read a page of releases as a list instead of one release at a time: the reading column renders every release of the current page in full - title and tag, the latest / pre-release / draft badges, author and date, the released range and the notes - and each entry carries its own actions (edit, publish, push and delete for the managing roles; export and copy for any reader; the provider link when the release has one), so a release can be acted on without being selected first. The pagination now drives both columns and is reachable from the bottom of the list as well as from the navigator, and clicking a navigator entry scrolls the reading column to that release and marks it instead of replacing the column and hiding the other releases of the page: reviewing a quarter of a release train is one page instead of ten clicks.
+
+### Changed
+- Link the version title of a release to the tag it was cut from: the title of an entry is an anchor that opens the tags tab on that tag and loads the commits it released - the mirror of the note icon that walks from a tag to its release. The tag navigator is paginated in the browser, so the page holding the tag is opened before the item is scrolled to, and the tag name travels on the element itself rather than in a selector built out of it. The title keeps the weight of the entry it names and reads as a link only on hover and on focus.
+
+### Documentation
+- Two OpenSpec changes describe the work above: `add-release-note-export` (the export contract, the document shape and its bounds) and `list-release-notes-per-page` (reading a page of releases as a list, with the navigator as a jump index).
+
+---
+
 ## [1.23.2] - 2026-09-29
 
 **Backend Version**: 1.23.2
