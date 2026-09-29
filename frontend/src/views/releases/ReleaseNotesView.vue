@@ -165,6 +165,28 @@
               />
 
               <template v-else>
+                <div class="export-bar">
+                  <el-checkbox
+                    :model-value="exportAll"
+                    :indeterminate="!exportAll && exportSelection.size > 0"
+                    data-test="export-all"
+                    @change="toggleExportAll"
+                  >
+                    {{ t('releaseNotes.export_all', { count: notesTotal }) }}
+                  </el-checkbox>
+                  <el-button
+                    size="small"
+                    type="primary"
+                    plain
+                    :loading="exportingNotes"
+                    :disabled="exportCount === 0"
+                    data-test="export-selected"
+                    @click="exportNotes()"
+                  >
+                    {{ t('releaseNotes.export_selected', { count: exportCount }) }}
+                  </el-button>
+                </div>
+
                 <ul class="nav-list">
                   <li
                     v-for="note in notes"
@@ -174,6 +196,13 @@
                     @click="selectNote(note)"
                   >
                     <div class="nav-item-main">
+                      <el-checkbox
+                        class="nav-item-check"
+                        :model-value="isExportSelected(note.id)"
+                        :aria-label="t('releaseNotes.export_selected', { count: 1 })"
+                        @click.stop
+                        @change="toggleExportSelection(note.id)"
+                      />
                       <span class="nav-item-name">{{ note.name }}</span>
                       <el-tag size="small" effect="plain">{{ note.tag_name }}</el-tag>
                     </div>
@@ -344,6 +373,25 @@
                     rel="noopener"
                   >
                     {{ t('releaseNotes.view_on_provider') }}
+                  </el-button>
+                  <!-- Exporting reads, so any reader can take the notes out -->
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :loading="exportingNotes"
+                    @click="exportNotes([selectedNote.id])"
+                  >
+                    {{ t('releaseNotes.export_one') }}
+                  </el-button>
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :loading="copyingNote"
+                    @click="copyNote(selectedNote)"
+                  >
+                    {{ t('releaseNotes.copy_one') }}
                   </el-button>
                   <template v-if="canManage">
                     <el-button link type="primary" size="small" @click="editNote(selectedNote)">
@@ -610,7 +658,12 @@ import UserAvatar from '@/components/user/UserAvatar.vue'
 import { useJira } from '@/composables/useJira'
 import { linkifyJiraMarkdown } from '@/utils/jira'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
-import type { ReleaseScopeReason, ReleaseScopeSource } from '@/api/releaseNotes'
+import type {
+  ReleaseNoteExportRequest,
+  ReleaseScopeReason,
+  ReleaseScopeSource,
+} from '@/api/releaseNotes'
+import { copyTextToClipboard, downloadMarkdown } from '@/utils/export/markdown'
 import { llmApi } from '@/api/llm'
 import { useAuthStore } from '@/stores/auth'
 
@@ -668,6 +721,53 @@ const branches = ref<string[]>([])
 const notes = ref<ReleaseNote[]>([])
 const notesTotal = ref(0)
 const notesLoading = ref(false)
+// Export selection: either the releases ticked in the list, or every release of
+// the repository - the latter covers releases the paginated list has not loaded,
+// which is what "export the change log" means. The two are exclusive: ticking a
+// release after selecting all narrows the export down to what was ticked.
+const exportSelection = ref<Set<number>>(new Set())
+const exportAll = ref(false)
+const exportingNotes = ref(false)
+const copyingNote = ref(false)
+
+// How many releases the export would write: everything, or what is ticked
+const exportCount = computed(() =>
+  exportAll.value ? notesTotal.value : exportSelection.value.size,
+)
+
+function isExportSelected(noteId: number): boolean {
+  return exportAll.value || exportSelection.value.has(noteId)
+}
+
+/** Tick or untick one release. Ticking one leaves the "all releases" mode. */
+function toggleExportSelection(noteId: number) {
+  if (exportAll.value) {
+    exportAll.value = false
+    exportSelection.value = new Set([noteId])
+    return
+  }
+
+  const next = new Set(exportSelection.value)
+  if (next.has(noteId)) {
+    next.delete(noteId)
+  } else {
+    next.add(noteId)
+  }
+  exportSelection.value = next
+}
+
+/** Switch between every release of the repository and the ticked ones. */
+function toggleExportAll(checked: unknown) {
+  exportAll.value = Boolean(checked)
+  if (exportAll.value) {
+    exportSelection.value = new Set()
+  }
+}
+
+function clearExportSelection() {
+  exportAll.value = false
+  exportSelection.value = new Set()
+}
 // Column 1 is a navigator with two tabs: stored releases and repository tags
 const activeTab = ref<NavigatorTab>('releases')
 const tabIsReleases = computed(() => activeTab.value === 'releases')
@@ -1198,6 +1298,79 @@ async function loadTagCommits(tag: string, refresh = false) {
 }
 
 // ------------------------------------------------------------------ #
+// Export
+// ------------------------------------------------------------------ #
+
+/**
+ * Export releases as one markdown document.
+ *
+ * The document is assembled by the backend: the page holds one page of releases,
+ * and a text document has to read the same whoever asked for it. Passing `ids`
+ * exports exactly those releases (the detail header does that for one release);
+ * otherwise the current selection decides - every release of the repository, or
+ * the ticked ones.
+ */
+async function exportNotes(ids?: number[]) {
+  if (!hasCoordinates.value) return
+
+  const payload: ReleaseNoteExportRequest = ids
+    ? { ...coordinates(), ids }
+    : exportAll.value
+      ? { ...coordinates(), select_all: true }
+      : { ...coordinates(), ids: [...exportSelection.value] }
+
+  if (!payload.ids?.length && !payload.select_all) return
+
+  exportingNotes.value = true
+  try {
+    const exported = await releaseNotesApi.exportNotes(payload)
+    downloadMarkdown(exported.content, exported.filename)
+    ElMessage.success(t('releaseNotes.exported_ok', { count: exported.count }))
+    if (exported.truncated) {
+      ElMessage.warning(t('releaseNotes.exported_truncated', { count: exported.count }))
+    }
+    if (exported.skipped_ids.length > 0) {
+      ElMessage.warning(
+        t('releaseNotes.exported_skipped', { count: exported.skipped_ids.length }),
+      )
+    }
+  } catch {
+    ElMessage.error(t('releaseNotes.export_failed'))
+  } finally {
+    exportingNotes.value = false
+  }
+}
+
+/**
+ * Put the open release on the clipboard.
+ *
+ * The same document the download would produce, so the two cannot disagree; a
+ * refused clipboard (a non-secure context, a denied permission) is reported so a
+ * copy that did nothing is never mistaken for one that worked.
+ */
+async function copyNote(note: ReleaseNote) {
+  if (!hasCoordinates.value) return
+
+  copyingNote.value = true
+  try {
+    const exported = await releaseNotesApi.exportNotes({
+      ...coordinates(),
+      ids: [note.id],
+    })
+    const copied = await copyTextToClipboard(exported.content)
+    if (copied) {
+      ElMessage.success(t('releaseNotes.copied_ok'))
+    } else {
+      ElMessage.warning(t('releaseNotes.copy_failed'))
+    }
+  } catch {
+    ElMessage.error(t('releaseNotes.export_failed'))
+  } finally {
+    copyingNote.value = false
+  }
+}
+
+// ------------------------------------------------------------------ #
 // Form actions
 // ------------------------------------------------------------------ #
 
@@ -1494,6 +1667,8 @@ watch(
   () => {
     // Another repository means another release: drop a half filled draft as well
     closeForm()
+    // an export selection belongs to the releases it was made from
+    clearExportSelection()
     selectedId.value = null
     selectedTag.value = null
     tagCommits.value = []
@@ -1666,6 +1841,20 @@ onBeforeUnmount(() => {
 .nav-pagination :deep(.el-pagination__total),
 .nav-pagination :deep(.el-pagination__sizes) {
   margin-right: auto;
+}
+
+.export-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.nav-item-check {
+  height: auto;
+  margin-right: 0;
 }
 
 .nav-list {

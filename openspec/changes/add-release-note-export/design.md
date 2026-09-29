@@ -59,22 +59,17 @@ Newest first, by `coalesce(published_date, updated_date) desc` - the exact expre
 
 ## Login hardening (v1.2.0)
 
-- Tag: `v1.2.0`
-- Status: published
-- Released: 2026-09-20 10:00
-- Author: Jane Doe
-- Pre-release: no
-
 <the stored body, verbatim>
 
 ---
 
-## Session timeout (v1.1.0)
+## Session timeout (v1.1.0) - pre-release
 ...
 ```
 
 - A section per release, separated by `---`, so a document can be read as a whole and split mechanically.
-- The metadata is a bullet list rather than YAML front matter: a note body may itself contain `---`, and sections must not depend on a marker the content can produce.
+- **No per-release metadata block.** An exported change log should read as notes, not as a record of the database: the tag, status, release date and author stay in the app. The one thing kept is a marker in the heading of a draft or a pre-release, because notes that read as released while the release is not would be worse than a suffix.
+- A released version therefore has a heading of exactly its name and tag, followed by its notes.
 - An empty body says so explicitly (`_No notes were written for this release._`) instead of leaving a gap that reads like a bug.
 
 ### D5 - Bodies are copied verbatim
@@ -107,7 +102,7 @@ The endpoint requires the same `release_note` read permission as listing, touche
 
 ### D10 - The page gains selection, not a second list
 
-- A checkbox per release row in the navigator (the row keeps its click-to-select behaviour), a "select all (filtered)" control in the list header honouring the current status filter, and an "Export selected (N)" action next to it, disabled while nothing is selected.
+- A checkbox per release row in the navigator (the row keeps its click-to-select behaviour), a "select all" control in the list header, and an "Export selected (N)" action next to it, disabled while nothing is selected. The list holds one page and has no status filter today, so "select all" means every release of the repository and is sent as `select_all` - the export then does not depend on how much of the list the browser has loaded.
 - The detail header of an open release gets "Export markdown", which exports that one release - the single-version half of the feature, without going through the navigator.
 - The selection lives in page state and is cleared when the repository changes; the export action reports the number of releases written and mentions anything skipped.
 
@@ -136,6 +131,6 @@ The export is a read over existing rows; nothing is stored about it.
 | `select_all` silently exports a subset on a repository with more than 200 releases | The cap is applied deterministically (newest first) and reported as `truncated`; the UI says it |
 | The selection on screen drifts from the database (a release deleted concurrently) | Skipped ids are reported and the export still succeeds |
 | Drafts leak into a published change log | Drafts are only exported when they are selected or when `select_all` is asked for them explicitly with `status: draft` / no filter; each section states its status |
-| A body containing `---` or `##` breaks the section structure | Metadata is a bullet list, not front matter, and bodies are copied verbatim into a section that starts with its own `##` heading; the separator is a plain horizontal rule, so nested content cannot be mistaken for a section |
+| A body containing `---` or `##` reads as if it were structure | Sections always start after a rule with a `##` heading, and that pair is the documented split contract. A *reader* still meets the body's own headings in the outline - markdown offers no way to nest an embedded document one level deeper without rewriting it, and bodies are exported verbatim on purpose. Dropping the metadata block makes a heuristic split slightly less obvious, which is why the rule + heading pair is written down as the contract |
 | Users expect the export to match the *rendered* page (linked tickets, avatars) | Documented as verbatim bodies; the difference is a display concern that the page already handles |
 | The clipboard API is unavailable (non-secure context) or denied | The copy action reports the failure and says the download can be used instead |

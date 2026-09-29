@@ -8,9 +8,15 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.core.git_provider import GitProvider
+from src.models.release_note import ReleaseNoteStatus
 
 
 MAX_BODY_LENGTH = 60000
+
+# Most releases one export document may hold. A batch export is bounded so the
+# response stays a document rather than a dump: the caller naming the ids is asked
+# for fewer, while a filtered export takes the newest ones and says so.
+EXPORT_MAX_RELEASES = 200
 
 
 # How the release scope base of a tag was obtained.
@@ -325,5 +331,64 @@ class ReleaseNotePreviewResponse(BaseModel):
         description=(
             "What the provider answered when it refused the call - its own message, with "
             "the API key taken out of it and cut to a readable length"
+        ),
+    )
+
+
+class ReleaseNoteExportRequest(ReleaseNoteCoordinates):
+    """Choose the releases whose notes are exported as one markdown document."""
+
+    ids: list[int] | None = Field(
+        default=None,
+        max_length=EXPORT_MAX_RELEASES,
+        description=(
+            "The releases to export, in any order (the document is ordered like the release "
+            "list). Mutually exclusive with 'select_all'"
+        ),
+    )
+    select_all: bool = Field(
+        default=False,
+        description=(
+            "Export every release of the repository matching 'status' instead of naming them, "
+            "so a batch export does not have to enumerate the releases first"
+        ),
+    )
+    status: str | None = Field(
+        default=None,
+        description=(
+            "Filter for 'select_all': 'draft' or 'published'. Omit it to export both. "
+            "Ignored when 'ids' is used"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> ReleaseNoteExportRequest:
+        if self.select_all and self.ids:
+            raise ValueError("select either 'ids' or 'select_all', not both")
+        if not self.select_all and not self.ids:
+            raise ValueError("'ids' or 'select_all' is required")
+        if self.status is not None and self.status not in ReleaseNoteStatus.VALUES:
+            raise ValueError("status must be draft or published")
+        return self
+
+
+class ReleaseNoteExportResponse(BaseModel):
+    """One markdown document holding the exported releases."""
+
+    filename: str = Field(..., description="Suggested filename for the document")
+    content: str = Field(..., description="The markdown document")
+    count: int = Field(..., description="Number of releases written into the document")
+    skipped_ids: list[int] = Field(
+        default_factory=list,
+        description=(
+            "Requested releases that do not exist or belong to another repository - they are "
+            "left out instead of failing the export"
+        ),
+    )
+    truncated: bool = Field(
+        default=False,
+        description=(
+            "True when more releases matched than one export holds, so the document only "
+            "carries the newest ones"
         ),
     )

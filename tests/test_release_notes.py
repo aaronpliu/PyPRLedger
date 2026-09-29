@@ -6,6 +6,8 @@ service and the CRUD tests use the in-memory SQLite fixture.
 
 from __future__ import annotations
 
+import re
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -19,6 +21,7 @@ from src.core.git_provider import GitProvider
 from src.core.permissions import get_current_user_with_token
 from src.main import app
 from src.models.auth_user import AuthUser
+from src.models.release_note import ReleaseNote, ReleaseNoteStatus
 from src.schemas.release_diff import CommitInfo
 from src.schemas.release_note import (
     REASON_FIRST_RELEASE,
@@ -1717,3 +1720,299 @@ async def test_endpoint_requires_authentication(async_client) -> None:
         app.dependency_overrides.pop(get_db_session, None)
 
     assert response.status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# Export: the document (service)
+# --------------------------------------------------------------------------- #
+
+
+def release_row(
+    *,
+    tag: str,
+    name: str,
+    body: str = "- something",
+    status: str = ReleaseNoteStatus.PUBLISHED,
+    published: datetime | None = None,
+    repository_slug: str = "my-repo",
+) -> ReleaseNote:
+    """A stored release row, inserted straight into the test session."""
+    return ReleaseNote(
+        project_key="PROJ",
+        repository_slug=repository_slug,
+        tag_name=tag,
+        name=name,
+        body=body,
+        status=status,
+        is_prerelease=False,
+        author="Jane Doe",
+        published_date=published,
+    )
+
+
+async def test_export_orders_the_releases_like_the_list(db_session: AsyncSession) -> None:
+    db_session.add_all(
+        [
+            release_row(
+                tag="v1.0.0",
+                name="Older",
+                body="- older marker",
+                published=datetime(2026, 9, 1, 10, 0, tzinfo=UTC),
+            ),
+            release_row(
+                tag="v1.1.0",
+                name="Newer",
+                body="- newer marker",
+                published=datetime(2026, 9, 20, 10, 0, tzinfo=UTC),
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    exported = await build_service(db_session).export_notes(
+        project_key="PROJ", repository_slug="my-repo", select_all=True
+    )
+
+    assert exported.count == 2
+    assert exported.content.index("## Newer (v1.1.0)") < exported.content.index("## Older (v1.0.0)")
+    assert "- newer marker" in exported.content
+    assert re.fullmatch(r"releasenotes-PROJ-my-repo-2-releases-\d{8}\.md", exported.filename)
+
+
+async def test_export_can_leave_the_drafts_out(db_session: AsyncSession) -> None:
+    db_session.add_all(
+        [
+            release_row(
+                tag="v1.0.0",
+                name="PublishedOne",
+                status=ReleaseNoteStatus.PUBLISHED,
+                published=datetime(2026, 9, 1, 10, 0, tzinfo=UTC),
+            ),
+            release_row(tag="v1.1.0", name="DraftOne", status=ReleaseNoteStatus.DRAFT),
+        ]
+    )
+    await db_session.flush()
+    service = build_service(db_session)
+
+    published_only = await service.export_notes(
+        project_key="PROJ",
+        repository_slug="my-repo",
+        select_all=True,
+        status=ReleaseNoteStatus.PUBLISHED,
+    )
+    everything = await service.export_notes(
+        project_key="PROJ", repository_slug="my-repo", select_all=True
+    )
+
+    assert published_only.count == 1
+    assert "DraftOne" not in published_only.content
+    assert everything.count == 2
+
+
+async def test_export_by_ids_reports_what_it_could_not_find(
+    db_session: AsyncSession,
+) -> None:
+    kept = release_row(tag="v1.0.0", name="Kept", published=datetime(2026, 9, 1, 10, 0, tzinfo=UTC))
+    elsewhere = release_row(
+        tag="v9.9.9",
+        name="Elsewhere",
+        repository_slug="other-repo",
+        published=datetime(2026, 9, 2, 10, 0, tzinfo=UTC),
+    )
+    db_session.add_all([kept, elsewhere])
+    await db_session.flush()
+
+    exported = await build_service(db_session).export_notes(
+        project_key="PROJ",
+        repository_slug="my-repo",
+        ids=[kept.id, elsewhere.id, 999_999],
+    )
+
+    assert exported.count == 1
+    assert "Kept" in exported.content
+    assert "Elsewhere" not in exported.content
+    # a release of another repository is never written, and a missing id is named
+    assert exported.skipped_ids == [elsewhere.id, 999_999]
+
+
+async def test_export_keeps_the_stored_body_verbatim(db_session: AsyncSession) -> None:
+    body = "### Fixed\n- ship the login fix PRL-123 (@jane)\n\n---\n\n## Not a section\n"
+    db_session.add(
+        release_row(
+            tag="v1.0.0",
+            name="Fixes",
+            body=body,
+            published=datetime(2026, 9, 1, 10, 0, tzinfo=UTC),
+        )
+    )
+    await db_session.flush()
+
+    exported = await build_service(db_session).export_notes(
+        project_key="PROJ", repository_slug="my-repo", select_all=True
+    )
+
+    assert body in exported.content
+    assert exported.content.count("## Fixes (v1.0.0)") == 1
+    assert "browse/PRL-123" not in exported.content
+
+
+async def test_export_reports_a_filtered_set_that_was_cut(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("src.services.release_note_service.EXPORT_MAX_RELEASES", 2)
+    db_session.add_all(
+        [
+            release_row(
+                tag=f"v1.{index}.0",
+                name=f"Release{index}",
+                published=datetime(2026, 9, index + 1, 10, 0, tzinfo=UTC),
+            )
+            for index in range(3)
+        ]
+    )
+    await db_session.flush()
+
+    exported = await build_service(db_session).export_notes(
+        project_key="PROJ", repository_slug="my-repo", select_all=True
+    )
+
+    assert exported.count == 2
+    assert exported.truncated is True
+    # the newest ones are the ones kept
+    assert "Release2" in exported.content
+    assert "Release0" not in exported.content
+
+
+async def test_export_of_a_repository_without_releases(db_session: AsyncSession) -> None:
+    exported = await build_service(db_session).export_notes(
+        project_key="PROJ", repository_slug="my-repo", select_all=True
+    )
+
+    assert exported.count == 0
+    assert exported.truncated is False
+    assert "No releases were selected" in exported.content
+
+
+# --------------------------------------------------------------------------- #
+# Export: the endpoint
+# --------------------------------------------------------------------------- #
+
+
+async def create_note_through_the_api(
+    client: Any, tag: str, name: str, *, status: str = "published", body: str = "notes"
+) -> dict[str, Any]:
+    created = await client.post(
+        "/api/v1/release/notes",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "tag_name": tag,
+            "name": name,
+            "body": body,
+            "status": status,
+        },
+    )
+    assert created.status_code == 201
+    return created.json()
+
+
+async def test_endpoint_exports_the_selected_releases(
+    async_client: Any, authenticated_client: StubRBAC
+) -> None:
+    first = await create_note_through_the_api(async_client, "v1.0.0", "First release")
+    await create_note_through_the_api(async_client, "v1.1.0", "Second release")
+
+    response = await async_client.post(
+        "/api/v1/release/notes/export",
+        json={"project_key": "PROJ", "repository_slug": "my-repo", "ids": [first["id"]]},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 1
+    assert payload["filename"] == "releasenotes-PROJ-my-repo-v1.0.0.md"
+    assert "## First release (v1.0.0)" in payload["content"]
+    assert "Second release" not in payload["content"]
+    assert payload["skipped_ids"] == []
+    assert payload["truncated"] is False
+
+
+async def test_endpoint_exports_every_published_release(
+    async_client: Any, authenticated_client: StubRBAC
+) -> None:
+    await create_note_through_the_api(async_client, "v1.0.0", "First release")
+    await create_note_through_the_api(async_client, "v1.1.0", "Second release")
+    await create_note_through_the_api(async_client, "v1.2.0", "DraftOne", status="draft")
+
+    response = await async_client.post(
+        "/api/v1/release/notes/export",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "select_all": True,
+            "status": "published",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 2
+    assert "DraftOne" not in payload["content"]
+
+
+async def test_endpoint_rejects_an_invalid_selection(
+    async_client: Any, authenticated_client: StubRBAC
+) -> None:
+    base = {"project_key": "PROJ", "repository_slug": "my-repo"}
+
+    neither = await async_client.post("/api/v1/release/notes/export", json=base)
+    both = await async_client.post(
+        "/api/v1/release/notes/export", json={**base, "ids": [1], "select_all": True}
+    )
+    too_many = await async_client.post(
+        "/api/v1/release/notes/export", json={**base, "ids": list(range(300))}
+    )
+    bad_status = await async_client.post(
+        "/api/v1/release/notes/export", json={**base, "select_all": True, "status": "nope"}
+    )
+
+    assert neither.status_code == 422
+    assert both.status_code == 422
+    assert too_many.status_code == 422
+    assert bad_status.status_code == 422
+
+
+async def test_endpoint_export_only_reads(
+    async_client: Any, authenticated_client: StubRBAC
+) -> None:
+    rbac: StubRBAC = authenticated_client
+    rbac.allowed = False
+
+    response = await async_client.post(
+        "/api/v1/release/notes/export",
+        json={"project_key": "PROJ", "repository_slug": "my-repo", "select_all": True},
+    )
+
+    assert response.status_code == 403
+    assert rbac.checks[0]["action"] == "read"
+    assert rbac.checks[0]["resource_type"] == "release_note"
+
+
+async def test_endpoint_reports_a_selection_that_disappeared(
+    async_client: Any, authenticated_client: StubRBAC
+) -> None:
+    note = await create_note_through_the_api(async_client, "v1.0.0", "First release")
+
+    response = await async_client.post(
+        "/api/v1/release/notes/export",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "ids": [note["id"], 424242],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 1
+    assert payload["skipped_ids"] == [424242]

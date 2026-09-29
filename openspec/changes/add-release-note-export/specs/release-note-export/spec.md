@@ -46,12 +46,17 @@ A request SHALL carry either an explicit list of release ids or a request for th
 
 ### Requirement: Document shape
 
-The document SHALL carry a title, a summary line naming the repository, the number of releases and the export date, and one section per release. Each section SHALL start with the release name and tag as a heading, followed by its metadata (tag, status, release date, author, pre-release flag) and then the body of the notes. Sections SHALL be separated by a horizontal rule.
+The document SHALL carry a title, a summary line naming the repository, the number of releases and the export date, and one section per release. Each section SHALL start with a heading holding the release name and tag, SHALL state in that heading when the release is a draft or a pre-release, and SHALL then carry the body of the notes; a released version SHALL carry nothing but its notes. Sections SHALL be separated by a horizontal rule.
 
 #### Scenario: A section names its release
-- **WHEN** a release is written into the document
-- **THEN** its section heading SHALL hold both the release name and its tag
-- **AND** the metadata SHALL state whether the release is a draft and whether it is a pre-release
+- **WHEN** a released version is written into the document
+- **THEN** its section SHALL hold only the heading (the release name and its tag) and the notes
+- **AND** no per-release metadata (tag, status, release date or author) SHALL be written
+
+#### Scenario: A draft or a pre-release
+- **WHEN** a release is a draft or a pre-release
+- **THEN** its heading SHALL state which of the two applies
+- **AND** the rest of the section SHALL still be the notes alone
 
 #### Scenario: A release without notes
 - **WHEN** a release has an empty body
@@ -111,7 +116,7 @@ The response SHALL carry a filename that distinguishes one release from several 
 
 ### Requirement: Choosing the versions in the page
 
-The release notes page SHALL let the user choose which releases to export: a control per release in the list, a way to select every release matching the current filter, and an action that exports the selection with its count. The page SHALL also offer exporting the release that is currently open, and SHALL report what was skipped.
+The release notes page SHALL let the user choose which releases to export: a control per release in the list, a way to select every release of the repository without paging through the list, and an action that exports the selection with its count. The page SHALL also offer exporting the release that is currently open, and SHALL report what was skipped.
 
 #### Scenario: Selecting a few releases
 - **WHEN** the user selects releases in the list and starts the export

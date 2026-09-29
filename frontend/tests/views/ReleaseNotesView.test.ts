@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import ElementPlus, { ElMessageBox } from 'element-plus'
+import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ReleaseNotesView from '@/views/releases/ReleaseNotesView.vue'
 import { projectsApi } from '@/api/projects'
@@ -11,7 +11,14 @@ import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
 import { llmApi } from '@/api/llm'
 import { resetJiraSettings } from '@/composables/useJira'
 import { useAuthStore } from '@/stores/auth'
+import { copyTextToClipboard, downloadMarkdown } from '@/utils/export/markdown'
 import enMessages from '@/locales/en.json'
+
+// The document comes from the backend: the browser only hands the bytes over
+vi.mock('@/utils/export/markdown', () => ({
+  downloadMarkdown: vi.fn(),
+  copyTextToClipboard: vi.fn().mockResolvedValue(true),
+}))
 
 vi.mock('@/api/projects', () => ({
   projectsApi: {
@@ -53,6 +60,7 @@ vi.mock('@/api/releaseNotes', () => ({
     preview: vi.fn(),
     push: vi.fn(),
     importReleases: vi.fn(),
+    exportNotes: vi.fn(),
   },
 }))
 
@@ -1449,5 +1457,152 @@ describe('ReleaseNotesView', () => {
       1,
       expect.objectContaining({ status: 'published', previous_tag: 'v1.0.0' }),
     )
+  })
+})
+
+// --------------------------------------------------------------------------- #
+// Export
+// --------------------------------------------------------------------------- #
+
+function exported(overrides: Record<string, unknown> = {}) {
+  return {
+    filename: 'releasenotes-ALPHA-alpha-api-v1.1.0.md',
+    content: '# Release notes - ALPHA/alpha-api',
+    count: 1,
+    skipped_ids: [] as number[],
+    truncated: false,
+    ...overrides,
+  }
+}
+
+describe('ReleaseNotesView export', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    signIn(['review_admin'])
+    vi.mocked(projectsApi.getAllProjects).mockResolvedValue(PROJECTS as any)
+    vi.mocked(projectsApi.getProjectRepositories).mockResolvedValue(REPOSITORIES as any)
+    vi.mocked(projectsApi.getCloudWorkspaces).mockResolvedValue([])
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue(REFS as any)
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 2,
+      items: [
+        release({ id: 11, tag_name: 'v1.1.0', name: 'Newer' }),
+        release({ id: 10, tag_name: 'v1.0.0', name: 'Older', is_latest: false }),
+      ],
+    })
+    vi.mocked(releaseNotesApi.exportNotes).mockResolvedValue(exported())
+    vi.mocked(copyTextToClipboard).mockResolvedValue(true)
+  })
+
+  /** Mount the page and pick the repository (loads the releases). */
+  async function mountAndSelect() {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    return wrapper
+  }
+
+  /** The header checkbox first, then one per release row. */
+  function exportCheckboxes(wrapper: AnyWrapper) {
+    return wrapper.findAllComponents({ name: 'ElCheckbox' })
+  }
+
+  it('exports the releases ticked in the list', async () => {
+    const wrapper = await mountAndSelect()
+
+    exportCheckboxes(wrapper)[1].vm.$emit('change', true)
+    await flushPromises()
+
+    await wrapper.find('[data-test="export-selected"]').trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.exportNotes).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: [11] }),
+    )
+    expect(downloadMarkdown).toHaveBeenCalledWith(
+      '# Release notes - ALPHA/alpha-api',
+      'releasenotes-ALPHA-alpha-api-v1.1.0.md',
+    )
+  })
+
+  it('exports every release of the repository', async () => {
+    const wrapper = await mountAndSelect()
+
+    exportCheckboxes(wrapper)[0].vm.$emit('change', true)
+    await flushPromises()
+
+    await wrapper.find('[data-test="export-selected"]').trigger('click')
+    await flushPromises()
+
+    const payload = vi.mocked(releaseNotesApi.exportNotes).mock.calls[0][0]
+    expect(payload.select_all).toBe(true)
+    expect(payload).not.toHaveProperty('ids')
+  })
+
+  it('does not offer the export while nothing is selected', async () => {
+    const wrapper = await mountAndSelect()
+
+    const button = () => wrapper.find('[data-test="export-selected"]').element as HTMLButtonElement
+    expect(button().disabled).toBe(true)
+
+    exportCheckboxes(wrapper)[1].vm.$emit('change', true)
+    await flushPromises()
+
+    expect(button().disabled).toBe(false)
+  })
+
+  it('exports the open release from the detail header', async () => {
+    const wrapper = await mountAndSelect()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.export_one)[0].trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.exportNotes).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: [11] }),
+    )
+  })
+
+  it('reports the releases that were skipped or cut', async () => {
+    vi.mocked(releaseNotesApi.exportNotes).mockResolvedValue(
+      exported({ count: 12, truncated: true, skipped_ids: [7] }),
+    )
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+
+    const wrapper = await mountAndSelect()
+    exportCheckboxes(wrapper)[1].vm.$emit('change', true)
+    await flushPromises()
+
+    await wrapper.find('[data-test="export-selected"]').trigger('click')
+    await flushPromises()
+
+    const messages = warning.mock.calls.map((call) => String(call[0]))
+    expect(messages.some((text) => text.includes('only the newest 12'))).toBe(true)
+    expect(messages.some((text) => text.includes('no longer exist'))).toBe(true)
+  })
+
+  it('copies the open release to the clipboard', async () => {
+    const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as any)
+    const wrapper = await mountAndSelect()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.copy_one)[0].trigger('click')
+    await flushPromises()
+
+    // the same document the download would use, and nothing downloaded
+    expect(copyTextToClipboard).toHaveBeenCalledWith('# Release notes - ALPHA/alpha-api')
+    expect(downloadMarkdown).not.toHaveBeenCalled()
+    expect(success).toHaveBeenCalled()
+  })
+
+  it('reports a clipboard the platform refused', async () => {
+    vi.mocked(copyTextToClipboard).mockResolvedValue(false)
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+    const wrapper = await mountAndSelect()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.copy_one)[0].trigger('click')
+    await flushPromises()
+
+    expect(
+      warning.mock.calls.some((call) => String(call[0]).includes('clipboard')),
+    ).toBe(true)
   })
 })

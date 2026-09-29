@@ -715,6 +715,7 @@ import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
 import { useJira } from '@/composables/useJira'
 import { jiraTicketSegments } from '@/utils/jira'
+import { copyTextToClipboard } from '@/utils/export/markdown'
 import { useAuthStore } from '@/stores/auth'
 import { projectsApi } from '@/api/projects'
 import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/api/projects'
@@ -1384,10 +1385,10 @@ function messageSegments(message?: string | null) {
 }
 
 async function copySha(value: string) {
-  try {
-    await navigator.clipboard.writeText(value)
+  if (await copyTextToClipboard(value)) {
     ElMessage.success(t('releaseDiff.copied'))
-  } catch {
+  } else {
+    // the clipboard was refused: show the text so it can be copied by hand
     ElMessage.info(value)
   }
 }

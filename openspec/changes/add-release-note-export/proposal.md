@@ -8,9 +8,9 @@ The material is already markdown (`ReleaseNote.body`), so the gap is **selection
 
 - **A backend export** (`POST /release/notes/export`) that returns one markdown document built from stored releases, with a suggested filename, the number of releases it holds, and an explicit report of anything it had to skip or cut.
 - **Two selection modes**, validated as one or the other: explicit release ids (what the page has selected), or the whole filtered set (every published release of the repository, optionally drafts too). "Export every published version" must not require the browser to page through the list.
-- **The document has one shape and one author.** The backend formats it - title, a summary block, one section per release with its metadata, the stored body verbatim - so the UI, an API consumer and CI produce byte-identical files.
+- **The document has one shape and one author.** The backend formats it - title, a summary line, one section per release (its heading, plus a draft / pre-release marker when one applies) and the stored body verbatim - so the UI, an API consumer and CI produce byte-identical files.
 - **Selection in the UI**: a checkbox per release in the navigator, "select all (filtered)" and "Export selected (N)" in the list header, plus "Export markdown" for the release that is open. The page reports how many releases were exported and warns when part of a selection could not be.
-- **Markdown only**, verbatim bodies: the stored body is copied as it is, without rewriting JIRA keys or author mentions, so an export stays reproducible and diffable (linking them is a display concern, already handled on screen).
+- **Markdown only**, verbatim bodies: the stored body is copied as it is, without rewriting JIRA keys or author mentions, so an export stays reproducible and diffable (linking them is a display concern, already handled on screen). Per-release metadata stays in the app - the file reads as notes.
 - **Bounded by construction**: one export holds at most 200 releases, and reaching that bound is reported instead of silently producing a partial document.
 
 ## Capabilities

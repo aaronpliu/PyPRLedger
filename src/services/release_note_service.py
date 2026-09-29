@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -22,6 +22,7 @@ from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
 from src.schemas.release_diff import ReleaseCompareRequest
 from src.schemas.release_note import (
+    EXPORT_MAX_RELEASES,
     REASON_PROVIDED,
     REASON_UNRESOLVED,
     SOURCE_EXPLICIT,
@@ -41,6 +42,11 @@ from src.services.release_diff_service import (
     ReleaseDiffService,
     resolve_provider_name,
     resolve_remote_project_key,
+)
+from src.services.release_note_export import (
+    ReleaseNoteExport,
+    build_release_notes_document,
+    release_note_export_filename,
 )
 from src.services.release_note_scope_service import ReleaseNoteScopeService
 from src.utils.timezone import get_current_time, utc_to_local
@@ -620,6 +626,83 @@ class ReleaseNoteService:
             .limit(1)
         )
         return (await self.db.execute(statement)).scalar_one_or_none()
+
+    async def export_notes(
+        self,
+        *,
+        project_key: str,
+        repository_slug: str,
+        ids: Sequence[int] | None = None,
+        select_all: bool = False,
+        status: str | None = None,
+    ) -> ReleaseNoteExport:
+        """Assemble one markdown document from the requested releases.
+
+        The releases are ordered the way the release list orders them (newest
+        first), so an export reads like the page it was taken from. Ids that do not
+        exist or belong to another repository are left out and reported - a page that
+        was open while a release was deleted must not fail a bulk export. A filtered
+        export that matches more releases than the bound keeps the newest ones and
+        reports that the document is not the whole set.
+
+        Args:
+            project_key: Project key of the repository
+            repository_slug: Repository slug
+            ids: The releases to export (mutually exclusive with ``select_all``)
+            select_all: Export every release matching ``status`` instead
+            status: Optional filter for ``select_all`` (draft / published)
+
+        Returns:
+            The document, its suggested filename and what was skipped or cut.
+        """
+        scope = [
+            ReleaseNote.project_key == project_key,
+            ReleaseNote.repository_slug == repository_slug,
+        ]
+        order = func.coalesce(ReleaseNote.published_date, ReleaseNote.updated_date).desc()
+        skipped_ids: list[int] = []
+        truncated = False
+
+        if ids:
+            requested = list(dict.fromkeys(ids))
+            statement = (
+                select(ReleaseNote).where(*scope, ReleaseNote.id.in_(requested)).order_by(order)
+            )
+            releases = list((await self.db.execute(statement)).scalars().all())
+            found = {note.id for note in releases}
+            skipped_ids = [release_id for release_id in requested if release_id not in found]
+        else:
+            filters = [*scope]
+            if status:
+                filters.append(ReleaseNote.status == status)
+
+            total = (
+                await self.db.execute(select(func.count(ReleaseNote.id)).where(*filters))
+            ).scalar_one()
+            statement = (
+                select(ReleaseNote).where(*filters).order_by(order).limit(EXPORT_MAX_RELEASES)
+            )
+            releases = list((await self.db.execute(statement)).scalars().all())
+            truncated = int(total or 0) > len(releases)
+
+        exported_at = get_current_time()
+        return ReleaseNoteExport(
+            filename=release_note_export_filename(
+                releases,
+                project_key=project_key,
+                repository_slug=repository_slug,
+                exported_at=exported_at,
+            ),
+            content=build_release_notes_document(
+                releases,
+                project_key=project_key,
+                repository_slug=repository_slug,
+                exported_at=exported_at,
+            ),
+            count=len(releases),
+            skipped_ids=skipped_ids,
+            truncated=truncated,
+        )
 
     async def author_avatars(self, authors: Iterable[str | None]) -> dict[str, str]:
         """Map release authors to their profile picture URL.

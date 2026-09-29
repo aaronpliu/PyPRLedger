@@ -133,6 +133,28 @@ export interface ReleaseNotePreviewResponse {
   summary_error?: string | null
 }
 
+export interface ReleaseNoteExportRequest extends ReleaseNoteCoordinates {
+  /** The releases to export, in any order (the document is ordered newest first) */
+  ids?: number[]
+  /** Export every release matching `status` instead of naming them */
+  select_all?: boolean
+  /** Filter for `select_all`; ignored when `ids` is used */
+  status?: ReleaseNoteStatus
+}
+
+export interface ReleaseNoteExportResponse {
+  /** Suggested filename for the document */
+  filename: string
+  /** The markdown document */
+  content: string
+  /** Number of releases written into the document */
+  count: number
+  /** Requested releases that do not exist or belong to another repository */
+  skipped_ids: number[]
+  /** True when more releases matched than one export holds (only the newest are written) */
+  truncated: boolean
+}
+
 export const releaseNotesApi = {
   /** List the version releases of a repository (drafts included), newest first. */
   async list(params: {
@@ -185,6 +207,12 @@ export const releaseNotesApi = {
   /** Import the releases of a repository from the git provider. */
   async importReleases(payload: ReleaseNoteImportRequest): Promise<ReleaseNoteImportResponse> {
     const response = await request.post('/release/notes/import', payload)
+    return response.data || response
+  },
+
+  /** Export one or more releases as a single markdown document. */
+  async exportNotes(payload: ReleaseNoteExportRequest): Promise<ReleaseNoteExportResponse> {
+    const response = await request.post('/release/notes/export', payload)
     return response.data || response
   },
 }
