@@ -458,13 +458,11 @@
                   {{ t('releaseNotes.ai_summary_unavailable') }}
                 </div>
                 <!-- the pass was asked for and could not be made: the notes on
-                     screen came from the commit subjects, and this says so -->
+                     screen came from the commit subjects, and this says why -->
                 <div v-else-if="aiFallback" class="field-hint ai-summary-fallback">
-                  {{
-                    aiFallback === 'not_configured'
-                      ? t('releaseNotes.ai_summary_fallback_not_configured')
-                      : t('releaseNotes.ai_summary_fallback_failed')
-                  }}
+                  <span>{{ aiFallbackMessage }}</span>
+                  <!-- the provider's own message, which is what can be acted on -->
+                  <code v-if="summaryError" class="ai-summary-error">{{ summaryError }}</code>
                 </div>
                 <div v-else-if="aiSummary" class="field-hint">
                   {{ t('releaseNotes.ai_summary_help') }}
@@ -710,18 +708,35 @@ const generating = ref(false)
 const generatedCount = ref<number | null>(null)
 // The AI pass is optional and server-side: the switch is only offered when the
 // deployment has an LLM configured (System Settings -> LLM).
+type SummaryNotice = 'not_configured' | 'provider_error' | 'unreadable_answer' | 'failed'
+
 const llmEnabled = ref(false)
 const aiSummary = ref(false)
 const summarizedByAi = ref(false)
-const summaryNotice = ref<string | null>(null)
+const summaryNotice = ref<SummaryNotice | null>(null)
+// What the provider said when it refused the call, when it said anything: the
+// one thing that tells an administrator what to change.
+const summaryError = ref<string | null>(null)
+
 // A pass that was asked for and could not be made is answered with the
 // deterministic notes, so say which one is on screen instead of leaving the
 // reader to guess whether the sections came from the AI or from the subjects.
-const aiFallback = computed(() => {
-  if (!aiSummary.value || summarizedByAi.value) return null
-  if (summaryNotice.value === 'not_configured') return 'not_configured'
-  if (summaryNotice.value === 'failed') return 'failed'
-  return null
+const aiFallback = computed<SummaryNotice | null>(() =>
+  aiSummary.value && !summarizedByAi.value ? summaryNotice.value : null,
+)
+const aiFallbackMessage = computed(() => {
+  switch (aiFallback.value) {
+    case 'not_configured':
+      return t('releaseNotes.ai_summary_fallback_not_configured')
+    case 'provider_error':
+      return t('releaseNotes.ai_summary_fallback_provider_error')
+    case 'unreadable_answer':
+      return t('releaseNotes.ai_summary_fallback_unreadable_answer')
+    case 'failed':
+      return t('releaseNotes.ai_summary_fallback_failed')
+    default:
+      return ''
+  }
 })
 const formCard = ref<HTMLElement | null>(null)
 
@@ -1303,6 +1318,7 @@ async function generateNotes() {
     // so the answer says which one is on screen rather than assuming the switch
     summarizedByAi.value = preview.summary_source === 'llm'
     summaryNotice.value = preview.summary_notice ?? null
+    summaryError.value = preview.summary_error ?? null
     if (preview.truncated) {
       ElMessage.warning(t('releaseNotes.generate_truncated'))
     }
@@ -1827,6 +1843,14 @@ onBeforeUnmount(() => {
 /* a summary that was asked for and could not be made is not a help text */
 .ai-summary-fallback {
   color: var(--el-color-warning);
+}
+
+.ai-summary-error {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--el-font-family-mono, monospace);
+  opacity: 0.85;
+  word-break: break-word;
 }
 
 .form-actions {

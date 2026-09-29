@@ -43,11 +43,15 @@ SUMMARY_LLM = "llm"
 
 # Why an asked-for summary stayed ``deterministic``. A fallback that is reported
 # silently looks the same as one that was never asked for, so the reason travels
-# with the notes and the caller can say which of the two is on screen.
-# ``not_configured`` is a deployment without a usable LLM - an administrator can
-# change that; ``failed`` is one that is configured but did not answer anything
-# readable, where asking again may help.
+# with the notes and the caller can say which of the two is on screen. Each one
+# calls for something different:
+#   ``not_configured``     a deployment without a usable LLM; an administrator
+#   ``provider_error``     the provider refused the call and said why
+#   ``unreadable_answer``  the model answered something that is not the JSON asked for
+#   ``failed``             the pass raised before it could answer at all
 SUMMARY_NOTICE_NOT_CONFIGURED = "not_configured"
+SUMMARY_NOTICE_PROVIDER_ERROR = "provider_error"
+SUMMARY_NOTICE_UNREADABLE_ANSWER = "unreadable_answer"
 SUMMARY_NOTICE_FAILED = "failed"
 
 
@@ -312,6 +316,14 @@ class ReleaseNotePreviewResponse(BaseModel):
         default=None,
         description=(
             "Why 'summary_source' stayed 'deterministic' although a summary was asked for: "
-            "'not_configured' | 'failed'. Null when no summary was asked for"
+            "'not_configured' | 'provider_error' | 'unreadable_answer' | 'failed'. Null when "
+            "no summary was asked for"
+        ),
+    )
+    summary_error: str | None = Field(
+        default=None,
+        description=(
+            "What the provider answered when it refused the call - its own message, with "
+            "the API key taken out of it and cut to a readable length"
         ),
     )

@@ -128,7 +128,9 @@ export interface ReleaseNotePreviewResponse {
   /** Whether the prose came from the commit subjects alone or from the LLM */
   summary_source?: 'deterministic' | 'llm'
   /** Why the summary stayed deterministic although the AI pass was asked for */
-  summary_notice?: 'not_configured' | 'failed' | null
+  summary_notice?: 'not_configured' | 'provider_error' | 'unreadable_answer' | 'failed' | null
+  /** What the provider answered when it refused the call */
+  summary_error?: string | null
 }
 
 export const releaseNotesApi = {

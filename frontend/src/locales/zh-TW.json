@@ -1068,6 +1068,8 @@
     "ai_summary_unavailable": "如需 AI 摘要，請在「系統設定」中啟用 LLM 整合。",
     "generated_with_ai": "概述由 AI 撰寫",
     "ai_summary_fallback_not_configured": "未配置 LLM，已略過 AI 摘要 —— 小節由提交資訊歸類。",
+    "ai_summary_fallback_provider_error": "LLM 拒絕了本次呼叫 —— 小節由提交資訊歸類。它的回應是：",
+    "ai_summary_fallback_unreadable_answer": "LLM 回應的內容不是版本說明 —— 小節由提交資訊歸類。",
     "ai_summary_fallback_failed": "AI 摘要產生失敗 —— 小節由提交資訊歸類。",
     "generate_truncated": "提交列表被截斷，如需完整說明請調大 Max Commits",
     "generate_failed": "產生版本說明失敗",

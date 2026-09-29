@@ -513,6 +513,41 @@ describe('ReleaseNotesView', () => {
     expect(wrapper.text()).not.toContain(enMessages.releaseNotes.generated_with_ai)
   })
 
+  it('shows what the LLM answered when it refused the call', async () => {
+    vi.mocked(llmApi.getConfig).mockResolvedValue({
+      enabled: true,
+      model: 'test-model',
+      base_url: 'https://llm.local/v1',
+    })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue({
+      ...preview([], { version: 'v1.1.0', commit_count: 3 }),
+      summary: null,
+      summary_source: 'deterministic',
+      summary_notice: 'provider_error',
+      summary_error: 'HTTP 404: model `test-model` not found',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const aiSummary = wrapper
+      .findAllComponents({ name: 'ElCheckbox' })
+      .find((box: AnyWrapper) => box.text() === enMessages.releaseNotes.ai_summary)
+    await aiSummary!.vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.generate_notes)[0].trigger('click')
+    await flushPromises()
+
+    // the reason, and the answer that names what to change
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.ai_summary_fallback_provider_error)
+    expect(wrapper.text()).toContain('HTTP 404: model `test-model` not found')
+  })
+
   it('edits the notes with the rendered markdown beside them', async () => {
     const wrapper = mountView()
     await flushPromises()

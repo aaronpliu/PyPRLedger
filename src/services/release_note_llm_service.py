@@ -24,8 +24,17 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
-from src.schemas.release_note import SUMMARY_NOTICE_FAILED, SUMMARY_NOTICE_NOT_CONFIGURED
-from src.services.llm_service import REQUEST_TIMEOUT_SECONDS, LlmService, load_llm_config
+from src.schemas.release_note import (
+    SUMMARY_NOTICE_NOT_CONFIGURED,
+    SUMMARY_NOTICE_PROVIDER_ERROR,
+    SUMMARY_NOTICE_UNREADABLE_ANSWER,
+)
+from src.services.llm_service import (
+    REQUEST_TIMEOUT_SECONDS,
+    LlmService,
+    load_llm_config,
+    redact,
+)
 from src.services.release_note_service import (
     NOTE_SECTIONS,
     OTHER_SECTION,
@@ -76,11 +85,13 @@ class SummaryOutcome:
 
     ``notice`` is ``None`` when there was nothing to summarize - a scope without
     commits is not a failure - and one of the ``SUMMARY_NOTICE_*`` codes when the
-    pass was asked for and could not be made.
+    pass was asked for and could not be made. ``detail`` is what the provider
+    itself said when it refused the call.
     """
 
     summary: ReleaseNoteSummary | None = None
     notice: str | None = None
+    detail: str | None = None
 
 
 @dataclass(frozen=True)
@@ -201,7 +212,6 @@ def parse_summary_answer(text: str | None, commit_ids: set[str]) -> ReleaseNoteS
         # is read pair by pair rather than thrown away for a syntax error.
         payload = read_cut_off_answer(body)
         if payload is None:
-            logger.warning("Release note summary answer is not JSON")
             return None
 
     sections: dict[str, str] = {}
@@ -282,7 +292,7 @@ class ReleaseNoteLlmService:
         needs_section = commits_needing_a_section(entries)
         needs_ids = {str(commit.get("id")) for commit in needs_section}
 
-        answer = await client.complete(
+        completion = await client.complete(
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
@@ -299,9 +309,16 @@ class ReleaseNoteLlmService:
                 },
             ]
         )
-        summary = parse_summary_answer(answer, needs_ids)
+        if completion.text is None:
+            return SummaryOutcome(notice=SUMMARY_NOTICE_PROVIDER_ERROR, detail=completion.error)
+
+        summary = parse_summary_answer(completion.text, needs_ids)
         if summary is None:
-            return SummaryOutcome(notice=SUMMARY_NOTICE_FAILED)
+            logger.warning(
+                "Release note summary answer could not be read",
+                extra={"answer": redact(completion.text, "")},
+            )
+            return SummaryOutcome(notice=SUMMARY_NOTICE_UNREADABLE_ANSWER)
 
         await self._write_cache(cache_key, summary)
         logger.info(

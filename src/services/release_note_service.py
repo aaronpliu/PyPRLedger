@@ -1040,7 +1040,7 @@ class ReleaseNoteService:
 
         self.resolve_author_urls(commits, git_provider=request.git_provider)
 
-        summary, summary_source, summary_notice = await self._summarize(
+        summary, summary_source, summary_notice, summary_error = await self._summarize(
             request, commits, previous_ref
         )
 
@@ -1074,6 +1074,7 @@ class ReleaseNoteService:
             summary=summary,
             summary_source=summary_source,
             summary_notice=summary_notice,
+            summary_error=summary_error,
         )
 
     async def _summarize(
@@ -1084,14 +1085,15 @@ class ReleaseNoteService:
     ) -> tuple[str | None, str, str | None]:
         """Optional LLM pass: a summary paragraph and a section per commit.
 
-        Answers ``(summary, source, notice)``. The commit list stays the source of
-        truth - the model only answers about the ids it was given - and anything
-        that goes wrong is answered with the deterministic notes rather than with
-        an error. ``notice`` says why there is no summary, so that a pass that was
-        asked for and failed is not mistaken for one that was never asked for.
+        Answers ``(summary, source, notice, detail)``. The commit list stays the
+        source of truth - the model only answers about the ids it was given - and
+        anything that goes wrong is answered with the deterministic notes rather
+        than with an error. ``notice`` says why there is no summary, so that a
+        pass that was asked for and failed is not mistaken for one that was never
+        asked for, and ``detail`` is what the provider said when it refused.
         """
         if not request.summarize:
-            return None, SUMMARY_DETERMINISTIC, None
+            return None, SUMMARY_DETERMINISTIC, None, None
 
         try:
             outcome = await self._llm_service.summarize(
@@ -1104,14 +1106,14 @@ class ReleaseNoteService:
             )
         except Exception as e:  # noqa: BLE001 - an optional pass must never fail the notes
             logger.warning(f"Release note summarization failed: {e}")
-            return None, SUMMARY_DETERMINISTIC, SUMMARY_NOTICE_FAILED
+            return None, SUMMARY_DETERMINISTIC, SUMMARY_NOTICE_FAILED, None
 
         summary = outcome.summary
         if summary is None:
-            return None, SUMMARY_DETERMINISTIC, outcome.notice
+            return None, SUMMARY_DETERMINISTIC, outcome.notice, outcome.detail
 
         for commit in commits:
             section = summary.sections.get(str(commit.get("id")))
             if section:
                 commit["section"] = section
-        return summary.summary or None, SUMMARY_LLM, None
+        return summary.summary or None, SUMMARY_LLM, None, None

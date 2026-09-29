@@ -26,10 +26,36 @@ logger = get_logger(__name__)
 # Every supported provider serves the same OpenAI shaped completions resource.
 COMPLETIONS_PATH = "chat/completions"
 REQUEST_TIMEOUT_SECONDS = 60.0
+HTTP_ERROR_STATUS = 400
+
+# A provider message is carried into the log and into the reason a caller
+# reports, so it is cut to a readable length and the credential is taken out of
+# it - providers quote the API key back in an authentication error.
+MAX_ERROR_CHARS = 300
 
 # Settings keys that override the environment defaults, in the order they are
 # applied by the admin UI.
 SETTING_KEYS: tuple[str, ...] = ("llm_enabled", "llm_model", "llm_base_url", "llm_api_key")
+
+
+def redact(text: str, secret: str) -> str:
+    """``text`` with the API key taken out of it, cut to a reportable length."""
+    if secret:
+        text = text.replace(secret, "***")
+    return " ".join(text.split())[:MAX_ERROR_CHARS]
+
+
+@dataclass(frozen=True)
+class Completion:
+    """One answer from the provider, or why there is none.
+
+    A pass that is optional still has to say why it produced nothing: answering
+    with a plain ``None`` makes a refused call read the same as one that was
+    never made, and leaves nobody anything to act on.
+    """
+
+    text: str | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -97,7 +123,7 @@ async def load_llm_config(db: AsyncSession) -> LlmConfig:
 
 
 class LlmService:
-    """One provider, one call: a chat completion, or ``None`` when it fails."""
+    """One provider, one call: a chat completion, or the reason there is none."""
 
     def __init__(self, config: LlmConfig, timeout: float = REQUEST_TIMEOUT_SECONDS) -> None:
         self._config = config
@@ -114,29 +140,19 @@ class LlmService:
     def config(self) -> LlmConfig:
         return self._config
 
-    async def complete(
-        self,
-        messages: Sequence[dict[str, str]],
-        *,
-        temperature: float = 0.2,
-    ) -> str | None:
-        """Return the assistant message, or ``None`` when the call cannot be made.
+    async def complete(self, messages: Sequence[dict[str, str]]) -> Completion:
+        """Ask for one completion.
 
-        How long the answer may be is left to the provider: an answer cut off by a
-        limit we chose ourselves is a failure of our own making. Every failure -
-        disabled, unreachable, refused, empty - is logged and answered with
-        ``None`` so that a caller whose LLM pass is optional can simply carry on
-        without one.
+        Only what every OpenAI shaped provider takes is sent - the messages and,
+        when one is configured, the model. A parameter a given model refuses
+        (``temperature``, ``max_tokens``) turns a question it can answer into a
+        400, and how long an answer may be is the provider's to decide.
         """
         if not self._config.usable:
-            return None
+            return Completion(error="the LLM integration is not configured")
 
         url = f"{self._config.base_url.rstrip('/')}/{COMPLETIONS_PATH}"
-        payload: dict[str, Any] = {
-            "messages": list(messages),
-            "temperature": temperature,
-            "stream": False,
-        }
+        payload: dict[str, Any] = {"messages": list(messages), "stream": False}
         if self._config.model:
             payload["model"] = self._config.model
 
@@ -147,27 +163,53 @@ class LlmService:
                     json=payload,
                     headers={"Authorization": f"Bearer {self._config.api_key}"},
                 )
-                response.raise_for_status()
-                body = response.json()
         except httpx.HTTPError as e:
-            logger.warning("LLM completion request failed", extra={"url": url, "error": str(e)})
-            return None
-        except ValueError as e:
+            error = redact(f"{type(e).__name__}: {e}", self._config.api_key)
+            logger.warning("LLM completion request failed", extra={"url": url, "error": error})
+            return Completion(error=error)
+
+        # The body is what names the problem - an unknown model, a bad key, a
+        # prompt longer than the model takes - so it is read before anything else.
+        if response.status_code >= HTTP_ERROR_STATUS:
+            error = redact(response.text, self._config.api_key)
             logger.warning(
-                "LLM completion returned a body that is not JSON", extra={"error": str(e)}
+                "LLM completion was refused by the provider",
+                extra={"url": url, "status": response.status_code, "body": error},
             )
-            return None
+            return Completion(error=f"HTTP {response.status_code}: {error}")
+
+        try:
+            body = response.json()
+        except ValueError as e:
+            error = redact(response.text, self._config.api_key)
+            logger.warning(
+                "LLM completion returned a body that is not JSON",
+                extra={"body": error, "error": str(e)},
+            )
+            return Completion(error=f"the response is not JSON: {error}")
+        if not isinstance(body, dict):
+            return Completion(error="the response is not a JSON object")
 
         choices = body.get("choices") or []
         if not choices:
-            logger.warning("LLM completion returned no choices")
-            return None
+            # a gateway that answers 200 with an error object says it here
+            error = redact(
+                str(body.get("error") or "the response holds no choices"), self._config.api_key
+            )
+            logger.warning("LLM completion returned no choices", extra={"body": error})
+            return Completion(error=error)
 
+        choice = choices[0]
         # A provider that stopped mid-answer says so here, rather than leaving the
         # caller to infer it from an answer that does not parse
-        choice = choices[0]
         if choice.get("finish_reason") == "length":
             logger.warning("LLM completion was cut off by the provider's token limit")
 
         content = (choice.get("message") or {}).get("content")
-        return content if isinstance(content, str) and content.strip() else None
+        if not isinstance(content, str) or not content.strip():
+            reason = redact(str(choice.get("finish_reason")), self._config.api_key)
+            logger.warning(
+                "LLM completion returned an empty answer", extra={"finish_reason": reason}
+            )
+            return Completion(error=f"the provider returned an empty answer ({reason})")
+        return Completion(text=content)

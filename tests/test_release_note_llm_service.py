@@ -19,6 +19,8 @@ from src.schemas.release_note import (
     SUMMARY_LLM,
     SUMMARY_NOTICE_FAILED,
     SUMMARY_NOTICE_NOT_CONFIGURED,
+    SUMMARY_NOTICE_PROVIDER_ERROR,
+    SUMMARY_NOTICE_UNREADABLE_ANSWER,
     ReleaseNotePreviewRequest,
 )
 from src.services import llm_service as llm_module
@@ -77,8 +79,13 @@ class StubDiffService:
 class StubLlmService:
     """Stands in for ReleaseNoteLlmService (fixed answer, no provider traffic)."""
 
-    def __init__(self, summary: ReleaseNoteSummary | None, notice: str | None = None) -> None:
-        self._outcome = SummaryOutcome(summary=summary, notice=notice)
+    def __init__(
+        self,
+        summary: ReleaseNoteSummary | None,
+        notice: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        self._outcome = SummaryOutcome(summary=summary, notice=notice, detail=detail)
         self.calls = 0
 
     async def summarize(self, **kwargs: Any) -> SummaryOutcome:
@@ -322,7 +329,10 @@ async def test_summarize_survives_a_provider_failure(
     )
 
     assert outcome.summary is None
-    assert outcome.notice == SUMMARY_NOTICE_FAILED
+    assert outcome.notice == SUMMARY_NOTICE_PROVIDER_ERROR
+    # the provider's own words, so the failure can be acted on
+    assert outcome.detail is not None
+    assert "empty answer" in outcome.detail
 
 
 async def test_summarize_asks_about_the_changes_not_the_merges(
@@ -399,6 +409,25 @@ async def test_summarize_reads_an_answer_the_provider_cut_off(
     assert outcome.summary.sections == {C1: "Added"}
 
 
+async def test_summarize_reports_an_answer_it_could_not_read(
+    monkeypatch: pytest.MonkeyPatch, db_session: AsyncSession
+) -> None:
+    """A model that talks instead of answering is a different failure to report."""
+    install_llm(monkeypatch, raw_answer="I am sorry, I cannot help with that.")
+    service = ReleaseNoteLlmService(db=db_session)
+
+    outcome = await service.summarize(
+        project_key="PROJ",
+        repository_slug="my-repo",
+        version="v1.1.0",
+        previous_version=None,
+        commits=[{"id": C1, "message": "wip on the callback"}],
+    )
+
+    assert outcome.summary is None
+    assert outcome.notice == SUMMARY_NOTICE_UNREADABLE_ANSWER
+
+
 async def test_summarize_reports_nothing_to_ask_about(
     monkeypatch: pytest.MonkeyPatch, db_session: AsyncSession
 ) -> None:
@@ -441,7 +470,9 @@ async def test_preview_renders_the_summary_the_llm_wrote(db_session: AsyncSessio
 
 async def test_preview_falls_back_when_the_llm_cannot_answer(db_session: AsyncSession) -> None:
     """A failed AI pass withholds the prose, never the notes - and reports it."""
-    llm = StubLlmService(None, notice=SUMMARY_NOTICE_FAILED)
+    llm = StubLlmService(
+        None, notice=SUMMARY_NOTICE_PROVIDER_ERROR, detail="HTTP 400: model not found"
+    )
     service = ReleaseNoteService(
         db_session, diff_service=StubDiffService([commit(C1, "wip")]), llm_service=llm
     )
@@ -449,7 +480,9 @@ async def test_preview_falls_back_when_the_llm_cannot_answer(db_session: AsyncSe
     preview = await service.generate_preview(preview_request(summarize=True))
 
     assert preview.summary_source == SUMMARY_DETERMINISTIC
-    assert preview.summary_notice == SUMMARY_NOTICE_FAILED
+    assert preview.summary_notice == SUMMARY_NOTICE_PROVIDER_ERROR
+    # what the provider said travels with the answer, not only into the log
+    assert preview.summary_error == "HTTP 400: model not found"
     assert preview.summary is None
     assert "wip" in preview.body
     assert "### 📝 Other Changes" in preview.body
