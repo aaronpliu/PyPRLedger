@@ -8,6 +8,7 @@ import { projectsApi } from '@/api/projects'
 import { rbacApi } from '@/api/rbac'
 import { releaseDiffApi } from '@/api/releaseDiff'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
+import { llmApi } from '@/api/llm'
 import { resetJiraSettings } from '@/composables/useJira'
 import { useAuthStore } from '@/stores/auth'
 import enMessages from '@/locales/en.json'
@@ -32,6 +33,13 @@ vi.mock('@/api/releaseDiff', () => ({
     listRefs: vi.fn(),
     compare: vi.fn(),
     check: vi.fn(),
+  },
+}))
+
+// The AI summary switch is only offered when the deployment has an LLM
+vi.mock('@/api/llm', () => ({
+  llmApi: {
+    getConfig: vi.fn(),
   },
 }))
 
@@ -241,6 +249,8 @@ describe('ReleaseNotesView', () => {
     vi.mocked(releaseNotesApi.remove).mockResolvedValue({ message: 'ok' })
     // JIRA is off unless a test asks for it
     vi.mocked(rbacApi.getJiraSettings).mockResolvedValue({ base_url: '', project_keys: [] })
+    // no LLM configured unless a test asks for one
+    vi.mocked(llmApi.getConfig).mockResolvedValue({ enabled: false, model: '', base_url: '' })
     resetJiraSettings()
   })
 
@@ -419,6 +429,46 @@ describe('ReleaseNotesView', () => {
     expect(wrapper.text()).toContain(
       enMessages.releaseNotes.generated.replace('{count}', '3'),
     )
+    // no LLM configured: the AI summary is not offered and is not asked for
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.ai_summary_unavailable)
+    expect(releaseNotesApi.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ summarize: false, language: 'en' }),
+    )
+  })
+
+  it('asks for an AI summary when the deployment has an LLM', async () => {
+    vi.mocked(llmApi.getConfig).mockResolvedValue({
+      enabled: true,
+      model: 'test-model',
+      base_url: 'https://llm.local/v1',
+    })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue({
+      ...preview([], { version: 'v1.1.0', commit_count: 3 }),
+      summary: 'Adds single sign-on.',
+      summary_source: 'llm',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const aiSummary = wrapper
+      .findAllComponents({ name: 'ElCheckbox' })
+      .find((box: AnyWrapper) => box.text() === enMessages.releaseNotes.ai_summary)
+    expect(aiSummary).toBeDefined()
+    await aiSummary!.vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.generate_notes)[0].trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ summarize: true }),
+    )
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.generated_with_ai)
   })
 
   it('deletes a release after confirmation', async () => {

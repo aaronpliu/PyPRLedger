@@ -32,6 +32,15 @@ REASON_RESOLVED = "resolved"
 REASON_FIRST_RELEASE = "first_release"
 REASON_UNRESOLVED = "unresolved"
 
+# Where the prose of a generated note came from.
+#
+# ``deterministic`` is the grouping derived from the commit subjects alone, which
+# needs no configuration; ``llm`` adds the summary paragraph the model wrote. A
+# caller that asked for a summary but could not get one is answered with
+# ``deterministic`` - the notes are never withheld for the sake of the AI pass.
+SUMMARY_DETERMINISTIC = "deterministic"
+SUMMARY_LLM = "llm"
+
 
 class ReleaseNoteCoordinates(BaseModel):
     """Repository coordinates shared by the release note endpoints."""
@@ -173,6 +182,22 @@ class ReleaseNotePreviewRequest(ReleaseNoteCoordinates):
             "a tag has just been created or moved"
         ),
     )
+    language: str | None = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "Language of the generated prose (section titles and the summary), e.g. "
+            "'en', 'zh-CN', 'zh-TW'. Defaults to English."
+        ),
+    )
+    summarize: bool = Field(
+        default=False,
+        description=(
+            "Also ask the configured LLM for a summary paragraph and for a section per "
+            "commit. Ignored - the notes stay deterministic - when no LLM is configured "
+            "or the call fails."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_versions(self) -> ReleaseNotePreviewRequest:
@@ -262,4 +287,15 @@ class ReleaseNotePreviewResponse(BaseModel):
     truncated: bool = Field(
         default=False,
         description="True when the returned commits are only part of that scope",
+    )
+    summary: str | None = Field(
+        default=None,
+        description="Summary paragraph of the release, when one was written for it",
+    )
+    summary_source: str = Field(
+        default=SUMMARY_DETERMINISTIC,
+        description=(
+            "'deterministic' | 'llm': whether the prose was derived from the commit subjects "
+            "alone or was written by the configured LLM"
+        ),
     )

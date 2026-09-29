@@ -439,9 +439,26 @@
                   >
                     {{ t('releaseNotes.generate_notes') }}
                   </el-button>
+                  <el-checkbox
+                    v-if="llmEnabled"
+                    v-model="aiSummary"
+                    size="small"
+                    style="margin-left: 8px"
+                  >
+                    {{ t('releaseNotes.ai_summary') }}
+                  </el-checkbox>
                   <span v-if="generatedCount !== null" class="generated-hint">
                     {{ t('releaseNotes.generated', { count: generatedCount }) }}
                   </span>
+                  <span v-if="summarizedByAi" class="generated-hint">
+                    · {{ t('releaseNotes.generated_with_ai') }}
+                  </span>
+                </div>
+                <div v-if="!llmEnabled" class="field-hint">
+                  {{ t('releaseNotes.ai_summary_unavailable') }}
+                </div>
+                <div v-else-if="aiSummary" class="field-hint">
+                  {{ t('releaseNotes.ai_summary_help') }}
                 </div>
                 <MdEditor
                   v-model="form.body"
@@ -586,11 +603,12 @@ import { useJira } from '@/composables/useJira'
 import { linkifyJiraMarkdown } from '@/utils/jira'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
 import type { ReleaseScopeReason, ReleaseScopeSource } from '@/api/releaseNotes'
+import { llmApi } from '@/api/llm'
 import { useAuthStore } from '@/stores/auth'
 
 type NavigatorTab = 'releases' | 'tags'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const authStore = useAuthStore()
 // JIRA link settings: also used to link the ticket keys of hand written notes
 const { jiraSettings, loadJiraSettings } = useJira()
@@ -675,6 +693,11 @@ const saving = ref(false)
 const importing = ref(false)
 const generating = ref(false)
 const generatedCount = ref<number | null>(null)
+// The AI pass is optional and server-side: the switch is only offered when the
+// deployment has an LLM configured (System Settings -> LLM).
+const llmEnabled = ref(false)
+const aiSummary = ref(false)
+const summarizedByAi = ref(false)
 const formCard = ref<HTMLElement | null>(null)
 
 const repo = ref({
@@ -1220,6 +1243,16 @@ function editNote(note: ReleaseNote) {
   formCard.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
+async function loadLlmConfig() {
+  try {
+    const config = await llmApi.getConfig()
+    llmEnabled.value = Boolean(config.enabled)
+  } catch {
+    // an unconfigured LLM simply means the deterministic notes are the only option
+    llmEnabled.value = false
+  }
+}
+
 async function generateNotes() {
   if (!hasCoordinates.value || !form.value.tag_name) return
 
@@ -1230,12 +1263,17 @@ async function generateNotes() {
       version: form.value.tag_name.trim(),
       previous_version: form.value.previous_tag.trim() || undefined,
       max_commits: PREVIEW_MAX_COMMITS,
+      language: locale.value,
+      summarize: aiSummary.value && llmEnabled.value,
     })
     form.value.body = preview.body
     if (!form.value.name.trim()) {
       form.value.name = preview.suggested_name
     }
     generatedCount.value = preview.commit_count
+    // The server falls back to the deterministic notes when the LLM call fails,
+    // so the answer says which one is on screen rather than assuming the switch
+    summarizedByAi.value = preview.summary_source === 'llm'
     if (preview.truncated) {
       ElMessage.warning(t('releaseNotes.generate_truncated'))
     }
@@ -1472,6 +1510,7 @@ onMounted(() => {
   })
   void loadProjects()
   void loadJiraSettings()
+  void loadLlmConfig()
 })
 
 onBeforeUnmount(() => {

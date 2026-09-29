@@ -319,8 +319,49 @@ def test_commit_section_maps_conventional_types_to_changelog_categories() -> Non
     assert commit_section("docs: update readme") == "Documentation"
     assert commit_section("test: cover the upsert") == "Tests"
 
-    assert commit_section("random change") == "Other Changes"
+    # a subject that says nothing about the kind of change stays ungrouped
+    assert commit_section("release 2.2601.5") == "Other Changes"
     assert commit_section(None) == "Other Changes"
+
+
+def test_commit_section_groups_subjects_without_a_conventional_prefix() -> None:
+    """A history that is not written in conventional commits is still grouped."""
+    # the wording decides when there is no "type:" prefix
+    assert commit_section("fix crash on logout") == "Fixed"
+    assert commit_section("Add support for SSO") == "Added"
+    assert commit_section("update the deploy script") == "Changed"
+    assert commit_section("delete the legacy importer") == "Removed"
+    assert commit_section("document the webhook payload") == "Documentation"
+    assert commit_section("cover the upsert path") == "Tests"
+
+    # the keyword the author led with wins
+    assert commit_section("update deps to fix the crash") == "Changed"
+    assert commit_section("fix the crash while updating") == "Fixed"
+
+
+def test_commit_section_looks_behind_ticket_and_pr_prefixes() -> None:
+    """A ticket key or a PR number in front of the wording does not hide it."""
+    assert commit_section("PRL-123: fix crash on logout") == "Fixed"
+    assert commit_section("[PRL-123] fix crash on logout") == "Fixed"
+    assert commit_section("PRL-123 - fix crash on logout") == "Fixed"
+    assert commit_section("#42: add the dashboard") == "Added"
+    assert commit_section("[hotfix] 修复登录崩溃") == "Fixed"
+
+    # and it is not removed from the rendered line - that is what gets linked
+    assert commit_subject("PRL-123: fix crash on logout") == "PRL-123: fix crash on logout"
+
+
+def test_commit_section_understands_chinese_subjects() -> None:
+    assert commit_section("修复登录崩溃") == "Fixed"
+    assert commit_section("新增导出功能") == "Added"
+    assert commit_section("重构导出模块") == "Changed"
+    assert commit_section("补充接口文档") == "Documentation"
+
+
+def test_commit_section_keeps_merge_commits_ungrouped() -> None:
+    """A merge subject describes the integration, not the change it carries."""
+    assert commit_section("Merge pull request #42 from acme/feature/sso") == "Other Changes"
+    assert commit_section("Merge branch 'release/1.0' into main") == "Other Changes"
 
 
 def test_section_emoji_covers_every_produced_section() -> None:
@@ -651,6 +692,54 @@ async def test_author_avatars_only_returns_accounts_that_have_a_picture(
     assert avatars == {"alice": "/api/v1/users/avatars/1_ab.png"}
     assert await service.author_avatars([]) == {}
     assert await service.author_avatars([None]) == {}
+
+
+def test_build_markdown_renders_the_summary_above_the_sections() -> None:
+    commits = [commit(C1, "feat: add login page", author=None).model_dump()]
+
+    body = build_release_notes_markdown(
+        commits,
+        version="v1.1.0",
+        previous_version="v1.0.0",
+        summary="This release adds single sign-on.",
+    )
+
+    assert body.splitlines()[0] == "## What's Changed"
+    assert body.index("This release adds single sign-on.") < body.index("### ✨ Added")
+
+
+def test_build_markdown_writes_the_sections_in_the_language_of_the_caller() -> None:
+    commits = [commit(C1, "feat: add login page", author=None).model_dump()]
+
+    body = build_release_notes_markdown(
+        commits, version="v1.1.0", previous_version="v1.0.0", language="zh-CN"
+    )
+
+    assert body.startswith("## 变更内容")
+    assert "### ✨ 新增" in body
+    # an unknown language keeps the English it has always produced
+    english = build_release_notes_markdown(commits, version="v1.1.0", language=None)
+    assert english.startswith("## What's Changed")
+
+
+def test_build_markdown_honours_a_caller_supplied_section() -> None:
+    """A grouping decided elsewhere (an LLM's) wins over the commit subject."""
+    payload = commit(C1, "wip").model_dump()
+    payload["section"] = "Fixed"
+
+    body = build_release_notes_markdown([payload], version="v1.1.0")
+
+    assert "### 🐛 Fixed" in body
+    assert "### 📝 Other Changes" not in body
+
+
+def test_build_markdown_ignores_a_section_it_does_not_know() -> None:
+    payload = commit(C1, "wip").model_dump()
+    payload["section"] = "Features"
+
+    body = build_release_notes_markdown([payload], version="v1.1.0")
+
+    assert "### 📝 Other Changes" in body
 
 
 # --------------------------------------------------------------------------- #

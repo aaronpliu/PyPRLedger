@@ -26,6 +26,8 @@ from src.schemas.release_note import (
     REASON_UNRESOLVED,
     SOURCE_EXPLICIT,
     SOURCE_NONE,
+    SUMMARY_DETERMINISTIC,
+    SUMMARY_LLM,
     ReleaseNoteCreateRequest,
     ReleaseNoteImportRequest,
     ReleaseNotePreviewRequest,
@@ -87,6 +89,157 @@ NOTE_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 OTHER_SECTION = "Other Changes"
 
+# A commit message does not have to be a conventional commit to be placed. When
+# the ``type:`` prefix is missing - or buried behind a ticket key - the wording of
+# the subject decides, so a history that is not written in conventional commits is
+# still grouped instead of landing in "Other Changes" as one flat list.
+#
+# Category-defining wording: when one of these appears the kind of change is
+# decided, whatever verb leads the subject - "add tests" is a test, "fix a typo
+# in the readme" is documentation. Latin and Chinese keywords sit in one table so
+# a repository whose history is not in English is classified the same way.
+STRONG_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Security", ("security", "vulnerability", "cve", "安全", "漏洞")),
+    ("Deprecated", ("deprecate", "deprecated", "弃用", "废弃")),
+    (
+        "Removed",
+        (
+            "remove",
+            "removed",
+            "delete",
+            "deleted",
+            "drop",
+            "dropped",
+            "revert",
+            "reverted",
+            "删除",
+            "移除",
+            "回滚",
+            "去掉",
+        ),
+    ),
+    (
+        "Tests",
+        ("test", "tests", "testing", "coverage", "cover", "covered", "测试", "单测", "用例"),
+    ),
+    (
+        "Documentation",
+        (
+            "doc",
+            "docs",
+            "document",
+            "documented",
+            "documentation",
+            "readme",
+            "changelog",
+            "文档",
+            "说明",
+            "注释",
+        ),
+    ),
+)
+
+# Generic wording: none of the above, so the verb the author led with decides.
+GENERIC_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Added",
+        (
+            "add",
+            "added",
+            "adds",
+            "feat",
+            "feature",
+            "implement",
+            "implemented",
+            "introduce",
+            "introduced",
+            "support",
+            "supported",
+            "create",
+            "created",
+            "新增",
+            "添加",
+            "增加",
+            "引入",
+            "实现",
+            "新建",
+        ),
+    ),
+    (
+        "Fixed",
+        (
+            "fix",
+            "fixed",
+            "fixes",
+            "bugfix",
+            "hotfix",
+            "patch",
+            "patched",
+            "resolve",
+            "resolved",
+            "repair",
+            "correct",
+            "corrected",
+            "修复",
+            "修正",
+            "解决",
+            "修好",
+        ),
+    ),
+    (
+        "Changed",
+        (
+            "change",
+            "changed",
+            "update",
+            "updated",
+            "upgrade",
+            "upgraded",
+            "improve",
+            "improved",
+            "refactor",
+            "refactored",
+            "optimize",
+            "optimise",
+            "perf",
+            "rename",
+            "renamed",
+            "migrate",
+            "migrated",
+            "bump",
+            "bumped",
+            "chore",
+            "style",
+            "build",
+            "ci",
+            "deps",
+            "优化",
+            "重构",
+            "改进",
+            "调整",
+            "更新",
+            "升级",
+            "迁移",
+            "重命名",
+            "整理",
+        ),
+    ),
+)
+
+# Bookkeeping in front of the actual wording: a ticket key, a pull request number
+# or a bracketed tag. Stripped before the subject is classified, and never removed
+# from the rendered line - a ticket key there is what gets linked to JIRA.
+NOISE_PREFIXES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^\s*[\[(]?[A-Z][A-Z0-9_]{1,9}-\d+[\])]?\s*[:：\-–]\s*"),
+    re.compile(r"^\s*\(?#\d+\)?\s*[:：\-–]\s*"),
+    re.compile(r"^\s*\[[^\[\]]{1,32}\]\s*"),
+)
+NOISE_PREFIX_PASSES = 3
+
+# A merge commit is history bookkeeping: its subject describes the integration,
+# not the change, so it is never classified from its wording.
+MERGE_SUBJECT_RE = re.compile(r"^merge\b", re.IGNORECASE)
+
 # Emoji each section is rendered with (one per Keep a Changelog category)
 SECTION_EMOJI: dict[str, str] = {
     "Added": "✨",
@@ -100,19 +253,111 @@ SECTION_EMOJI: dict[str, str] = {
     OTHER_SECTION: "📝",
 }
 
+DEFAULT_LANGUAGE = "en"
+
+# Section titles and the surrounding prose in the language of the caller. The
+# section keys stay English: they are what the classifier and an LLM answer with.
+SECTION_TRANSLATIONS: dict[str, dict[str, str]] = {
+    "zh-CN": {
+        "Added": "新增",
+        "Changed": "变更",
+        "Deprecated": "弃用",
+        "Removed": "移除",
+        "Fixed": "修复",
+        "Security": "安全",
+        "Documentation": "文档",
+        "Tests": "测试",
+        OTHER_SECTION: "其他变更",
+        "## What's Changed": "## 变更内容",
+        "_No commits found in this release scope._": "_此发布范围没有提交。_",
+    },
+    "zh-TW": {
+        "Added": "新增",
+        "Changed": "變更",
+        "Deprecated": "棄用",
+        "Removed": "移除",
+        "Fixed": "修復",
+        "Security": "安全性",
+        "Documentation": "文件",
+        "Tests": "測試",
+        OTHER_SECTION: "其他變更",
+        "## What's Changed": "## 變更內容",
+        "_No commits found in this release scope._": "_此發佈範圍沒有提交。_",
+    },
+}
+
+
+def section_label(text: str, language: str | None) -> str:
+    """Render one of the note's fixed strings in the caller's language."""
+    translations = SECTION_TRANSLATIONS.get((language or DEFAULT_LANGUAGE).strip())
+    return (translations or {}).get(text, text)
+
+
+def strip_subject_noise(header: str) -> str:
+    """Drop ticket keys / PR numbers in front of a commit subject."""
+    stripped = header.strip()
+    for _ in range(NOISE_PREFIX_PASSES):
+        for pattern in NOISE_PREFIXES:
+            candidate = pattern.sub("", stripped, count=1).strip()
+            if candidate and candidate != stripped:
+                stripped = candidate
+                break
+        else:
+            break
+    return stripped
+
+
+def keyword_section(header: str) -> str | None:
+    """Section implied by the wording of a subject.
+
+    A category-defining word decides whatever verb leads the subject: "add tests"
+    is a test, not a feature. Without one, the keyword the author led with wins -
+    "update deps to fix a crash" is a change, "fix a crash while updating" is a
+    fix.
+    """
+    lowered = header.lower()
+
+    def earliest(table: tuple[tuple[str, tuple[str, ...]], ...]) -> tuple[int, str] | None:
+        best: tuple[int, str] | None = None
+        for section, keywords in table:
+            for keyword in keywords:
+                # a word boundary keeps "add" out of "address"; Chinese has none
+                match = (
+                    re.search(rf"\b{re.escape(keyword)}\b", lowered) if keyword.isascii() else None
+                )
+                index = match.start() if match else header.find(keyword)
+                if index >= 0 and (best is None or index < best[0]):
+                    best = (index, section)
+        return best
+
+    for table in (STRONG_KEYWORDS, GENERIC_KEYWORDS):
+        found = earliest(table)
+        if found is not None:
+            return found[1]
+    return None
+
 
 def commit_section(message: str | None) -> str:
-    """Map a commit message to its release note section (conventional commits)."""
+    """Map a commit message to its release note section.
+
+    A conventional ``type:`` prefix decides when there is one; otherwise the
+    wording of the subject does, so a history that is not written in conventional
+    commits is still grouped into sections.
+    """
     if not message:
         return OTHER_SECTION
-    header = message.split("\n", 1)[0].strip()
+    header = strip_subject_noise(message.split("\n", 1)[0].strip())
+    if not header or MERGE_SUBJECT_RE.match(header):
+        return OTHER_SECTION
+
     # "feat(scope): add x" / "feat!: breaking change" -> "feat"
     prefix = header.split(":", 1)[0].strip().lower()
     prefix = prefix.split("(", 1)[0].rstrip("!")
     for title, prefixes in NOTE_SECTIONS:
         if prefix in prefixes:
             return title
-    return OTHER_SECTION
+
+    return keyword_section(header) or OTHER_SECTION
 
 
 # JIRA ticket key: a project key (letter, then letters / digits / underscore) and a number
@@ -200,6 +445,8 @@ def build_release_notes_markdown(
     compare_url: str | None = None,
     jira_base_url: str | None = None,
     jira_project_keys: Iterable[str] = (),
+    language: str | None = None,
+    summary: str | None = None,
 ) -> str:
     """Group commits into a changelog in the style of GitHub release notes.
 
@@ -207,11 +454,19 @@ def build_release_notes_markdown(
     revision comparison on the git platform, otherwise the range stays plain text.
     Commit authors are mentioned as ``@login`` linked to their profile, and JIRA
     ticket keys are linked when ``jira_base_url`` is configured.
+
+    ``summary`` is an optional paragraph - the one thing a reader wants before the
+    list - rendered right under the heading. A commit may carry a ``section`` of
+    its own, which is how a caller-supplied grouping (an LLM's, say) is honoured:
+    the commit list itself stays the source of truth.
     """
     grouped: dict[str, list[str]] = {}
+    known_sections = {title for title, _ in NOTE_SECTIONS} | {OTHER_SECTION}
 
     for commit in commits:
-        section = commit_section(commit.get("message"))
+        section = commit.get("section")
+        if section not in known_sections:
+            section = commit_section(commit.get("message"))
         subject = commit_subject(commit.get("message")) or commit.get("id", "")[:7]
         subject = linkify_jira_tickets(
             subject, base_url=jira_base_url, project_keys=jira_project_keys
@@ -225,10 +480,14 @@ def build_release_notes_markdown(
 
         grouped.setdefault(section, []).append(f"- {subject}{author_part} in {reference}")
 
-    lines: list[str] = ["## What's Changed", ""]
+    heading = section_label("## What's Changed", language)
+    lines: list[str] = [heading, ""]
+
+    if summary and summary.strip():
+        lines.extend([summary.strip(), ""])
 
     if not commits:
-        lines.append("_No commits found in this release scope._")
+        lines.append(section_label("_No commits found in this release scope._", language))
         lines.append("")
     else:
         ordered_sections = [title for title, _ in NOTE_SECTIONS] + [OTHER_SECTION]
@@ -236,7 +495,8 @@ def build_release_notes_markdown(
             entries = grouped.get(title)
             if not entries:
                 continue
-            lines.append(f"### {SECTION_EMOJI.get(title, '')} {title}".rstrip())
+            label = section_label(title, language)
+            lines.append(f"### {SECTION_EMOJI.get(title, '')} {label}".rstrip())
             lines.extend(entries)
             lines.append("")
 
@@ -273,6 +533,7 @@ class ReleaseNoteService:
         diff_service: ReleaseDiffService | None = None,
         scope_service: ReleaseNoteScopeService | None = None,
         provider_factory: Callable[[str], BaseGitProvider] = get_git_provider,
+        llm_service: Any | None = None,
     ) -> None:
         self.db = db
         self._diff_service = diff_service or ReleaseDiffService()
@@ -280,6 +541,14 @@ class ReleaseNoteService:
             provider_factory=provider_factory
         )
         self._provider_factory = provider_factory
+        if llm_service is not None:
+            self._llm_service = llm_service
+        else:
+            # Imported here: the summarizer classifies with the vocabulary above,
+            # so importing it at module level would close a cycle.
+            from src.services.release_note_llm_service import ReleaseNoteLlmService
+
+            self._llm_service = ReleaseNoteLlmService(db=db)
 
     # ------------------------------------------------------------------ #
     # Queries
@@ -749,6 +1018,9 @@ class ReleaseNoteService:
         )
 
         self.resolve_author_urls(commits, git_provider=request.git_provider)
+
+        summary, summary_source = await self._summarize(request, commits, previous_ref)
+
         jira_base_url, jira_project_keys = jira_settings()
 
         body = build_release_notes_markdown(
@@ -759,6 +1031,8 @@ class ReleaseNoteService:
             compare_url=compare_url,
             jira_base_url=jira_base_url,
             jira_project_keys=jira_project_keys,
+            language=request.language,
+            summary=summary,
         )
 
         return ReleaseNotePreviewResponse(
@@ -774,4 +1048,43 @@ class ReleaseNoteService:
             commit_count=commit_count,
             commits=commits,
             truncated=truncated,
+            summary=summary,
+            summary_source=summary_source,
         )
+
+    async def _summarize(
+        self,
+        request: ReleaseNotePreviewRequest,
+        commits: list[dict[str, Any]],
+        previous_ref: str | None,
+    ) -> tuple[str | None, str]:
+        """Optional LLM pass: a summary paragraph and a section per commit.
+
+        The commit list stays the source of truth - the model only answers about
+        the ids it was given - and anything that goes wrong is answered with the
+        deterministic notes rather than with an error.
+        """
+        if not request.summarize:
+            return None, SUMMARY_DETERMINISTIC
+
+        try:
+            summary = await self._llm_service.summarize(
+                project_key=request.project_key,
+                repository_slug=request.repository_slug,
+                version=request.version,
+                previous_version=previous_ref,
+                commits=commits,
+                language=request.language,
+            )
+        except Exception as e:  # noqa: BLE001 - an optional pass must never fail the notes
+            logger.warning(f"Release note summarization failed: {e}")
+            return None, SUMMARY_DETERMINISTIC
+
+        if summary is None:
+            return None, SUMMARY_DETERMINISTIC
+
+        for commit in commits:
+            section = summary.sections.get(str(commit.get("id")))
+            if section:
+                commit["section"] = section
+        return summary.summary or None, SUMMARY_LLM

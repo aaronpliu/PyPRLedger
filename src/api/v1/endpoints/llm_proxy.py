@@ -7,15 +7,13 @@ from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response, StreamingResponse
 
-from src.core.config import settings
 from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
-from src.models.system_setting import SystemSetting
+from src.services.llm_service import load_llm_config
 from src.utils.log import get_logger
 
 
@@ -33,33 +31,7 @@ async def _get_llm_config(db: AsyncSession) -> dict:
     Returns:
         Dict with enabled, model, base_url, api_key keys
     """
-    config = {
-        "enabled": settings.LLM_PROXY_ENABLED,
-        "model": settings.LLM_DEFAULT_MODEL,
-        "base_url": settings.LLM_DEFAULT_BASE_URL,
-        "api_key": settings.LLM_DEFAULT_API_KEY,
-    }
-
-    # Override with system_settings from DB if they exist
-    setting_keys = ["llm_enabled", "llm_model", "llm_base_url", "llm_api_key"]
-    stmt = select(SystemSetting).where(
-        SystemSetting.setting_key.in_(setting_keys),
-        SystemSetting.is_active.is_(True),
-    )
-    result = await db.execute(stmt)
-    for setting in result.scalars().all():
-        key = setting.setting_key
-        value = setting.setting_value
-        if key == "llm_enabled":
-            config["enabled"] = value.lower() == "true"
-        elif key == "llm_model" and value:
-            config["model"] = value
-        elif key == "llm_base_url" and value:
-            config["base_url"] = value
-        elif key == "llm_api_key" and value:
-            config["api_key"] = value
-
-    return config
+    return (await load_llm_config(db)).as_dict(include_key=True)
 
 
 @router.get(

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Group release notes into Keep a Changelog sections from the wording of a commit subject: a ticket key, a pull request number or a bracketed tag in front of it no longer hides the wording, and subjects that are not conventional commits (or not in English) are grouped instead of landing in "Other Changes" as one flat list
+- Summarize a release with the configured LLM: an opt-in "AI summary" on the notes form adds a summary paragraph and a section per commit, answered through the existing LLM proxy configuration (System Settings -> LLM) and falling back to the deterministic notes when no LLM is enabled or the call fails
+- Write the generated notes in the language of the caller (section titles and the summary; English, 简体中文, 繁體中文)
+
 ### Fixed
 - Reverse the Bitbucket Server comparison direction: `/compare/commits` streams the commits reachable from `from` but not from `to` (`git log to..from`), so the provider now exchanges the two refs in the query to honour the documented `to_ref \ from_ref` contract; a newer release was previously reported as missing the commits it added, and a release note was built from the empty `previous \ version` difference ("No commits found")
 

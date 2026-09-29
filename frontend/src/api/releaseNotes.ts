@@ -81,6 +81,10 @@ export interface ReleaseNotePreviewRequest extends ReleaseNoteCoordinates {
   include_authors?: boolean
   /** Re-resolve the release scope instead of reusing the cached resolution */
   refresh?: boolean
+  /** Language of the generated prose (section titles and summary), e.g. 'zh-CN' */
+  language?: string
+  /** Ask the configured LLM for a summary paragraph and a section per commit */
+  summarize?: boolean
 }
 
 export interface PreviewCommit {
@@ -119,6 +123,10 @@ export interface ReleaseNotePreviewResponse {
   commit_count: number
   commits: PreviewCommit[]
   truncated: boolean
+  /** Summary paragraph of the release, when one was written for it */
+  summary?: string | null
+  /** Whether the prose came from the commit subjects alone or from the LLM */
+  summary_source?: 'deterministic' | 'llm'
 }
 
 export const releaseNotesApi = {
