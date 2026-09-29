@@ -286,8 +286,20 @@ class ReleaseNoteLlmService:
         if cached is not None:
             return SummaryOutcome(summary=cached)
 
-        if not config.usable:
-            return SummaryOutcome(notice=SUMMARY_NOTICE_NOT_CONFIGURED)
+        reason = config.unusable_reason
+        if reason is not None:
+            # Which piece of the configuration is missing, since a summary that is
+            # skipped looks the same as one that was never asked for
+            logger.warning(
+                "Release note summary skipped - the LLM cannot be called",
+                extra={
+                    "enabled": config.enabled,
+                    "base_url": config.base_url,
+                    "model": config.model,
+                    "reason": reason,
+                },
+            )
+            return SummaryOutcome(notice=SUMMARY_NOTICE_NOT_CONFIGURED, detail=reason)
 
         needs_section = commits_needing_a_section(entries)
         needs_ids = {str(commit.get("id")) for commit in needs_section}

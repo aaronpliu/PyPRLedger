@@ -68,9 +68,23 @@ class LlmConfig:
     api_key: str
 
     @property
+    def unusable_reason(self) -> str | None:
+        """Why no request can be made, or ``None`` when one can.
+
+        An API key is not required: a model served on localhost - the usual
+        deployment - takes no credential, and demanding one kept the client from
+        calling a provider that was configured and answering.
+        """
+        if not self.enabled:
+            return "the LLM integration is disabled"
+        if not self.base_url:
+            return "no LLM base URL is configured"
+        return None
+
+    @property
     def usable(self) -> bool:
-        """Whether a request can be made: enabled and fully addressed."""
-        return bool(self.enabled and self.base_url and self.api_key)
+        """Whether a request can be made: enabled and addressed."""
+        return self.unusable_reason is None
 
     def as_dict(self, *, include_key: bool = False) -> dict[str, Any]:
         """Config as a plain dict, with the API key only when asked for."""
@@ -148,21 +162,24 @@ class LlmService:
         (``temperature``, ``max_tokens``) turns a question it can answer into a
         400, and how long an answer may be is the provider's to decide.
         """
-        if not self._config.usable:
-            return Completion(error="the LLM integration is not configured")
+        reason = self._config.unusable_reason
+        if reason is not None:
+            return Completion(error=reason)
 
         url = f"{self._config.base_url.rstrip('/')}/{COMPLETIONS_PATH}"
         payload: dict[str, Any] = {"messages": list(messages), "stream": False}
         if self._config.model:
             payload["model"] = self._config.model
 
+        # Only sent when there is one: a model on localhost takes no credential,
+        # and an empty `Bearer ` is something providers refuse.
+        headers: dict[str, str] = {}
+        if self._config.api_key:
+            headers["Authorization"] = f"Bearer {self._config.api_key}"
+
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(
-                    url,
-                    json=payload,
-                    headers={"Authorization": f"Bearer {self._config.api_key}"},
-                )
+                response = await client.post(url, json=payload, headers=headers)
         except httpx.HTTPError as e:
             error = redact(f"{type(e).__name__}: {e}", self._config.api_key)
             logger.warning("LLM completion request failed", extra={"url": url, "error": error})

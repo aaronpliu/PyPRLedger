@@ -62,9 +62,11 @@ async def test_the_request_carries_only_what_every_provider_takes(
 ) -> None:
     """A parameter a model refuses turns a question it can answer into a 400."""
     seen: list[dict[str, Any]] = []
+    request_url: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(json.loads(request.content))
+        request_url.append(str(request.url))
         return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
 
     install_transport(monkeypatch, handler)
@@ -79,18 +81,69 @@ async def test_the_request_carries_only_what_every_provider_takes(
             "model": "test-model",
         }
     ]
+    # the URL the request went to: the base URL with the resource appended
+    assert request_url == ["https://llm.local/v1/chat/completions"]
 
 
-async def test_a_disabled_integration_is_never_called(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_model_without_an_api_key_is_called(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A model served on localhost takes no credential.
+
+    Regression: demanding a key kept the client from calling a provider that was
+    configured and answering - the request never left the process, so the
+    provider logged nothing at all.
+    """
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    install_transport(monkeypatch, handler)
+
+    completion = await LlmService(config(api_key="")).complete([{"role": "user", "content": "hi"}])
+
+    assert completion.text == "ok"
+    assert len(seen) == 1
+    # and an empty `Bearer ` - which providers refuse - is not sent either
+    assert "authorization" not in {key.lower() for key in seen[0].headers}
+
+
+async def test_a_configured_key_is_sent_as_a_bearer_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    install_transport(monkeypatch, handler)
+
+    await LlmService(config()).complete([{"role": "user", "content": "hi"}])
+
+    assert seen[0].headers["authorization"] == "Bearer sk-secret"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "reason"),
+    [
+        ({"enabled": False}, "the LLM integration is disabled"),
+        ({"base_url": ""}, "no LLM base URL is configured"),
+    ],
+)
+async def test_an_unusable_configuration_says_which_piece_is_missing(
+    monkeypatch: pytest.MonkeyPatch, overrides: dict[str, Any], reason: str
+) -> None:
+    """A skipped pass has to name what to configure, or it reads as a failure."""
     calls: list[httpx.Request] = []
     install_transport(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
 
-    completion = await LlmService(config(enabled=False)).complete(
-        [{"role": "user", "content": "hi"}]
-    )
+    completion = await LlmService(config(**overrides)).complete([{"role": "user", "content": "hi"}])
 
     assert completion.text is None
-    assert completion.error == "the LLM integration is not configured"
+    assert completion.error == reason
     assert calls == []
 
 
