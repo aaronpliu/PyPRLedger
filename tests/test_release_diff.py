@@ -606,6 +606,46 @@ async def test_bitbucket_provider_compare_commits_paginates(monkeypatch) -> None
     assert commits[0]["url"].endswith(f"/commits/{C1}")
 
 
+async def test_bitbucket_provider_compares_in_the_git_log_direction(monkeypatch) -> None:
+    """The difference is git log from_ref..to_ref - what the newer ref adds.
+
+    Bitbucket Server streams the opposite pair (git log to..from), so the
+    adapter has to exchange the two refs in the query.
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    from src.services.git_providers import bitbucket_server
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        query = parse_qs(urlparse(str(request.url)).query)
+        reachable_to = set(reachable(query["to"][0]))
+        ids = [sha for sha in reachable(query["from"][0]) if sha not in reachable_to]
+        return httpx.Response(
+            200,
+            json={
+                "values": [COMMITS[sha] for sha in ids],
+                "size": len(ids),
+                "isLastPage": True,
+            },
+        )
+
+    real_client = httpx.AsyncClient
+
+    def client_factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        kwargs.pop("verify", None)
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(bitbucket_server.httpx, "AsyncClient", client_factory)
+
+    provider = bitbucket_server.BitbucketServerProvider()
+
+    added = await provider.compare_commits("PROJ", "my-repo", "v1.0.0", "v1.1.0", limit=10)
+    removed = await provider.compare_commits("PROJ", "my-repo", "v1.1.0", "v1.0.0", limit=10)
+
+    assert [commit["id"] for commit in added] == [C4]
+    assert removed == []
+
+
 async def test_bitbucket_provider_lists_tags_and_branches(monkeypatch) -> None:
     from src.services.git_providers import bitbucket_server
 

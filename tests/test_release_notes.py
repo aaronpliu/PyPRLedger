@@ -680,6 +680,71 @@ async def test_preview_uses_the_compare_scope_when_a_previous_version_exists(
     assert diff.list_calls == []
 
 
+async def test_preview_lists_the_commits_the_release_adds_over_its_predecessor(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end against a mocked Bitbucket Server: a newer release adds work.
+
+    Regression: the Server comparison used to answer ``previous \\ version``, so
+    the notes of a release that contained its predecessor came out empty.
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    import httpx
+
+    from src.services.git_providers import bitbucket_server
+    from src.services.release_diff_service import ReleaseDiffService
+
+    reachable = {"v1.0.0": [C1], "v1.1.0": [C1, C2]}
+
+    def payload(sha: str) -> dict[str, Any]:
+        return {
+            "id": sha,
+            "displayId": sha[:7],
+            "author": {"name": "Jane Doe", "emailAddress": "jane@example.com"},
+            "authorTimestamp": 1_690_000_000_000,
+            "message": "feat: add login page" if sha == C2 else "chore: initial import",
+        }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        query = parse_qs(urlparse(str(request.url)).query)
+        # Bitbucket Server streams from \ to, i.e. git log to..from
+        other = set(reachable[query["to"][0]])
+        ids = [sha for sha in reachable[query["from"][0]] if sha not in other]
+        values = [payload(sha) for sha in ids]
+        return httpx.Response(200, json={"values": values, "size": len(values), "isLastPage": True})
+
+    real_client = httpx.AsyncClient
+
+    def client_factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        kwargs.pop("verify", None)
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(bitbucket_server.httpx, "AsyncClient", client_factory)
+
+    server_provider = bitbucket_server.BitbucketServerProvider()
+    service = build_service(
+        db_session,
+        ReleaseDiffService(provider_factory=lambda _name: server_provider),
+        provider=server_provider,  # type: ignore[arg-type]
+    )
+
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="PROJ",
+            repository_slug="my-repo",
+            version="v1.1.0",
+            previous_version="v1.0.0",
+        )
+    )
+
+    assert preview.commit_count == 1
+    assert [item["id"] for item in preview.commits] == [C2]
+    assert "add login page" in preview.body
+    assert "_No commits found in this release scope._" not in preview.body
+
+
 async def test_preview_links_the_changelog_range_to_the_provider_comparison(
     db_session: AsyncSession,
 ) -> None:
