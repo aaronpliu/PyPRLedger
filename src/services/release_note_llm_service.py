@@ -29,6 +29,7 @@ from src.services.llm_service import REQUEST_TIMEOUT_SECONDS, LlmService, load_l
 from src.services.release_note_service import (
     NOTE_SECTIONS,
     OTHER_SECTION,
+    commit_section,
     is_merge_commit,
 )
 from src.utils.log import get_logger
@@ -39,16 +40,21 @@ logger = get_logger(__name__)
 
 # The prompt is a summary task, not a data transfer: a release with thousands of
 # commits is summarised from its newest work, and each subject is trimmed so a
-# single merge message cannot crowd the window out.
+# single over-long message cannot crowd the list out.
 MAX_PROMPT_COMMITS = 300
 MAX_SUBJECT_CHARS = 180
 
 # Bumped when the prompt or the answer schema changes.
-CACHE_KEY_VERSION = "v1"
+CACHE_KEY_VERSION = "v2"
 
 KNOWN_SECTIONS: frozenset[str] = frozenset({title for title, _ in NOTE_SECTIONS} | {OTHER_SECTION})
 
 SECTION_LIST = ", ".join([title for title, _ in NOTE_SECTIONS] + [OTHER_SECTION])
+
+# What the commit list marks the commits the answer is asked about with. Named
+# once: instructions that point at a mark the list does not write, or the other
+# way round, ask a question the model cannot find.
+NEEDS_SECTION_MARK = "[needs a section]"
 
 SYSTEM_PROMPT = (
     "You write release notes for software releases. You are given the commits of "
@@ -56,9 +62,11 @@ SYSTEM_PROMPT = (
     '{"summary": "<two or three sentences describing what this release does, no '
     'headings, no bullet points>", "categories": {"<commit id>": "<section>"}}\n'
     f"The section must be one of: {SECTION_LIST}.\n"
-    "Rules: use only the commit ids you were given and answer for every one of "
-    "them; never invent a commit, never invent a feature that no commit shows. "
-    'When the subject of a commit is ambiguous, use "Other Changes".'
+    f'Answer for every commit the list marks "{NEEDS_SECTION_MARK}", and for no other '
+    "commit; when none is marked, answer with the summary alone. Use only the "
+    "commit ids you were given; never invent a commit, never invent a feature "
+    "that no commit shows. When the subject of a commit is ambiguous, use "
+    '"Other Changes".'
 )
 
 
@@ -95,6 +103,69 @@ class ReleaseNoteSummary:
         )
 
 
+# A commit id is the hex sha the answer was asked about. The summary is written
+# before the sections, so both are still readable in an answer that was cut short.
+_ANSWER_SUMMARY_RE = re.compile(r'"summary"\s*:\s*"((?:[^"\\]|\\.)*)"')
+_ANSWER_SECTION_RE = re.compile(r'"([0-9a-fA-F]{7,40})"\s*:\s*"([^"]{1,32})"')
+
+
+def commits_needing_a_section(commits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The commits the deterministic pass could not place, newest first.
+
+    Only these are put to the model: a commit whose subject already says what it
+    is needs no second opinion, and the rest of the release stays in the prompt as
+    the context of the summary. A merge is left out - it has no section to give.
+    """
+    return [
+        commit
+        for commit in commits
+        if not is_merge_commit(commit.get("message"))
+        and commit_section(commit.get("message")) == OTHER_SECTION
+    ]
+
+
+def _prompt_lines(commits: list[dict[str, Any]], needs_section: set[str]) -> list[str]:
+    """One line per commit, the ones the answer is asked about marked.
+
+    The rest of the list is what the summary is written from.
+    """
+    lines: list[str] = []
+    for commit in commits:
+        subject = str(commit.get("message") or "").split("\n", 1)[0].strip()
+        mark = f"  {NEEDS_SECTION_MARK}" if str(commit.get("id")) in needs_section else ""
+        lines.append(f"- {commit.get('id')}: {subject[:MAX_SUBJECT_CHARS]}{mark}")
+    return lines
+
+
+def read_cut_off_answer(raw: str) -> dict[str, Any] | None:
+    """Read what arrived of an answer the provider stopped mid-object.
+
+    A provider that stops writing - its own limit, a dropped connection - would
+    otherwise lose the whole answer, the summary included, to a syntax error. The
+    pairs
+    are read back into the shape the model was asked for, so the same validation
+    decides what is kept.
+    """
+    summary = _ANSWER_SUMMARY_RE.search(raw)
+    sections = _ANSWER_SECTION_RE.findall(raw)
+    if summary is None and not sections:
+        return None
+    if summary is not None:
+        logger.info("Release note summary answer was cut off - reading what arrived")
+    return {
+        "summary": _json_string(summary.group(1)) if summary else "",
+        "categories": dict(sections),
+    }
+
+
+def _json_string(value: str) -> str:
+    """The body of a JSON string as the text it stands for."""
+    try:
+        return json.loads(f'"{value}"')
+    except json.JSONDecodeError:
+        return value
+
+
 def parse_summary_answer(text: str | None, commit_ids: set[str]) -> ReleaseNoteSummary | None:
     """Read the model's answer, keeping only what can be trusted.
 
@@ -111,17 +182,27 @@ def parse_summary_answer(text: str | None, commit_ids: set[str]) -> ReleaseNoteS
         raw = fenced.group(1).strip()
 
     start = raw.find("{")
-    end = raw.rfind("}")
-    if start < 0 or end <= start:
+    if start < 0:
         return None
+    body = raw[start:]
 
-    try:
-        payload = json.loads(raw[start : end + 1])
-    except json.JSONDecodeError:
-        logger.warning("Release note summary answer is not JSON")
-        return None
-    if not isinstance(payload, dict):
-        return None
+    payload: dict[str, Any] | None = None
+    end = body.rfind("}")
+    if end > 0:
+        try:
+            payload = json.loads(body[: end + 1])
+        except json.JSONDecodeError:
+            payload = None
+        if not isinstance(payload, dict):
+            payload = None
+
+    if payload is None:
+        # A model that ran out of tokens - or a provider that stopped the answer -
+        # is read pair by pair rather than thrown away for a syntax error.
+        payload = read_cut_off_answer(body)
+        if payload is None:
+            logger.warning("Release note summary answer is not JSON")
+            return None
 
     sections: dict[str, str] = {}
     categories = payload.get("categories")
@@ -198,18 +279,27 @@ class ReleaseNoteLlmService:
         if not config.usable:
             return SummaryOutcome(notice=SUMMARY_NOTICE_NOT_CONFIGURED)
 
+        needs_section = commits_needing_a_section(entries)
+        needs_ids = {str(commit.get("id")) for commit in needs_section}
+
         answer = await client.complete(
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
                     "role": "user",
                     "content": self._prompt(
-                        entries, project_key, repository_slug, version, previous_version, language
+                        entries,
+                        needs_ids,
+                        project_key=project_key,
+                        repository_slug=repository_slug,
+                        version=version,
+                        previous_version=previous_version,
+                        language=language,
                     ),
                 },
             ]
         )
-        summary = parse_summary_answer(answer, {str(entry.get("id")) for entry in entries})
+        summary = parse_summary_answer(answer, needs_ids)
         if summary is None:
             return SummaryOutcome(notice=SUMMARY_NOTICE_FAILED)
 
@@ -233,6 +323,8 @@ class ReleaseNoteLlmService:
     @staticmethod
     def _prompt(
         commits: list[dict[str, Any]],
+        needs_section: set[str],
+        *,
         project_key: str,
         repository_slug: str,
         version: str,
@@ -243,11 +335,9 @@ class ReleaseNoteLlmService:
         lines = [
             f"Repository: {project_key}/{repository_slug}",
             f"Release: {version} (scope: {scope})",
-            "Commits:",
+            f'Commits ("{NEEDS_SECTION_MARK}" marks the ones to answer about):',
         ]
-        for commit in commits:
-            subject = str(commit.get("message") or "").split("\n", 1)[0].strip()
-            lines.append(f"- {commit.get('id')}: {subject[:MAX_SUBJECT_CHARS]}")
+        lines.extend(_prompt_lines(commits, needs_section))
         if language:
             lines.append(f"Write the summary in this language: {language}")
         return "\n".join(lines)

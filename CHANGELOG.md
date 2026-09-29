@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Report why an AI summary did not happen instead of falling back silently: a preview that was asked for one answers with `summary_notice` (`not_configured` when the deployment has no usable LLM, `failed` when the call or its answer could not be used), and the notes form says under the switch that the sections came from the commit subjects
 
 ### Fixed
+- Keep the AI summary from failing on a release of any size: the model is asked only about the commits whose subject does not say what the change is - the rest of the scope stays in the prompt as the context of the summary - so it answers a handful of entries instead of one per commit, and the completion no longer puts a token limit of its own on the answer (800 was room for about 35 entries, so anything larger came back cut off mid-JSON and was reported as a failed call); an answer that does come back cut off is read pair by pair rather than dropped for a syntax error
 - Leave merge commits out of the generated release notes: an integration is not a change of its own - what the release added is listed through the commits the merge brought in, in the same scope - so "Merge branch" and "Merge pull request" subjects no longer fill the "Other Changes" section; they are left out of the AI prompt for the same reason, and a scope that holds nothing else renders as the empty scope it is
 
 ---

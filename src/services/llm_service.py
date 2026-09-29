@@ -119,13 +119,14 @@ class LlmService:
         messages: Sequence[dict[str, str]],
         *,
         temperature: float = 0.2,
-        max_tokens: int = 800,
     ) -> str | None:
         """Return the assistant message, or ``None`` when the call cannot be made.
 
-        Every failure - disabled, unreachable, refused, empty - is logged and
-        answered with ``None`` so that a caller whose LLM pass is optional can
-        simply carry on without one.
+        How long the answer may be is left to the provider: an answer cut off by a
+        limit we chose ourselves is a failure of our own making. Every failure -
+        disabled, unreachable, refused, empty - is logged and answered with
+        ``None`` so that a caller whose LLM pass is optional can simply carry on
+        without one.
         """
         if not self._config.usable:
             return None
@@ -134,7 +135,6 @@ class LlmService:
         payload: dict[str, Any] = {
             "messages": list(messages),
             "temperature": temperature,
-            "max_tokens": max_tokens,
             "stream": False,
         }
         if self._config.model:
@@ -163,5 +163,11 @@ class LlmService:
             logger.warning("LLM completion returned no choices")
             return None
 
-        content = (choices[0].get("message") or {}).get("content")
+        # A provider that stopped mid-answer says so here, rather than leaving the
+        # caller to infer it from an answer that does not parse
+        choice = choices[0]
+        if choice.get("finish_reason") == "length":
+            logger.warning("LLM completion was cut off by the provider's token limit")
+
+        content = (choice.get("message") or {}).get("content")
         return content if isinstance(content, str) and content.strip() else None

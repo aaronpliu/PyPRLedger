@@ -25,10 +25,14 @@ from src.services import llm_service as llm_module
 from src.services import release_note_llm_service as llm_notes_module
 from src.services.llm_service import LlmConfig
 from src.services.release_note_llm_service import (
+    NEEDS_SECTION_MARK,
+    SYSTEM_PROMPT,
     ReleaseNoteLlmService,
     ReleaseNoteSummary,
     SummaryOutcome,
+    commits_needing_a_section,
     parse_summary_answer,
+    read_cut_off_answer,
 )
 from src.services.release_note_service import ReleaseNoteService
 
@@ -36,6 +40,7 @@ from src.services.release_note_service import ReleaseNoteService
 C1 = "1111111111111111111111111111111111111111"
 C2 = "2222222222222222222222222222222222222222"
 C3 = "3333333333333333333333333333333333333333"
+C4 = "4444444444444444444444444444444444444444"
 
 
 def commit(sha: str, message: str) -> CommitInfo:
@@ -82,12 +87,17 @@ class StubLlmService:
 
 
 def install_llm(
-    monkeypatch: pytest.MonkeyPatch, *, enabled: bool = True, payload: Any = None
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    enabled: bool = True,
+    payload: Any = None,
+    raw_answer: str | None = None,
 ) -> list[str]:
     """Point the summarizer at a mock provider answering ``payload``.
 
-    Returns the body of every request it was asked, so a test can tell what the
-    model was shown.
+    ``raw_answer`` sends exactly those bytes instead, which is how a provider that
+    ran out of budget answers. Returns the body of every request it was asked, so
+    a test can tell what the model was shown.
     """
     config = LlmConfig(
         enabled=enabled,
@@ -106,7 +116,10 @@ def install_llm(
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path.endswith("/chat/completions")
         bodies.append(request.content.decode())
-        content = "" if payload is None else json.dumps(payload)
+        if raw_answer is not None:
+            content = raw_answer
+        else:
+            content = "" if payload is None else json.dumps(payload)
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
     real_client = httpx.AsyncClient
@@ -172,6 +185,78 @@ def test_parse_summary_answer_drops_what_it_cannot_trust() -> None:
 @pytest.mark.parametrize("answer", ["", "not json at all", "{}"])
 def test_parse_summary_answer_gives_up_without_failing(answer: str) -> None:
     assert parse_summary_answer(answer, {C1}) is None
+
+
+def test_parse_summary_answer_reads_an_answer_that_was_cut_off() -> None:
+    """A provider that ran out of budget stops before the closing braces.
+
+    Regression: the whole answer used to be dropped for a syntax error, so a
+    release with more commits than the budget covered read as a failed call.
+    """
+    raw = f'{{"summary": "Adds SSO login.", "categories": {{"{C1}": "Added", "{C2}": "Fixe'
+
+    summary = parse_summary_answer(raw, {C1, C2})
+
+    assert summary is not None
+    assert summary.summary == "Adds SSO login."
+    # the pair that arrived whole is kept, the one that did not is dropped
+    assert summary.sections == {C1: "Added"}
+
+
+def test_parse_summary_answer_keeps_a_summary_without_its_sections() -> None:
+    raw = '{"summary": "Adds SSO login.", "categories": {'
+
+    summary = parse_summary_answer(raw, {C1})
+
+    assert summary is not None
+    assert summary.summary == "Adds SSO login."
+    assert summary.sections == {}
+
+
+def test_read_cut_off_answer_gives_up_on_what_is_not_an_answer() -> None:
+    assert read_cut_off_answer('{"categories": {"not a commit"') is None
+    assert read_cut_off_answer("{") is None
+
+
+# --------------------------------------------------------------------------- #
+# What the model is asked
+# --------------------------------------------------------------------------- #
+
+
+def test_commits_needing_a_section_are_the_ones_the_classifier_could_not_place() -> None:
+    commits = [
+        {"id": C1, "message": "feat: add login"},
+        {"id": C2, "message": "fix the export crash"},
+        {"id": C3, "message": "wip"},
+        # a merge has no section to give - it is not in the notes at all
+        {"id": C4, "message": "Merge pull request #42 from acme/sso"},
+    ]
+
+    assert [commit["id"] for commit in commits_needing_a_section(commits)] == [C3]
+
+
+def test_the_instructions_and_the_commit_list_agree_on_the_mark() -> None:
+    """Instructions pointing at a mark the list does not write ask for nothing."""
+    assert NEEDS_SECTION_MARK in SYSTEM_PROMPT
+
+    prompt = ReleaseNoteLlmService._prompt(
+        [{"id": C1, "message": "wip"}],
+        {C1},
+        project_key="PROJ",
+        repository_slug="my-repo",
+        version="v1.1.0",
+        previous_version=None,
+        language=None,
+    )
+
+    assert NEEDS_SECTION_MARK in prompt
+
+
+def test_every_commit_the_classifier_could_not_place_is_asked_about() -> None:
+    """No cap on the question: how long an answer may be is the provider's call."""
+    commits = [{"id": f"{index:040x}", "message": "wip"} for index in range(200)]
+
+    assert len(commits_needing_a_section(commits)) == 200
 
 
 # --------------------------------------------------------------------------- #
@@ -262,6 +347,56 @@ async def test_summarize_asks_about_the_changes_not_the_merges(
     assert len(bodies) == 1
     assert C1 in bodies[0]
     assert C2 not in bodies[0]
+
+
+async def test_summarize_asks_for_a_section_only_where_the_subject_is_silent(
+    monkeypatch: pytest.MonkeyPatch, db_session: AsyncSession
+) -> None:
+    """The subjects that already say what they are are context, not questions."""
+    bodies = install_llm(monkeypatch, payload={"summary": "Adds SSO login."})
+    service = ReleaseNoteLlmService(db=db_session)
+
+    await service.summarize(
+        project_key="PROJ",
+        repository_slug="my-repo",
+        version="v1.1.0",
+        previous_version=None,
+        commits=[
+            {"id": C1, "message": "feat: add SSO login"},
+            {"id": C2, "message": "wip on the callback"},
+        ],
+    )
+
+    request = json.loads(bodies[0])
+    prompt = request["messages"][1]["content"]
+    assert f"- {C1}: feat: add SSO login" in prompt
+    # only the commit whose subject says nothing about the change is asked about
+    marked = [line for line in prompt.splitlines() if line.endswith("[needs a section]")]
+    assert marked == [f"- {C2}: wip on the callback  [needs a section]"]
+    # no limit of our own: the provider decides how long the answer may be
+    assert "max_tokens" not in request
+
+
+async def test_summarize_reads_an_answer_the_provider_cut_off(
+    monkeypatch: pytest.MonkeyPatch, db_session: AsyncSession
+) -> None:
+    """A truncated answer is still an answer, and no longer a failed call."""
+    cut_off = f'{{"summary": "Adds SSO login.", "categories": {{"{C1}": "Added"'
+    install_llm(monkeypatch, raw_answer=cut_off)
+    service = ReleaseNoteLlmService(db=db_session)
+
+    outcome = await service.summarize(
+        project_key="PROJ",
+        repository_slug="my-repo",
+        version="v1.1.0",
+        previous_version=None,
+        commits=[{"id": C1, "message": "wip on the callback"}],
+    )
+
+    assert outcome.notice is None
+    assert outcome.summary is not None
+    assert outcome.summary.summary == "Adds SSO login."
+    assert outcome.summary.sections == {C1: "Added"}
 
 
 async def test_summarize_reports_nothing_to_ask_about(
