@@ -52,6 +52,10 @@
     "edit": "编辑",
     "create": "创建",
     "update": "更新",
+    "updating": "更新中...",
+    "close": "关闭",
+    "enable_all": "全部启用",
+    "disable_all": "全部停用",
     "search": "搜索",
     "filter": "筛选",
     "loading": "加载中...",
@@ -720,7 +724,6 @@
     "admin_panel": "管理面板",
     "users": "用户",
     "roles": "角色",
-    "delegations": "委托管理",
     "audit_logs": "审计日志",
     "user_management": "用户管理",
     "role_management": "角色管理",
@@ -915,6 +918,9 @@
     "validation_required": "请输入令牌名称",
     "validation_length": "名称长度必须在 1 到 100 个字符之间"
   },
+  "confirm": {
+    "delete_avatar": "确定删除头像？"
+  },
   "releaseDiff": {
     "title": "版本",
     "subtitle": "先选择仓库，下面的两个工具都会复用它 —— 既可以比较两个版本，也可以校验提交是否属于某个版本",
@@ -967,6 +973,8 @@
     "inconclusive_help": "扫描在已发现至少 {count} 条后，于 {limit} 条处停止。请提高扫描上限（或用 git 复核）后，再把该版本视为已校验通过。",
     "check_truncated_title": "仅提交详情受到限制",
     "check_truncated_note": "用于附加提交详情的列表已达上限。每条提交是否属于目标版本由 git 平台直接判定，因此结论不受影响。",
+    "truncated_warning": "用于附加提交详情的列表已达上限 —— 结论由 git 平台直接判定，不受影响。",
+    "commit_set_bounded_title": "仅显示列表所能携带的最新提交",
     "missing_source_ref": "源版本",
     "missing_source_placeholder": "提交必须全部存在的版本，例如 v1.1.5",
     "missing_target_ref": "目标版本",

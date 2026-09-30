@@ -52,6 +52,10 @@
     "edit": "編輯",
     "create": "建立",
     "update": "更新",
+    "updating": "更新中...",
+    "close": "關閉",
+    "enable_all": "全部啟用",
+    "disable_all": "全部停用",
     "search": "搜尋",
     "filter": "篩選",
     "loading": "載入中...",
@@ -720,7 +724,6 @@
     "admin_panel": "管理面板",
     "users": "使用者",
     "roles": "角色",
-    "delegations": "委託管理",
     "audit_logs": "稽核日誌",
     "user_management": "使用者管理",
     "role_management": "角色管理",
@@ -915,6 +918,9 @@
     "validation_required": "請輸入權杖名稱",
     "validation_length": "名稱長度必須在 1 到 100 個字元之間"
   },
+  "confirm": {
+    "delete_avatar": "確定刪除大頭貼？"
+  },
   "releaseDiff": {
     "title": "版本",
     "subtitle": "先選擇儲存庫，下面的兩個工具都會重複使用它 —— 既可比較兩個版本，也可校驗提交是否屬於某個版本",
@@ -967,6 +973,8 @@
     "inconclusive_help": "掃描在已發現至少 {count} 條後，於 {limit} 條處停止。請提高掃描上限（或用 git 複核）後，再把該版本視為已校驗通過。",
     "check_truncated_title": "僅提交詳情受到限制",
     "check_truncated_note": "用於附加提交詳情的清單已達上限。每條提交是否屬於目標版本由 git 平台直接判定，因此結論不受影響。",
+    "truncated_warning": "用於附帶提交詳情的清單已達上限 —— 結論由 git 平台直接判定，不受影響。",
+    "commit_set_bounded_title": "僅顯示清單所能攜帶的最新提交",
     "missing_source_ref": "來源版本",
     "missing_source_placeholder": "提交必須全部存在的版本，例如 v1.1.5",
     "missing_target_ref": "目標版本",

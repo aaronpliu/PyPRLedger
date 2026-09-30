@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fold the repository coordinates of the Releases and the Release Notes pages away: the header of each page carries a toggle (open on arrival, with `aria-expanded` kept in step) and the coordinates are hidden rather than unmounted, so the repository that was picked stays picked
 - Search the tag list of the Release Notes page by name: the search narrows the list before it is paged, says so when nothing matches (instead of looking like an empty repository), and a jump from a release to its tag clears a search that would have hidden it
 
+### Fixed
+- Define the translation keys the source asks for but the locale files never carried, which rendered as the key itself - `releaseDiff.truncated_warning` and `releaseDiff.commit_set_bounded_title` in the exported release comparison report, `common.updating` on the forced password change button, `common.close` on the reviews banner, `common.enable_all` / `common.disable_all` on the notification preferences, and the whole `confirm` section (`confirm.delete_avatar`) on the avatar dialog. A test now checks that every `t('...')` literal of the source is defined and that the three locales hold the same keys, so a missing key fails the build instead of reaching a report nobody can correct afterwards; it also found `admin.delegations`, a key only the Chinese locales carried and nothing asked for
+
 ---
 
 ## [1.24.0] - 2026-09-29

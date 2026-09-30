@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import enMessages from '@/locales/en.json'
 import type {
   ReleaseCommitCheckResponse,
   ReleaseCompareResponse,
@@ -206,6 +207,14 @@ describe('buildCheckSectionHtml', () => {
     expect(html).not.toContain('cell-warn')
     expect(html).toContain('class="status status-missing"')
     expect(html.match(/class="url"/g)).toBeTruthy()
+  })
+
+  it('warns in the report when the commit listing was capped', () => {
+    const html = buildCheckSectionHtml({ ...CHECK, truncated: true }, CONTEXT)
+
+    // a sentence a reader can act on, not a key nobody can substitute afterwards
+    expect(html).toContain(`<p class="warning">${enMessages.releaseDiff.truncated_warning}</p>`)
+    expect(html).not.toContain('releaseDiff.')
   })
 })
 
