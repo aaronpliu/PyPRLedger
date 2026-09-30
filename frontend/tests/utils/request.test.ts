@@ -51,19 +51,6 @@ describe('request progress wiring', () => {
     expect(active.value).toBe(false)
   })
 
-  it('names a slow provider call while it runs, and clears it afterwards', async () => {
-    const release = installGatedAdapter()
-    const { label } = useProgress()
-
-    const pending = request.post('/release/diff/refs', {})
-    await flushPromises()
-    expect(label.value).toBe('common.loading_refs')
-
-    release()
-    await pending
-    expect(label.value).toBeNull()
-  })
-
   it('never raises the bar for background traffic', async () => {
     const release = installGatedAdapter()
     const { active } = useProgress()

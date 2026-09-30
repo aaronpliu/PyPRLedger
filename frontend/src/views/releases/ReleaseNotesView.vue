@@ -174,7 +174,6 @@
                 v-if="notesLoading"
                 :rows="4"
                 :label="t('releaseNotes.notes_loading')"
-                show-elapsed
               />
 
               <el-empty
@@ -299,7 +298,6 @@
                 v-if="refsLoading && tags.length === 0"
                 :rows="5"
                 :label="t('releaseNotes.tags_loading')"
-                show-elapsed
               />
               <el-empty
                 v-else-if="tags.length === 0"
@@ -577,7 +575,6 @@
               v-if="tagCommitsLoading"
               :rows="5"
               :label="t('releaseNotes.commits_loading')"
-              show-elapsed
             />
 
             <commit-table v-else :commits="tagCommits" :empty-text="t('releaseNotes.commits_empty')" />
@@ -753,7 +750,6 @@
             v-else-if="notesLoading"
             :rows="6"
             :label="t('releaseNotes.notes_loading')"
-            show-elapsed
           />
 
           <el-empty

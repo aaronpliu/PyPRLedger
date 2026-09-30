@@ -4,7 +4,6 @@ import {
   PROGRESS_SHOW_DELAY_MS,
   beginProgress,
   endProgress,
-  progressLabelFor,
   resetProgress,
   useProgress,
 } from '@/composables/useProgress'
@@ -19,15 +18,6 @@ describe('useProgress', () => {
     vi.useRealTimers()
   })
 
-  it('names the calls that leave the backend', () => {
-    expect(progressLabelFor('/release/diff/refs')).toBe('common.loading_refs')
-    expect(progressLabelFor('/release/diff/compare')).toBe('common.loading_compare')
-    expect(progressLabelFor('/release/diff/check')).toBe('common.loading_compare')
-    expect(progressLabelFor('/release/notes/preview')).toBe('common.loading_preview')
-    expect(progressLabelFor('/release/notes')).toBeNull()
-    expect(progressLabelFor(undefined)).toBeNull()
-  })
-
   it('stays hidden for a call answered within the delay', () => {
     const { visible, active } = useProgress()
     const id = beginProgress()
@@ -39,14 +29,11 @@ describe('useProgress', () => {
     expect(visible.value).toBe(false)
   })
 
-  it('appears after the delay and counts the seconds', () => {
-    const { visible, elapsedSeconds } = useProgress()
-    const id = beginProgress('common.loading_refs')
+  it('appears after the delay', () => {
+    const { visible } = useProgress()
+    const id = beginProgress()
     vi.advanceTimersByTime(PROGRESS_SHOW_DELAY_MS + 1)
     expect(visible.value).toBe(true)
-
-    vi.advanceTimersByTime(3000)
-    expect(elapsedSeconds.value).toBe(3)
     endProgress(id)
   })
 
@@ -76,13 +63,5 @@ describe('useProgress', () => {
 
     endProgress(b)
     expect(pending.value).toBe(0)
-  })
-
-  it('reports the latest label and clears it on reset', () => {
-    const { label } = useProgress()
-    beginProgress('common.loading_refs')
-    expect(label.value).toBe('common.loading_refs')
-    resetProgress()
-    expect(label.value).toBeNull()
   })
 })

@@ -3,7 +3,7 @@ import type { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConf
 import { ElMessage } from 'element-plus'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
-import { beginProgress, endProgress, progressLabelFor } from '@/composables/useProgress'
+import { beginProgress, endProgress } from '@/composables/useProgress'
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean
@@ -120,7 +120,7 @@ request.interceptors.request.use(
     // Announce the request, unless it is background traffic. The id travels with
     // the config so that whichever interceptor sees the request settle closes it.
     if (!tracked._silent && !isSilentRequest(config.url)) {
-      tracked._progressId = beginProgress(progressLabelFor(config.url))
+      tracked._progressId = beginProgress()
     }
 
     if (isAuthExcluded(config.url)) {

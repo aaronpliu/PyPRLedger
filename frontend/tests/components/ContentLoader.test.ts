@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createI18n } from 'vue-i18n'
@@ -11,9 +11,6 @@ function mountLoader(props: Record<string, unknown> = {}) {
 }
 
 describe('ContentLoader', () => {
-  beforeEach(() => vi.useFakeTimers())
-  afterEach(() => vi.useRealTimers())
-
   it('renders nothing when not loading', () => {
     const wrapper = mountLoader({ loading: false })
     expect(wrapper.find('[role="status"]').exists()).toBe(false)
@@ -29,17 +26,17 @@ describe('ContentLoader', () => {
     expect(wrapper.text()).toContain('Fetching from Bitbucket')
   })
 
-  it('renders a skeleton when rows are asked for', async () => {
+  it('renders a skeleton, and no spinner, when rows are asked for', async () => {
     const wrapper = mountLoader({ rows: 5 })
     await flushPromises()
     expect(wrapper.findComponent({ name: 'ElSkeleton' }).exists()).toBe(true)
+    expect(wrapper.find('.content-loader-spinner').exists()).toBe(false)
   })
 
-  it('counts the seconds of a long call', async () => {
-    const wrapper = mountLoader({ showElapsed: true })
-    vi.advanceTimersByTime(4000)
-    await wrapper.vm.$nextTick()
-    expect(wrapper.text()).toContain('4s')
+  it('renders a spinner, and no skeleton, when no rows are asked for', () => {
+    const wrapper = mountLoader()
+    expect(wrapper.find('.content-loader-spinner').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ElSkeleton' }).exists()).toBe(false)
   })
 
   it('falls back to the generic label', () => {

@@ -148,7 +148,6 @@
           v-if="refsLoading"
           inline
           :label="t('releaseDiff.ref_loading')"
-          show-elapsed
         />
         <span v-else-if="refsFailed" class="refs-hint-warning">
           {{ t('releaseDiff.ref_suggestions_failed') }}
