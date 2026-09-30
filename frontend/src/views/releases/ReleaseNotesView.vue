@@ -170,9 +170,12 @@
           <el-tabs v-else v-model="activeTab" class="nav-tabs">
             <!-- ============ Stored releases, paginated ============ -->
             <el-tab-pane name="releases" :label="t('releaseNotes.list_title')">
-              <div v-if="notesLoading" class="loading-block">
-                <el-skeleton :rows="4" animated />
-              </div>
+              <ContentLoader
+                v-if="notesLoading"
+                :rows="4"
+                :label="t('releaseNotes.notes_loading')"
+                show-elapsed
+              />
 
               <el-empty
                 v-else-if="notes.length === 0"
@@ -290,8 +293,16 @@
                 data-test="tags-search"
               />
 
+              <!-- a first load is a wait, not an empty repository: show the load
+                   instead of a premature "no tags" while the provider is asked -->
+              <ContentLoader
+                v-if="refsLoading && tags.length === 0"
+                :rows="5"
+                :label="t('releaseNotes.tags_loading')"
+                show-elapsed
+              />
               <el-empty
-                v-if="tags.length === 0"
+                v-else-if="tags.length === 0"
                 :description="t('releaseNotes.tags_empty')"
                 :image-size="60"
               />
@@ -562,7 +573,12 @@
               :title="tagTrimNotice"
             />
 
-            <el-skeleton v-if="tagCommitsLoading" class="loading-block" :rows="5" animated />
+            <ContentLoader
+              v-if="tagCommitsLoading"
+              :rows="5"
+              :label="t('releaseNotes.commits_loading')"
+              show-elapsed
+            />
 
             <commit-table v-else :commits="tagCommits" :empty-text="t('releaseNotes.commits_empty')" />
           </template>
@@ -733,7 +749,12 @@
             />
           </template>
 
-          <el-skeleton v-else-if="notesLoading" :rows="6" animated />
+          <ContentLoader
+            v-else-if="notesLoading"
+            :rows="6"
+            :label="t('releaseNotes.notes_loading')"
+            show-elapsed
+          />
 
           <el-empty
             v-else
@@ -766,6 +787,7 @@ import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/
 import { releaseDiffApi } from '@/api/releaseDiff'
 import type { CommitInfo } from '@/api/releaseDiff'
 import CommitTable from '@/components/release/CommitTable.vue'
+import ContentLoader from '@/components/common/ContentLoader.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
 import { useJira } from '@/composables/useJira'
 import { linkifyJiraMarkdown } from '@/utils/jira'

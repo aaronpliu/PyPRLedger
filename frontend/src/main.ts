@@ -35,5 +35,8 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 // Initialize auth
 const authStore = useAuthStore()
 authStore.initAuth().finally(() => {
+  // The auth call that gates the first paint is exactly the wait nobody was told
+  // about: the boot element in index.html stands in for the app until it mounts.
+  document.getElementById('boot-loading')?.remove()
   app.mount('#app')
 })

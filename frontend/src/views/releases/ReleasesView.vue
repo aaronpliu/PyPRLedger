@@ -144,7 +144,12 @@
       </el-form>
 
       <div class="refs-hint">
-        <span v-if="refsLoading">{{ t('releaseDiff.ref_loading') }}</span>
+        <ContentLoader
+          v-if="refsLoading"
+          inline
+          :label="t('releaseDiff.ref_loading')"
+          show-elapsed
+        />
         <span v-else-if="refsFailed" class="refs-hint-warning">
           {{ t('releaseDiff.ref_suggestions_failed') }}
         </span>
@@ -687,6 +692,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowDown, Camera, Download, QuestionFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
+import ContentLoader from '@/components/common/ContentLoader.vue'
 import { useJira } from '@/composables/useJira'
 import { jiraTicketSegments } from '@/utils/jira'
 import { copyTextToClipboard } from '@/utils/export/markdown'
