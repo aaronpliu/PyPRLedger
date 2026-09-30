@@ -8,22 +8,37 @@
             <h2>{{ t('releaseNotes.title') }}</h2>
             <p class="subtitle">{{ t('releaseNotes.subtitle') }}</p>
           </div>
-          <!-- Users who cannot manage releases only get a label: the explanation
-               is kept in the tooltip instead of a banner over the page -->
-          <el-tooltip
-            v-if="!canManage"
-            :content="t('releaseNotes.read_only_help')"
-            placement="bottom-end"
-            :show-after="100"
-          >
-            <el-tag class="read-only-tag" type="info" size="small" round effect="plain">
-              <el-icon><InfoFilled /></el-icon>
-              <span>{{ t('releaseNotes.read_only_title') }}</span>
-            </el-tag>
-          </el-tooltip>
+          <div class="header-end">
+            <!-- Users who cannot manage releases only get a label: the explanation
+                 is kept in the tooltip instead of a banner over the page -->
+            <el-tooltip
+              v-if="!canManage"
+              :content="t('releaseNotes.read_only_help')"
+              placement="bottom-end"
+              :show-after="100"
+            >
+              <el-tag class="read-only-tag" type="info" size="small" round effect="plain">
+                <el-icon><InfoFilled /></el-icon>
+                <span>{{ t('releaseNotes.read_only_title') }}</span>
+              </el-tag>
+            </el-tooltip>
+            <!-- The coordinates fold away: the list and the notes are what the
+                 page is opened for -->
+            <el-button
+              class="panel-toggle"
+              :class="{ 'is-collapsed': !coordinatesOpen }"
+              text
+              :icon="ArrowDown"
+              :aria-expanded="coordinatesOpen ? 'true' : 'false'"
+              :aria-label="coordinatesOpen ? t('common.collapse') : t('common.expand')"
+              data-test="coordinates-toggle"
+              @click="coordinatesOpen = !coordinatesOpen"
+            />
+          </div>
         </div>
       </template>
 
+      <div class="panel-body" :class="{ 'is-collapsed': !coordinatesOpen }">
       <el-form :model="repo" label-width="150px">
         <el-row :gutter="16">
           <el-col :xs="24" :sm="12" :md="6">
@@ -109,6 +124,7 @@
           </el-col>
         </el-row>
       </el-form>
+      </div>
     </el-card>
 
     <el-row :gutter="16" class="notes-row">
@@ -261,9 +277,27 @@
                 </el-button>
               </div>
 
+              <!-- A repository can hold hundreds of tags: the search narrows the
+                   list before it is paged, so a tag is reachable by name -->
+              <el-input
+                v-if="tags.length > 0"
+                v-model="tagSearch"
+                class="nav-search"
+                size="small"
+                clearable
+                :prefix-icon="Search"
+                :placeholder="t('releaseNotes.tags_search_placeholder')"
+                data-test="tags-search"
+              />
+
               <el-empty
                 v-if="tags.length === 0"
                 :description="t('releaseNotes.tags_empty')"
+                :image-size="60"
+              />
+              <el-empty
+                v-else-if="filteredTags.length === 0"
+                :description="t('releaseNotes.tags_no_match')"
                 :image-size="60"
               />
 
@@ -301,14 +335,14 @@
                 </ul>
 
                 <el-pagination
-                  v-if="tags.length > tagPageSize"
+                  v-if="filteredTags.length > tagPageSize"
                   v-model:current-page="tagPage"
                   v-model:page-size="tagPageSize"
                   class="nav-pagination"
                   size="small"
                   background
                   :page-sizes="[10, 20, 50, 100]"
-                  :total="tags.length"
+                  :total="filteredTags.length"
                   layout="total, sizes, prev, pager, next"
                 />
               </template>
@@ -724,7 +758,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Close, Document, InfoFilled, Refresh } from '@element-plus/icons-vue'
+import { ArrowDown, Close, Document, InfoFilled, Refresh, Search } from '@element-plus/icons-vue'
 import { MdEditor, MdPreview, type ToolbarNames } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { projectsApi } from '@/api/projects'
@@ -795,6 +829,11 @@ const workspacesLoaded = ref(false)
 const refsLoading = ref(false)
 const tags = ref<string[]>([])
 const branches = ref<string[]>([])
+
+// The coordinate panel is open on arrival: it is what a first visit fills in
+const coordinatesOpen = ref(true)
+// The tag navigator is searched by name, not paged through
+const tagSearch = ref('')
 
 const notes = ref<ReleaseNote[]>([])
 const notesTotal = ref(0)
@@ -1017,9 +1056,19 @@ const sortedTags = computed(() =>
   [...tags.value].sort((a, b) => b.localeCompare(a, undefined, { numeric: true })),
 )
 const selectableRefs = computed(() => [...sortedTags.value, ...branches.value])
+
+/** Whether a tag survives the search box, by a plain substring of its name. */
+function tagMatchesQuery(tag: string): boolean {
+  const query = tagSearch.value.trim().toLowerCase()
+  return !query || tag.toLowerCase().includes(query)
+}
+
+// The search narrows the list before it is paged, so a match is on the first
+// page of the result rather than on whichever page its position falls on
+const filteredTags = computed(() => sortedTags.value.filter(tagMatchesQuery))
 const visibleTags = computed(() => {
   const start = (tagPage.value - 1) * tagPageSize.value
-  return sortedTags.value.slice(start, start + tagPageSize.value)
+  return filteredTags.value.slice(start, start + tagPageSize.value)
 })
 /** Short revision, or an empty string when the server resolved none. */
 function shortRevision(sha?: string | null): string {
@@ -1288,7 +1337,12 @@ async function openNoteForTag(tag: string) {
 function openTagForNote(tag: string) {
   activeTab.value = 'tags'
 
-  const position = sortedTags.value.indexOf(tag)
+  // a search that hides the tag would leave the jump pointing at nothing
+  if (!tagMatchesQuery(tag)) {
+    tagSearch.value = ''
+  }
+
+  const position = filteredTags.value.indexOf(tag)
   if (position >= 0) {
     const page = Math.floor(position / tagPageSize.value) + 1
     if (page !== tagPage.value) {
@@ -1855,6 +1909,8 @@ watch(
     tagCommitCount.value = 0
     notesPage.value = 1
     tagPage.value = 1
+    // a search for a tag of the previous repository means nothing here
+    tagSearch.value = ''
     invalidateReleaseTagIndex()
     void loadRefs()
     void loadNotes()
@@ -1879,6 +1935,11 @@ watch(notesPageSize, () => {
 })
 
 watch(tagPageSize, () => {
+  tagPage.value = 1
+})
+
+// A narrower search has a result of its own: start it from its first page
+watch(tagSearch, () => {
   tagPage.value = 1
 })
 
@@ -1938,6 +1999,28 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
+}
+
+/* The read-only label and the fold toggle sit together at the end of the header */
+.header-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The chevron points at the closed panel once the body is folded away */
+.panel-toggle :deep(.el-icon) {
+  transition: transform 0.2s ease;
+}
+
+.panel-toggle.is-collapsed :deep(.el-icon) {
+  transform: rotate(-90deg);
+}
+
+/* Folded away rather than unmounted: the repository that was picked stays
+   picked, and the panel comes back exactly as it was left */
+.panel-body.is-collapsed {
+  display: none;
 }
 
 /* Read-only label of a user without the release administrator role: the label
@@ -2035,6 +2118,10 @@ onBeforeUnmount(() => {
 .nav-item-check {
   height: auto;
   margin-right: 0;
+}
+
+.nav-search {
+  margin-bottom: 8px;
 }
 
 .nav-list {

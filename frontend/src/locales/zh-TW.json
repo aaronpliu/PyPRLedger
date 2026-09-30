@@ -76,6 +76,8 @@
     "page": "頁",
     "apply": "套用",
     "reset": "重設",
+    "expand": "展開",
+    "collapse": "收合",
     "live_update": "即時更新"
   },
   "menu": {
@@ -1101,6 +1103,8 @@
     "close_editor": "關閉",
     "panel_tags": "標籤",
     "tags_empty": "該倉庫尚無標籤",
+    "tags_search_placeholder": "搜尋標籤",
+    "tags_no_match": "沒有符合標籤",
     "tags_hint": "標籤對應的提交",
     "draft_for_tag": "為該標籤起草版本",
     "open_note": "開啟版本說明",

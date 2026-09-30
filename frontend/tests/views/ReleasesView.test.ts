@@ -235,6 +235,31 @@ describe('ReleasesView', () => {
     )
   })
 
+  it('opens with the coordinate panel shown and folds it away on demand', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const toggle = wrapper.find('[data-test="coordinates-toggle"]')
+    const panel = wrapper.find('.context-card .panel-body')
+
+    // the panel a first visit fills in is open on arrival
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(panel.classes()).not.toContain('is-collapsed')
+
+    await toggle.trigger('click')
+
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(toggle.classes()).toContain('is-collapsed')
+    // folded away rather than unmounted, so what was picked is still there
+    expect(panel.classes()).toContain('is-collapsed')
+    expect(panel.find('.repo-form').exists()).toBe(true)
+
+    await toggle.trigger('click')
+
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(panel.classes()).not.toContain('is-collapsed')
+  })
+
   it('populates the project key dropdown from the projects API', async () => {
     const wrapper = mountView()
     await flushPromises()

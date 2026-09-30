@@ -250,6 +250,23 @@ async function selectRepository(wrapper: AnyWrapper) {
   await nextTick()
 }
 
+/** Names of the tags on the visible page of the tag navigator. */
+function tagNames(wrapper: AnyWrapper) {
+  return wrapper
+    .findAll('.nav-item.tag-item .nav-item-name')
+    .map((name: AnyWrapper) => name.text())
+}
+
+/** Type into the search box of the tag navigator. */
+async function setTagSearch(wrapper: AnyWrapper, value: string) {
+  const input = wrapper.find(
+    `input[placeholder="${enMessages.releaseNotes.tags_search_placeholder}"]`,
+  )
+  expect(input.exists()).toBe(true)
+  await input.setValue(value)
+  await flushPromises()
+}
+
 describe('ReleaseNotesView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -764,6 +781,64 @@ describe('ReleaseNotesView', () => {
     const preview = wrapper.find('.md-preview-stub').text()
     expect(preview).toContain('- ship the login fix PRL-123')
     expect(preview).not.toContain('browse/PRL-123')
+  })
+
+  it('opens with the coordinate panel shown and folds it away on demand', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const toggle = wrapper.find('[data-test="coordinates-toggle"]')
+    const panel = wrapper.find('.context-card .panel-body')
+
+    // the panel a first visit fills in is open on arrival
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(panel.classes()).not.toContain('is-collapsed')
+
+    await toggle.trigger('click')
+
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(toggle.classes()).toContain('is-collapsed')
+    // folded away rather than unmounted, so what was picked is still there
+    expect(panel.classes()).toContain('is-collapsed')
+    expect(panel.find('form').exists()).toBe(true)
+
+    await toggle.trigger('click')
+
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(panel.classes()).not.toContain('is-collapsed')
+  })
+
+  it('searches the tag list by name', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.0.0', 'v1.1.0', 'v2.0.0-rc1'],
+    } as never)
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    // newest first, as every other tag picker orders them
+    expect(tagNames(wrapper)).toEqual(['v2.0.0-rc1', 'v1.1.0', 'v1.0.0'])
+
+    await setTagSearch(wrapper, '1.1')
+
+    expect(tagNames(wrapper)).toEqual(['v1.1.0'])
+
+    await setTagSearch(wrapper, 'rc')
+
+    expect(tagNames(wrapper)).toEqual(['v2.0.0-rc1'])
+
+    // a search that matches nothing says so instead of looking like an empty repo
+    await setTagSearch(wrapper, 'nope')
+    expect(tagNames(wrapper)).toEqual([])
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.tags_no_match)
+    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.tags_empty)
+
+    // and clearing it brings the whole list back
+    await setTagSearch(wrapper, '')
+    expect(tagNames(wrapper)).toEqual(['v2.0.0-rc1', 'v1.1.0', 'v1.0.0'])
   })
 
   it('badges the selected tag instead of the release of the other tab', async () => {

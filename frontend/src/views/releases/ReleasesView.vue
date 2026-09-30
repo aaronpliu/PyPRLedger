@@ -7,9 +7,22 @@
             <h2>{{ t('releaseDiff.title') }}</h2>
             <p class="subtitle">{{ t('releaseDiff.subtitle') }}</p>
           </div>
+          <!-- The coordinates fold away so the results get the room, and they are
+               what a reader comes back to change one ref at a time -->
+          <el-button
+            class="panel-toggle"
+            :class="{ 'is-collapsed': !coordinatesOpen }"
+            text
+            :icon="ArrowDown"
+            :aria-expanded="coordinatesOpen ? 'true' : 'false'"
+            :aria-label="coordinatesOpen ? t('common.collapse') : t('common.expand')"
+            data-test="coordinates-toggle"
+            @click="coordinatesOpen = !coordinatesOpen"
+          />
         </div>
       </template>
 
+      <div class="panel-body" :class="{ 'is-collapsed': !coordinatesOpen }">
       <!-- Repository coordinates shared by both tools -->
       <el-form :model="repo" label-width="150px" class="repo-form">
         <el-row :gutter="16">
@@ -156,6 +169,7 @@
         >
           {{ t('releaseDiff.refresh_refs') }}
         </el-button>
+      </div>
       </div>
     </el-card>
 
@@ -710,7 +724,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Camera, Download, QuestionFilled } from '@element-plus/icons-vue'
+import { ArrowDown, Camera, Download, QuestionFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
 import { useJira } from '@/composables/useJira'
@@ -772,6 +786,8 @@ const checkScopeEnabled = ref(false)
 const includeCommits = ref(true)
 const maxCommits = ref(1000)
 const openSections = ref<string[]>(['missing', 'added'])
+// The coordinate panel is open on arrival: it is what a first visit fills in
+const coordinatesOpen = ref(true)
 
 const repo = ref({
   project_key: '' as string,
@@ -1426,10 +1442,32 @@ async function copySha(value: string) {
   font-weight: 600;
 }
 
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .card-header h2 {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
+}
+
+/* The chevron points at the closed panel once the body is folded away */
+.panel-toggle :deep(.el-icon) {
+  transition: transform 0.2s ease;
+}
+
+.panel-toggle.is-collapsed :deep(.el-icon) {
+  transform: rotate(-90deg);
+}
+
+/* Folded away rather than unmounted: the repository that was picked stays
+   picked, and the panel comes back exactly as it was left */
+.panel-body.is-collapsed {
+  display: none;
 }
 
 .subtitle {

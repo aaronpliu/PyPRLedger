@@ -76,6 +76,8 @@
     "page": "Page",
     "apply": "Apply",
     "reset": "Reset",
+    "expand": "Expand",
+    "collapse": "Collapse",
     "live_update": "Live Update"
   },
   "menu": {
@@ -1100,6 +1102,8 @@
     "close_editor": "Close",
     "panel_tags": "Tags",
     "tags_empty": "No tags in this repository yet",
+    "tags_search_placeholder": "Search tags",
+    "tags_no_match": "No tag matches the search",
     "tags_hint": "Commits of a tag",
     "draft_for_tag": "Draft a release for this tag",
     "open_note": "Open the release note",

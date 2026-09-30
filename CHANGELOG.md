@@ -5,6 +5,14 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Fold the repository coordinates of the Releases and the Release Notes pages away: the header of each page carries a toggle (open on arrival, with `aria-expanded` kept in step) and the coordinates are hidden rather than unmounted, so the repository that was picked stays picked
+- Search the tag list of the Release Notes page by name: the search narrows the list before it is paged, says so when nothing matches (instead of looking like an empty repository), and a jump from a release to its tag clears a search that would have hidden it
+
+---
+
 ## [1.24.0] - 2026-09-29
 
 **Backend Version**: 1.24.0

@@ -76,6 +76,8 @@
     "page": "页",
     "apply": "应用",
     "reset": "重置",
+    "expand": "展开",
+    "collapse": "收起",
     "live_update": "实时更新"
   },
   "menu": {
@@ -1101,6 +1103,8 @@
     "close_editor": "关闭",
     "panel_tags": "标签",
     "tags_empty": "该仓库暂无标签",
+    "tags_search_placeholder": "搜索标签",
+    "tags_no_match": "没有匹配的标签",
     "tags_hint": "标签对应的提交",
     "draft_for_tag": "为该标签起草版本",
     "open_note": "打开版本说明",
