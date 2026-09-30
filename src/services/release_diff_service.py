@@ -99,8 +99,6 @@ class ReleaseDiffService:
     async def compare_releases(
         self,
         request: ReleaseCompareRequest,
-        *,
-        baseline_ref: str | None = None,
     ) -> ReleaseCompareResponse:
         """Compare two releases: is the source contained, and what does the target add?
 
@@ -111,9 +109,7 @@ class ReleaseDiffService:
         lists are rendered material and never decide the verdict.
 
         Args:
-            request: Release compare payload
-            baseline_ref: Baseline stored for the repository, used when the caller
-                supplies none and does not opt out
+            request: Release compare payload, its optional baseline included
 
         Returns:
             ReleaseCompareResponse with the verdict plus the missing and added commits
@@ -122,10 +118,9 @@ class ReleaseDiffService:
         provider = self._provider_factory(provider_name)
         remote_key = self._remote_project_key(request, provider_name)
 
-        stored_baseline = None
-        if request.use_stored_baseline and not request.baseline_ref:
-            stored_baseline = baseline_ref or None
-        effective_baseline = request.baseline_ref or stored_baseline
+        # The baseline belongs to this comparison: a repository holds several
+        # release lines, and each line forks from its own point
+        effective_baseline = request.baseline_ref
 
         cache_key = self._build_cache_key(
             "compare",
@@ -206,7 +201,6 @@ class ReleaseDiffService:
             source_ref=request.source_ref,
             target_ref=request.target_ref,
             baseline_ref=effective_baseline,
-            baseline_stored=stored_baseline is not None,
             narrowed=bool(effective_baseline),
             verdict=verdict,
             scan_complete=missing_complete,

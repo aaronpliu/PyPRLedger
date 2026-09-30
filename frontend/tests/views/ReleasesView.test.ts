@@ -10,7 +10,6 @@ import { projectsApi } from '@/api/projects'
 import type { RepositorySummary } from '@/api/projects'
 import { releaseDiffApi } from '@/api/releaseDiff'
 import type { ReleaseCompareResponse } from '@/api/releaseDiff'
-import { useAuthStore } from '@/stores/auth'
 import {
   buildReleaseReportHtml,
   downloadReleaseReport,
@@ -38,9 +37,6 @@ vi.mock('@/api/releaseDiff', () => ({
     compare: vi.fn(),
     check: vi.fn(),
     listRefs: vi.fn(),
-    getBaseline: vi.fn(),
-    saveBaseline: vi.fn(),
-    clearBaseline: vi.fn(),
   },
 }))
 
@@ -810,7 +806,6 @@ describe('ReleasesView reports and screenshots', () => {
     source_ref: 'v1.2.0',
     target_ref: 'v1.3.0',
     baseline_ref: null,
-    baseline_stored: false,
     narrowed: false,
     verdict: 'missing',
     scan_complete: true,
@@ -1088,7 +1083,6 @@ describe('ReleasesView merged release diff', () => {
     source_ref: 'v1.1.5',
     target_ref: 'v2.3.0',
     baseline_ref: 'v1.0.0',
-    baseline_stored: true,
     narrowed: true,
     verdict: 'missing',
     scan_complete: true,
@@ -1105,17 +1099,6 @@ describe('ReleasesView merged release diff', () => {
     rendered_truncated: false,
   }
 
-  const STORED_BASELINE = {
-    project_key: 'ALPHA',
-    repository_slug: 'alpha-api',
-    git_provider: 'bitbucket_server',
-    baseline_ref: 'v1.0.0',
-    note: 'fork point of the 1.x line',
-    updated_by: 'tester',
-    updated_date: '2026-09-28T00:00:00',
-    exists: true,
-  }
-
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(projectsApi.getCloudWorkspaces).mockResolvedValue([])
@@ -1124,14 +1107,6 @@ describe('ReleasesView merged release diff', () => {
       Promise.resolve(REPOSITORIES_BY_PROJECT[projectKey] ?? []),
     )
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue(REFS)
-    vi.mocked(releaseDiffApi.getBaseline).mockResolvedValue({
-      ...STORED_BASELINE,
-      baseline_ref: null,
-      note: null,
-      updated_by: null,
-      updated_date: null,
-      exists: false,
-    })
   })
 
   async function mountWithRepository() {
@@ -1167,7 +1142,7 @@ describe('ReleasesView merged release diff', () => {
     await flushPromises()
   }
 
-  it('sends one request carrying source, target and the stored baseline', async () => {
+  it('sends one request carrying source, target and the baseline of the field', async () => {
     vi.mocked(releaseDiffApi.compare).mockResolvedValue(COMPARISON)
 
     const wrapper = await mountWithRepository()
@@ -1180,10 +1155,31 @@ describe('ReleasesView merged release diff', () => {
         source_ref: 'v1.1.5',
         target_ref: 'v2.3.0',
         baseline_ref: undefined,
-        // an empty field still narrows against the repository baseline
-        use_stored_baseline: true,
       }),
     )
+  })
+
+  it('clears both tools when another repository is picked', async () => {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue(COMPARISON)
+
+    const wrapper = await mountWithRepository()
+    await runComparison(wrapper)
+    await refInput(wrapper, enMessages.releaseDiff.missing_baseline_placeholder).setValue('v1.0.0')
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[1].vm.$emit('update:modelValue', 'alpha-web')
+    await flushPromises()
+
+    // a ref of the repository that was just left means nothing in the new one
+    expect((refInput(wrapper, SOURCE_PLACEHOLDER).element as HTMLInputElement).value).toBe('')
+    expect((refInput(wrapper, TARGET_PLACEHOLDER).element as HTMLInputElement).value).toBe('')
+    expect(
+      (refInput(wrapper, enMessages.releaseDiff.missing_baseline_placeholder).element as
+        HTMLInputElement).value,
+    ).toBe('')
+    // and the verdict of the old repository is not left on screen
+    expect(wrapper.find('.scope-used').exists()).toBe(false)
   })
 
   it('renders the verdict with the missing and the added commits', async () => {
@@ -1218,7 +1214,6 @@ describe('ReleasesView merged release diff', () => {
       added_commits: [],
       narrowed: false,
       baseline_ref: null,
-      baseline_stored: false,
     })
 
     const wrapper = await mountWithRepository()
@@ -1233,35 +1228,6 @@ describe('ReleasesView merged release diff', () => {
     expect(verdict).toBeDefined()
     expect(verdict!.props('type')).toBe('warning')
     expect(verdict!.props('type')).not.toBe('success')
-  })
-
-  it('stores and clears the baseline for the managing roles', async () => {
-    vi.mocked(releaseDiffApi.compare).mockResolvedValue(COMPARISON)
-    vi.mocked(releaseDiffApi.saveBaseline).mockResolvedValue(STORED_BASELINE)
-
-    const wrapper = await mountWithRepository()
-    await runComparison(wrapper)
-
-    const saveLabel = enMessages.releaseDiff.baseline_save
-    // not a managing role: no controls
-    expect(
-      wrapper.findAll('button').some((button: AnyWrapper) => button.text() === saveLabel),
-    ).toBe(false)
-
-    useAuthStore().user = { id: 1, username: 'tester', roles: ['review_admin'] } as never
-    await nextTick()
-
-    const baselineInput = refInput(wrapper, enMessages.releaseDiff.missing_baseline_placeholder)
-    await baselineInput.setValue('v1.0.0')
-    await flushPromises()
-
-    const saveButton = wrapper.findAll('button').find((button: AnyWrapper) => button.text() === saveLabel)
-    await saveButton!.trigger('click')
-    await flushPromises()
-
-    expect(releaseDiffApi.saveBaseline).toHaveBeenCalledWith(
-      expect.objectContaining({ project_key: 'ALPHA', baseline_ref: 'v1.0.0' }),
-    )
   })
 
   it('keeps the comparison selection in the URL', async () => {

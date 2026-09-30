@@ -1068,10 +1068,10 @@ class ReleaseNoteService:
 
         if previous_ref:
             # The release's own commits are exactly the ones the new version adds on
-            # top of its predecessor, asked as one provider difference. The repository
-            # baseline is deliberately ignored: notes are scoped by the predecessor.
-            # The revisions are used when known so a tag moved between resolving the
-            # scope and comparing cannot change what the notes are built from.
+            # top of its predecessor, asked as one provider difference - no baseline
+            # narrows it, since the notes are scoped by the predecessor. The revisions
+            # are used when known so a tag moved between resolving the scope and
+            # comparing cannot change what the notes are built from.
             comparison = await self._diff_service.compare_releases(
                 ReleaseCompareRequest(
                     project_key=request.project_key,
@@ -1081,7 +1081,6 @@ class ReleaseNoteService:
                     source_ref=previous_sha or previous_ref,
                     target_ref=version_sha or request.version,
                     include_commits=True,
-                    use_stored_baseline=False,
                     scan_limit=min(max(request.max_commits, 1), 10000),
                     render_limit=min(max(request.max_commits, 1), 2000),
                 )

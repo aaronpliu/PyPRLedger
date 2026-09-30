@@ -35,7 +35,6 @@ const COMPARE: ReleaseCompareResponse = {
   source_ref: 'v1.0.0',
   target_ref: 'v1.1.0',
   baseline_ref: 'v0.9.0',
-  baseline_stored: true,
   narrowed: true,
   verdict: 'missing',
   scan_complete: true,
@@ -153,8 +152,8 @@ describe('buildCompareSectionHtml', () => {
     expect(html).toContain('v1.1.0')
     expect(html).toContain('https://bitbucket.org/aaronpliu/pylang/commits/v1.0.0')
     expect(html).toContain('https://bitbucket.org/aaronpliu/pylang/commits/v1.1.0')
-    // the effective baseline is part of the report, not the two old scopes
-    expect(html).toContain('Stored baseline: v0.9.0')
+    // the effective baseline is part of the report, read as the ref it is
+    expect(html).toContain('v0.9.0')
     // scope row names the compared pair
     expect(html).toContain('v1.0.0 → v1.1.0')
     // commit url column

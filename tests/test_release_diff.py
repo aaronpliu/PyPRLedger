@@ -10,11 +10,7 @@ from typing import Any
 import httpx
 import pytest
 
-from src.api.v1.endpoints.release_diff import (
-    get_baseline_service,
-    get_rbac_service,
-    get_release_diff_service,
-)
+from src.api.v1.endpoints.release_diff import get_release_diff_service
 from src.core.database import get_db_session
 from src.core.exceptions import GitServiceException
 from src.core.permissions import get_current_user_with_token
@@ -26,7 +22,6 @@ from src.schemas.release_diff import (
     ReleaseRefsRequest,
 )
 from src.services.git_providers.base import BaseGitProvider
-from src.services.release_check_baseline_service import ReleaseCheckBaselineService
 from src.services.release_diff_service import ReleaseDiffService
 
 
@@ -270,36 +265,7 @@ async def test_compare_narrows_both_directions_by_the_baseline() -> None:
     assert result.verdict == "contained"
     assert result.narrowed is True
     assert result.baseline_ref == "v1.0.0"
-    assert result.baseline_stored is False
     assert result.filtered_by_baseline_count == 1
-
-
-async def test_compare_uses_the_stored_baseline_when_none_is_given() -> None:
-    service = build_service(FakeGitProvider())
-
-    result = await service.compare_releases(
-        compare_payload(source_ref="v1.1.0", target_ref="v2.0.0"),
-        baseline_ref="v1.0.0",
-    )
-
-    assert result.verdict == "contained"
-    assert result.baseline_ref == "v1.0.0"
-    assert result.baseline_stored is True
-    assert result.narrowed is True
-
-
-async def test_compare_ignores_the_stored_baseline_when_told_to() -> None:
-    service = build_service(FakeGitProvider())
-
-    result = await service.compare_releases(
-        compare_payload(source_ref="v1.1.0", target_ref="v2.0.0", use_stored_baseline=False),
-        baseline_ref="v1.0.0",
-    )
-
-    assert result.verdict == "missing"
-    assert result.baseline_ref is None
-    assert result.baseline_stored is False
-    assert result.narrowed is False
 
 
 async def test_compare_is_inconclusive_when_the_scan_is_capped() -> None:
@@ -706,31 +672,9 @@ def fake_provider() -> FakeGitProvider:
     return FakeGitProvider()
 
 
-class StubRBAC:
-    """RBAC stub: grants everything unless a test says otherwise."""
-
-    def __init__(self) -> None:
-        self.allowed = True
-        self.checks: list[dict[str, Any]] = []
-
-    async def check_permission(self, **kwargs: Any) -> bool:
-        self.checks.append(kwargs)
-        return self.allowed
-
-
-class StubBaselineService:
-    """Baseline store stub: no stored baseline unless a test says otherwise."""
-
-    def __init__(self, baseline_ref: str | None = None) -> None:
-        self.baseline_ref = baseline_ref
-
-    async def get_ref(self, **kwargs: Any) -> str | None:
-        return self.baseline_ref
-
-
 @pytest.fixture
 def authenticated_client(fake_provider, db_session):
-    """Test client with auth, the diff service and the baseline store overridden."""
+    """Test client with auth, the diff service and the database overridden."""
 
     async def _current_user() -> AuthUser:
         return AuthUser(id=1, username="tester", email="tester@example.com")
@@ -738,19 +682,14 @@ def authenticated_client(fake_provider, db_session):
     async def _db_session() -> Any:
         yield db_session
 
-    rbac = StubRBAC()
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_release_diff_service] = lambda: build_service(fake_provider)
-    app.dependency_overrides[get_baseline_service] = lambda: ReleaseCheckBaselineService(db_session)
-    app.dependency_overrides[get_rbac_service] = lambda: rbac
-    yield rbac
+    yield
     for dependency in (
         get_current_user_with_token,
         get_db_session,
         get_release_diff_service,
-        get_baseline_service,
-        get_rbac_service,
     ):
         app.dependency_overrides.pop(dependency, None)
 
@@ -953,7 +892,6 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
 
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_release_diff_service] = lambda: ReleaseDiffService()
-    app.dependency_overrides[get_baseline_service] = lambda: StubBaselineService()
     try:
         compare_response = await async_client.post(
             "/api/v1/release/diff/compare",
@@ -1056,142 +994,8 @@ async def test_check_excludes_commits_before_the_release_base() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Service: stored baselines
+# Endpoints: error handling
 # --------------------------------------------------------------------------- #
-
-
-async def test_baseline_service_upserts_and_normalizes_the_project_key(db_session) -> None:
-    service = ReleaseCheckBaselineService(db_session)
-
-    saved = await service.save(
-        git_provider="bitbucket_server",
-        project_key="proj",
-        repository_slug="my-repo",
-        baseline_ref="v1.0.0",
-        note="fork point of the 1.x line",
-        updated_by="tester",
-    )
-
-    assert saved.project_key == "PROJ"
-    assert saved.note == "fork point of the 1.x line"
-    assert (
-        await service.get_ref(
-            git_provider="bitbucket_server", project_key="PROJ", repository_slug="my-repo"
-        )
-        == "v1.0.0"
-    )
-    # a different casing addresses the same baseline
-    assert (
-        await service.get_ref(
-            git_provider="bitbucket_server", project_key="proj", repository_slug="my-repo"
-        )
-        == "v1.0.0"
-    )
-
-    await service.save(
-        git_provider="bitbucket_server",
-        project_key="PROJ",
-        repository_slug="my-repo",
-        baseline_ref="v1.2.0",
-        updated_by="tester",
-    )
-
-    assert (
-        await service.get_ref(
-            git_provider="bitbucket_server", project_key="PROJ", repository_slug="my-repo"
-        )
-        == "v1.2.0"
-    )
-
-    assert (
-        await service.clear(
-            git_provider="bitbucket_server", project_key="PROJ", repository_slug="my-repo"
-        )
-        is True
-    )
-    assert (
-        await service.get_ref(
-            git_provider="bitbucket_server", project_key="PROJ", repository_slug="my-repo"
-        )
-        is None
-    )
-    assert (
-        await service.clear(
-            git_provider="bitbucket_server", project_key="PROJ", repository_slug="my-repo"
-        )
-        is False
-    )
-
-
-# --------------------------------------------------------------------------- #
-# Endpoints: missing check and baseline
-# --------------------------------------------------------------------------- #
-
-
-async def test_endpoint_baseline_round_trip(async_client, authenticated_client) -> None:
-    saved = await async_client.put(
-        "/api/v1/release/diff/baseline",
-        json={
-            "project_key": "PROJ",
-            "repository_slug": "my-repo",
-            "baseline_ref": "  v1.0.0  ",
-            "note": "fork point of the 1.x line",
-        },
-    )
-
-    assert saved.status_code == 200
-    saved_body = saved.json()
-    assert saved_body["baseline_ref"] == "v1.0.0"
-    assert saved_body["exists"] is True
-    assert saved_body["updated_by"] == "tester"
-
-    fetched = await async_client.get(
-        "/api/v1/release/diff/baseline",
-        params={"project_key": "proj", "repository_slug": "my-repo"},
-    )
-    assert fetched.status_code == 200
-    assert fetched.json()["project_key"] == "PROJ"
-    assert fetched.json()["baseline_ref"] == "v1.0.0"
-
-    cleared = await async_client.delete(
-        "/api/v1/release/diff/baseline",
-        params={"project_key": "PROJ", "repository_slug": "my-repo"},
-    )
-    assert cleared.status_code == 200
-    assert cleared.json()["exists"] is False
-
-    after = await async_client.get(
-        "/api/v1/release/diff/baseline",
-        params={"project_key": "PROJ", "repository_slug": "my-repo"},
-    )
-    assert after.json()["exists"] is False
-    assert after.json()["baseline_ref"] is None
-
-
-async def test_endpoint_baseline_write_requires_the_manage_permission(
-    async_client, authenticated_client
-) -> None:
-    rbac: StubRBAC = authenticated_client
-    rbac.allowed = False
-
-    denied = await async_client.put(
-        "/api/v1/release/diff/baseline",
-        json={
-            "project_key": "PROJ",
-            "repository_slug": "my-repo",
-            "baseline_ref": "v1.0.0",
-        },
-    )
-
-    assert denied.status_code == 403
-    assert rbac.checks and rbac.checks[0]["action"] == "manage"
-
-    # reading a baseline stays open to any authenticated user
-    allowed_read = await async_client.get(
-        "/api/v1/release/diff/baseline",
-        params={"project_key": "PROJ", "repository_slug": "my-repo"},
-    )
-    assert allowed_read.status_code == 200
 
 
 async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider) -> None:
@@ -1204,7 +1008,6 @@ async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider) 
 
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_release_diff_service] = lambda: build_service(FailingProvider())
-    app.dependency_overrides[get_baseline_service] = lambda: StubBaselineService()
     try:
         response = await async_client.post(
             "/api/v1/release/diff/compare",
@@ -1218,7 +1021,6 @@ async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider) 
     finally:
         app.dependency_overrides.pop(get_current_user_with_token, None)
         app.dependency_overrides.pop(get_release_diff_service, None)
-        app.dependency_overrides.pop(get_baseline_service, None)
 
     assert response.status_code == 502
 

@@ -47,11 +47,10 @@ export interface ReleaseCompareRequest {
   target_ref: string
   /**
    * Optional baseline narrowing **both** directions: difference commits that already
-   * existed at it are ignored (the work a line did since the fork point).
+   * existed at it are ignored (the work a line did since the fork point). It belongs
+   * to this comparison alone, since a repository holds several release lines.
    */
   baseline_ref?: string | null
-  /** Use the baseline stored for the repository when baseline_ref is empty (default true) */
-  use_stored_baseline?: boolean
   /** Difference commits enumerated per direction before the verdict turns inconclusive */
   scan_limit?: number
   /** Maximum number of difference commits returned with details per direction */
@@ -70,8 +69,6 @@ export interface ReleaseCompareResponse {
   target_ref: string
   /** Effective baseline both directions were narrowed against */
   baseline_ref?: string | null
-  /** True when the effective baseline came from the repository baseline store */
-  baseline_stored?: boolean
   narrowed: boolean
   /**
    * Containment verdict, derived from the provider difference alone: rendered (and
@@ -91,25 +88,6 @@ export interface ReleaseCompareResponse {
   added_complete: boolean
   /** True when more difference commits exist than the rendered lists carry */
   rendered_truncated: boolean
-}
-
-export interface ReleaseBaselineRequest {
-  project_key: string
-  repository_slug: string
-  git_provider?: string | null
-  baseline_ref: string
-  note?: string | null
-}
-
-export interface ReleaseBaseline {
-  project_key: string
-  repository_slug: string
-  git_provider: string
-  baseline_ref?: string | null
-  note?: string | null
-  updated_by?: string | null
-  updated_date?: string | null
-  exists: boolean
 }
 
 export interface ReleaseCommitCheckRequest {
@@ -168,24 +146,4 @@ export const releaseDiffApi = {
     return request.post('/release/diff/check', payload)
   },
 
-  /** Baseline stored for a repository (shared, so the routine check is two clicks). */
-  getBaseline(params: {
-    project_key: string
-    repository_slug: string
-    git_provider?: string | null
-  }): Promise<ReleaseBaseline> {
-    return request.get('/release/diff/baseline', { params })
-  },
-
-  saveBaseline(payload: ReleaseBaselineRequest): Promise<ReleaseBaseline> {
-    return request.put('/release/diff/baseline', payload)
-  },
-
-  clearBaseline(params: {
-    project_key: string
-    repository_slug: string
-    git_provider?: string | null
-  }): Promise<ReleaseBaseline> {
-    return request.delete('/release/diff/baseline', { params })
-  },
 }

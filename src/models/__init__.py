@@ -17,7 +17,6 @@ from src.models.pull_request import (
     PullRequestReviewBase,
 )
 from src.models.rbac import UserRoleAssignment
-from src.models.release_check_baseline import ReleaseCheckBaseline
 from src.models.release_note import ReleaseNote
 from src.models.repository import Repository
 from src.models.role import Role
@@ -45,5 +44,4 @@ __all__ = [
     "PersonalAccessToken",
     "UserCommentTemplate",
     "ReleaseNote",
-    "ReleaseCheckBaseline",
 ]

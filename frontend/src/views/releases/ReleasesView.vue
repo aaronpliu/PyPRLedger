@@ -291,39 +291,8 @@
                     </div>
                   </template>
                 </el-autocomplete>
+                <div class="scope-preview">{{ t('releaseDiff.baseline_field_help') }}</div>
               </el-form-item>
-            </el-col>
-            <el-col :xs="24" :md="12">
-              <div class="baseline-actions">
-                <el-button
-                  v-if="canManageReleases"
-                  size="small"
-                  :loading="baselineSaving"
-                  :disabled="!canStoreBaseline"
-                  @click="saveBaseline"
-                >
-                  {{ t('releaseDiff.baseline_save') }}
-                </el-button>
-                <el-button
-                  v-if="canManageReleases && storedBaseline?.exists"
-                  size="small"
-                  :loading="baselineSaving"
-                  @click="clearBaseline"
-                >
-                  {{ t('releaseDiff.baseline_clear') }}
-                </el-button>
-              </div>
-              <div class="scope-preview">
-                <template v-if="storedBaseline?.exists">
-                  {{
-                    t('releaseDiff.baseline_stored', {
-                      ref: storedBaseline.baseline_ref,
-                      user: storedBaseline.updated_by || '-',
-                    })
-                  }}
-                </template>
-                <template v-else>{{ t('releaseDiff.baseline_none') }}</template>
-              </div>
             </el-col>
           </el-row>
 
@@ -406,16 +375,7 @@
           <div class="scope-used">
             <el-tag size="small" type="info">
               {{ t('releaseDiff.missing_baseline_ref') }}:
-              {{
-                compareResult.baseline_ref
-                  ? compareResult.baseline_stored
-                    ? t('releaseDiff.baseline_stored', {
-                        ref: compareResult.baseline_ref,
-                        user: '-',
-                      })
-                    : compareResult.baseline_ref
-                  : t('releaseDiff.baseline_none_applied')
-              }}
+              {{ compareResult.baseline_ref || t('releaseDiff.baseline_none_applied') }}
             </el-tag>
           </div>
 
@@ -730,7 +690,6 @@ import CommitTable from '@/components/release/CommitTable.vue'
 import { useJira } from '@/composables/useJira'
 import { jiraTicketSegments } from '@/utils/jira'
 import { copyTextToClipboard } from '@/utils/export/markdown'
-import { useAuthStore } from '@/stores/auth'
 import { projectsApi } from '@/api/projects'
 import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/api/projects'
 import {
@@ -749,7 +708,6 @@ import {
 } from '@/utils/screenshot'
 import {
   releaseDiffApi,
-  type ReleaseBaseline,
   type ReleaseCommitCheckResponse,
   type ReleaseCompareResponse,
 } from '@/api/releaseDiff'
@@ -812,15 +770,6 @@ const checkForm = ref({
 const commitsInput = ref('')
 const compareResult = ref<ReleaseCompareResponse | null>(null)
 const checkResult = ref<ReleaseCommitCheckResponse | null>(null)
-
-// The stored baseline is team configuration: only the roles that may edit it see the buttons
-const MANAGE_ROLES = ['review_admin', 'system_admin']
-const authStore = useAuthStore()
-const canManageReleases = computed(() =>
-  (authStore.user?.roles ?? []).some((role) => MANAGE_ROLES.includes(role)),
-)
-const storedBaseline = ref<ReleaseBaseline | null>(null)
-const baselineSaving = ref(false)
 
 const route = useRoute()
 const router = useRouter()
@@ -1072,7 +1021,6 @@ onMounted(async () => {
   void loadJiraSettings()
   await loadProjects()
   await applyUrlState()
-  await loadBaseline()
 })
 
 function basePayload() {
@@ -1221,9 +1169,8 @@ async function runCompare() {
       ...basePayload(),
       source_ref: compareForm.value.source_ref.trim(),
       target_ref: compareForm.value.target_ref.trim(),
+      // the field is the baseline: an empty one narrows nothing
       baseline_ref: baseline || undefined,
-      // an empty field still narrows against the baseline stored for the repository
-      use_stored_baseline: !baseline,
       include_commits: includeCommits.value,
     })
     syncUrlState()
@@ -1268,79 +1215,14 @@ async function runCheck() {
   }
 }
 
-// ------------------------------------------------------------------ #
-// Baseline: the shared starting point both directions are narrowed against
-// ------------------------------------------------------------------ #
-
-const canStoreBaseline = computed(() =>
-  Boolean(
-    selectedProjectKey.value &&
-      selectedRepositorySlug.value &&
-      compareForm.value.baseline_ref.trim(),
-  ),
-)
-
-async function loadBaseline() {
-  if (!selectedProjectKey.value || !selectedRepositorySlug.value) {
-    storedBaseline.value = null
-    return
-  }
-
-  try {
-    storedBaseline.value = await releaseDiffApi.getBaseline({
-      project_key: selectedProjectKey.value,
-      repository_slug: selectedRepositorySlug.value,
-      git_provider: repo.value.git_provider || undefined,
-    })
-  } catch {
-    // a missing baseline is not an error state
-    storedBaseline.value = null
-  }
-}
-
-async function saveBaseline() {
-  if (!canStoreBaseline.value) {
-    ElMessage.warning(t('releaseDiff.validation_missing_required'))
-    return
-  }
-
-  baselineSaving.value = true
-  try {
-    storedBaseline.value = await releaseDiffApi.saveBaseline({
-      project_key: selectedProjectKey.value,
-      repository_slug: selectedRepositorySlug.value,
-      git_provider: repo.value.git_provider || undefined,
-      baseline_ref: compareForm.value.baseline_ref.trim(),
-    })
-    ElMessage.success(t('releaseDiff.baseline_saved'))
-  } catch {
-    ElMessage.error(t('releaseDiff.baseline_save_failed'))
-  } finally {
-    baselineSaving.value = false
-  }
-}
-
-async function clearBaseline() {
-  baselineSaving.value = true
-  try {
-    storedBaseline.value = await releaseDiffApi.clearBaseline({
-      project_key: selectedProjectKey.value,
-      repository_slug: selectedRepositorySlug.value,
-      git_provider: repo.value.git_provider || undefined,
-    })
-    ElMessage.success(t('releaseDiff.baseline_cleared'))
-  } catch {
-    ElMessage.error(t('releaseDiff.baseline_clear_failed'))
-  } finally {
-    baselineSaving.value = false
-  }
-}
-
-
 
 // ------------------------------------------------------------------ #
 // URL state: the merge check is a routine, so a link reopens the same check
 // ------------------------------------------------------------------ #
+
+// Set while the selection a link carries is being written: the coordinate watcher
+// must not clear what that link asked for
+let restoringUrl = false
 
 function readQueryValue(key: string): string {
   const value = route.query[key]
@@ -1360,27 +1242,37 @@ function syncUrlState() {
 }
 
 async function applyUrlState() {
-  const projectKey = readQueryValue('project_key')
-  const repositorySlug = readQueryValue('repository_slug')
+  restoringUrl = true
+  try {
+    const projectKey = readQueryValue('project_key')
+    const repositorySlug = readQueryValue('repository_slug')
 
-  if (projectKey) {
-    repo.value.project_key = projectKey
-    repo.value.repository_slug = repositorySlug
-    // the project watcher clears the slug while it reloads the repository catalog
-    await nextTick()
-    repo.value.repository_slug = repositorySlug
+    if (projectKey) {
+      repo.value.project_key = projectKey
+      repo.value.repository_slug = repositorySlug
+      // the project watcher clears the slug while it reloads the repository catalog
+      await nextTick()
+      repo.value.repository_slug = repositorySlug
+    }
+
+    compareForm.value.source_ref = readQueryValue('source')
+    compareForm.value.target_ref = readQueryValue('target')
+    compareForm.value.baseline_ref = readQueryValue('baseline')
+  } finally {
+    restoringUrl = false
   }
-
-  compareForm.value.source_ref = readQueryValue('source')
-  compareForm.value.target_ref = readQueryValue('target')
-  compareForm.value.baseline_ref = readQueryValue('baseline')
 }
 
-// The stored baseline belongs to a repository: reload it when the coordinates change
+// The refs of one repository mean nothing in another: switch repository and both
+// tools are cleared, rather than comparing a stale source / target / baseline in
+// the repository that was just picked. The coordinates a link restored keep the
+// selection the link carries.
 watch(
   () => [selectedProjectKey.value, selectedRepositorySlug.value],
   () => {
-    void loadBaseline()
+    if (restoringUrl) return
+    resetCompare()
+    resetCheck()
   },
 )
 
@@ -1647,12 +1539,6 @@ async function copySha(value: string) {
 .scope-preview code {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   color: var(--el-color-primary);
-}
-
-.baseline-actions {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 6px;
 }
 
 .scope-used {

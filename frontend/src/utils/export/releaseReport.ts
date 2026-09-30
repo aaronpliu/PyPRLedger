@@ -220,9 +220,7 @@ function commitTable(
 
 function baselineText(result: ReleaseCompareResponse): string {
   if (!result.baseline_ref) return t('releaseDiff.baseline_none_applied')
-  return result.baseline_stored
-    ? t('releaseDiff.baseline_stored', { ref: result.baseline_ref, user: '-' })
-    : result.baseline_ref
+  return result.baseline_ref
 }
 
 function compareStatusText(result: ReleaseCompareResponse): string {

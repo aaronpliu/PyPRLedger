@@ -129,13 +129,9 @@ class ReleaseCompareRequest(ReleaseDiffRepository):
         description=(
             "Optional baseline both directions are narrowed against: difference commits "
             "that already existed at it are ignored, which is what 'the work this line "
-            "did since the fork point' means. When omitted, the baseline stored for the "
-            "repository is used unless use_stored_baseline is false."
+            "did since the fork point' means. It belongs to this comparison alone - a "
+            "repository holds several release lines, each with a fork point of its own."
         ),
-    )
-    use_stored_baseline: bool = Field(
-        default=True,
-        description="Use the baseline stored for the repository when baseline_ref is omitted",
     )
     scan_limit: int = Field(
         default=2000,
@@ -261,10 +257,6 @@ class ReleaseCompareResponse(BaseModel):
     baseline_ref: str | None = Field(
         default=None, description="Effective baseline both directions were narrowed against"
     )
-    baseline_stored: bool = Field(
-        default=False,
-        description="True when the effective baseline came from the repository baseline store",
-    )
     narrowed: bool = Field(
         default=False, description="True when a baseline narrowed the comparison"
     )
@@ -348,51 +340,4 @@ class ReleaseCommitCheckResponse(BaseModel):
             "cap. It concerns the attached details only - the verdict is answered per "
             "commit by the provider and is unaffected."
         ),
-    )
-
-
-class ReleaseBaselineRequest(BaseModel):
-    """Request payload for PUT /release/diff/baseline."""
-
-    project_key: str = Field(
-        ..., min_length=1, max_length=128, description="Bitbucket project key (or GitHub org)"
-    )
-    repository_slug: str = Field(..., min_length=1, max_length=256, description="Repository slug")
-    git_provider: str | None = Field(
-        default=None, description="Git provider override (defaults to the configured one)"
-    )
-    baseline_ref: str = Field(
-        ...,
-        min_length=1,
-        max_length=256,
-        description=(
-            "Ref the merge check narrows against, for example the fork point of a "
-            "maintenance line or the previous release of that line"
-        ),
-    )
-    note: str | None = Field(
-        default=None, max_length=255, description="Why this baseline was chosen"
-    )
-
-    @field_validator("baseline_ref")
-    @classmethod
-    def _strip_ref(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("baseline_ref must not be blank")
-        return stripped
-
-
-class ReleaseBaselineResponse(BaseModel):
-    """Stored merge check baseline of a repository."""
-
-    project_key: str
-    repository_slug: str
-    git_provider: str
-    baseline_ref: str | None = Field(default=None, description="Stored baseline ref")
-    note: str | None = Field(default=None, description="Why this baseline was chosen")
-    updated_by: str | None = Field(default=None, description="Username of the last editor")
-    updated_date: str | None = Field(default=None, description="When it was last changed")
-    exists: bool = Field(
-        default=False, description="False when the repository has no stored baseline"
     )
