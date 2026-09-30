@@ -981,7 +981,7 @@
     "missing_target_placeholder": "Release that should contain them, e.g. v2.3.0",
     "missing_baseline_ref": "Baseline",
     "missing_baseline_placeholder": "Optional - fork point or previous release of that line",
-    "baseline_field_help": "Empty means no baseline - both refs are compared over their whole history.",
+    "baseline_field_help": "Empty = no baseline, whole history of both refs",
     "missing_contained": "All commits of {source} are contained in {target}",
     "missing_found": "{count} commit(s) of {source} are missing from {target}",
     "missing_baseline_used": "Narrowed by the baseline {ref}: {filtered} difference commit(s) existed before it and were ignored",

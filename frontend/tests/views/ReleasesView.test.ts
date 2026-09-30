@@ -1159,6 +1159,18 @@ describe('ReleasesView merged release diff', () => {
     )
   })
 
+  it('explains an empty baseline next to its input instead of under it', async () => {
+    const wrapper = await mountWithRepository()
+
+    // the explanation belongs to the field, so it shares the line with its input
+    // (it used to sit under the input in a half column and wrapped over two lines)
+    const field = wrapper.find('.baseline-field')
+    expect(field.find('input').attributes('placeholder')).toBe(
+      enMessages.releaseDiff.missing_baseline_placeholder,
+    )
+    expect(field.find('.baseline-hint').text()).toBe(enMessages.releaseDiff.baseline_field_help)
+  })
+
   it('clears both tools when another repository is picked', async () => {
     vi.mocked(releaseDiffApi.compare).mockResolvedValue(COMPARISON)
 

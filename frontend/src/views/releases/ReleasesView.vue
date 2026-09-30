@@ -276,26 +276,32 @@
           </el-row>
 
           <el-row :gutter="16">
-            <el-col :xs="24" :md="12">
+            <el-col :xs="24" :md="24">
               <el-form-item :label="t('releaseDiff.missing_baseline_ref')">
-                <el-autocomplete
-                  v-model="compareForm.baseline_ref"
-                  :fetch-suggestions="queryRefs"
-                  :placeholder="t('releaseDiff.missing_baseline_placeholder')"
-                  clearable
-                  trigger-on-focus
-                  style="width: 100%"
-                >
-                  <template #default="{ item }">
-                    <div class="ref-option">
-                      <span>{{ item.value }}</span>
-                      <el-tag size="small" effect="plain" type="info">
-                        {{ refTypeLabel(item.type) }}
-                      </el-tag>
-                    </div>
-                  </template>
-                </el-autocomplete>
-                <div class="scope-preview">{{ t('releaseDiff.baseline_field_help') }}</div>
+                <div class="baseline-field">
+                  <el-autocomplete
+                    v-model="compareForm.baseline_ref"
+                    :fetch-suggestions="queryRefs"
+                    :placeholder="t('releaseDiff.missing_baseline_placeholder')"
+                    clearable
+                    trigger-on-focus
+                    class="baseline-input"
+                  >
+                    <template #default="{ item }">
+                      <div class="ref-option">
+                        <span>{{ item.value }}</span>
+                        <el-tag size="small" effect="plain" type="info">
+                          {{ refTypeLabel(item.type) }}
+                        </el-tag>
+                      </div>
+                    </template>
+                  </el-autocomplete>
+                  <!-- the hint explains the field, so it belongs to the field: next
+                       to the input on one line instead of a block underneath it -->
+                  <span class="baseline-hint">
+                    {{ t('releaseDiff.baseline_field_help') }}
+                  </span>
+                </div>
               </el-form-item>
             </el-col>
           </el-row>
@@ -1398,6 +1404,31 @@ async function copySha(value: string) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+/* The baseline is optional, so its explanation sits next to it on the same line.
+   The input keeps a width of its own: squeezed next to the hint it would cut the
+   placeholder, and cut short of it the hint became a two-line block. */
+.baseline-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.baseline-input {
+  flex: 0 0 auto;
+  width: 400px;
+  max-width: 100%;
+}
+
+/* Explanatory text, not a label: same weight as the hints above the form */
+.baseline-hint {
+  flex: 1 1 240px;
+  min-width: 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .result-actions {
