@@ -455,17 +455,37 @@ describe('ReleasesView', () => {
     await compareButton!.trigger('click')
     await flushPromises()
 
-    const sendButton = wrapper
+    const handoff = wrapper
       .findAll('button')
-      .find((button) => button.text() === enMessages.releaseDiff.send_missing_to_check)
-    expect(sendButton).toBeDefined()
+      .find((button) => button.text().includes(enMessages.releaseDiff.handoff_to_check))
+    expect(handoff).toBeDefined()
+    // the strip leads with the number of missing shas
+    expect(handoff!.text()).toContain('2')
 
-    await sendButton!.trigger('click')
+    // the delivery must never move the page: the token and the tint on the strip
+    // are the whole story
+    const textarea = wrapper.find('textarea').element as HTMLTextAreaElement
+    vi.spyOn(textarea, 'getBoundingClientRect').mockReturnValue({
+      top: 400,
+      left: 700,
+      bottom: 580,
+      right: 1200,
+      width: 500,
+      height: 180,
+      x: 700,
+      y: 400,
+      toJSON: () => ({}),
+    } as DOMRect)
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(textarea, 'scrollIntoView', { value: scrollIntoView })
+
+    await handoff!.trigger('click')
     await flushPromises()
 
-    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe(
-      'aaa1111\nbbb2222',
-    )
+    expect(textarea.value).toBe('aaa1111\nbbb2222')
+    // the strip answers where it was clicked instead of lighting up a distant card
+    expect(wrapper.find('.result-handoff.is-delivered').exists()).toBe(true)
+    expect(scrollIntoView).not.toHaveBeenCalled()
   })
 
   it('resets a tool without touching the shared repository context', async () => {
@@ -885,9 +905,22 @@ describe('ReleasesView reports and screenshots', () => {
       enMessages.releaseDiff.missing_commits_title,
     )
     expect(wrapper.findAll('.el-tag--danger').length).toBeGreaterThan(0)
-    // the shortcut that forwards the missing shas is red as well
-    const sendButton = buttonsByLabel(wrapper, enMessages.releaseDiff.send_missing_to_check)[0]
-    expect(sendButton.classes()).toContain('el-button--danger')
+    // the handoff that forwards the missing shas leads with their number
+    const handoff = wrapper.find('.result-handoff')
+    expect(handoff.exists()).toBe(true)
+    expect(handoff.text()).toContain(String(COMPARE_RESULT.missing_count))
+    expect(handoff.text()).toContain(enMessages.releaseDiff.handoff_to_check)
+  })
+
+  it('keeps the handoff out when nothing is missing', async () => {
+    const wrapper = await mountWithCompareResult({
+      ...COMPARE_RESULT,
+      verdict: 'contained',
+      missing_count: 0,
+      missing_commits: [],
+    } as ReleaseCompareResponse)
+
+    expect(wrapper.find('.result-handoff').exists()).toBe(false)
   })
 
   it('highlights missing commits in the check result', async () => {

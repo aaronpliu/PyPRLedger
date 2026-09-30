@@ -376,11 +376,29 @@
             </el-dropdown>
           </div>
 
-          <div v-if="compareResult.missing_commits.length" class="result-actions">
-            <el-button size="small" type="danger" plain @click="sendMissingToCheck">
-              {{ t('releaseDiff.send_missing_to_check') }}
-            </el-button>
-          </div>
+          <button
+            v-if="compareResult.missing_commits.length"
+            ref="handoffStrip"
+            type="button"
+            class="result-handoff"
+            :class="{ 'is-delivered': handoffDelivered }"
+            @click="sendMissingToCheck"
+          >
+            <span class="result-handoff-count">
+              {{
+                commitCountLabel(compareResult.missing_count, !compareResult.scan_complete)
+              }}
+            </span>
+            <span class="result-handoff-text">
+              {{ t('releaseDiff.handoff_to_check') }}
+            </span>
+            <span class="result-handoff-arrow" aria-hidden="true">
+              <el-icon>
+                <ArrowRight v-if="!handoffDelivered" />
+                <CircleCheck v-else />
+              </el-icon>
+            </span>
+          </button>
 
           <div class="scope-used">
             <el-tag size="small" type="info">
@@ -690,11 +708,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, Camera, Download, QuestionFilled } from '@element-plus/icons-vue'
+import {
+  ArrowDown,
+  ArrowRight,
+  Camera,
+  CircleCheck,
+  Download,
+  QuestionFilled,
+} from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
 import ContentLoader from '@/components/common/ContentLoader.vue'
@@ -749,6 +774,10 @@ const refsLoadedAt = ref('')
 
 const compareSection = ref<HTMLElement | null>(null)
 const checkSection = ref<HTMLElement | null>(null)
+const handoffStrip = ref<HTMLElement | null>(null)
+const handoffDelivered = ref(false)
+// The mark on the receiving card is temporary: one look, not a sticky note
+let handoffTimer = 0
 const compareLoading = ref(false)
 const checkLoading = ref(false)
 const checkScopeEnabled = ref(false)
@@ -1079,11 +1108,6 @@ function resetCheck() {
   checkResult.value = null
 }
 
-async function scrollTo(element: HTMLElement | null) {
-  await nextTick()
-  element?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-}
-
 async function sendMissingToCheck() {
   const shas = (compareResult.value?.missing_commits ?? []).map((commit) => commit.id)
   if (shas.length === 0) {
@@ -1092,8 +1116,88 @@ async function sendMissingToCheck() {
 
   commitsInput.value = shas.join('\n')
   ElMessage.success(t('releaseDiff.sent_missing_to_check', { count: shas.length }))
-  await scrollTo(checkSection.value)
+
+  const landing = checkSection.value?.querySelector('textarea') ?? checkSection.value
+  await flyMissingToken(shas.length, landing)
+  markHandoffDelivered()
 }
+
+// The strip answers on its own element: a card lighting up across the page reads
+// as a flash, while the icon and tint where the click happened reads as done
+function markHandoffDelivered() {
+  handoffDelivered.value = true
+  window.clearTimeout(handoffTimer)
+  handoffTimer = window.setTimeout(() => {
+    handoffDelivered.value = false
+  }, 1400)
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
+
+// A sliver of the landing catches a token flying into almost nothing visible
+function landingOnScreen(element: Element): boolean {
+  const rect = element.getBoundingClientRect()
+  const viewHeight = window.innerHeight || document.documentElement.clientHeight
+  const viewWidth = window.innerWidth || document.documentElement.clientWidth
+  const centerY = rect.top + rect.height / 2
+  const centerX = rect.left + rect.width / 2
+  return centerY > 0 && centerY < viewHeight && centerX > 0 && centerX < viewWidth
+}
+
+async function flyMissingToken(count: number, landing: Element | null) {
+  // With the landing off screen there is nothing to fly into: the toast already
+  // said where the shas went, and moving the page would read as a jump
+  if (
+    !landing ||
+    !landingOnScreen(landing) ||
+    !handoffStrip.value ||
+    prefersReducedMotion() ||
+    typeof Element.prototype.animate !== 'function'
+  ) {
+    return
+  }
+
+  const token = document.createElement('div')
+  token.className = 'delivery-token'
+  token.textContent = `${count} SHA`
+  const from = handoffStrip.value.getBoundingClientRect()
+  // Placed before it paints, so no frame can catch the token at the origin
+  token.style.transform = `translate(${from.left}px, ${from.top}px)`
+  document.body.appendChild(token)
+
+  const to = landing.getBoundingClientRect()
+  const endX = to.left + to.width / 2 - token.offsetWidth / 2
+  const endY = to.top + to.height / 2 - token.offsetHeight / 2
+
+  const flight = token.animate(
+    [
+      { transform: `translate(${from.left}px, ${from.top}px)`, opacity: 1 },
+      {
+        transform: `translate(${(from.left + endX) / 2}px, ${
+          Math.min(from.top, endY) - 28
+        }px) scale(1.08)`,
+        opacity: 1,
+        offset: 0.5,
+      },
+      { transform: `translate(${endX}px, ${endY}px) scale(0.55)`, opacity: 0.2 },
+    ],
+    { duration: 520, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+  )
+
+  try {
+    await flight.finished
+  } catch {
+    // The flight was interrupted: the delivery itself already happened
+  }
+  token.remove()
+}
+
+onBeforeUnmount(() => window.clearTimeout(handoffTimer))
 
 // ------------------------------------------------------------------ #
 // Reporting: standalone HTML report + screenshot sharing
@@ -1431,8 +1535,107 @@ async function copySha(value: string) {
   line-height: 1.4;
 }
 
-.result-actions {
+/* The handoff is a promise, not a button: it leads with the number of missing
+   shas and names where they land. The arrow follows the card direction: beside
+   on the wide layout, below once the cards stack */
+.result-handoff {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
   margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--el-color-danger-light-5);
+  border-radius: 8px;
+  background: var(--el-color-danger-light-9);
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* A new action should not have to shout twice: one pass, then it settles. The
+   tint rides its own layer and only opacity moves, so nothing has to repaint */
+.result-handoff::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--el-color-danger-light-8);
+  opacity: 0;
+  pointer-events: none;
+  animation: handoff-attention 1.6s ease 1 both;
+}
+
+.result-handoff:hover,
+.result-handoff:focus-visible {
+  border-color: var(--el-color-danger);
+  background: var(--el-color-danger-light-8);
+}
+
+.result-handoff-count {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--el-color-danger);
+}
+
+.result-handoff-arrow {
+  margin-left: auto;
+  color: var(--el-color-danger);
+}
+
+/* Delivered: the strip answers where it was clicked, so no distant card has to
+   light up to confirm the handoff */
+.result-handoff.is-delivered,
+.result-handoff.is-delivered:hover,
+.result-handoff.is-delivered:focus-visible {
+  border-color: var(--el-color-success-light-5);
+  background: var(--el-color-success-light-9);
+}
+
+.result-handoff.is-delivered .result-handoff-count,
+.result-handoff.is-delivered .result-handoff-arrow {
+  color: var(--el-color-success);
+}
+
+@keyframes handoff-attention {
+  0% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 1199px) {
+  .result-handoff-arrow {
+    transform: rotate(90deg);
+  }
+}
+
+/* The token that carries the shas: anchored to the viewport, gone on arrival */
+.delivery-token {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2001;
+  padding: 4px 10px;
+  border: 1px solid var(--el-color-danger);
+  border-radius: 999px;
+  background: var(--el-bg-color);
+  color: var(--el-color-danger);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result-handoff::after {
+    animation: none;
+  }
 }
 
 .report-toolbar {

@@ -930,7 +930,7 @@
     "baseline_none_applied": "無基線（比較兩個 ref 的全部歷史）",
     "filtered_by_baseline_count": "基線之前",
     "check_help": "校驗指定提交（完整或短 SHA）是否屬於目標版本。",
-    "send_missing_to_check": "把缺失的 SHA 填入提交校驗",
+    "handoff_to_check": "送到「2 檢查提交」驗證是否存在",
     "sent_missing_to_check": "已把 {count} 個提交填入提交校驗",
     "ref_type_tag": "標籤",
     "ref_type_branch": "分支",

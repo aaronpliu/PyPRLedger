@@ -930,7 +930,7 @@
     "baseline_none_applied": "No baseline (whole history of both refs)",
     "filtered_by_baseline_count": "Before baseline",
     "check_help": "Verify whether specific commits (full or short SHA) belong to a target release.",
-    "send_missing_to_check": "Send missing SHAs to Check Commits",
+    "handoff_to_check": "Deliver to card 2 - Check Commits",
     "sent_missing_to_check": "{count} commit(s) copied to Check Commits",
     "ref_type_tag": "tag",
     "ref_type_branch": "branch",
