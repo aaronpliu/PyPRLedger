@@ -7,18 +7,52 @@
             <h2>{{ t('releaseDiff.title') }}</h2>
             <p class="subtitle">{{ t('releaseDiff.subtitle') }}</p>
           </div>
-          <!-- The coordinates fold away so the results get the room, and they are
-               what a reader comes back to change one ref at a time -->
-          <el-button
-            class="panel-toggle"
-            :class="{ 'is-collapsed': !coordinatesOpen }"
-            text
-            :icon="ArrowDown"
-            :aria-expanded="coordinatesOpen ? 'true' : 'false'"
-            :aria-label="coordinatesOpen ? t('common.collapse') : t('common.expand')"
-            data-test="coordinates-toggle"
-            @click="coordinatesOpen = !coordinatesOpen"
-          />
+          <!-- The report actions live beside the fold: they act on the results
+               below, so they stay reachable even with the coordinates collapsed -->
+          <div class="card-header-actions">
+            <el-button
+              size="small"
+              :icon="Download"
+              :disabled="!hasAnyResult"
+              @click="exportReport('both')"
+            >
+              {{ t('releaseDiff.report_export_both') }}
+            </el-button>
+            <el-dropdown
+              trigger="click"
+              :disabled="!hasAnyResult"
+              @command="(command: string) => captureReport(bothSections, 'release-report', command)"
+            >
+              <el-button size="small" :icon="Camera" :disabled="!hasAnyResult">
+                {{ t('releaseDiff.screenshot_both') }}
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="download">
+                    {{ t('releaseDiff.screenshot_download') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item command="copy">
+                    {{ t('releaseDiff.screenshot_copy') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="shareSupported" command="share">
+                    {{ t('releaseDiff.screenshot_share') }}
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <!-- The coordinates fold away so the results get the room, and they are
+                 what a reader comes back to change one ref at a time -->
+            <el-button
+              class="panel-toggle"
+              :class="{ 'is-collapsed': !coordinatesOpen }"
+              text
+              :icon="ArrowDown"
+              :aria-expanded="coordinatesOpen ? 'true' : 'false'"
+              :aria-label="coordinatesOpen ? t('common.collapse') : t('common.expand')"
+              data-test="coordinates-toggle"
+              @click="coordinatesOpen = !coordinatesOpen"
+            />
+          </div>
         </div>
       </template>
 
@@ -176,40 +210,6 @@
       </div>
       </div>
     </el-card>
-
-    <!-- ================= Report actions for both tools ================= -->
-    <div class="report-toolbar">
-      <el-button
-        size="small"
-        :icon="Download"
-        :disabled="!hasAnyResult"
-        @click="exportReport('both')"
-      >
-        {{ t('releaseDiff.report_export_both') }}
-      </el-button>
-      <el-dropdown
-        trigger="click"
-        :disabled="!hasAnyResult"
-        @command="(command: string) => captureReport(bothSections, 'release-report', command)"
-      >
-        <el-button size="small" :icon="Camera" :disabled="!hasAnyResult">
-          {{ t('releaseDiff.screenshot_both') }}
-        </el-button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="download">
-              {{ t('releaseDiff.screenshot_download') }}
-            </el-dropdown-item>
-            <el-dropdown-item command="copy">
-              {{ t('releaseDiff.screenshot_copy') }}
-            </el-dropdown-item>
-            <el-dropdown-item v-if="shareSupported" command="share">
-              {{ t('releaseDiff.screenshot_share') }}
-            </el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-    </div>
 
     <!-- ================= Tools (left: compare, right: check) ================= -->
     <el-row :gutter="16" class="tool-sections">
@@ -1451,7 +1451,7 @@ async function copySha(value: string) {
 
 .card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -1460,6 +1460,23 @@ async function copySha(value: string) {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
+}
+
+/* Report actions and the fold share one rail on the right, vertically centred
+   against the title */
+.card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  /* the rail drops under the title rather than squeezing it */
+  .card-header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 
 /* The chevron points at the closed panel once the body is folded away */
@@ -1636,13 +1653,6 @@ async function copySha(value: string) {
   .result-handoff::after {
     animation: none;
   }
-}
-
-.report-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
 }
 
 .report-actions {

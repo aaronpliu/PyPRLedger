@@ -888,11 +888,22 @@ describe('ReleasesView reports and screenshots', () => {
   it('offers report actions for the comparison result', async () => {
     const wrapper = await mountWithCompareResult()
 
-    // one per tool that has a result, plus the shared toolbar above the columns
+    // one per tool that has a result, plus the shared pair in the context card header
     expect(buttonsByLabel(wrapper, enMessages.releaseDiff.report_export_html)).toHaveLength(1)
     expect(buttonsByLabel(wrapper, enMessages.releaseDiff.screenshot)).toHaveLength(1)
     expect(buttonsByLabel(wrapper, enMessages.releaseDiff.report_export_both)).toHaveLength(1)
     expect(buttonsByLabel(wrapper, enMessages.releaseDiff.screenshot_both)).toHaveLength(1)
+    // the shared pair rides in the context card header, beside the fold toggle
+    const headerActions = wrapper.find('.card-header-actions')
+    expect(headerActions.exists()).toBe(true)
+    expect(
+      headerActions.findAll('button').map((button: AnyWrapper) => button.text()),
+    ).toEqual(
+      expect.arrayContaining([
+        enMessages.releaseDiff.report_export_both,
+        enMessages.releaseDiff.screenshot_both,
+      ]),
+    )
   }, 30000)
 
   it('highlights missing release commits in red', async () => {
@@ -1031,7 +1042,7 @@ describe('ReleasesView reports and screenshots', () => {
     )
   }, 30000)
 
-  it('exports both tools into one report from the toolbar', async () => {
+  it('exports both tools into one report from the context card header', async () => {
     const wrapper = await mountWithCompareResult()
 
     await buttonsByLabel(wrapper, enMessages.releaseDiff.report_export_both)[0].trigger('click')
@@ -1058,7 +1069,7 @@ describe('ReleasesView reports and screenshots', () => {
   it('downloads a PNG screenshot of both columns', async () => {
     const wrapper = await mountWithCompareResult()
 
-    // dropdown order: shared toolbar, compare card, check card
+    // dropdown order: context card header, compare card, check card
     const dropdowns = wrapper.findAllComponents({ name: 'ElDropdown' })
     dropdowns[0].vm.$emit('command', 'download')
     await flushPromises()
