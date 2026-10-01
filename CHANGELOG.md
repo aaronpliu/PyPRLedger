@@ -5,15 +5,21 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.24.1] - 2026-10-01
+
+**Backend Version**: 1.24.1
+**Frontend Version**: 1.19.1
 
 ### Added
-- Loading progress, global and per area: every request in flight raises a thin top progress bar - the axios client opens and closes one slot per request, and background traffic such as heartbeats and notification polling stays off it - and a shared `ContentLoader` (a skeleton for list areas, a small spinner for inline waits, and a label naming what is asked) marks the areas that wait on the git provider: the tags and branches of the Release Diff page, and the tags, the releases and the tag commits of the Release Notes page. Both are suppressed for readers who asked for reduced motion
+- Loading progress, global and per area: every request in flight raises a thin top progress bar - the axios client opens and closes one slot per request, and background traffic such as heartbeats and notification polling stays off it - the bar's fill eases open and closed rather than jumping - and a shared `ContentLoader` (a skeleton for list areas, a small spinner for inline waits, and a label naming what is asked) marks the areas that wait on the git provider: the tags and branches of the Release Diff page, and the tags, the releases and the tag commits of the Release Notes page. Both are suppressed for readers who asked for reduced motion
 - Fold the repository coordinates of the Releases and the Release Notes pages away: the header of each page carries a toggle (open on arrival, with `aria-expanded` kept in step) and the coordinates are hidden rather than unmounted, so the repository that was picked stays picked
 - Search the tag list of the Release Notes page by name: the search narrows the list before it is paged, says so when nothing matches (instead of looking like an empty repository), and a jump from a release to its tag clears a search that would have hidden it
 
 ### Changed
 - Switching repository clears the comparison: the source, target and baseline fields are reset, and the verdict of the previous repository is dropped rather than left on screen, instead of carrying a stale ref into the repository that was just picked. A link that reopens a check still restores the selection it carries
+- The handoff to the commit check is a strip, not a button: it leads with the number of missing SHAs and names where they land ("Deliver to card 2 - Check Commits"), and an arrow follows the direction of the cards - beside on the wide layout, down once they stack. Confirming it flies a token carrying the count into the check card's input and rings the card on arrival, so the delivery is confirmed where it lands instead of only in a toast. The flight is skipped when the destination is off screen, under `prefers-reduced-motion`, or without the animation API: the handover of the SHAs itself never depends on it
+- The shared "Export Both (HTML)" and "Screenshot Both" actions moved into the header of the Releases card, vertically centred beside the fold toggle, instead of a toolbar of their own between the card and the two tools: they act on the results below, so they stay reachable with the coordinates folded away
+- The baseline field of a comparison takes the full width of its row with a one-line help text, instead of half a row whose hint wrapped into a two-line block
 
 ### Removed
 - The per-repository baseline store: the `release_check_baseline` table, its `GET` / `PUT` / `DELETE /release/diff/baseline` endpoints, the `release_diff` RBAC resource that guarded writes to it, the `use_stored_baseline` request flag and the `baseline_stored` response field. A baseline belongs to a release *line*, and one repository holds several - `feature/2026Oct` releases 2.2610.x while `feature/2026Dec` releases 2.2612.x - each with a fork point of its own, so a single stored baseline was wrong for every line but one. Applying it to a comparison that never asked for it was worse: the Baseline field read as "no baseline" while the comparison was silently narrowed. The baseline is now what the field says it is, an optional part of one comparison, carried in the request (and in the page URL) instead of in a table. The migrations are withdrawn rather than superseded: `033` was applied in the test environment only, which is rolled back to `032`, so no environment keeps the table and no migration is needed for the withdrawal. An environment that did apply `033` is rolled back to `032` **before** it takes this release, since `downgrade` needs the file it undoes; the sequence is in `docs/DEPLOYMENT_GUIDE.md`
@@ -21,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - A first load of the tags tab looked like an empty repository: "No tags" was shown while the provider was still being asked. It now shows the loader instead, and so does the app's first paint, which sat on a blank page until the auth handshake finished - a boot indicator in `index.html` stands in until the app mounts
 - Define the translation keys the source asks for but the locale files never carried, which rendered as the key itself - `releaseDiff.truncated_warning` and `releaseDiff.commit_set_bounded_title` in the exported release comparison report, `common.updating` on the forced password change button, `common.close` on the reviews banner, `common.enable_all` / `common.disable_all` on the notification preferences, and the whole `confirm` section (`confirm.delete_avatar`) on the avatar dialog. A test now checks that every `t('...')` literal of the source is defined and that the three locales hold the same keys, so a missing key fails the build instead of reaching a report nobody can correct afterwards; it also found `admin.delegations`, a key only the Chinese locales carried and nothing asked for
+
+---
+
+## [Unreleased]
 
 ---
 
