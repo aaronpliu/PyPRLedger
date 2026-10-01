@@ -5,6 +5,9 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+---
 ## [1.24.1] - 2026-10-01
 
 **Backend Version**: 1.24.1
@@ -27,10 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - A first load of the tags tab looked like an empty repository: "No tags" was shown while the provider was still being asked. It now shows the loader instead, and so does the app's first paint, which sat on a blank page until the auth handshake finished - a boot indicator in `index.html` stands in until the app mounts
 - Define the translation keys the source asks for but the locale files never carried, which rendered as the key itself - `releaseDiff.truncated_warning` and `releaseDiff.commit_set_bounded_title` in the exported release comparison report, `common.updating` on the forced password change button, `common.close` on the reviews banner, `common.enable_all` / `common.disable_all` on the notification preferences, and the whole `confirm` section (`confirm.delete_avatar`) on the avatar dialog. A test now checks that every `t('...')` literal of the source is defined and that the three locales hold the same keys, so a missing key fails the build instead of reaching a report nobody can correct afterwards; it also found `admin.delegations`, a key only the Chinese locales carried and nothing asked for
-
----
-
-## [Unreleased]
 
 ---
 
