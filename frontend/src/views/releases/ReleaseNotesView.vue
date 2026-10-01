@@ -8,22 +8,37 @@
             <h2>{{ t('releaseNotes.title') }}</h2>
             <p class="subtitle">{{ t('releaseNotes.subtitle') }}</p>
           </div>
-          <!-- Users who cannot manage releases only get a label: the explanation
-               is kept in the tooltip instead of a banner over the page -->
-          <el-tooltip
-            v-if="!canManage"
-            :content="t('releaseNotes.read_only_help')"
-            placement="bottom-end"
-            :show-after="100"
-          >
-            <el-tag class="read-only-tag" type="info" size="small" round effect="plain">
-              <el-icon><InfoFilled /></el-icon>
-              <span>{{ t('releaseNotes.read_only_title') }}</span>
-            </el-tag>
-          </el-tooltip>
+          <div class="header-end">
+            <!-- Users who cannot manage releases only get a label: the explanation
+                 is kept in the tooltip instead of a banner over the page -->
+            <el-tooltip
+              v-if="!canManage"
+              :content="t('releaseNotes.read_only_help')"
+              placement="bottom-end"
+              :show-after="100"
+            >
+              <el-tag class="read-only-tag" type="info" size="small" round effect="plain">
+                <el-icon><InfoFilled /></el-icon>
+                <span>{{ t('releaseNotes.read_only_title') }}</span>
+              </el-tag>
+            </el-tooltip>
+            <!-- The coordinates fold away: the list and the notes are what the
+                 page is opened for -->
+            <el-button
+              class="panel-toggle"
+              :class="{ 'is-collapsed': !coordinatesOpen }"
+              text
+              :icon="ArrowDown"
+              :aria-expanded="coordinatesOpen ? 'true' : 'false'"
+              :aria-label="coordinatesOpen ? t('common.collapse') : t('common.expand')"
+              data-test="coordinates-toggle"
+              @click="coordinatesOpen = !coordinatesOpen"
+            />
+          </div>
         </div>
       </template>
 
+      <div class="panel-body" :class="{ 'is-collapsed': !coordinatesOpen }">
       <el-form :model="repo" label-width="150px">
         <el-row :gutter="16">
           <el-col :xs="24" :sm="12" :md="6">
@@ -109,6 +124,7 @@
           </el-col>
         </el-row>
       </el-form>
+      </div>
     </el-card>
 
     <el-row :gutter="16" class="notes-row">
@@ -154,9 +170,11 @@
           <el-tabs v-else v-model="activeTab" class="nav-tabs">
             <!-- ============ Stored releases, paginated ============ -->
             <el-tab-pane name="releases" :label="t('releaseNotes.list_title')">
-              <div v-if="notesLoading" class="loading-block">
-                <el-skeleton :rows="4" animated />
-              </div>
+              <ContentLoader
+                v-if="notesLoading"
+                :rows="4"
+                :label="t('releaseNotes.notes_loading')"
+              />
 
               <el-empty
                 v-else-if="notes.length === 0"
@@ -165,6 +183,28 @@
               />
 
               <template v-else>
+                <div class="export-bar">
+                  <el-checkbox
+                    :model-value="exportAll"
+                    :indeterminate="!exportAll && exportSelection.size > 0"
+                    data-test="export-all"
+                    @change="toggleExportAll"
+                  >
+                    {{ t('releaseNotes.export_all', { count: notesTotal }) }}
+                  </el-checkbox>
+                  <el-button
+                    size="small"
+                    type="primary"
+                    plain
+                    :loading="exportingNotes"
+                    :disabled="exportCount === 0"
+                    data-test="export-selected"
+                    @click="exportNotes()"
+                  >
+                    {{ t('releaseNotes.export_selected', { count: exportCount }) }}
+                  </el-button>
+                </div>
+
                 <ul class="nav-list">
                   <li
                     v-for="note in notes"
@@ -174,6 +214,13 @@
                     @click="selectNote(note)"
                   >
                     <div class="nav-item-main">
+                      <el-checkbox
+                        class="nav-item-check"
+                        :model-value="isExportSelected(note.id)"
+                        :aria-label="t('releaseNotes.export_selected', { count: 1 })"
+                        @click.stop
+                        @change="toggleExportSelection(note.id)"
+                      />
                       <span class="nav-item-name">{{ note.name }}</span>
                       <el-tag size="small" effect="plain">{{ note.tag_name }}</el-tag>
                     </div>
@@ -232,19 +279,45 @@
                 </el-button>
               </div>
 
+              <!-- A repository can hold hundreds of tags: the search narrows the
+                   list before it is paged, so a tag is reachable by name -->
+              <el-input
+                v-if="tags.length > 0"
+                v-model="tagSearch"
+                class="nav-search"
+                size="small"
+                clearable
+                :prefix-icon="Search"
+                :placeholder="t('releaseNotes.tags_search_placeholder')"
+                data-test="tags-search"
+              />
+
+              <!-- a first load is a wait, not an empty repository: show the load
+                   instead of a premature "no tags" while the provider is asked -->
+              <ContentLoader
+                v-if="refsLoading && tags.length === 0"
+                :rows="5"
+                :label="t('releaseNotes.tags_loading')"
+              />
               <el-empty
-                v-if="tags.length === 0"
+                v-else-if="tags.length === 0"
                 :description="t('releaseNotes.tags_empty')"
+                :image-size="60"
+              />
+              <el-empty
+                v-else-if="filteredTags.length === 0"
+                :description="t('releaseNotes.tags_no_match')"
                 :image-size="60"
               />
 
               <template v-else>
-                <ul class="nav-list">
+                <ul ref="tagListRef" class="nav-list">
                   <li
                     v-for="tag in visibleTags"
                     :key="tag"
                     class="nav-item tag-item"
                     :class="{ active: selectedTag === tag && !editorOpen }"
+                    :data-tag-name="tag"
                     @click="selectTag(tag)"
                   >
                     <div class="nav-item-main">
@@ -271,14 +344,14 @@
                 </ul>
 
                 <el-pagination
-                  v-if="tags.length > tagPageSize"
+                  v-if="filteredTags.length > tagPageSize"
                   v-model:current-page="tagPage"
                   v-model:page-size="tagPageSize"
                   class="nav-pagination"
                   size="small"
                   background
                   :page-sizes="[10, 20, 50, 100]"
-                  :total="tags.length"
+                  :total="filteredTags.length"
                   layout="total, sizes, prev, pager, next"
                 />
               </template>
@@ -295,20 +368,17 @@
             <div class="section-header">
               <div class="section-title">
                 <h3>{{ detailTitle }}</h3>
-                <!-- The badges describe the selection of the active tab: a release
-                     kept from the releases tab must not decorate a tag. -->
-                <template v-if="tabIsReleases && selectedNote && !editorOpen">
-                  <el-tag size="small" effect="plain">{{ selectedNote.tag_name }}</el-tag>
-                  <el-tag v-if="selectedNote.is_latest" size="small" type="success" round>
-                    {{ t('releaseNotes.badge_latest') }}
-                  </el-tag>
-                  <el-tag v-if="selectedNote.is_prerelease" size="small" type="warning" round>
-                    {{ t('releaseNotes.badge_prerelease') }}
-                  </el-tag>
-                  <el-tag v-if="selectedNote.status === 'draft'" size="small" type="info" round>
-                    {{ t('releaseNotes.badge_draft') }}
-                  </el-tag>
-                </template>
+                <!-- The badges and the actions now live on each entry, so the
+                     header describes the page (or the tag) and not a selection. -->
+                <el-tag
+                  v-if="tabIsReleases && !editorOpen && notesTotal"
+                  size="small"
+                  type="info"
+                  round
+                  data-test="page-count"
+                >
+                  {{ notesTotal }}
+                </el-tag>
                 <el-tag v-else-if="tabIsTags && selectedTag && !editorOpen" size="small" effect="plain">
                   {{ selectedTag }}
                 </el-tag>
@@ -333,45 +403,6 @@
                 >
                   {{ t('releaseNotes.draft_for_tag') }}
                 </el-button>
-                <template v-else-if="tabIsReleases && selectedNote">
-                  <el-button
-                    v-if="selectedNote.external_url"
-                    link
-                    size="small"
-                    tag="a"
-                    :href="selectedNote.external_url"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    {{ t('releaseNotes.view_on_provider') }}
-                  </el-button>
-                  <template v-if="canManage">
-                    <el-button link type="primary" size="small" @click="editNote(selectedNote)">
-                      {{ t('releaseNotes.edit_release') }}
-                    </el-button>
-                    <el-button
-                      v-if="selectedNote.status === 'draft'"
-                      link
-                      type="success"
-                      size="small"
-                      @click="publishNote(selectedNote)"
-                    >
-                      {{ t('releaseNotes.publish') }}
-                    </el-button>
-                    <el-button
-                      v-if="canImportFromProvider"
-                      link
-                      type="primary"
-                      size="small"
-                      @click="pushNote(selectedNote)"
-                    >
-                      {{ t('releaseNotes.push_to_provider') }}
-                    </el-button>
-                    <el-button link type="danger" size="small" @click="confirmDelete(selectedNote)">
-                      {{ t('releaseNotes.delete') }}
-                    </el-button>
-                  </template>
-                </template>
               </div>
             </div>
           </template>
@@ -439,16 +470,41 @@
                   >
                     {{ t('releaseNotes.generate_notes') }}
                   </el-button>
+                  <el-checkbox
+                    v-if="llmEnabled"
+                    v-model="aiSummary"
+                    size="small"
+                    style="margin-left: 8px"
+                  >
+                    {{ t('releaseNotes.ai_summary') }}
+                  </el-checkbox>
                   <span v-if="generatedCount !== null" class="generated-hint">
                     {{ t('releaseNotes.generated', { count: generatedCount }) }}
                   </span>
+                  <span v-if="summarizedByAi" class="generated-hint">
+                    · {{ t('releaseNotes.generated_with_ai') }}
+                  </span>
+                </div>
+                <div v-if="!llmEnabled" class="field-hint">
+                  {{ t('releaseNotes.ai_summary_unavailable') }}
+                </div>
+                <!-- the pass was asked for and could not be made: the notes on
+                     screen came from the commit subjects, and this says why -->
+                <div v-else-if="aiFallback" class="field-hint ai-summary-fallback">
+                  <span>{{ aiFallbackMessage }}</span>
+                  <!-- the provider's own message, which is what can be acted on -->
+                  <code v-if="summaryError" class="ai-summary-error">{{ summaryError }}</code>
+                </div>
+                <div v-else-if="aiSummary" class="field-hint">
+                  {{ t('releaseNotes.ai_summary_help') }}
                 </div>
                 <MdEditor
                   v-model="form.body"
                   :toolbars="toolbars"
                   :theme="mdTheme"
-                  :preview="false"
-                  :style="{ height: '320px' }"
+                  :language="mdLanguage"
+                  preview-theme="github"
+                  :style="{ height: '420px' }"
                   :placeholder="t('releaseNotes.notes_placeholder')"
                 />
               </div>
@@ -495,70 +551,218 @@
           <!-- Commits released by the selected tag (mapping tag -> commits) -->
           <template v-else-if="tabIsTags && selectedTag">
             <div class="release-meta">
-              <span>
-                {{
-                  tagPrevious
-                    ? t('releaseNotes.range', { from: tagPrevious, to: selectedTag })
-                    : t('releaseNotes.full_history', { tag: selectedTag })
-                }}
-              </span>
+              <span>{{ tagScopeHint }}</span>
               <span v-if="!tagCommitsLoading"> · {{ t('releaseNotes.commit_count', { count: tagCommitCount }) }}</span>
             </div>
 
             <el-alert
-              v-if="tagTruncated"
+              v-if="tagScopeInferred"
               class="status-alert"
               type="warning"
               :closable="false"
-              :title="t('releaseNotes.commits_truncated')"
+              :title="t('releaseNotes.scope_inferred', { from: tagScope?.previous ?? '' })"
             />
 
-            <el-skeleton v-if="tagCommitsLoading" class="loading-block" :rows="5" animated />
+            <el-alert
+              v-if="tagScopeTrimmed"
+              class="status-alert"
+              type="warning"
+              :closable="false"
+              :title="tagTrimNotice"
+            />
+
+            <ContentLoader
+              v-if="tagCommitsLoading"
+              :rows="5"
+              :label="t('releaseNotes.commits_loading')"
+            />
 
             <commit-table v-else :commits="tagCommits" :empty-text="t('releaseNotes.commits_empty')" />
           </template>
 
-          <!-- Read-only notes of the selected release -->
-          <template v-else-if="tabIsReleases && selectedNote">
-            <div class="release-meta">
-              <span v-if="selectedNote.author" class="release-author">
-                <UserAvatar
-                  v-if="selectedNote.author_avatar_url"
-                  class="release-author-avatar"
-                  :username="selectedNote.author"
-                  :avatar-url="selectedNote.author_avatar_url"
-                  :size="22"
-                />
-                {{ t('releaseNotes.released_by', { author: selectedNote.author }) }}
-              </span>
-              <span v-if="selectedNote.published_date">
-                · {{ formatDate(selectedNote.published_date) }}
-              </span>
-              <span v-else-if="selectedNote.updated_date">
-                · {{ t('releaseNotes.updated_at', { date: formatDate(selectedNote.updated_date) }) }}
-              </span>
-              <span v-if="selectedNote.previous_tag" class="release-range">
-                ·
-                {{
-                  t('releaseNotes.range', {
-                    from: selectedNote.previous_tag,
-                    to: selectedNote.tag_name,
-                  })
-                }}
-              </span>
-            </div>
+          <!-- Every release of the current page, one entry each -->
+          <template v-else-if="tabIsReleases && notes.length">
+            <article
+              v-for="note in notes"
+              :key="note.id"
+              class="note-entry"
+              :class="{ focused: selectedNote?.id === note.id }"
+              :data-note-id="note.id"
+            >
+              <header class="note-entry-header">
+                <div class="note-entry-title">
+                  <h4 class="note-entry-name">
+                    <!-- The title links back to the tag the release was cut from:
+                         the mirror of the note icon in the tag navigator -->
+                    <a
+                      class="note-entry-tag-link"
+                      href="#"
+                      @click.prevent="openTagForNote(note.tag_name)"
+                    >
+                      {{ note.name }}
+                    </a>
+                  </h4>
+                  <!-- the tag is the version's identity: it reads at the same
+                       weight as the title, while the status badges stay small -->
+                  <el-tag effect="plain">{{ note.tag_name }}</el-tag>
+                  <el-tag v-if="note.is_latest" size="small" type="success" round>
+                    {{ t('releaseNotes.badge_latest') }}
+                  </el-tag>
+                  <el-tag v-if="note.is_prerelease" size="small" type="warning" round>
+                    {{ t('releaseNotes.badge_prerelease') }}
+                  </el-tag>
+                  <el-tag v-if="note.status === 'draft'" size="small" type="info" round>
+                    {{ t('releaseNotes.badge_draft') }}
+                  </el-tag>
+                </div>
 
-            <div v-if="selectedNote.body" class="release-body" @click="openNoteLink">
-              <MdPreview :model-value="noteBody(selectedNote.body)" :theme="mdTheme" preview-theme="github" />
-            </div>
-            <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
+                <!-- The actions belong to the entry they sit on, so a release can
+                     be acted on without selecting it first -->
+                <div class="note-entry-actions">
+                  <el-button
+                    v-if="note.external_url"
+                    link
+                    size="small"
+                    tag="a"
+                    :href="note.external_url"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    {{ t('releaseNotes.view_on_provider') }}
+                  </el-button>
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :loading="exportingNotes"
+                    @click="exportNotes([note.id])"
+                  >
+                    {{ t('releaseNotes.export_one') }}
+                  </el-button>
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :loading="copyingNote"
+                    @click="copyNote(note)"
+                  >
+                    {{ t('releaseNotes.copy_one') }}
+                  </el-button>
+                  <template v-if="canManage">
+                    <el-button link type="primary" size="small" @click="editNote(note)">
+                      {{ t('releaseNotes.edit_release') }}
+                    </el-button>
+                    <el-button
+                      v-if="note.status === 'draft'"
+                      link
+                      type="success"
+                      size="small"
+                      @click="publishNote(note)"
+                    >
+                      {{ t('releaseNotes.publish') }}
+                    </el-button>
+                    <el-button
+                      v-if="canImportFromProvider"
+                      link
+                      type="primary"
+                      size="small"
+                      @click="pushNote(note)"
+                    >
+                      {{ t('releaseNotes.push_to_provider') }}
+                    </el-button>
+                    <el-button link type="danger" size="small" @click="confirmDelete(note)">
+                      {{ t('releaseNotes.delete') }}
+                    </el-button>
+                  </template>
+                </div>
+              </header>
+
+              <div class="release-meta">
+                <span v-if="note.author" class="release-author">
+                  <UserAvatar
+                    v-if="note.author_avatar_url"
+                    class="release-author-avatar"
+                    :username="note.author"
+                    :avatar-url="note.author_avatar_url"
+                    :size="22"
+                  />
+                  {{ t('releaseNotes.released_by', { author: note.author }) }}
+                </span>
+                <span v-if="note.published_date">
+                  · {{ formatDate(note.published_date) }}
+                </span>
+                <span v-else-if="note.updated_date">
+                  · {{ t('releaseNotes.updated_at', { date: formatDate(note.updated_date) }) }}
+                </span>
+                <span v-if="note.previous_tag" class="release-range">
+                  ·
+                  {{
+                    t('releaseNotes.range', {
+                      from: note.previous_tag,
+                      to: note.tag_name,
+                    })
+                  }}
+                </span>
+              </div>
+
+              <div
+                v-if="note.body"
+                class="release-body"
+                :class="{ collapsed: isNoteCollapsed(note) }"
+                @click="openNoteLink"
+              >
+                <MdPreview :model-value="noteBody(note.body)" :theme="mdTheme" preview-theme="github" />
+                <div v-if="isNoteCollapsed(note)" class="note-fade" />
+              </div>
+              <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
+
+              <!-- Collapsing is a reading aid: the notes stay whole in the release
+                   and in an export -->
+              <el-button
+                v-if="isLongNote(note)"
+                link
+                type="primary"
+                size="small"
+                class="note-expand"
+                @click="toggleNoteExpanded(note.id)"
+              >
+                {{
+                  isNoteCollapsed(note)
+                    ? t('releaseNotes.show_more')
+                    : t('releaseNotes.show_less')
+                }}
+              </el-button>
+            </article>
+
+            <el-pagination
+              v-if="notesTotal > notesPageSize"
+              v-model:current-page="notesPage"
+              v-model:page-size="notesPageSize"
+              class="detail-pagination"
+              :page-sizes="[5, 10, 20, 50]"
+              :total="notesTotal"
+              layout="total, sizes, prev, pager, next"
+              background
+            />
           </template>
 
-          <el-skeleton v-else-if="notesLoading" :rows="6" animated />
+          <ContentLoader
+            v-else-if="notesLoading"
+            :rows="6"
+            :label="t('releaseNotes.notes_loading')"
+          />
 
           <el-empty
             v-else
-            :description="t(hasCoordinates ? 'releaseNotes.select_hint' : 'releaseNotes.needs_repository')"
+            :description="
+              t(
+                !hasCoordinates
+                  ? 'releaseNotes.needs_repository'
+                  : notesTotal === 0
+                    ? 'releaseNotes.empty'
+                    : 'releaseNotes.select_hint',
+              )
+            "
           />
         </el-card>
         </div>
@@ -568,10 +772,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Close, Document, InfoFilled, Refresh } from '@element-plus/icons-vue'
+import { ArrowDown, Close, Document, InfoFilled, Refresh, Search } from '@element-plus/icons-vue'
 import { MdEditor, MdPreview, type ToolbarNames } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { projectsApi } from '@/api/projects'
@@ -579,15 +783,23 @@ import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/
 import { releaseDiffApi } from '@/api/releaseDiff'
 import type { CommitInfo } from '@/api/releaseDiff'
 import CommitTable from '@/components/release/CommitTable.vue'
+import ContentLoader from '@/components/common/ContentLoader.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
 import { useJira } from '@/composables/useJira'
 import { linkifyJiraMarkdown } from '@/utils/jira'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
+import type {
+  ReleaseNoteExportRequest,
+  ReleaseScopeReason,
+  ReleaseScopeSource,
+} from '@/api/releaseNotes'
+import { copyTextToClipboard, downloadMarkdown } from '@/utils/export/markdown'
+import { llmApi } from '@/api/llm'
 import { useAuthStore } from '@/stores/auth'
 
 type NavigatorTab = 'releases' | 'tags'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const authStore = useAuthStore()
 // JIRA link settings: also used to link the ticket keys of hand written notes
 const { jiraSettings, loadJiraSettings } = useJira()
@@ -618,6 +830,11 @@ const toolbars: ToolbarNames[] = [
   '-',
   'revoke',
   'next',
+  '-',
+  // reading the note as it will be published, next to the markdown being typed
+  'preview',
+  'previewOnly',
+  'catalog',
 ]
 
 const projects = ref<ProjectSummary[]>([])
@@ -631,9 +848,94 @@ const refsLoading = ref(false)
 const tags = ref<string[]>([])
 const branches = ref<string[]>([])
 
+// The coordinate panel is open on arrival: it is what a first visit fills in
+const coordinatesOpen = ref(true)
+// The tag navigator is searched by name, not paged through
+const tagSearch = ref('')
+
 const notes = ref<ReleaseNote[]>([])
 const notesTotal = ref(0)
 const notesLoading = ref(false)
+// Export selection: either the releases ticked in the list, or every release of
+// the repository - the latter covers releases the paginated list has not loaded,
+// which is what "export the change log" means. The two are exclusive: ticking a
+// release after selecting all narrows the export down to what was ticked.
+const exportSelection = ref<Set<number>>(new Set())
+const exportAll = ref(false)
+const exportingNotes = ref(false)
+const copyingNote = ref(false)
+
+// How many releases the export would write: everything, or what is ticked
+const exportCount = computed(() =>
+  exportAll.value ? notesTotal.value : exportSelection.value.size,
+)
+
+// Notes long enough to be collapsed are expanded one entry at a time; the state
+// is dropped when the page changes.
+const NOTE_COLLAPSE_LINES = 20
+const NOTE_COLLAPSE_CHARS = 1500
+const expandedNotes = ref<Set<number>>(new Set())
+
+/**
+ * Whether the notes of a release are long enough to be worth collapsing.
+ *
+ * The decision is taken from the text rather than from the rendered height: the
+ * test environment has no layout engine, so a measured overflow check could never
+ * be asserted, and it would also depend on the renderer and the font.
+ */
+function isLongNote(note: ReleaseNote): boolean {
+  const body = note.body ?? ''
+  return body.length > NOTE_COLLAPSE_CHARS || body.split('\n').length > NOTE_COLLAPSE_LINES
+}
+
+/** Whether the notes are rendered collapsed (long, and not expanded by hand). */
+function isNoteCollapsed(note: ReleaseNote): boolean {
+  return isLongNote(note) && !expandedNotes.value.has(note.id)
+}
+
+function toggleNoteExpanded(noteId: number) {
+  const next = new Set(expandedNotes.value)
+  if (next.has(noteId)) {
+    next.delete(noteId)
+  } else {
+    next.add(noteId)
+  }
+  expandedNotes.value = next
+}
+
+function isExportSelected(noteId: number): boolean {
+  return exportAll.value || exportSelection.value.has(noteId)
+}
+
+/** Tick or untick one release. Ticking one leaves the "all releases" mode. */
+function toggleExportSelection(noteId: number) {
+  if (exportAll.value) {
+    exportAll.value = false
+    exportSelection.value = new Set([noteId])
+    return
+  }
+
+  const next = new Set(exportSelection.value)
+  if (next.has(noteId)) {
+    next.delete(noteId)
+  } else {
+    next.add(noteId)
+  }
+  exportSelection.value = next
+}
+
+/** Switch between every release of the repository and the ticked ones. */
+function toggleExportAll(checked: unknown) {
+  exportAll.value = Boolean(checked)
+  if (exportAll.value) {
+    exportSelection.value = new Set()
+  }
+}
+
+function clearExportSelection() {
+  exportAll.value = false
+  exportSelection.value = new Set()
+}
 // Column 1 is a navigator with two tabs: stored releases and repository tags
 const activeTab = ref<NavigatorTab>('releases')
 const tabIsReleases = computed(() => activeTab.value === 'releases')
@@ -643,6 +945,8 @@ const notesPage = ref(1)
 const notesPageSize = ref(10)
 const tagPage = ref(1)
 const tagPageSize = ref(20)
+// the rendered page of the tag navigator, used to bring a tag into view
+const tagListRef = ref<HTMLElement | null>(null)
 // Either a stored release or a tag is selected, depending on the active tab
 const selectedId = ref<number | null>(null)
 const selectedTag = ref<string | null>(null)
@@ -652,6 +956,17 @@ const tagCommits = ref<CommitInfo[]>([])
 const tagCommitCount = ref(0)
 const tagCommitsLoading = ref(false)
 const tagTruncated = ref(false)
+// Release scope of the selected tag as the server resolved it: the predecessor it
+// found, the revisions the comparison was pinned to, and whether the answer was
+// proven (an ancestor) or inferred from the tag order
+const tagScope = ref<{
+  previous: string | null
+  previousSha: string | null
+  versionSha: string | null
+  source: ReleaseScopeSource
+  verified: boolean
+  reason: ReleaseScopeReason
+} | null>(null)
 // tag name -> release (id + position in the full list), loaded for the tags tab
 const releaseTagIndex = ref<Map<string, { id: number; position: number }>>(new Map())
 const releaseTagIndexLoaded = ref(false)
@@ -661,6 +976,38 @@ const saving = ref(false)
 const importing = ref(false)
 const generating = ref(false)
 const generatedCount = ref<number | null>(null)
+// The AI pass is optional and server-side: the switch is only offered when the
+// deployment has an LLM configured (System Settings -> LLM).
+type SummaryNotice = 'not_configured' | 'provider_error' | 'unreadable_answer' | 'failed'
+
+const llmEnabled = ref(false)
+const aiSummary = ref(false)
+const summarizedByAi = ref(false)
+const summaryNotice = ref<SummaryNotice | null>(null)
+// What the provider said when it refused the call, when it said anything: the
+// one thing that tells an administrator what to change.
+const summaryError = ref<string | null>(null)
+
+// A pass that was asked for and could not be made is answered with the
+// deterministic notes, so say which one is on screen instead of leaving the
+// reader to guess whether the sections came from the AI or from the subjects.
+const aiFallback = computed<SummaryNotice | null>(() =>
+  aiSummary.value && !summarizedByAi.value ? summaryNotice.value : null,
+)
+const aiFallbackMessage = computed(() => {
+  switch (aiFallback.value) {
+    case 'not_configured':
+      return t('releaseNotes.ai_summary_fallback_not_configured')
+    case 'provider_error':
+      return t('releaseNotes.ai_summary_fallback_provider_error')
+    case 'unreadable_answer':
+      return t('releaseNotes.ai_summary_fallback_unreadable_answer')
+    case 'failed':
+      return t('releaseNotes.ai_summary_fallback_failed')
+    default:
+      return ''
+  }
+})
 const formCard = ref<HTMLElement | null>(null)
 
 const repo = ref({
@@ -697,6 +1044,9 @@ const isDarkTheme = computed(() => {
   return document.documentElement.getAttribute('data-theme') === 'dark'
 })
 const mdTheme = computed<'dark' | 'light'>(() => (isDarkTheme.value ? 'dark' : 'light'))
+// The library only ships zh-CN and en-US tooltips, and answers an unknown
+// language with English - closer to zh-CN than that for a Chinese UI
+const mdLanguage = computed(() => (locale.value.startsWith('zh') ? 'zh-CN' : 'en-US'))
 
 let themeObserver: MutationObserver | null = null
 
@@ -724,14 +1074,83 @@ const sortedTags = computed(() =>
   [...tags.value].sort((a, b) => b.localeCompare(a, undefined, { numeric: true })),
 )
 const selectableRefs = computed(() => [...sortedTags.value, ...branches.value])
+
+/** Whether a tag survives the search box, by a plain substring of its name. */
+function tagMatchesQuery(tag: string): boolean {
+  const query = tagSearch.value.trim().toLowerCase()
+  return !query || tag.toLowerCase().includes(query)
+}
+
+// The search narrows the list before it is paged, so a match is on the first
+// page of the result rather than on whichever page its position falls on
+const filteredTags = computed(() => sortedTags.value.filter(tagMatchesQuery))
 const visibleTags = computed(() => {
   const start = (tagPage.value - 1) * tagPageSize.value
-  return sortedTags.value.slice(start, start + tagPageSize.value)
+  return filteredTags.value.slice(start, start + tagPageSize.value)
 })
-// The release scope of a tag runs from the next older tag to the tag itself
-const tagPrevious = computed(() =>
-  selectedTag.value ? previousTagFor(selectedTag.value) : null,
+/** Short revision, or an empty string when the server resolved none. */
+function shortRevision(sha?: string | null): string {
+  return (sha ?? '').trim().slice(0, 7)
+}
+
+/** A ref with its revision when one is known: ``v1.0.0 (3f2a1b)``. */
+function labelWithRevision(ref: string, sha?: string | null): string {
+  const short = shortRevision(sha)
+  return short ? `${ref} (${short})` : ref
+}
+
+// The release scope of a tag is resolved by the server: the browser only holds a
+// page of tags, so guessing the predecessor here used to lose the scope of every
+// tag beyond that page and list the whole history instead.
+const tagScopeResolved = computed(() => tagScope.value?.reason === 'resolved')
+
+const tagScopeRange = computed(() => {
+  const scope = tagScope.value
+  if (!scope || !scope.previous || !tagScopeResolved.value) return null
+  return t('releaseNotes.range', {
+    from: labelWithRevision(scope.previous, scope.previousSha),
+    to: labelWithRevision(selectedTag.value ?? '', scope.versionSha),
+  })
+})
+
+// A scope inferred from the tag order is a legitimate answer, just not a proven one
+const tagScopeInferred = computed(
+  () => Boolean(tagScope.value) && tagScopeResolved.value && !tagScope.value?.verified,
 )
+
+// A capped listing borrows its meaning from the scope: for a resolved scope it is
+// a display limit, and the panel must not present it as a repository limit
+const tagScopeTrimmed = computed(() => tagTruncated.value && tagScopeResolved.value)
+
+const tagTrimNotice = computed(() =>
+  tagCommits.value.length < tagCommitCount.value
+    ? t('releaseNotes.commits_trimmed', {
+        shown: tagCommits.value.length,
+        count: tagCommitCount.value,
+      })
+    : t('releaseNotes.commits_scan_capped'),
+)
+
+/** Scope line of the tags panel: the range when resolved, why otherwise. */
+const tagScopeHint = computed(() => {
+  const tag = selectedTag.value ?? ''
+  const scope = tagScope.value
+
+  if (scope?.reason === 'first_release') {
+    return t('releaseNotes.scope_first_release', { tag })
+  }
+  if (scope?.reason === 'unresolved') {
+    return t('releaseNotes.scope_unresolved', { tag })
+  }
+  if (scope) {
+    return tagScopeRange.value ?? t('releaseNotes.full_history', { tag })
+  }
+  // no answer yet: the local tag order is only a placeholder for the label
+  const guess = previousTagFor(tag)
+  return guess
+    ? t('releaseNotes.range', { from: guess, to: tag })
+    : t('releaseNotes.full_history', { tag })
+})
 
 // Header of the right column: the editor, the selected release or the tag commits
 const detailTitle = computed(() => {
@@ -743,10 +1162,9 @@ const detailTitle = computed(() => {
       ? t('releaseNotes.tag_commits_title', { tag: selectedTag.value })
       : t('releaseNotes.select_title')
   }
-  if (selectedNote.value) {
-    return selectedNote.value.name
-  }
-  return t('releaseNotes.select_title')
+  // The column holds a page of releases, so its title describes the list rather
+  // than one selection (the badges and the actions moved into the entries).
+  return t('releaseNotes.list_title')
 })
 
 function secondaryName(value: string, name?: string | null): string | undefined {
@@ -781,6 +1199,41 @@ function uniqueRefs(values: string[] | null | undefined): string[] {
 function selectNote(note: ReleaseNote) {
   closeForm()
   selectedId.value = note.id
+  void scrollToNoteEntry(note.id)
+}
+
+/**
+ * Bring the entry of a release into view in the reading column.
+ *
+ * The column lists the whole page, so picking a release scrolls to it instead of
+ * replacing what is rendered. The wait is bounded and repeated: jumping from the
+ * tags tab can change the page first, and that reload is started by a watcher
+ * rather than awaited here.
+ */
+async function scrollToNoteEntry(noteId: number) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await nextTick()
+    const target = document.querySelector(`[data-note-id="${noteId}"]`)
+    if (target) {
+      target.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+}
+
+/** Scroll the tag of the navigator into view (the list is paginated). */
+async function scrollToTagItem(tag: string) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await nextTick()
+    const items = tagListRef.value?.querySelectorAll<HTMLElement>('.tag-item') ?? []
+    const target = Array.from(items).find((item) => item.dataset.tagName === tag)
+    if (target) {
+      target.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' })
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
 }
 
 /** Select a tag and show the commits it released. */
@@ -888,6 +1341,36 @@ async function openNoteForTag(tag: string) {
   if (page !== notesPage.value) {
     notesPage.value = page
   }
+  // the entry may only exist once the page it belongs to has loaded
+  void scrollToNoteEntry(entry.id)
+}
+
+/**
+ * Mirror of openNoteForTag: from a release to the tag it was cut from.
+ *
+ * The tag navigator is paginated in the browser, so the page holding the tag is
+ * opened before the item is scrolled to; selecting it also loads the commits it
+ * released, which is where the release's scope can be inspected.
+ */
+function openTagForNote(tag: string) {
+  activeTab.value = 'tags'
+
+  // a search that hides the tag would leave the jump pointing at nothing
+  if (!tagMatchesQuery(tag)) {
+    tagSearch.value = ''
+  }
+
+  const position = filteredTags.value.indexOf(tag)
+  if (position >= 0) {
+    const page = Math.floor(position / tagPageSize.value) + 1
+    if (page !== tagPage.value) {
+      tagPage.value = page
+    }
+  }
+
+  // selects the tag (and closes an open editor) and loads its commits
+  selectTag(tag)
+  void scrollToTagItem(tag)
 }
 
 function coordinates() {
@@ -974,6 +1457,12 @@ async function loadRefs(force = false) {
     }
     if (force) {
       ElMessage.success(t('releaseNotes.refresh_tags_ok'))
+      // A refreshed tag list is the moment a new tag may exist or an old one may
+      // have been moved, so the scope of the current selection is re-resolved
+      // instead of being served from the cache.
+      if (selectedTag.value) {
+        void loadTagCommits(selectedTag.value, true)
+      }
     }
   } catch {
     // refs are only suggestions - typing the tag manually stays possible
@@ -985,6 +1474,8 @@ async function loadRefs(force = false) {
 async function loadNotes() {
   notes.value = []
   notesTotal.value = 0
+  // an expanded note belongs to the page it was expanded on
+  expandedNotes.value = new Set()
   if (!hasCoordinates.value) return
 
   notesLoading.value = true
@@ -1014,29 +1505,114 @@ async function loadNotes() {
  * This is the tag -> commits mapping shown in the tags tab; the generated note
  * body of the same scope is ignored on purpose.
  */
-async function loadTagCommits(tag: string) {
+async function loadTagCommits(tag: string, refresh = false) {
   tagCommits.value = []
   tagCommitCount.value = 0
   tagTruncated.value = false
+  tagScope.value = null
   if (!hasCoordinates.value) return
 
   tagCommitsLoading.value = true
   try {
+    // The predecessor is resolved on the server: the browser only holds a page of
+    // tags, and guessing it here used to lose the scope of every tag beyond that
+    // page (the whole history was listed instead).
     const response = await releaseNotesApi.preview({
       ...coordinates(),
       version: tag,
-      previous_version: previousTagFor(tag) ?? undefined,
       max_commits: PREVIEW_MAX_COMMITS,
+      refresh,
     })
     // a newer click may have overtaken this response
     if (selectedTag.value !== tag) return
     tagCommits.value = (response.commits ?? []) as CommitInfo[]
     tagCommitCount.value = response.commit_count ?? tagCommits.value.length
     tagTruncated.value = Boolean(response.truncated)
+    tagScope.value = {
+      previous: response.previous_version ?? null,
+      previousSha: response.previous_sha ?? null,
+      versionSha: response.version_sha ?? null,
+      source: response.previous_source ?? 'none',
+      verified: Boolean(response.previous_verified),
+      reason: response.scope_reason ?? 'unresolved',
+    }
   } catch {
     ElMessage.error(t('releaseNotes.commits_load_failed'))
   } finally {
     tagCommitsLoading.value = false
+  }
+}
+
+// ------------------------------------------------------------------ #
+// Export
+// ------------------------------------------------------------------ #
+
+/**
+ * Export releases as one markdown document.
+ *
+ * The document is assembled by the backend: the page holds one page of releases,
+ * and a text document has to read the same whoever asked for it. Passing `ids`
+ * exports exactly those releases (the detail header does that for one release);
+ * otherwise the current selection decides - every release of the repository, or
+ * the ticked ones.
+ */
+async function exportNotes(ids?: number[]) {
+  if (!hasCoordinates.value) return
+
+  const payload: ReleaseNoteExportRequest = ids
+    ? { ...coordinates(), ids }
+    : exportAll.value
+      ? { ...coordinates(), select_all: true }
+      : { ...coordinates(), ids: [...exportSelection.value] }
+
+  if (!payload.ids?.length && !payload.select_all) return
+
+  exportingNotes.value = true
+  try {
+    const exported = await releaseNotesApi.exportNotes(payload)
+    downloadMarkdown(exported.content, exported.filename)
+    ElMessage.success(t('releaseNotes.exported_ok', { count: exported.count }))
+    if (exported.truncated) {
+      ElMessage.warning(t('releaseNotes.exported_truncated', { count: exported.count }))
+    }
+    if (exported.skipped_ids.length > 0) {
+      ElMessage.warning(
+        t('releaseNotes.exported_skipped', { count: exported.skipped_ids.length }),
+      )
+    }
+  } catch {
+    ElMessage.error(t('releaseNotes.export_failed'))
+  } finally {
+    exportingNotes.value = false
+  }
+}
+
+/**
+ * Put the open release on the clipboard.
+ *
+ * The same document the download would produce, so the two cannot disagree; a
+ * refused clipboard (a non-secure context, a denied permission) is reported so a
+ * copy that did nothing is never mistaken for one that worked.
+ */
+async function copyNote(note: ReleaseNote) {
+  if (!hasCoordinates.value) return
+
+  copyingNote.value = true
+  try {
+    const exported = await releaseNotesApi.exportNotes({
+      ...coordinates(),
+      ids: [note.id],
+    })
+    const copied = await copyTextToClipboard(exported.content)
+    if (copied) {
+      ElMessage.success(t('releaseNotes.copied_ok'))
+    } else {
+      ElMessage.warning(t('releaseNotes.copy_failed'))
+    }
+  } catch {
+    ElMessage.error(t('releaseNotes.export_failed'))
+  } finally {
+    copyingNote.value = false
   }
 }
 
@@ -1101,6 +1677,11 @@ function startNewRelease(tag?: string) {
   const initial = tag ?? selected ?? sortedTags.value[0] ?? tags.value[0]
   if (initial) {
     form.value.tag_name = initial
+    // The draft inherits the scope the server resolved for that tag, so the editor
+    // generates the same commit set the tags panel shows. The local tag order is
+    // only a fallback for a tag the resolver has not looked at.
+    const scope = initial === selectedTag.value ? tagScope.value : null
+    form.value.previous_tag = (scope ? scope.previous : previousTagFor(initial)) ?? ''
   }
   formCard.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
@@ -1124,6 +1705,16 @@ function editNote(note: ReleaseNote) {
   formCard.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
+async function loadLlmConfig() {
+  try {
+    const config = await llmApi.getConfig()
+    llmEnabled.value = Boolean(config.enabled)
+  } catch {
+    // an unconfigured LLM simply means the deterministic notes are the only option
+    llmEnabled.value = false
+  }
+}
+
 async function generateNotes() {
   if (!hasCoordinates.value || !form.value.tag_name) return
 
@@ -1134,12 +1725,19 @@ async function generateNotes() {
       version: form.value.tag_name.trim(),
       previous_version: form.value.previous_tag.trim() || undefined,
       max_commits: PREVIEW_MAX_COMMITS,
+      language: locale.value,
+      summarize: aiSummary.value && llmEnabled.value,
     })
     form.value.body = preview.body
     if (!form.value.name.trim()) {
       form.value.name = preview.suggested_name
     }
     generatedCount.value = preview.commit_count
+    // The server falls back to the deterministic notes when the LLM call fails,
+    // so the answer says which one is on screen rather than assuming the switch
+    summarizedByAi.value = preview.summary_source === 'llm'
+    summaryNotice.value = preview.summary_notice ?? null
+    summaryError.value = preview.summary_error ?? null
     if (preview.truncated) {
       ElMessage.warning(t('releaseNotes.generate_truncated'))
     }
@@ -1274,7 +1872,13 @@ async function confirmDelete(note: ReleaseNote) {
     if (editingId.value === note.id) {
       closeForm()
     }
-    await loadNotes()
+    // This page may have held nothing but the release just deleted: step back on
+    // to the last page that still has releases instead of showing an empty list.
+    if (notes.value.length <= 1 && notesPage.value > 1) {
+      notesPage.value -= 1
+    } else {
+      await loadNotes()
+    }
     refreshReleaseTagIndex()
   } catch {
     ElMessage.error(t('releaseNotes.delete_failed'))
@@ -1315,12 +1919,16 @@ watch(
   () => {
     // Another repository means another release: drop a half filled draft as well
     closeForm()
+    // an export selection belongs to the releases it was made from
+    clearExportSelection()
     selectedId.value = null
     selectedTag.value = null
     tagCommits.value = []
     tagCommitCount.value = 0
     notesPage.value = 1
     tagPage.value = 1
+    // a search for a tag of the previous repository means nothing here
+    tagSearch.value = ''
     invalidateReleaseTagIndex()
     void loadRefs()
     void loadNotes()
@@ -1345,6 +1953,11 @@ watch(notesPageSize, () => {
 })
 
 watch(tagPageSize, () => {
+  tagPage.value = 1
+})
+
+// A narrower search has a result of its own: start it from its first page
+watch(tagSearch, () => {
   tagPage.value = 1
 })
 
@@ -1376,6 +1989,7 @@ onMounted(() => {
   })
   void loadProjects()
   void loadJiraSettings()
+  void loadLlmConfig()
 })
 
 onBeforeUnmount(() => {
@@ -1403,6 +2017,28 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
+}
+
+/* The read-only label and the fold toggle sit together at the end of the header */
+.header-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The chevron points at the closed panel once the body is folded away */
+.panel-toggle :deep(.el-icon) {
+  transition: transform 0.2s ease;
+}
+
+.panel-toggle.is-collapsed :deep(.el-icon) {
+  transform: rotate(-90deg);
+}
+
+/* Folded away rather than unmounted: the repository that was picked stays
+   picked, and the panel comes back exactly as it was left */
+.panel-body.is-collapsed {
+  display: none;
 }
 
 /* Read-only label of a user without the release administrator role: the label
@@ -1488,6 +2124,24 @@ onBeforeUnmount(() => {
   margin-right: auto;
 }
 
+.export-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.nav-item-check {
+  height: auto;
+  margin-right: 0;
+}
+
+.nav-search {
+  margin-bottom: 8px;
+}
+
 .nav-list {
   display: flex;
   flex-direction: column;
@@ -1570,6 +2224,98 @@ onBeforeUnmount(() => {
   margin-top: 12px;
 }
 
+/* Reading column: one entry per release of the page */
+.note-entry {
+  padding: 16px 0 20px;
+  border-bottom: 1px solid var(--el-border-color);
+}
+
+.note-entry:last-of-type {
+  border-bottom: 0;
+}
+
+.note-entry.focused {
+  margin-left: -12px;
+  padding-left: 10px;
+  border-left: 2px solid var(--el-color-primary);
+}
+
+.note-entry-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.note-entry-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The release name is the line that identifies a version on a page holding
+   several of them, so nothing inside the notes may compete with it. */
+.note-entry-name {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--el-text-color-primary);
+}
+
+/* The title is the anchor onto the tag it was cut from, so it keeps the weight of
+   the entry while behaving like a link on hover and on focus. */
+.note-entry-tag-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.note-entry-tag-link:hover,
+.note-entry-tag-link:focus-visible {
+  color: var(--el-color-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.note-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+/* A long note is clamped with a fade; the expand control follows it */
+.release-body.collapsed {
+  max-height: 24rem;
+  overflow: hidden;
+}
+
+.note-fade {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3rem;
+  background: linear-gradient(transparent, var(--el-bg-color));
+  pointer-events: none;
+}
+
+.note-expand {
+  margin-top: 4px;
+}
+
+.detail-pagination {
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.detail-pagination :deep(.el-pagination__total),
+.detail-pagination :deep(.el-pagination__sizes) {
+  margin-right: auto;
+}
+
 .release-meta {
   margin-top: 6px;
   color: var(--el-text-color-secondary);
@@ -1592,6 +2338,40 @@ onBeforeUnmount(() => {
 .release-body {
   position: relative;
   margin-top: 12px;
+}
+
+/* The rendered notes must not outrank the release name (20px).
+   md-editor's github theme renders a level-2 heading - which is what a generated
+   body opens with ("## What's Changed") - at 1.5em with 24px/16px block margins,
+   and inherits its base size from the page. The scale is therefore pinned here
+   instead of being left to the ambient font size: the notes are the content of a
+   release, so 14px text with a 16px top heading, below the release name. */
+.release-body :deep(.github-theme) {
+  font-size: 14px;
+}
+
+.release-body :deep(h1),
+.release-body :deep(h2) {
+  font-size: 16px;
+}
+
+.release-body :deep(h3) {
+  font-size: 15px;
+}
+
+.release-body :deep(h4),
+.release-body :deep(h5),
+.release-body :deep(h6) {
+  font-size: 14px;
+}
+
+.release-body :deep(h1),
+.release-body :deep(h2),
+.release-body :deep(h3),
+.release-body :deep(h4),
+.release-body :deep(h5),
+.release-body :deep(h6) {
+  margin-block: 14px 8px;
 }
 
 /* The card already provides the surface: keep the rendered markdown on it instead
@@ -1658,6 +2438,19 @@ onBeforeUnmount(() => {
   margin-top: 4px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+/* a summary that was asked for and could not be made is not a help text */
+.ai-summary-fallback {
+  color: var(--el-color-warning);
+}
+
+.ai-summary-error {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--el-font-family-mono, monospace);
+  opacity: 0.85;
+  word-break: break-word;
 }
 
 .form-actions {

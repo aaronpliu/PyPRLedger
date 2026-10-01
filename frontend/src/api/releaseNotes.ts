@@ -75,9 +75,16 @@ export interface ReleaseNoteImportResponse {
 
 export interface ReleaseNotePreviewRequest extends ReleaseNoteCoordinates {
   version: string
+  /** Leave it out to let the server resolve the predecessor from the repository tags */
   previous_version?: string | null
   max_commits?: number
   include_authors?: boolean
+  /** Re-resolve the release scope instead of reusing the cached resolution */
+  refresh?: boolean
+  /** Language of the generated prose (section titles and summary), e.g. 'zh-CN' */
+  language?: string
+  /** Ask the configured LLM for a summary paragraph and a section per commit */
+  summarize?: boolean
 }
 
 export interface PreviewCommit {
@@ -92,13 +99,59 @@ export interface PreviewCommit {
   url?: string | null
 }
 
+/** How the release scope base was obtained: proven ('ancestor'), inferred from the tag order, or supplied. */
+export type ReleaseScopeSource = 'explicit' | 'ancestor' | 'name_order' | 'none'
+
+/** Why the scope looks the way it does; the last two mean the commits come from the full history. */
+export type ReleaseScopeReason = 'provided' | 'resolved' | 'first_release' | 'unresolved'
+
 export interface ReleaseNotePreviewResponse {
   version: string
+  /** Scope base: what was supplied, or the predecessor the server resolved */
   previous_version?: string | null
+  /** Revision the scope base was pinned to (when known) */
+  previous_sha?: string | null
+  /** Revision the released ref was pinned to (when known) */
+  version_sha?: string | null
+  previous_source?: ReleaseScopeSource
+  /** True only for a supplied base or one proven to be an ancestor */
+  previous_verified?: boolean
+  scope_reason?: ReleaseScopeReason
   suggested_name: string
   body: string
+  /** Size of the release scope (a lower bound when a scan was capped) */
   commit_count: number
   commits: PreviewCommit[]
+  truncated: boolean
+  /** Summary paragraph of the release, when one was written for it */
+  summary?: string | null
+  /** Whether the prose came from the commit subjects alone or from the LLM */
+  summary_source?: 'deterministic' | 'llm'
+  /** Why the summary stayed deterministic although the AI pass was asked for */
+  summary_notice?: 'not_configured' | 'provider_error' | 'unreadable_answer' | 'failed' | null
+  /** What the provider answered when it refused the call */
+  summary_error?: string | null
+}
+
+export interface ReleaseNoteExportRequest extends ReleaseNoteCoordinates {
+  /** The releases to export, in any order (the document is ordered newest first) */
+  ids?: number[]
+  /** Export every release matching `status` instead of naming them */
+  select_all?: boolean
+  /** Filter for `select_all`; ignored when `ids` is used */
+  status?: ReleaseNoteStatus
+}
+
+export interface ReleaseNoteExportResponse {
+  /** Suggested filename for the document */
+  filename: string
+  /** The markdown document */
+  content: string
+  /** Number of releases written into the document */
+  count: number
+  /** Requested releases that do not exist or belong to another repository */
+  skipped_ids: number[]
+  /** True when more releases matched than one export holds (only the newest are written) */
   truncated: boolean
 }
 
@@ -154,6 +207,12 @@ export const releaseNotesApi = {
   /** Import the releases of a repository from the git provider. */
   async importReleases(payload: ReleaseNoteImportRequest): Promise<ReleaseNoteImportResponse> {
     const response = await request.post('/release/notes/import', payload)
+    return response.data || response
+  },
+
+  /** Export one or more releases as a single markdown document. */
+  async exportNotes(payload: ReleaseNoteExportRequest): Promise<ReleaseNoteExportResponse> {
+    const response = await request.post('/release/notes/export', payload)
     return response.data || response
   },
 }

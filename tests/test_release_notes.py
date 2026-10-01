@@ -6,6 +6,8 @@ service and the CRUD tests use the in-memory SQLite fixture.
 
 from __future__ import annotations
 
+import re
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -19,8 +21,17 @@ from src.core.git_provider import GitProvider
 from src.core.permissions import get_current_user_with_token
 from src.main import app
 from src.models.auth_user import AuthUser
+from src.models.release_note import ReleaseNote, ReleaseNoteStatus
 from src.schemas.release_diff import CommitInfo
 from src.schemas.release_note import (
+    REASON_FIRST_RELEASE,
+    REASON_PROVIDED,
+    REASON_RESOLVED,
+    REASON_UNRESOLVED,
+    SOURCE_ANCESTOR,
+    SOURCE_EXPLICIT,
+    SOURCE_NAME_ORDER,
+    SOURCE_NONE,
     ReleaseNoteCreateRequest,
     ReleaseNoteImportRequest,
     ReleaseNotePreviewRequest,
@@ -28,6 +39,7 @@ from src.schemas.release_note import (
     ReleaseNoteUpdateRequest,
 )
 from src.services.git_providers.base import BaseGitProvider
+from src.services.release_note_scope_service import ReleaseScope
 from src.services.release_note_service import (
     NOTE_SECTIONS,
     OTHER_SECTION,
@@ -37,6 +49,7 @@ from src.services.release_note_service import (
     build_release_notes_markdown,
     commit_section,
     commit_subject,
+    is_merge_commit,
     jira_settings,
     linkify_jira_tickets,
     parse_provider_datetime,
@@ -66,9 +79,16 @@ def commit(
 class StubDiffService:
     """Stands in for ReleaseDiffService (no provider traffic)."""
 
-    def __init__(self, added: list[CommitInfo] | None = None, truncated: bool = False) -> None:
+    def __init__(
+        self,
+        added: list[CommitInfo] | None = None,
+        truncated: bool = False,
+        added_count: int | None = None,
+    ) -> None:
         self._added = added or []
         self._truncated = truncated
+        # the size of the scope, which can exceed the returned (trimmed) list
+        self._added_count = len(self._added) if added_count is None else added_count
         self.compare_calls: list[Any] = []
         self.list_calls: list[dict[str, Any]] = []
 
@@ -77,7 +97,11 @@ class StubDiffService:
         return type(
             "Comparison",
             (),
-            {"added_commits": self._added, "truncated": self._truncated},
+            {
+                "added_commits": self._added,
+                "added_count": self._added_count,
+                "added_complete": not self._truncated,
+            },
         )()
 
     async def list_release_commits(self, **kwargs: Any) -> tuple[list[CommitInfo], bool]:
@@ -212,13 +236,54 @@ def build_service(
     db: AsyncSession,
     diff: StubDiffService | None = None,
     provider: StubProvider | None = None,
+    scope: Any | None = None,
 ) -> ReleaseNoteService:
     stub = provider or StubProvider()
     return ReleaseNoteService(
         db,
         diff_service=diff or StubDiffService(),  # type: ignore[arg-type]
+        scope_service=scope,
         provider_factory=lambda _name: stub,
     )
+
+
+class StubScopeService:
+    """Stands in for ReleaseNoteScopeService (fixed answer, no provider traffic)."""
+
+    def __init__(self, scope: ReleaseScope) -> None:
+        self.scope = scope
+        self.calls: list[dict[str, Any]] = []
+
+    async def resolve(self, **kwargs: Any) -> ReleaseScope:
+        self.calls.append(kwargs)
+        return self.scope
+
+
+class TagListingProvider(ComparingProvider):
+    """Stub provider that can list tags with their revisions and verify ancestry."""
+
+    def __init__(
+        self,
+        tags: list[dict[str, Any]] | None = None,
+        ancestors: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__()
+        self.tags = tags or []
+        self.ancestors = set(ancestors)
+        self.tag_calls = 0
+        self.probes: list[tuple[str, str]] = []
+
+    async def list_tags_with_commits(
+        self, project_key: str, repository_slug: str, limit: int = 1000
+    ) -> list[dict[str, Any]]:
+        self.tag_calls += 1
+        return self.tags[:limit]
+
+    async def contains_commit(
+        self, project_key: str, repository_slug: str, ref: str, commit: str
+    ) -> bool:
+        self.probes.append((ref, commit))
+        return commit in self.ancestors
 
 
 def create_payload(**overrides: Any) -> ReleaseNoteCreateRequest:
@@ -258,8 +323,67 @@ def test_commit_section_maps_conventional_types_to_changelog_categories() -> Non
     assert commit_section("docs: update readme") == "Documentation"
     assert commit_section("test: cover the upsert") == "Tests"
 
-    assert commit_section("random change") == "Other Changes"
+    # a subject that says nothing about the kind of change stays ungrouped
+    assert commit_section("release 2.2601.5") == "Other Changes"
     assert commit_section(None) == "Other Changes"
+
+
+def test_commit_section_groups_subjects_without_a_conventional_prefix() -> None:
+    """A history that is not written in conventional commits is still grouped."""
+    # the wording decides when there is no "type:" prefix
+    assert commit_section("fix crash on logout") == "Fixed"
+    assert commit_section("Add support for SSO") == "Added"
+    assert commit_section("update the deploy script") == "Changed"
+    assert commit_section("delete the legacy importer") == "Removed"
+    assert commit_section("document the webhook payload") == "Documentation"
+    assert commit_section("cover the upsert path") == "Tests"
+
+    # the keyword the author led with wins
+    assert commit_section("update deps to fix the crash") == "Changed"
+    assert commit_section("fix the crash while updating") == "Fixed"
+
+
+def test_commit_section_looks_behind_ticket_and_pr_prefixes() -> None:
+    """A ticket key or a PR number in front of the wording does not hide it."""
+    assert commit_section("PRL-123: fix crash on logout") == "Fixed"
+    assert commit_section("[PRL-123] fix crash on logout") == "Fixed"
+    assert commit_section("PRL-123 - fix crash on logout") == "Fixed"
+    assert commit_section("#42: add the dashboard") == "Added"
+    assert commit_section("[hotfix] 修复登录崩溃") == "Fixed"
+
+    # and it is not removed from the rendered line - that is what gets linked
+    assert commit_subject("PRL-123: fix crash on logout") == "PRL-123: fix crash on logout"
+
+
+def test_commit_section_understands_chinese_subjects() -> None:
+    assert commit_section("修复登录崩溃") == "Fixed"
+    assert commit_section("新增导出功能") == "Added"
+    assert commit_section("重构导出模块") == "Changed"
+    assert commit_section("补充接口文档") == "Documentation"
+
+
+def test_commit_section_keeps_merge_commits_ungrouped() -> None:
+    """A merge subject describes the integration, not the change it carries."""
+    assert commit_section("Merge pull request #42 from acme/feature/sso") == "Other Changes"
+    assert commit_section("Merge branch 'release/1.0' into main") == "Other Changes"
+
+
+def test_is_merge_commit_reads_the_messages_git_and_the_platforms_write() -> None:
+    """Every wording a merge commit is given describes an integration."""
+    assert is_merge_commit("Merge branch 'release/1.0' into main")
+    assert is_merge_commit("Merge remote-tracking branch 'origin/main'")
+    assert is_merge_commit("Merge pull request #42 from acme/feature/sso")
+    # Bitbucket Server writes the merge the other way around
+    assert is_merge_commit("Merged in feature/sso (pull request #42)")
+    # a ticket key in front of it does not hide it
+    assert is_merge_commit("PRL-123: Merge branch 'main'")
+    assert is_merge_commit("[PRL-123] Merge branch 'main'")
+    assert is_merge_commit("Merge branch 'main' into feature/sso\n\nSome body")
+
+    assert not is_merge_commit("feat: merge the two report makers")
+    assert not is_merge_commit("Merger of the export pipelines")
+    assert not is_merge_commit("")
+    assert not is_merge_commit(None)
 
 
 def test_section_emoji_covers_every_produced_section() -> None:
@@ -592,6 +716,80 @@ async def test_author_avatars_only_returns_accounts_that_have_a_picture(
     assert await service.author_avatars([None]) == {}
 
 
+def test_build_markdown_renders_the_summary_above_the_sections() -> None:
+    commits = [commit(C1, "feat: add login page", author=None).model_dump()]
+
+    body = build_release_notes_markdown(
+        commits,
+        version="v1.1.0",
+        previous_version="v1.0.0",
+        summary="This release adds single sign-on.",
+    )
+
+    assert body.splitlines()[0] == "## What's Changed"
+    assert body.index("This release adds single sign-on.") < body.index("### ✨ Added")
+
+
+def test_build_markdown_writes_the_sections_in_the_language_of_the_caller() -> None:
+    commits = [commit(C1, "feat: add login page", author=None).model_dump()]
+
+    body = build_release_notes_markdown(
+        commits, version="v1.1.0", previous_version="v1.0.0", language="zh-CN"
+    )
+
+    assert body.startswith("## 变更内容")
+    assert "### ✨ 新增" in body
+    # an unknown language keeps the English it has always produced
+    english = build_release_notes_markdown(commits, version="v1.1.0", language=None)
+    assert english.startswith("## What's Changed")
+
+
+def test_build_markdown_honours_a_caller_supplied_section() -> None:
+    """A grouping decided elsewhere (an LLM's) wins over the commit subject."""
+    payload = commit(C1, "wip").model_dump()
+    payload["section"] = "Fixed"
+
+    body = build_release_notes_markdown([payload], version="v1.1.0")
+
+    assert "### 🐛 Fixed" in body
+    assert "### 📝 Other Changes" not in body
+
+
+def test_build_markdown_ignores_a_section_it_does_not_know() -> None:
+    payload = commit(C1, "wip").model_dump()
+    payload["section"] = "Features"
+
+    body = build_release_notes_markdown([payload], version="v1.1.0")
+
+    assert "### 📝 Other Changes" in body
+
+
+def test_build_markdown_leaves_the_merges_out() -> None:
+    """What a merge integrated is listed through the commits it merged."""
+    commits = [
+        commit(C1, "feat: add login page").model_dump(),
+        commit(C2, "Merge pull request #42 from acme/feature/sso").model_dump(),
+        commit(C3, "Merged in feature/sso (pull request #42)").model_dump(),
+    ]
+
+    body = build_release_notes_markdown(commits, version="v1.1.0")
+
+    assert "add login page" in body
+    assert "Merge" not in body
+    assert "### 📝 Other Changes" not in body
+
+
+def test_build_markdown_of_a_scope_that_holds_nothing_but_merges() -> None:
+    """A release that only integrated work has no change of its own to list."""
+    commits = [commit(C2, "Merge branch 'main' into feature/sso").model_dump()]
+
+    body = build_release_notes_markdown(commits, version="v1.1.0")
+
+    assert "Merge" not in body
+    assert "### 📝 Other Changes" not in body
+    assert "_No commits found in this release scope._" in body
+
+
 # --------------------------------------------------------------------------- #
 # Service: note generation
 # --------------------------------------------------------------------------- #
@@ -614,9 +812,74 @@ async def test_preview_uses_the_compare_scope_when_a_previous_version_exists(
 
     assert preview.commit_count == 1
     assert "add login page" in preview.body
-    assert diff.compare_calls[0].old_release_ref == "v1.0.0"
-    assert diff.compare_calls[0].new_release_ref == "v1.1.0"
+    assert diff.compare_calls[0].source_ref == "v1.0.0"
+    assert diff.compare_calls[0].target_ref == "v1.1.0"
     assert diff.list_calls == []
+
+
+async def test_preview_lists_the_commits_the_release_adds_over_its_predecessor(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end against a mocked Bitbucket Server: a newer release adds work.
+
+    Regression: the Server comparison used to answer ``previous \\ version``, so
+    the notes of a release that contained its predecessor came out empty.
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    import httpx
+
+    from src.services.git_providers import bitbucket_server
+    from src.services.release_diff_service import ReleaseDiffService
+
+    reachable = {"v1.0.0": [C1], "v1.1.0": [C1, C2]}
+
+    def payload(sha: str) -> dict[str, Any]:
+        return {
+            "id": sha,
+            "displayId": sha[:7],
+            "author": {"name": "Jane Doe", "emailAddress": "jane@example.com"},
+            "authorTimestamp": 1_690_000_000_000,
+            "message": "feat: add login page" if sha == C2 else "chore: initial import",
+        }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        query = parse_qs(urlparse(str(request.url)).query)
+        # Bitbucket Server streams from \ to, i.e. git log to..from
+        other = set(reachable[query["to"][0]])
+        ids = [sha for sha in reachable[query["from"][0]] if sha not in other]
+        values = [payload(sha) for sha in ids]
+        return httpx.Response(200, json={"values": values, "size": len(values), "isLastPage": True})
+
+    real_client = httpx.AsyncClient
+
+    def client_factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        kwargs.pop("verify", None)
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(bitbucket_server.httpx, "AsyncClient", client_factory)
+
+    server_provider = bitbucket_server.BitbucketServerProvider()
+    service = build_service(
+        db_session,
+        ReleaseDiffService(provider_factory=lambda _name: server_provider),
+        provider=server_provider,  # type: ignore[arg-type]
+    )
+
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="PROJ",
+            repository_slug="my-repo",
+            version="v1.1.0",
+            previous_version="v1.0.0",
+        )
+    )
+
+    assert preview.commit_count == 1
+    assert [item["id"] for item in preview.commits] == [C2]
+    assert "add login page" in preview.body
+    assert "_No commits found in this release scope._" not in preview.body
 
 
 async def test_preview_links_the_changelog_range_to_the_provider_comparison(
@@ -806,6 +1069,177 @@ async def test_preview_rejects_identical_versions() -> None:
             version="v1.0.0",
             previous_version="v1.0.0",
         )
+
+
+# --------------------------------------------------------------------------- #
+# Release scope resolution: the server answers "what came before this tag?"
+# --------------------------------------------------------------------------- #
+
+
+def tag_entry(name: str, sha: str, date: int | None = 100) -> dict[str, Any]:
+    return {"name": name, "sha": sha, "date": date, "is_annotated": False}
+
+
+def preview_request(**overrides: Any) -> ReleaseNotePreviewRequest:
+    payload: dict[str, Any] = {
+        "project_key": "PROJ",
+        "repository_slug": "my-repo",
+        "version": "v1.1.0",
+    }
+    payload.update(overrides)
+    return ReleaseNotePreviewRequest(**payload)
+
+
+async def test_preview_resolves_the_scope_from_the_repository_tags(
+    db_session: AsyncSession,
+) -> None:
+    """No previous version supplied: the server resolves and verifies it."""
+    diff = StubDiffService([commit(C2, "feat: add login")])
+    provider = TagListingProvider(
+        tags=[tag_entry("v1.0.0", C1), tag_entry("v1.1.0", C2, 200)],
+        ancestors=(C1,),
+    )
+    service = build_service(db_session, diff, provider=provider)
+
+    preview = await service.generate_preview(preview_request())
+
+    assert preview.previous_version == "v1.0.0"
+    assert preview.previous_sha == C1
+    assert preview.version_sha == C2
+    assert preview.previous_source == SOURCE_ANCESTOR
+    assert preview.previous_verified is True
+    assert preview.scope_reason == REASON_RESOLVED
+    # the difference is asked with the resolved revisions, not with the tag names
+    assert diff.compare_calls[0].source_ref == C1
+    assert diff.compare_calls[0].target_ref == C2
+    # the resolved scope reaches the generated body as well
+    assert "Full Changelog" in preview.body
+
+
+async def test_preview_labels_a_first_release(db_session: AsyncSession) -> None:
+    """The oldest tag has no predecessor - the commits come from the history."""
+    diff = StubDiffService([commit(C1, "feat: initial import")], truncated=True)
+    provider = TagListingProvider(tags=[tag_entry("v1.0.0", C1)])
+    service = build_service(db_session, diff, provider=provider)
+
+    preview = await service.generate_preview(preview_request(version="v1.0.0"))
+
+    assert preview.scope_reason == REASON_FIRST_RELEASE
+    assert preview.previous_version is None
+    assert preview.version_sha == C1
+    assert diff.compare_calls == []
+    assert diff.list_calls[0]["ref"] == "v1.0.0"
+
+
+async def test_preview_reports_an_unresolvable_scope(db_session: AsyncSession) -> None:
+    """A provider that cannot list tags degrades instead of failing the request."""
+    diff = StubDiffService([commit(C1, "feat: initial import")])
+    service = build_service(db_session, diff, provider=StubProvider())
+
+    preview = await service.generate_preview(preview_request(version="v1.0.0"))
+
+    assert preview.scope_reason == REASON_UNRESOLVED
+    assert preview.previous_version is None
+    assert preview.previous_source == SOURCE_NONE
+    assert preview.previous_verified is False
+    assert diff.compare_calls == []
+    assert len(diff.list_calls) == 1
+
+
+async def test_preview_keeps_a_supplied_previous_version(db_session: AsyncSession) -> None:
+    """An explicit predecessor is authoritative - the resolver is not consulted."""
+    diff = StubDiffService([commit(C1, "feat: add login")])
+    scope = StubScopeService(ReleaseScope(version="v1.1.0", reason=REASON_UNRESOLVED))
+    service = build_service(db_session, diff, scope=scope)
+
+    preview = await service.generate_preview(preview_request(previous_version="v1.0.0"))
+
+    assert preview.previous_version == "v1.0.0"
+    assert preview.previous_source == SOURCE_EXPLICIT
+    assert preview.previous_verified is True
+    assert preview.scope_reason == REASON_PROVIDED
+    assert scope.calls == []
+
+
+async def test_preview_reports_an_inferred_scope_as_unverified(
+    db_session: AsyncSession,
+) -> None:
+    """A scope resolved by tag order is used, but never presented as proven."""
+    diff = StubDiffService([commit(C1, "feat: add login")])
+    scope = StubScopeService(
+        ReleaseScope(
+            version="v1.1.0",
+            previous_ref="v1.0.0",
+            source=SOURCE_NAME_ORDER,
+            verified=False,
+            reason=REASON_RESOLVED,
+        )
+    )
+    service = build_service(db_session, diff, scope=scope)
+
+    preview = await service.generate_preview(preview_request())
+
+    assert preview.previous_source == SOURCE_NAME_ORDER
+    assert preview.previous_verified is False
+    assert preview.scope_reason == REASON_RESOLVED
+
+
+async def test_preview_passes_the_refresh_flag_to_the_resolver(
+    db_session: AsyncSession,
+) -> None:
+    scope = StubScopeService(
+        ReleaseScope(version="v1.1.0", previous_ref="v1.0.0", reason=REASON_RESOLVED)
+    )
+    service = build_service(db_session, StubDiffService([commit(C1, "feat")]), scope=scope)
+
+    await service.generate_preview(preview_request(refresh=True))
+
+    assert scope.calls[0]["refresh"] is True
+
+
+async def test_preview_reports_the_scope_size_when_the_list_is_trimmed(
+    db_session: AsyncSession,
+) -> None:
+    """The count is the scope, and the trimming is reported separately."""
+    diff = StubDiffService([commit(C1, "feat: add login")], added_count=40)
+    scope = StubScopeService(
+        ReleaseScope(
+            version="v1.1.0",
+            previous_ref="v1.0.0",
+            previous_sha=C1,
+            source=SOURCE_ANCESTOR,
+            verified=True,
+            reason=REASON_RESOLVED,
+        )
+    )
+    service = build_service(db_session, diff, scope=scope)
+
+    preview = await service.generate_preview(preview_request())
+
+    assert preview.commit_count == 40
+    assert len(preview.commits) == 1
+    assert preview.truncated is True
+
+
+async def test_preview_flags_a_capped_scope_scan(db_session: AsyncSession) -> None:
+    """A scan that hit its cap is reported, even when nothing was trimmed."""
+    diff = StubDiffService([commit(C1, "feat: add login")], truncated=True)
+    scope = StubScopeService(
+        ReleaseScope(
+            version="v1.1.0",
+            previous_ref="v1.0.0",
+            previous_sha=C1,
+            source=SOURCE_ANCESTOR,
+            verified=True,
+            reason=REASON_RESOLVED,
+        )
+    )
+    service = build_service(db_session, diff, scope=scope)
+
+    preview = await service.generate_preview(preview_request())
+
+    assert preview.commit_count == 1
+    assert preview.truncated is True
 
 
 # --------------------------------------------------------------------------- #
@@ -1286,3 +1720,299 @@ async def test_endpoint_requires_authentication(async_client) -> None:
         app.dependency_overrides.pop(get_db_session, None)
 
     assert response.status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# Export: the document (service)
+# --------------------------------------------------------------------------- #
+
+
+def release_row(
+    *,
+    tag: str,
+    name: str,
+    body: str = "- something",
+    status: str = ReleaseNoteStatus.PUBLISHED,
+    published: datetime | None = None,
+    repository_slug: str = "my-repo",
+) -> ReleaseNote:
+    """A stored release row, inserted straight into the test session."""
+    return ReleaseNote(
+        project_key="PROJ",
+        repository_slug=repository_slug,
+        tag_name=tag,
+        name=name,
+        body=body,
+        status=status,
+        is_prerelease=False,
+        author="Jane Doe",
+        published_date=published,
+    )
+
+
+async def test_export_orders_the_releases_like_the_list(db_session: AsyncSession) -> None:
+    db_session.add_all(
+        [
+            release_row(
+                tag="v1.0.0",
+                name="Older",
+                body="- older marker",
+                published=datetime(2026, 9, 1, 10, 0, tzinfo=UTC),
+            ),
+            release_row(
+                tag="v1.1.0",
+                name="Newer",
+                body="- newer marker",
+                published=datetime(2026, 9, 20, 10, 0, tzinfo=UTC),
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    exported = await build_service(db_session).export_notes(
+        project_key="PROJ", repository_slug="my-repo", select_all=True
+    )
+
+    assert exported.count == 2
+    assert exported.content.index("## Newer (v1.1.0)") < exported.content.index("## Older (v1.0.0)")
+    assert "- newer marker" in exported.content
+    assert re.fullmatch(r"releasenotes-PROJ-my-repo-2-releases-\d{8}\.md", exported.filename)
+
+
+async def test_export_can_leave_the_drafts_out(db_session: AsyncSession) -> None:
+    db_session.add_all(
+        [
+            release_row(
+                tag="v1.0.0",
+                name="PublishedOne",
+                status=ReleaseNoteStatus.PUBLISHED,
+                published=datetime(2026, 9, 1, 10, 0, tzinfo=UTC),
+            ),
+            release_row(tag="v1.1.0", name="DraftOne", status=ReleaseNoteStatus.DRAFT),
+        ]
+    )
+    await db_session.flush()
+    service = build_service(db_session)
+
+    published_only = await service.export_notes(
+        project_key="PROJ",
+        repository_slug="my-repo",
+        select_all=True,
+        status=ReleaseNoteStatus.PUBLISHED,
+    )
+    everything = await service.export_notes(
+        project_key="PROJ", repository_slug="my-repo", select_all=True
+    )
+
+    assert published_only.count == 1
+    assert "DraftOne" not in published_only.content
+    assert everything.count == 2
+
+
+async def test_export_by_ids_reports_what_it_could_not_find(
+    db_session: AsyncSession,
+) -> None:
+    kept = release_row(tag="v1.0.0", name="Kept", published=datetime(2026, 9, 1, 10, 0, tzinfo=UTC))
+    elsewhere = release_row(
+        tag="v9.9.9",
+        name="Elsewhere",
+        repository_slug="other-repo",
+        published=datetime(2026, 9, 2, 10, 0, tzinfo=UTC),
+    )
+    db_session.add_all([kept, elsewhere])
+    await db_session.flush()
+
+    exported = await build_service(db_session).export_notes(
+        project_key="PROJ",
+        repository_slug="my-repo",
+        ids=[kept.id, elsewhere.id, 999_999],
+    )
+
+    assert exported.count == 1
+    assert "Kept" in exported.content
+    assert "Elsewhere" not in exported.content
+    # a release of another repository is never written, and a missing id is named
+    assert exported.skipped_ids == [elsewhere.id, 999_999]
+
+
+async def test_export_keeps_the_stored_body_verbatim(db_session: AsyncSession) -> None:
+    body = "### Fixed\n- ship the login fix PRL-123 (@jane)\n\n---\n\n## Not a section\n"
+    db_session.add(
+        release_row(
+            tag="v1.0.0",
+            name="Fixes",
+            body=body,
+            published=datetime(2026, 9, 1, 10, 0, tzinfo=UTC),
+        )
+    )
+    await db_session.flush()
+
+    exported = await build_service(db_session).export_notes(
+        project_key="PROJ", repository_slug="my-repo", select_all=True
+    )
+
+    assert body in exported.content
+    assert exported.content.count("## Fixes (v1.0.0)") == 1
+    assert "browse/PRL-123" not in exported.content
+
+
+async def test_export_reports_a_filtered_set_that_was_cut(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("src.services.release_note_service.EXPORT_MAX_RELEASES", 2)
+    db_session.add_all(
+        [
+            release_row(
+                tag=f"v1.{index}.0",
+                name=f"Release{index}",
+                published=datetime(2026, 9, index + 1, 10, 0, tzinfo=UTC),
+            )
+            for index in range(3)
+        ]
+    )
+    await db_session.flush()
+
+    exported = await build_service(db_session).export_notes(
+        project_key="PROJ", repository_slug="my-repo", select_all=True
+    )
+
+    assert exported.count == 2
+    assert exported.truncated is True
+    # the newest ones are the ones kept
+    assert "Release2" in exported.content
+    assert "Release0" not in exported.content
+
+
+async def test_export_of_a_repository_without_releases(db_session: AsyncSession) -> None:
+    exported = await build_service(db_session).export_notes(
+        project_key="PROJ", repository_slug="my-repo", select_all=True
+    )
+
+    assert exported.count == 0
+    assert exported.truncated is False
+    assert "No releases were selected" in exported.content
+
+
+# --------------------------------------------------------------------------- #
+# Export: the endpoint
+# --------------------------------------------------------------------------- #
+
+
+async def create_note_through_the_api(
+    client: Any, tag: str, name: str, *, status: str = "published", body: str = "notes"
+) -> dict[str, Any]:
+    created = await client.post(
+        "/api/v1/release/notes",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "tag_name": tag,
+            "name": name,
+            "body": body,
+            "status": status,
+        },
+    )
+    assert created.status_code == 201
+    return created.json()
+
+
+async def test_endpoint_exports_the_selected_releases(
+    async_client: Any, authenticated_client: StubRBAC
+) -> None:
+    first = await create_note_through_the_api(async_client, "v1.0.0", "First release")
+    await create_note_through_the_api(async_client, "v1.1.0", "Second release")
+
+    response = await async_client.post(
+        "/api/v1/release/notes/export",
+        json={"project_key": "PROJ", "repository_slug": "my-repo", "ids": [first["id"]]},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 1
+    assert payload["filename"] == "releasenotes-PROJ-my-repo-v1.0.0.md"
+    assert "## First release (v1.0.0)" in payload["content"]
+    assert "Second release" not in payload["content"]
+    assert payload["skipped_ids"] == []
+    assert payload["truncated"] is False
+
+
+async def test_endpoint_exports_every_published_release(
+    async_client: Any, authenticated_client: StubRBAC
+) -> None:
+    await create_note_through_the_api(async_client, "v1.0.0", "First release")
+    await create_note_through_the_api(async_client, "v1.1.0", "Second release")
+    await create_note_through_the_api(async_client, "v1.2.0", "DraftOne", status="draft")
+
+    response = await async_client.post(
+        "/api/v1/release/notes/export",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "select_all": True,
+            "status": "published",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 2
+    assert "DraftOne" not in payload["content"]
+
+
+async def test_endpoint_rejects_an_invalid_selection(
+    async_client: Any, authenticated_client: StubRBAC
+) -> None:
+    base = {"project_key": "PROJ", "repository_slug": "my-repo"}
+
+    neither = await async_client.post("/api/v1/release/notes/export", json=base)
+    both = await async_client.post(
+        "/api/v1/release/notes/export", json={**base, "ids": [1], "select_all": True}
+    )
+    too_many = await async_client.post(
+        "/api/v1/release/notes/export", json={**base, "ids": list(range(300))}
+    )
+    bad_status = await async_client.post(
+        "/api/v1/release/notes/export", json={**base, "select_all": True, "status": "nope"}
+    )
+
+    assert neither.status_code == 422
+    assert both.status_code == 422
+    assert too_many.status_code == 422
+    assert bad_status.status_code == 422
+
+
+async def test_endpoint_export_only_reads(
+    async_client: Any, authenticated_client: StubRBAC
+) -> None:
+    rbac: StubRBAC = authenticated_client
+    rbac.allowed = False
+
+    response = await async_client.post(
+        "/api/v1/release/notes/export",
+        json={"project_key": "PROJ", "repository_slug": "my-repo", "select_all": True},
+    )
+
+    assert response.status_code == 403
+    assert rbac.checks[0]["action"] == "read"
+    assert rbac.checks[0]["resource_type"] == "release_note"
+
+
+async def test_endpoint_reports_a_selection_that_disappeared(
+    async_client: Any, authenticated_client: StubRBAC
+) -> None:
+    note = await create_note_through_the_api(async_client, "v1.0.0", "First release")
+
+    response = await async_client.post(
+        "/api/v1/release/notes/export",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "ids": [note["id"], 424242],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 1
+    assert payload["skipped_ids"] == [424242]

@@ -31,6 +31,8 @@ from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
 from src.schemas.release_note import (
     ReleaseNoteCreateRequest,
+    ReleaseNoteExportRequest,
+    ReleaseNoteExportResponse,
     ReleaseNoteImportRequest,
     ReleaseNoteImportResponse,
     ReleaseNoteListResponse,
@@ -219,6 +221,55 @@ async def preview_release_notes(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": "bad_request", "message": str(e)},
         )
+
+
+@router.post(
+    "/export",
+    response_model=ReleaseNoteExportResponse,
+    summary="Export the notes of one or more releases as markdown",
+    description=(
+        "Package the stored release notes of the chosen releases into one markdown "
+        "document, newest first. Choose the releases by `ids`, or ask for every "
+        "release matching `status` with `select_all`. The response carries the "
+        "document, a suggested filename, and whatever was skipped or cut."
+    ),
+)
+async def export_release_notes(
+    payload: ReleaseNoteExportRequest,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> ReleaseNoteExportResponse:
+    """Export releases as one markdown document (reading, not changing)."""
+    await ensure_permission(rbac_service, current_user, "read")
+
+    exported = await service.export_notes(
+        project_key=payload.project_key,
+        repository_slug=payload.repository_slug,
+        ids=payload.ids,
+        select_all=payload.select_all,
+        status=payload.status,
+    )
+
+    logger.info(
+        "Release notes exported",
+        extra={
+            "project_key": payload.project_key,
+            "repository_slug": payload.repository_slug,
+            "user_id": current_user.id,
+            "count": exported.count,
+            "skipped": len(exported.skipped_ids),
+            "truncated": exported.truncated,
+        },
+    )
+
+    return ReleaseNoteExportResponse(
+        filename=exported.filename,
+        content=exported.content,
+        count=exported.count,
+        skipped_ids=exported.skipped_ids,
+        truncated=exported.truncated,
+    )
 
 
 @router.post(

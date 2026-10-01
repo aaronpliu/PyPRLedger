@@ -7,9 +7,56 @@
             <h2>{{ t('releaseDiff.title') }}</h2>
             <p class="subtitle">{{ t('releaseDiff.subtitle') }}</p>
           </div>
+          <!-- The report actions live beside the fold: they act on the results
+               below, so they stay reachable even with the coordinates collapsed -->
+          <div class="card-header-actions">
+            <el-button
+              size="small"
+              :icon="Download"
+              :disabled="!hasAnyResult"
+              @click="exportReport('both')"
+            >
+              {{ t('releaseDiff.report_export_both') }}
+            </el-button>
+            <el-dropdown
+              trigger="click"
+              :disabled="!hasAnyResult"
+              @command="(command: string) => captureReport(bothSections, 'release-report', command)"
+            >
+              <el-button size="small" :icon="Camera" :disabled="!hasAnyResult">
+                {{ t('releaseDiff.screenshot_both') }}
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="download">
+                    {{ t('releaseDiff.screenshot_download') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item command="copy">
+                    {{ t('releaseDiff.screenshot_copy') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="shareSupported" command="share">
+                    {{ t('releaseDiff.screenshot_share') }}
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <!-- The coordinates fold away so the results get the room, and they are
+                 what a reader comes back to change one ref at a time -->
+            <el-button
+              class="panel-toggle"
+              :class="{ 'is-collapsed': !coordinatesOpen }"
+              text
+              :icon="ArrowDown"
+              :aria-expanded="coordinatesOpen ? 'true' : 'false'"
+              :aria-label="coordinatesOpen ? t('common.collapse') : t('common.expand')"
+              data-test="coordinates-toggle"
+              @click="coordinatesOpen = !coordinatesOpen"
+            />
+          </div>
         </div>
       </template>
 
+      <div class="panel-body" :class="{ 'is-collapsed': !coordinatesOpen }">
       <!-- Repository coordinates shared by both tools -->
       <el-form :model="repo" label-width="150px" class="repo-form">
         <el-row :gutter="16">
@@ -131,7 +178,11 @@
       </el-form>
 
       <div class="refs-hint">
-        <span v-if="refsLoading">{{ t('releaseDiff.ref_loading') }}</span>
+        <ContentLoader
+          v-if="refsLoading"
+          inline
+          :label="t('releaseDiff.ref_loading')"
+        />
         <span v-else-if="refsFailed" class="refs-hint-warning">
           {{ t('releaseDiff.ref_suggestions_failed') }}
         </span>
@@ -157,41 +208,8 @@
           {{ t('releaseDiff.refresh_refs') }}
         </el-button>
       </div>
+      </div>
     </el-card>
-
-    <!-- ================= Report actions for both tools ================= -->
-    <div class="report-toolbar">
-      <el-button
-        size="small"
-        :icon="Download"
-        :disabled="!hasAnyResult"
-        @click="exportReport('both')"
-      >
-        {{ t('releaseDiff.report_export_both') }}
-      </el-button>
-      <el-dropdown
-        trigger="click"
-        :disabled="!hasAnyResult"
-        @command="(command: string) => captureReport(bothSections, 'release-report', command)"
-      >
-        <el-button size="small" :icon="Camera" :disabled="!hasAnyResult">
-          {{ t('releaseDiff.screenshot_both') }}
-        </el-button>
-        <template #dropdown>
-          <el-dropdown-menu>
-            <el-dropdown-item command="download">
-              {{ t('releaseDiff.screenshot_download') }}
-            </el-dropdown-item>
-            <el-dropdown-item command="copy">
-              {{ t('releaseDiff.screenshot_copy') }}
-            </el-dropdown-item>
-            <el-dropdown-item v-if="shareSupported" command="share">
-              {{ t('releaseDiff.screenshot_share') }}
-            </el-dropdown-item>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-    </div>
 
     <!-- ================= Tools (left: compare, right: check) ================= -->
     <el-row :gutter="16" class="tool-sections">
@@ -213,12 +231,12 @@
 
         <el-form :model="compareForm" label-width="180px">
           <el-row :gutter="16">
-            <el-col :xs="24">
-              <el-form-item :label="t('releaseDiff.old_release_ref')" required>
+            <el-col :xs="24" :md="12">
+              <el-form-item :label="t('releaseDiff.missing_source_ref')" required>
                 <el-autocomplete
-                  v-model="compareForm.old_release_ref"
+                  v-model="compareForm.source_ref"
                   :fetch-suggestions="queryRefs"
-                  :placeholder="t('releaseDiff.ref_placeholder')"
+                  :placeholder="t('releaseDiff.missing_source_placeholder')"
                   clearable
                   trigger-on-focus
                   style="width: 100%"
@@ -234,12 +252,12 @@
                 </el-autocomplete>
               </el-form-item>
             </el-col>
-            <el-col :xs="24">
-              <el-form-item :label="t('releaseDiff.new_release_ref')" required>
+            <el-col :xs="24" :md="12">
+              <el-form-item :label="t('releaseDiff.missing_target_ref')" required>
                 <el-autocomplete
-                  v-model="compareForm.new_release_ref"
+                  v-model="compareForm.target_ref"
                   :fetch-suggestions="queryRefs"
-                  :placeholder="t('releaseDiff.ref_placeholder')"
+                  :placeholder="t('releaseDiff.missing_target_placeholder')"
                   clearable
                   trigger-on-focus
                   style="width: 100%"
@@ -257,78 +275,34 @@
             </el-col>
           </el-row>
 
-          <div class="scope-block">
-            <el-switch
-              v-model="compareScopeEnabled"
-              size="small"
-              @change="onCompareScopeToggle"
-            />
-            <span class="scope-title">{{ t('releaseDiff.scope_toggle') }}</span>
-            <el-tooltip :content="t('releaseDiff.scope_help')" placement="top" :show-after="100">
-              <el-icon class="help-icon"><QuestionFilled /></el-icon>
-            </el-tooltip>
-          </div>
-
-          <el-row v-if="compareScopeEnabled" :gutter="16">
-            <el-col :xs="24">
-              <el-form-item :label="t('releaseDiff.old_release_base_ref')">
-                <el-autocomplete
-                  v-model="compareForm.old_release_base_ref"
-                  :fetch-suggestions="queryRefs"
-                  :placeholder="t('releaseDiff.base_ref_placeholder')"
-                  clearable
-                  trigger-on-focus
-                  style="width: 100%"
-                >
-                  <template #default="{ item }">
-                    <div class="ref-option">
-                      <span>{{ item.value }}</span>
-                      <el-tag size="small" effect="plain" type="info">
-                        {{ refTypeLabel(item.type) }}
-                      </el-tag>
-                    </div>
-                  </template>
-                </el-autocomplete>
+          <el-row :gutter="16">
+            <el-col :xs="24" :md="24">
+              <el-form-item :label="t('releaseDiff.missing_baseline_ref')">
+                <div class="baseline-field">
+                  <el-autocomplete
+                    v-model="compareForm.baseline_ref"
+                    :fetch-suggestions="queryRefs"
+                    :placeholder="t('releaseDiff.missing_baseline_placeholder')"
+                    clearable
+                    trigger-on-focus
+                    class="baseline-input"
+                  >
+                    <template #default="{ item }">
+                      <div class="ref-option">
+                        <span>{{ item.value }}</span>
+                        <el-tag size="small" effect="plain" type="info">
+                          {{ refTypeLabel(item.type) }}
+                        </el-tag>
+                      </div>
+                    </template>
+                  </el-autocomplete>
+                  <!-- the hint explains the field, so it belongs to the field: next
+                       to the input on one line instead of a block underneath it -->
+                  <span class="baseline-hint">
+                    {{ t('releaseDiff.baseline_field_help') }}
+                  </span>
+                </div>
               </el-form-item>
-              <div class="scope-preview">
-                {{ t('releaseDiff.scope_of') }} {{ t('releaseDiff.old_release_ref') }}:
-                <code>{{ scopeText(compareForm.old_release_base_ref, compareForm.old_release_ref) }}</code>
-              </div>
-            </el-col>
-            <el-col :xs="24">
-              <el-form-item :label="t('releaseDiff.new_release_base_ref')">
-                <el-autocomplete
-                  v-model="compareForm.new_release_base_ref"
-                  :fetch-suggestions="queryRefs"
-                  :placeholder="t('releaseDiff.base_ref_placeholder')"
-                  clearable
-                  trigger-on-focus
-                  style="width: 100%"
-                >
-                  <template #default="{ item }">
-                    <div class="ref-option">
-                      <span>{{ item.value }}</span>
-                      <el-tag size="small" effect="plain" type="info">
-                        {{ refTypeLabel(item.type) }}
-                      </el-tag>
-                    </div>
-                  </template>
-                </el-autocomplete>
-              </el-form-item>
-              <div class="scope-preview">
-                {{ t('releaseDiff.scope_of') }} {{ t('releaseDiff.new_release_ref') }}:
-                <code>{{ scopeText(compareForm.new_release_base_ref, compareForm.new_release_ref) }}</code>
-              </div>
-            </el-col>
-            <el-col :xs="24">
-              <el-button
-                link
-                type="primary"
-                :disabled="!compareForm.old_release_ref.trim()"
-                @click="useOldAsNewBase"
-              >
-                {{ t('releaseDiff.scope_use_old_as_new_base') }}
-              </el-button>
             </el-col>
           </el-row>
 
@@ -352,20 +326,30 @@
             class="status-alert"
           />
           <el-alert
-            v-if="compareResult.truncated"
+            v-if="compareResult.verdict === 'inconclusive'"
             type="warning"
-            :title="t('releaseDiff.truncated_warning')"
+            show-icon
             :closable="false"
             class="status-alert"
+            :title="t('releaseDiff.inconclusive_title')"
+            :description="
+              t('releaseDiff.inconclusive_help', {
+                limit: compareResult.scan_limit,
+                count: compareResult.missing_count,
+              })
+            "
           />
           <el-alert
-            v-if="commitSetsTruncated"
-            type="warning"
+            v-if="compareResult.narrowed"
+            type="info"
             :closable="false"
-            show-icon
             class="status-alert"
-            :title="t('releaseDiff.commit_set_bounded_title')"
-            :description="t('releaseDiff.commit_set_bounded_help')"
+            :title="
+              t('releaseDiff.missing_baseline_used', {
+                ref: compareResult.baseline_ref,
+                filtered: compareResult.filtered_by_baseline_count,
+              })
+            "
           />
 
           <div class="report-actions">
@@ -392,66 +376,58 @@
             </el-dropdown>
           </div>
 
-          <div v-if="compareResult.missing_commits.length" class="result-actions">
-            <el-button size="small" type="danger" plain @click="sendMissingToCheck">
-              {{ t('releaseDiff.send_missing_to_check') }}
-            </el-button>
-          </div>
+          <button
+            v-if="compareResult.missing_commits.length"
+            ref="handoffStrip"
+            type="button"
+            class="result-handoff"
+            :class="{ 'is-delivered': handoffDelivered }"
+            @click="sendMissingToCheck"
+          >
+            <span class="result-handoff-count">
+              {{
+                commitCountLabel(compareResult.missing_count, !compareResult.scan_complete)
+              }}
+            </span>
+            <span class="result-handoff-text">
+              {{ t('releaseDiff.handoff_to_check') }}
+            </span>
+            <span class="result-handoff-arrow" aria-hidden="true">
+              <el-icon>
+                <ArrowRight v-if="!handoffDelivered" />
+                <CircleCheck v-else />
+              </el-icon>
+            </span>
+          </button>
 
           <div class="scope-used">
             <el-tag size="small" type="info">
-              {{ t('releaseDiff.old_release_ref') }}:
-              {{ scopeText(compareResult.old_release_base_ref, compareResult.old_release_ref) }}
-            </el-tag>
-            <el-tag size="small" type="info">
-              {{ t('releaseDiff.new_release_ref') }}:
-              {{ scopeText(compareResult.new_release_base_ref, compareResult.new_release_ref) }}
+              {{ t('releaseDiff.missing_baseline_ref') }}:
+              {{ compareResult.baseline_ref || t('releaseDiff.baseline_none_applied') }}
             </el-tag>
           </div>
 
           <el-row :gutter="16" class="stat-row">
-            <el-col :xs="12" :md="6">
-              <div class="stat-card">
-                <span class="stat-value">
-                  {{
-                    commitCountLabel(
-                      compareResult.summary.old_commit_count ?? 0,
-                      compareResult.old_commits_truncated,
-                    )
-                  }}
-                </span>
-                <span class="stat-label">{{ t('releaseDiff.old_commit_count') }}</span>
-              </div>
-            </el-col>
-            <el-col :xs="12" :md="6">
-              <div class="stat-card">
-                <span class="stat-value">
-                  {{
-                    commitCountLabel(
-                      compareResult.summary.new_commit_count ?? 0,
-                      compareResult.new_commits_truncated,
-                    )
-                  }}
-                </span>
-                <span class="stat-label">{{ t('releaseDiff.new_commit_count') }}</span>
-              </div>
-            </el-col>
-            <el-col :xs="12" :md="4">
+            <el-col :xs="12" :md="8">
               <div class="stat-card danger">
-                <span class="stat-value">{{ compareResult.summary.missing_count ?? 0 }}</span>
+                <span class="stat-value">
+                  {{ commitCountLabel(compareResult.missing_count, !compareResult.scan_complete) }}
+                </span>
                 <span class="stat-label">{{ t('releaseDiff.missing_count') }}</span>
               </div>
             </el-col>
-            <el-col :xs="12" :md="4">
+            <el-col :xs="12" :md="8">
               <div class="stat-card success">
-                <span class="stat-value">{{ compareResult.summary.added_count ?? 0 }}</span>
+                <span class="stat-value">
+                  {{ commitCountLabel(compareResult.added_count, !compareResult.added_complete) }}
+                </span>
                 <span class="stat-label">{{ t('releaseDiff.added_count') }}</span>
               </div>
             </el-col>
-            <el-col :xs="12" :md="4">
+            <el-col :xs="12" :md="8">
               <div class="stat-card">
-                <span class="stat-value">{{ compareResult.summary.common_count ?? 0 }}</span>
-                <span class="stat-label">{{ t('releaseDiff.common_count') }}</span>
+                <span class="stat-value">{{ compareResult.filtered_by_baseline_count ?? 0 }}</span>
+                <span class="stat-label">{{ t('releaseDiff.filtered_by_baseline_count') }}</span>
               </div>
             </el-col>
           </el-row>
@@ -481,25 +457,17 @@
             >
               <commit-table :commits="compareResult.added_commits" />
             </el-collapse-item>
-            <el-collapse-item
-              :title="`${t('releaseDiff.old_release_commits_title')} (${commitCountLabel(
-                compareResult.old_release_commits.length,
-                compareResult.old_commits_truncated,
-              )})`"
-              name="old"
-            >
-              <commit-table :commits="compareResult.old_release_commits" />
-            </el-collapse-item>
-            <el-collapse-item
-              :title="`${t('releaseDiff.new_release_commits_title')} (${commitCountLabel(
-                compareResult.new_release_commits.length,
-                compareResult.new_commits_truncated,
-              )})`"
-              name="new"
-            >
-              <commit-table :commits="compareResult.new_release_commits" />
-            </el-collapse-item>
           </el-collapse>
+
+          <p v-if="compareResult.rendered_truncated" class="scope-preview">
+            {{
+              t('releaseDiff.missing_render_truncated', {
+                rendered:
+                  compareResult.missing_commits.length + compareResult.added_commits.length,
+                count: compareResult.missing_count + compareResult.added_count,
+              })
+            }}
+          </p>
         </div>
 
         <el-empty v-else :description="t('releaseDiff.empty_result')" />
@@ -616,7 +584,9 @@
           <el-alert
             v-if="checkResult.truncated"
             type="warning"
-            :title="t('releaseDiff.truncated_warning')"
+            show-icon
+            :title="t('releaseDiff.check_truncated_title')"
+            :description="t('releaseDiff.check_truncated_note')"
             :closable="false"
             class="status-alert"
           />
@@ -731,19 +701,31 @@
       </el-card>
     </div>
     </el-col>
+
+
     </el-row>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Camera, Download, QuestionFilled } from '@element-plus/icons-vue'
+import {
+  ArrowDown,
+  ArrowRight,
+  Camera,
+  CircleCheck,
+  Download,
+  QuestionFilled,
+} from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
+import ContentLoader from '@/components/common/ContentLoader.vue'
 import { useJira } from '@/composables/useJira'
 import { jiraTicketSegments } from '@/utils/jira'
+import { copyTextToClipboard } from '@/utils/export/markdown'
 import { projectsApi } from '@/api/projects'
 import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/api/projects'
 import {
@@ -792,13 +774,18 @@ const refsLoadedAt = ref('')
 
 const compareSection = ref<HTMLElement | null>(null)
 const checkSection = ref<HTMLElement | null>(null)
+const handoffStrip = ref<HTMLElement | null>(null)
+const handoffDelivered = ref(false)
+// The mark on the receiving card is temporary: one look, not a sticky note
+let handoffTimer = 0
 const compareLoading = ref(false)
 const checkLoading = ref(false)
-const compareScopeEnabled = ref(false)
 const checkScopeEnabled = ref(false)
 const includeCommits = ref(true)
 const maxCommits = ref(1000)
 const openSections = ref<string[]>(['missing', 'added'])
+// The coordinate panel is open on arrival: it is what a first visit fills in
+const coordinatesOpen = ref(true)
 
 const repo = ref({
   project_key: '' as string,
@@ -808,11 +795,11 @@ const repo = ref({
   workspace_slug: '' as string,
 })
 
+// One comparison, one vocabulary: source / target / baseline
 const compareForm = ref({
-  old_release_ref: '',
-  new_release_ref: '',
-  old_release_base_ref: '',
-  new_release_base_ref: '',
+  source_ref: '',
+  target_ref: '',
+  baseline_ref: '',
 })
 
 const checkForm = ref({
@@ -823,6 +810,9 @@ const checkForm = ref({
 const commitsInput = ref('')
 const compareResult = ref<ReleaseCompareResponse | null>(null)
 const checkResult = ref<ReleaseCommitCheckResponse | null>(null)
+
+const route = useRoute()
+const router = useRouter()
 
 // Report / screenshot sharing
 const shareSupported = canShareImage()
@@ -841,28 +831,31 @@ const reportContext = computed(() => ({
 }))
 const bothSections = computed(() => document.querySelector<HTMLElement>('.tool-sections'))
 
-// A missing release commit set is a defect, not a notice: highlight it in red
-const compareAlertType = computed<'success' | 'error' | 'info'>(() => {
-  if (!compareResult.value) return 'info'
-  if (compareResult.value.status === 'identical') return 'info'
-  return compareResult.value.old_commits_included ? 'success' : 'error'
+// The verdict decides the colour: an inconclusive scan must never look like a pass.
+const compareAlertType = computed<'success' | 'error' | 'warning' | 'info'>(() => {
+  const result = compareResult.value
+  if (!result) return 'info'
+  if (result.verdict === 'inconclusive') return 'warning'
+  return result.verdict === 'contained' ? 'success' : 'error'
 })
 
-// A multi-year repository can hold tens of thousands of commits: the old / new
-// release commit sets are therefore only loaded as a bounded preview.
-const commitSetsTruncated = computed(
-  () =>
-    Boolean(
-      compareResult.value?.old_commits_truncated || compareResult.value?.new_commits_truncated,
-    ),
-)
-
 const compareStatusText = computed(() => {
-  if (!compareResult.value) return ''
-  if (compareResult.value.status === 'identical') return t('releaseDiff.status_identical')
-  return compareResult.value.old_commits_included
-    ? t('releaseDiff.status_included')
-    : t('releaseDiff.status_missing')
+  const result = compareResult.value
+  if (!result) return ''
+  if (result.verdict === 'inconclusive') return t('releaseDiff.status_inconclusive')
+  if (result.verdict === 'contained') {
+    return result.source_ref === result.target_ref
+      ? t('releaseDiff.status_identical')
+      : t('releaseDiff.missing_contained', {
+          source: result.source_ref,
+          target: result.target_ref,
+        })
+  }
+  return t('releaseDiff.missing_found', {
+    count: result.missing_count,
+    source: result.source_ref,
+    target: result.target_ref,
+  })
 })
 
 // el-select emits undefined when cleared - always work with trimmed strings
@@ -1064,9 +1057,10 @@ watch(isCloudProvider, (isCloud) => {
   }
 })
 
-onMounted(() => {
-  void loadProjects()
+onMounted(async () => {
   void loadJiraSettings()
+  await loadProjects()
+  await applyUrlState()
 })
 
 function basePayload() {
@@ -1092,32 +1086,16 @@ function scopeText(baseRef: string | null | undefined, releaseRef: string): stri
   return base ? `${base}..${release}` : t('releaseDiff.scope_full_history', { ref: release })
 }
 
-function onCompareScopeToggle(enabled: boolean) {
-  if (!enabled) {
-    compareForm.value.old_release_base_ref = ''
-    compareForm.value.new_release_base_ref = ''
-  }
-}
-
 function onCheckScopeToggle(enabled: boolean) {
   if (!enabled) {
     checkForm.value.target_release_base_ref = ''
   }
 }
 
-function useOldAsNewBase() {
-  compareForm.value.new_release_base_ref = compareForm.value.old_release_ref.trim()
-}
-
 function resetCompare() {
-  compareForm.value = {
-    old_release_ref: '',
-    new_release_ref: '',
-    old_release_base_ref: '',
-    new_release_base_ref: '',
-  }
-  compareScopeEnabled.value = false
+  compareForm.value = { source_ref: '', target_ref: '', baseline_ref: '' }
   compareResult.value = null
+  syncUrlState()
 }
 
 function resetCheck() {
@@ -1130,11 +1108,6 @@ function resetCheck() {
   checkResult.value = null
 }
 
-async function scrollTo(element: HTMLElement | null) {
-  await nextTick()
-  element?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-}
-
 async function sendMissingToCheck() {
   const shas = (compareResult.value?.missing_commits ?? []).map((commit) => commit.id)
   if (shas.length === 0) {
@@ -1143,8 +1116,88 @@ async function sendMissingToCheck() {
 
   commitsInput.value = shas.join('\n')
   ElMessage.success(t('releaseDiff.sent_missing_to_check', { count: shas.length }))
-  await scrollTo(checkSection.value)
+
+  const landing = checkSection.value?.querySelector('textarea') ?? checkSection.value
+  await flyMissingToken(shas.length, landing)
+  markHandoffDelivered()
 }
+
+// The strip answers on its own element: a card lighting up across the page reads
+// as a flash, while the icon and tint where the click happened reads as done
+function markHandoffDelivered() {
+  handoffDelivered.value = true
+  window.clearTimeout(handoffTimer)
+  handoffTimer = window.setTimeout(() => {
+    handoffDelivered.value = false
+  }, 1400)
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
+
+// A sliver of the landing catches a token flying into almost nothing visible
+function landingOnScreen(element: Element): boolean {
+  const rect = element.getBoundingClientRect()
+  const viewHeight = window.innerHeight || document.documentElement.clientHeight
+  const viewWidth = window.innerWidth || document.documentElement.clientWidth
+  const centerY = rect.top + rect.height / 2
+  const centerX = rect.left + rect.width / 2
+  return centerY > 0 && centerY < viewHeight && centerX > 0 && centerX < viewWidth
+}
+
+async function flyMissingToken(count: number, landing: Element | null) {
+  // With the landing off screen there is nothing to fly into: the toast already
+  // said where the shas went, and moving the page would read as a jump
+  if (
+    !landing ||
+    !landingOnScreen(landing) ||
+    !handoffStrip.value ||
+    prefersReducedMotion() ||
+    typeof Element.prototype.animate !== 'function'
+  ) {
+    return
+  }
+
+  const token = document.createElement('div')
+  token.className = 'delivery-token'
+  token.textContent = `${count} SHA`
+  const from = handoffStrip.value.getBoundingClientRect()
+  // Placed before it paints, so no frame can catch the token at the origin
+  token.style.transform = `translate(${from.left}px, ${from.top}px)`
+  document.body.appendChild(token)
+
+  const to = landing.getBoundingClientRect()
+  const endX = to.left + to.width / 2 - token.offsetWidth / 2
+  const endY = to.top + to.height / 2 - token.offsetHeight / 2
+
+  const flight = token.animate(
+    [
+      { transform: `translate(${from.left}px, ${from.top}px)`, opacity: 1 },
+      {
+        transform: `translate(${(from.left + endX) / 2}px, ${
+          Math.min(from.top, endY) - 28
+        }px) scale(1.08)`,
+        opacity: 1,
+        offset: 0.5,
+      },
+      { transform: `translate(${endX}px, ${endY}px) scale(0.55)`, opacity: 0.2 },
+    ],
+    { duration: 520, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+  )
+
+  try {
+    await flight.finished
+  } catch {
+    // The flight was interrupted: the delivery itself already happened
+  }
+  token.remove()
+}
+
+onBeforeUnmount(() => window.clearTimeout(handoffTimer))
 
 // ------------------------------------------------------------------ #
 // Reporting: standalone HTML report + screenshot sharing
@@ -1217,8 +1270,8 @@ async function runCompare() {
   if (
     !selectedProjectKey.value ||
     !selectedRepositorySlug.value ||
-    !compareForm.value.old_release_ref.trim() ||
-    !compareForm.value.new_release_ref.trim()
+    !compareForm.value.source_ref.trim() ||
+    !compareForm.value.target_ref.trim()
   ) {
     ElMessage.warning(t('releaseDiff.validation_required'))
     return
@@ -1226,19 +1279,16 @@ async function runCompare() {
 
   compareLoading.value = true
   try {
+    const baseline = compareForm.value.baseline_ref.trim()
     compareResult.value = await releaseDiffApi.compare({
       ...basePayload(),
-      old_release_ref: compareForm.value.old_release_ref.trim(),
-      new_release_ref: compareForm.value.new_release_ref.trim(),
-      old_release_base_ref: compareScopeEnabled.value
-        ? optionalRef(compareForm.value.old_release_base_ref)
-        : undefined,
-      new_release_base_ref: compareScopeEnabled.value
-        ? optionalRef(compareForm.value.new_release_base_ref)
-        : undefined,
+      source_ref: compareForm.value.source_ref.trim(),
+      target_ref: compareForm.value.target_ref.trim(),
+      // the field is the baseline: an empty one narrows nothing
+      baseline_ref: baseline || undefined,
       include_commits: includeCommits.value,
-      max_commits: maxCommits.value,
     })
+    syncUrlState()
   } catch {
     ElMessage.error(t('releaseDiff.compare_failed'))
   } finally {
@@ -1280,6 +1330,67 @@ async function runCheck() {
   }
 }
 
+
+// ------------------------------------------------------------------ #
+// URL state: the merge check is a routine, so a link reopens the same check
+// ------------------------------------------------------------------ #
+
+// Set while the selection a link carries is being written: the coordinate watcher
+// must not clear what that link asked for
+let restoringUrl = false
+
+function readQueryValue(key: string): string {
+  const value = route.query[key]
+  return typeof value === 'string' ? value : ''
+}
+
+function syncUrlState() {
+  const query: Record<string, string> = {}
+  if (selectedProjectKey.value) query.project_key = selectedProjectKey.value
+  if (selectedRepositorySlug.value) query.repository_slug = selectedRepositorySlug.value
+  if (compareForm.value.source_ref.trim()) query.source = compareForm.value.source_ref.trim()
+  if (compareForm.value.target_ref.trim()) query.target = compareForm.value.target_ref.trim()
+  if (compareForm.value.baseline_ref.trim()) {
+    query.baseline = compareForm.value.baseline_ref.trim()
+  }
+  void router.replace({ query })
+}
+
+async function applyUrlState() {
+  restoringUrl = true
+  try {
+    const projectKey = readQueryValue('project_key')
+    const repositorySlug = readQueryValue('repository_slug')
+
+    if (projectKey) {
+      repo.value.project_key = projectKey
+      repo.value.repository_slug = repositorySlug
+      // the project watcher clears the slug while it reloads the repository catalog
+      await nextTick()
+      repo.value.repository_slug = repositorySlug
+    }
+
+    compareForm.value.source_ref = readQueryValue('source')
+    compareForm.value.target_ref = readQueryValue('target')
+    compareForm.value.baseline_ref = readQueryValue('baseline')
+  } finally {
+    restoringUrl = false
+  }
+}
+
+// The refs of one repository mean nothing in another: switch repository and both
+// tools are cleared, rather than comparing a stale source / target / baseline in
+// the repository that was just picked. The coordinates a link restored keep the
+// selection the link carries.
+watch(
+  () => [selectedProjectKey.value, selectedRepositorySlug.value],
+  () => {
+    if (restoringUrl) return
+    resetCompare()
+    resetCheck()
+  },
+)
+
 function formatTimestamp(value?: number | null): string {
   if (!value) return '-'
   return dayjs(value).format('YYYY-MM-DD HH:mm')
@@ -1297,10 +1408,10 @@ function messageSegments(message?: string | null) {
 }
 
 async function copySha(value: string) {
-  try {
-    await navigator.clipboard.writeText(value)
+  if (await copyTextToClipboard(value)) {
     ElMessage.success(t('releaseDiff.copied'))
-  } catch {
+  } else {
+    // the clipboard was refused: show the text so it can be copied by hand
     ElMessage.info(value)
   }
 }
@@ -1338,10 +1449,49 @@ async function copySha(value: string) {
   font-weight: 600;
 }
 
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .card-header h2 {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
+}
+
+/* Report actions and the fold share one rail on the right, vertically centred
+   against the title */
+.card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  /* the rail drops under the title rather than squeezing it */
+  .card-header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+/* The chevron points at the closed panel once the body is folded away */
+.panel-toggle :deep(.el-icon) {
+  transition: transform 0.2s ease;
+}
+
+.panel-toggle.is-collapsed :deep(.el-icon) {
+  transform: rotate(-90deg);
+}
+
+/* Folded away rather than unmounted: the repository that was picked stays
+   picked, and the panel comes back exactly as it was left */
+.panel-body.is-collapsed {
+  display: none;
 }
 
 .subtitle {
@@ -1377,15 +1527,132 @@ async function copySha(value: string) {
   gap: 12px;
 }
 
-.result-actions {
-  margin-bottom: 12px;
+/* The baseline is optional, so its explanation sits next to it on the same line.
+   The input keeps a width of its own: squeezed next to the hint it would cut the
+   placeholder, and cut short of it the hint became a two-line block. */
+.baseline-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
 }
 
-.report-toolbar {
+.baseline-input {
+  flex: 0 0 auto;
+  width: 400px;
+  max-width: 100%;
+}
+
+/* Explanatory text, not a label: same weight as the hints above the form */
+.baseline-hint {
+  flex: 1 1 240px;
+  min-width: 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* The handoff is a promise, not a button: it leads with the number of missing
+   shas and names where they land. The arrow follows the card direction: beside
+   on the wide layout, below once the cards stack */
+.result-handoff {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--el-color-danger-light-5);
+  border-radius: 8px;
+  background: var(--el-color-danger-light-9);
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* A new action should not have to shout twice: one pass, then it settles. The
+   tint rides its own layer and only opacity moves, so nothing has to repaint */
+.result-handoff::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--el-color-danger-light-8);
+  opacity: 0;
+  pointer-events: none;
+  animation: handoff-attention 1.6s ease 1 both;
+}
+
+.result-handoff:hover,
+.result-handoff:focus-visible {
+  border-color: var(--el-color-danger);
+  background: var(--el-color-danger-light-8);
+}
+
+.result-handoff-count {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--el-color-danger);
+}
+
+.result-handoff-arrow {
+  margin-left: auto;
+  color: var(--el-color-danger);
+}
+
+/* Delivered: the strip answers where it was clicked, so no distant card has to
+   light up to confirm the handoff */
+.result-handoff.is-delivered,
+.result-handoff.is-delivered:hover,
+.result-handoff.is-delivered:focus-visible {
+  border-color: var(--el-color-success-light-5);
+  background: var(--el-color-success-light-9);
+}
+
+.result-handoff.is-delivered .result-handoff-count,
+.result-handoff.is-delivered .result-handoff-arrow {
+  color: var(--el-color-success);
+}
+
+@keyframes handoff-attention {
+  0% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 1199px) {
+  .result-handoff-arrow {
+    transform: rotate(90deg);
+  }
+}
+
+/* The token that carries the shas: anchored to the viewport, gone on arrival */
+.delivery-token {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2001;
+  padding: 4px 10px;
+  border: 1px solid var(--el-color-danger);
+  border-radius: 999px;
+  background: var(--el-bg-color);
+  color: var(--el-color-danger);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result-handoff::after {
+    animation: none;
+  }
 }
 
 .report-actions {

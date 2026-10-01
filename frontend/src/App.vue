@@ -1,5 +1,6 @@
 <template>
   <div id="app">
+    <GlobalProgress />
     <router-view />
     <PWAInstallPrompt />
     <PageAgentLauncher
@@ -14,6 +15,7 @@
 import { watch } from 'vue'
 import PWAInstallPrompt from '@/components/common/PWAInstallPrompt.vue'
 import PageAgentLauncher from '@/components/common/PageAgentLauncher.vue'
+import GlobalProgress from '@/components/common/GlobalProgress.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useIdleSessionHeartbeat } from '@/composables/useIdleSessionHeartbeat'
 import { usePageAgent } from '@/composables/usePageAgent'

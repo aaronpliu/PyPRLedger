@@ -300,6 +300,64 @@ class BitbucketServerProvider(BaseGitProvider):
                 names.append(name)
         return names
 
+    async def list_tags_with_commits(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Fetch tags with the commit each one points at.
+
+        Maps to GET /rest/api/latest/projects/{key}/repos/{slug}/tags. Bitbucket
+        reports ``latestCommit`` - the commit the tag resolves to, so an annotated
+        tag object is dereferenced server side - and ``type`` says whether the tag
+        is annotated or lightweight.
+
+        ``orderBy`` is deliberately not sent: the scope resolver orders the entries
+        itself, and a listing capped by ``limit`` must not silently depend on an
+        ordering the server picks.
+        """
+        url = f"{self._base_url}/projects/{project_key}/repos/{repository_slug}/tags"
+        logger.info(
+            f"Listing tags with commits on Bitbucket Server: {project_key}/{repository_slug}"
+        )
+
+        values = await self._fetch_paged_values(url, limit)
+        entries: list[dict[str, Any]] = []
+        for value in values:
+            tag_type = str(value.get("type") or "").strip().upper()
+            entries.append(
+                {
+                    "name": value.get("displayId") or value.get("name") or value.get("id"),
+                    "sha": value.get("latestCommit") or value.get("hash"),
+                    "date": self._to_epoch_ms(value.get("latestCommitTimestamp")),
+                    "is_annotated": (tag_type == "ANNOTATED") if tag_type else None,
+                }
+            )
+
+        return self.normalize_tag_entries(entries)
+
+    @staticmethod
+    def _to_epoch_ms(value: Any) -> int | None:
+        """Read a Bitbucket Server timestamp (epoch milliseconds) defensively."""
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _compare_params(from_ref: str, to_ref: str) -> dict[str, str]:
+        """Query pair for ``compare/commits`` expressed in provider terms.
+
+        Bitbucket Server answers the resource with the commits reachable from
+        the ``from`` ref but not from the ``to`` ref (``git log to..from``),
+        while the provider contract is the opposite (``git log from..to``), so
+        the two refs are exchanged in the query.
+        """
+        return {"from": to_ref, "to": from_ref}
+
     async def compare_commits(
         self,
         project_key: str,
@@ -317,8 +375,31 @@ class BitbucketServerProvider(BaseGitProvider):
             f"Comparing commits on Bitbucket Server: {project_key}/{repository_slug} "
             f"({from_ref} -> {to_ref})"
         )
-        commits, _ = await self._fetch_paged_commits(url, {"from": from_ref, "to": to_ref}, limit)
+        commits, _ = await self._fetch_paged_commits(
+            url, self._compare_params(from_ref, to_ref), limit
+        )
         return self._with_commit_urls(commits, project_key, repository_slug)
+
+    async def compare_commits_complete(
+        self,
+        project_key: str,
+        repository_slug: str,
+        from_ref: str,
+        to_ref: str,
+        limit: int = 1000,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Difference plus completeness, taken from ``isLastPage`` / ``nextPageStart``.
+
+        ``_fetch_paged_commits`` stops either because the provider reported the
+        last page or because the limit was reached; only the former proves that
+        the difference was enumerated completely.
+        """
+        url = f"{self._base_url}/projects/{project_key}/repos/{repository_slug}/compare/commits"
+        commits, truncated = await self._fetch_paged_commits(
+            url, self._compare_params(from_ref, to_ref), limit
+        )
+        complete = not truncated and len(commits) < limit
+        return self._with_commit_urls(commits, project_key, repository_slug), complete
 
     async def list_commits_until(
         self,

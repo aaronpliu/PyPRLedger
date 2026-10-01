@@ -17,6 +17,9 @@ from typing import Any
 from src.core.config import settings
 from src.core.git_provider import GitProvider
 from src.schemas.release_diff import (
+    VERDICT_CONTAINED,
+    VERDICT_INCONCLUSIVE,
+    VERDICT_MISSING,
     CommitCheckResult,
     CommitInfo,
     ReleaseCommitCheckRequest,
@@ -37,6 +40,13 @@ from src.utils.redis import RedisCache
 logger = get_logger(__name__)
 
 SHORT_SHA_LENGTH = 7
+
+# Bumped whenever the meaning of a cached response changes. Entries written by the
+# previous implementation (which derived "missing" by intersecting two capped
+# commit sets) must never be served as if they carried a trustworthy verdict.
+# "v3" also discards entries produced while the Bitbucket Server comparison ran
+# in the reversed direction.
+CACHE_KEY_VERSION = "v3"
 
 
 def resolve_remote_project_key(
@@ -86,29 +96,43 @@ class ReleaseDiffService:
     # Public API
     # ------------------------------------------------------------------ #
 
-    async def compare_releases(self, request: ReleaseCompareRequest) -> ReleaseCompareResponse:
-        """Compare two releases and report whether the old release is contained.
+    async def compare_releases(
+        self,
+        request: ReleaseCompareRequest,
+    ) -> ReleaseCompareResponse:
+        """Compare two releases: is the source contained, and what does the target add?
+
+        Both answers are provider differences - ``source \\ target`` for the verdict
+        and ``target \\ source`` for the additions - which are small by construction,
+        so neither depends on how much history the repository holds and neither walks
+        a release listing. One optional baseline narrows both directions; the commit
+        lists are rendered material and never decide the verdict.
 
         Args:
-            request: Release compare payload
+            request: Release compare payload, its optional baseline included
 
         Returns:
-            ReleaseCompareResponse with missing/added commit breakdown
+            ReleaseCompareResponse with the verdict plus the missing and added commits
         """
         provider_name = self._resolve_provider_name(request.git_provider)
         provider = self._provider_factory(provider_name)
         remote_key = self._remote_project_key(request, provider_name)
+
+        # The baseline belongs to this comparison: a repository holds several
+        # release lines, and each line forks from its own point
+        effective_baseline = request.baseline_ref
 
         cache_key = self._build_cache_key(
             "compare",
             provider_name,
             remote_key,
             request.repository_slug,
-            request.old_release_ref,
-            request.new_release_ref,
-            request.old_release_base_ref,
-            request.new_release_base_ref,
-            request.max_commits,
+            request.source_ref,
+            request.target_ref,
+            effective_baseline,
+            request.scan_limit,
+            request.render_limit,
+            bool(request.include_commits),
         )
         cached = None if request.refresh else await self._read_cache(cache_key)
         if cached is not None:
@@ -118,99 +142,92 @@ class ReleaseDiffService:
                 ReleaseCompareResponse(**cached), bool(request.include_commits)
             )
 
-        # The commit sets are only a preview: a multi-year repository can hold tens of
-        # thousands of commits, so they are bounded by commit_preview_limit and flagged
-        # as truncated instead of being fetched and rendered in full.
-        preview_limit = request.commit_preview_limit
-        old_commits, old_truncated = await self._fetch_release_commits(
+        # The containment answer comes from the provider difference in the missing
+        # direction: shared history cancels out, so it is enumerated completely or
+        # explicitly reported as inconclusive - never inferred from a capped listing.
+        missing_raw, missing_complete = await self._scan_release_difference(
             provider=provider,
             project_key=remote_key,
             repository_slug=request.repository_slug,
-            release_ref=request.old_release_ref,
-            base_ref=request.old_release_base_ref,
-            max_commits=preview_limit,
+            source_ref=request.source_ref,
+            target_ref=request.target_ref,
+            scan_limit=request.scan_limit,
         )
-        new_commits, new_truncated = await self._fetch_release_commits(
+        added_raw, added_complete = await self._scan_release_difference(
             provider=provider,
             project_key=remote_key,
             repository_slug=request.repository_slug,
-            release_ref=request.new_release_ref,
-            base_ref=request.new_release_base_ref,
-            max_commits=preview_limit,
-        )
-
-        behind_ids, behind_truncated = await self._fetch_compare_ids(
-            provider=provider,
-            project_key=remote_key,
-            repository_slug=request.repository_slug,
-            from_ref=request.new_release_ref,
-            to_ref=request.old_release_ref,
-            max_commits=request.max_commits,
-        )
-        ahead_ids, ahead_truncated = await self._fetch_compare_ids(
-            provider=provider,
-            project_key=remote_key,
-            repository_slug=request.repository_slug,
-            from_ref=request.old_release_ref,
-            to_ref=request.new_release_ref,
-            max_commits=request.max_commits,
+            source_ref=request.target_ref,
+            target_ref=request.source_ref,
+            scan_limit=request.scan_limit,
         )
 
-        missing_commits = [commit for commit in old_commits if commit.id in behind_ids]
-        added_commits = [commit for commit in new_commits if commit.id in ahead_ids]
+        # One baseline narrows both directions: it drops the commits that already
+        # existed at the starting point, which is what "the work this line did since
+        # the fork point" means.
+        missing_raw, missing_filtered = await self._filter_by_base(
+            provider=provider,
+            project_key=remote_key,
+            repository_slug=request.repository_slug,
+            commits=missing_raw,
+            base_ref=effective_baseline,
+        )
+        added_raw, added_filtered = await self._filter_by_base(
+            provider=provider,
+            project_key=remote_key,
+            repository_slug=request.repository_slug,
+            commits=added_raw,
+            base_ref=effective_baseline,
+        )
 
-        old_commits_included = not missing_commits
-        if request.old_release_ref == request.new_release_ref:
-            status = "identical"
-        elif old_commits_included:
-            status = "included"
+        if request.source_ref.strip() == request.target_ref.strip():
+            verdict = VERDICT_CONTAINED
+        elif not missing_complete:
+            # never claim a pass from an incomplete scan
+            verdict = VERDICT_INCONCLUSIVE
+        elif missing_raw:
+            verdict = VERDICT_MISSING
         else:
-            status = "missing_commits"
+            verdict = VERDICT_CONTAINED
+
+        render_limit = request.render_limit
+        missing_commits = [self._normalize_commit(raw) for raw in missing_raw[:render_limit]]
+        added_commits = [self._normalize_commit(raw) for raw in added_raw[:render_limit]]
 
         response = ReleaseCompareResponse(
             project_key=request.project_key,
             repository_slug=request.repository_slug,
             git_provider=provider_name,
-            old_release_ref=request.old_release_ref,
-            new_release_ref=request.new_release_ref,
-            old_release_base_ref=request.old_release_base_ref,
-            new_release_base_ref=request.new_release_base_ref,
-            old_commits_included=old_commits_included,
-            status=status,
-            summary={
-                "old_commit_count": len(old_commits),
-                "new_commit_count": len(new_commits),
-                "missing_count": len(missing_commits),
-                "added_count": len(added_commits),
-                "common_count": max(
-                    0,
-                    len(
-                        {commit.id for commit in old_commits}
-                        & {commit.id for commit in new_commits}
-                    ),
-                ),
-            },
+            source_ref=request.source_ref,
+            target_ref=request.target_ref,
+            baseline_ref=effective_baseline,
+            narrowed=bool(effective_baseline),
+            verdict=verdict,
+            scan_complete=missing_complete,
+            scan_limit=request.scan_limit,
+            filtered_by_baseline_count=missing_filtered + added_filtered,
+            missing_count=len(missing_raw),
             missing_commits=missing_commits,
+            added_count=len(added_raw),
             added_commits=added_commits,
-            old_release_commits=old_commits,
-            new_release_commits=new_commits,
-            old_commits_truncated=old_truncated,
-            new_commits_truncated=new_truncated,
-            truncated=old_truncated or new_truncated or behind_truncated or ahead_truncated,
+            added_complete=added_complete,
+            rendered_truncated=len(missing_raw) > len(missing_commits)
+            or len(added_raw) > len(added_commits),
         )
 
         await self._write_cache(cache_key, response.model_dump(mode="json"))
-        self.metrics.increment_release_diff("compare", provider_name, status)
+        self.metrics.increment_release_diff("compare", provider_name, verdict)
         logger.info(
             "Release comparison completed",
             extra={
                 "project_key": request.project_key,
                 "repository_slug": request.repository_slug,
-                "old_release_ref": request.old_release_ref,
-                "new_release_ref": request.new_release_ref,
-                "status": status,
-                "missing_count": len(missing_commits),
-                "added_count": len(added_commits),
+                "source_ref": request.source_ref,
+                "target_ref": request.target_ref,
+                "verdict": verdict,
+                "missing_count": len(missing_raw),
+                "added_count": len(added_raw),
+                "baseline_ref": effective_baseline,
             },
         )
 
@@ -286,6 +303,11 @@ class ReleaseDiffService:
     async def check_commits(self, request: ReleaseCommitCheckRequest) -> ReleaseCommitCheckResponse:
         """Check whether the given commits belong to the target release.
 
+        Each commit is answered by the provider against the target ref (and, when a
+        release base ref is supplied, against that base as well), so the verdict is
+        exact however large the release is. The commit listing of the release is
+        only used to attach details to the matches.
+
         Args:
             request: Commit check payload
 
@@ -306,37 +328,69 @@ class ReleaseDiffService:
         )
 
         lookup = self._build_commit_lookup(release_commits)
+        base_ref = (request.target_release_base_ref or "").strip() or None
         results: list[CommitCheckResult] = []
 
         for raw_commit in request.commits:
+            # The listing above only enriches the answer. Membership is asked from the
+            # provider, so a commit that fell outside a capped listing is still answered
+            # correctly instead of being reported as missing.
             matched = self._match_commit(raw_commit, lookup)
-            if matched is None:
+            candidate = matched.id if matched else raw_commit.strip()
+
+            contained = matched is not None or await provider.contains_commit(
+                project_key=remote_key,
+                repository_slug=request.repository_slug,
+                ref=request.target_release_ref,
+                commit=candidate,
+            )
+            if not contained:
                 results.append(
                     CommitCheckResult(
                         commit=raw_commit,
                         included=False,
-                        reason="not_found_in_release_scope",
+                        reason="not_reachable_from_target",
                     )
                 )
-            else:
+                continue
+
+            if base_ref and await provider.contains_commit(
+                project_key=remote_key,
+                repository_slug=request.repository_slug,
+                ref=base_ref,
+                commit=candidate,
+            ):
                 results.append(
                     CommitCheckResult(
                         commit=raw_commit,
-                        included=True,
-                        matched_id=matched.id,
+                        included=False,
+                        matched_id=matched.id if matched else None,
                         commit_info=matched,
-                        reason="matched",
+                        reason="excluded_by_release_base",
                     )
                 )
+                continue
+
+            results.append(
+                CommitCheckResult(
+                    commit=raw_commit,
+                    included=True,
+                    matched_id=matched.id if matched else None,
+                    commit_info=matched,
+                    reason="matched",
+                )
+            )
 
         included_count = sum(1 for result in results if result.included)
+        all_included = included_count == len(results)
         response = ReleaseCommitCheckResponse(
             project_key=request.project_key,
             repository_slug=request.repository_slug,
             git_provider=provider_name,
             target_release_ref=request.target_release_ref,
             target_release_base_ref=request.target_release_base_ref,
-            all_included=included_count == len(results),
+            all_included=all_included,
+            verdict=VERDICT_CONTAINED if all_included else VERDICT_MISSING,
             summary={
                 "requested": len(results),
                 "included_count": included_count,
@@ -463,28 +517,78 @@ class ReleaseDiffService:
 
         return [self._normalize_commit(raw) for raw in raw_commits], truncated
 
-    async def _fetch_compare_ids(
+    async def _scan_release_difference(
         self,
         provider: BaseGitProvider,
         project_key: str,
         repository_slug: str,
-        from_ref: str,
-        to_ref: str,
-        max_commits: int,
-    ) -> tuple[set[str], bool]:
-        """Return commit ids reachable from ``to_ref`` but not from ``from_ref``."""
-        if from_ref == to_ref:
-            return set(), False
+        *,
+        source_ref: str,
+        target_ref: str,
+        scan_limit: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Enumerate the commits the target release is missing.
 
-        raw_commits = await provider.compare_commits(
+        ``source \\ target`` is small by construction - the history both releases
+        share cancels out, so only the work that never reached the target remains.
+        That is what makes a complete enumeration possible (and what lets the
+        caller be told when it was not possible).
+
+        Returns:
+            Tuple of (raw commits, complete).
+        """
+        if source_ref.strip() == target_ref.strip():
+            return [], True
+
+        return await provider.compare_commits_complete(
             project_key=project_key,
             repository_slug=repository_slug,
-            from_ref=from_ref,
-            to_ref=to_ref,
-            limit=max_commits,
+            from_ref=target_ref,
+            to_ref=source_ref,
+            limit=scan_limit,
         )
-        ids = {self._normalize_commit(raw).id for raw in raw_commits}
-        return ids, len(raw_commits) >= max_commits
+
+    async def _filter_by_base(
+        self,
+        provider: BaseGitProvider,
+        project_key: str,
+        repository_slug: str,
+        commits: list[dict[str, Any]],
+        *,
+        base_ref: str | None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Drop difference commits that already existed at ``base_ref``.
+
+        A baseline narrows the answer to the release's own work (for example the
+        work of a maintenance line since the fork point). Membership of the base is
+        answered by the provider per commit, which stays exact on any repository
+        size - and the number of candidates is the number of missing commits, not
+        the size of a release.
+
+        Returns:
+            Tuple of (kept commits, number of commits filtered out).
+        """
+        base = (base_ref or "").strip()
+        if not base or not commits:
+            return list(commits), 0
+
+        kept: list[dict[str, Any]] = []
+        filtered = 0
+        for raw in commits:
+            commit_id = self._normalize_commit(raw).id
+            if not commit_id:
+                continue
+            if await provider.contains_commit(
+                project_key=project_key,
+                repository_slug=repository_slug,
+                ref=base,
+                commit=commit_id,
+            ):
+                filtered += 1
+                continue
+            kept.append(raw)
+
+        return kept, filtered
 
     @staticmethod
     def _clean_refs(values: list[str] | None) -> list[str]:
@@ -600,24 +704,24 @@ class ReleaseDiffService:
     def _apply_include_commits(
         response: ReleaseCompareResponse, include_commits: bool
     ) -> ReleaseCompareResponse:
-        """Strip commit details from the response when the caller opted out."""
+        """Strip commit details from the response when the caller opted out.
+
+        The verdict and the counts are untouched: only the rendered lists are dropped.
+        """
         if include_commits:
             return response
 
-        return response.model_copy(
-            update={
-                "missing_commits": [],
-                "added_commits": [],
-                "old_release_commits": [],
-                "new_release_commits": [],
-            }
-        )
+        return response.model_copy(update={"missing_commits": [], "added_commits": []})
 
     @staticmethod
     def _build_cache_key(operation: str, *parts: Any) -> str:
-        """Build a stable cache key for a release diff operation."""
+        """Build a stable cache key for a release diff operation.
+
+        The key carries a version segment so responses computed by an older
+        implementation are never replayed with a different meaning.
+        """
         digest = hashlib.sha256("|".join(str(part) for part in parts).encode()).hexdigest()
-        return f"release_diff:{operation}:{digest[:32]}"
+        return f"release_diff:{CACHE_KEY_VERSION}:{operation}:{digest[:32]}"
 
     async def _read_cache(self, cache_key: str) -> dict | None:
         """Read a cached response, tolerating cache failures."""

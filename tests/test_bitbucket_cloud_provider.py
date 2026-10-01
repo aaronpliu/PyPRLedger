@@ -255,17 +255,17 @@ async def test_release_diff_compare_runs_against_cloud_provider(monkeypatch) -> 
             project_key=WORKSPACE,
             repository_slug=REPO,
             git_provider="bitbucket_cloud",
-            old_release_ref="v1.0.0",
-            new_release_ref="v1.1.0",
+            source_ref="v1.0.0",
+            target_ref="v1.1.0",
         )
     )
 
     assert result.git_provider == "bitbucket_cloud"
-    assert result.status == "included"
-    assert [commit.id for commit in result.old_release_commits] == [C1]
+    assert result.verdict == "contained"
+    assert result.missing_count == 0
     assert [commit.id for commit in result.added_commits] == [C2]
-    assert result.old_release_commits[0].author_name == "Jane Doe"
-    assert result.old_release_commits[0].author_username == "jane"
+    # C2 has no display name and no email, so the provider falls back to the nickname
+    assert result.added_commits[0].author_username == "john"
 
 
 async def test_repository_url_drops_clone_credentials(monkeypatch) -> None:

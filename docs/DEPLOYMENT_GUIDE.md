@@ -480,12 +480,50 @@ docker-compose up -d --scale api=3
 # Check current migration state
 docker-compose exec api alembic current
 
-# Stamp to specific version
+# Stamp to specific version - aligns the recorded version only: it runs no
+# migration and undoes nothing, so it cannot clean up after one (see 6)
 docker-compose exec api alembic stamp <version>
 
 # Rollback to previous version
 docker-compose exec api alembic downgrade -1
 ```
+
+#### 6. A Revision Is Withdrawn
+
+**Symptoms**: a release deletes a migration file that some environments already applied - a feature reverted before it reached them all.
+
+**Solutions**: the order is the whole problem. `downgrade` needs the file it undoes, so every environment that applied the revision has to be rolled back **before** the code without it arrives.
+
+```bash
+# 1. On each environment, see where it stands
+docker-compose exec api alembic current
+
+# 2. Roll the ones that are past the withdrawn revision back to the one before
+#    it: this runs the withdrawn revision's own downgrade, undoing the table,
+#    its indexes and any permission or seed rows it added
+docker-compose exec api alembic downgrade <revision-before-it>
+docker-compose exec api alembic current
+
+# 3. Deploy the code, where the revision file no longer exists
+
+# 4. Verify that a single head is left, and that every environment is on it
+docker-compose exec api alembic heads
+```
+
+An environment that never applied the revision needs nothing: it is already at
+the head the others were rolled back to. If the deployment did reach an
+environment first, restore that one file for the downgrade - a revision file is
+standalone, it needs no application code:
+
+```bash
+git show <commit-that-has-it>:alembic/versions/<revision>_<slug>.py > alembic/versions/<revision>_<slug>.py
+docker-compose exec api alembic downgrade <revision-before-it>
+rm alembic/versions/<revision>_<slug>.py
+```
+
+**Do not `stamp` instead of `downgrade`**: stamping rewrites the version number
+and leaves everything the revision created in the database, with no migration
+left that could remove it.
 
 ### Getting Help
 

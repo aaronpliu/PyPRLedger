@@ -3,13 +3,26 @@ import type { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConf
 import { ElMessage } from 'element-plus'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
+import { beginProgress, endProgress } from '@/composables/useProgress'
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean
   _suppressGlobalError?: boolean
+  /** Background traffic (heartbeats, polling) that never raises the progress bar. */
+  _silent?: boolean
+  /** The progress slot this request opened, closed again when it settles. */
+  _progressId?: string
 }
 
 const AUTH_EXCLUDED_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout']
+
+// The requests the app makes on its own, with no reader waiting for an answer: a
+// heartbeat or a poll should not flash the progress bar every few seconds.
+const SILENT_REQUEST_PATHS = ['/auth/heartbeat', '/auth/refresh', '/notifications/unread-count']
+
+function isSilentRequest(url?: string): boolean {
+  return Boolean(url && SILENT_REQUEST_PATHS.some((path) => url.includes(path)))
+}
 let refreshPromise: Promise<string> | null = null
 let lastAuthFailureTimestamp = 0
 let isRedirectingToLogin = false
@@ -102,6 +115,14 @@ async function refreshAccessToken(): Promise<string> {
 // Request interceptor - add JWT token
 request.interceptors.request.use(
   async (config) => {
+    const tracked = config as RetryableRequestConfig
+
+    // Announce the request, unless it is background traffic. The id travels with
+    // the config so that whichever interceptor sees the request settle closes it.
+    if (!tracked._silent && !isSilentRequest(config.url)) {
+      tracked._progressId = beginProgress()
+    }
+
     if (isAuthExcluded(config.url)) {
       return config
     }
@@ -113,6 +134,7 @@ request.interceptors.request.use(
       try {
         token = await refreshAccessToken()
       } catch (error) {
+        endProgress(tracked._progressId)
         await redirectToLogin()
         return Promise.reject(error)
       }
@@ -131,11 +153,15 @@ request.interceptors.request.use(
 // Response interceptor - handle errors
 request.interceptors.response.use(
   (response: AxiosResponse) => {
+    const config = response.config as RetryableRequestConfig
+    endProgress(config._progressId)
     return response.data
   },
   async (error: AxiosError) => {
     const { response } = error
     const originalRequest = error.config as RetryableRequestConfig | undefined
+    // close the progress slot whatever the outcome - the retry below opens its own
+    endProgress(originalRequest?._progressId)
     const responseData = response?.data as { detail?: string; message?: string; error?: string } | undefined
 
     if (response) {

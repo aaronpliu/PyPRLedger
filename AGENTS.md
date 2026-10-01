@@ -103,6 +103,8 @@ ruff format && ruff check --fix
 # Migrations
 alembic revision --autogenerate -m "desc"
 alembic upgrade head
+alembic current                            # what this database has applied
+alembic heads                              # the single revision the code expects
 
 # Docker
 docker-compose up -d
@@ -313,6 +315,7 @@ alembic/versions/      # DB migrations
 - **Don't return ORM models** - convert to Pydantic schemas
 - **Don't call BitbucketService directly** - use `get_git_provider()` from `src/services/git_providers/` to support multi-provider routing
 - **Don't hardcode provider assumptions** - `project.git_provider` may be `bitbucket_server` or `github_enterprise`
+- **Don't delete a migration an environment may have applied** - withdraw a revision by `alembic downgrade <revision-before-it>` on every environment that ran it, *before* the file leaves the code: `downgrade` needs the file it undoes, and `alembic stamp` would leave the table and the permission rows behind (see `docs/DEPLOYMENT_GUIDE.md`, troubleshooting 6)
 
 ## Key Files
 

@@ -8,9 +8,57 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.core.git_provider import GitProvider
+from src.models.release_note import ReleaseNoteStatus
 
 
 MAX_BODY_LENGTH = 60000
+
+# Most releases one export document may hold. A batch export is bounded so the
+# response stays a document rather than a dump: the caller naming the ids is asked
+# for fewer, while a filtered export takes the newest ones and says so.
+EXPORT_MAX_RELEASES = 200
+
+
+# How the release scope base of a tag was obtained.
+#
+# ``ancestor`` is the only resolved value that was *proven* (the base is an
+# ancestor of the released ref); ``name_order`` is inferred from the tag order.
+SOURCE_EXPLICIT = "explicit"
+SOURCE_ANCESTOR = "ancestor"
+SOURCE_NAME_ORDER = "name_order"
+SOURCE_NONE = "none"
+
+# Why a scope looks the way it does.
+#
+# ``first_release`` and ``unresolved`` are the two cases where the commits come
+# from the whole history reachable from the version instead of a release scope:
+# the tag has no predecessor, or its predecessor could not be determined.
+REASON_PROVIDED = "provided"
+REASON_RESOLVED = "resolved"
+REASON_FIRST_RELEASE = "first_release"
+REASON_UNRESOLVED = "unresolved"
+
+# Where the prose of a generated note came from.
+#
+# ``deterministic`` is the grouping derived from the commit subjects alone, which
+# needs no configuration; ``llm`` adds the summary paragraph the model wrote. A
+# caller that asked for a summary but could not get one is answered with
+# ``deterministic`` - the notes are never withheld for the sake of the AI pass.
+SUMMARY_DETERMINISTIC = "deterministic"
+SUMMARY_LLM = "llm"
+
+# Why an asked-for summary stayed ``deterministic``. A fallback that is reported
+# silently looks the same as one that was never asked for, so the reason travels
+# with the notes and the caller can say which of the two is on screen. Each one
+# calls for something different:
+#   ``not_configured``     a deployment without a usable LLM; an administrator
+#   ``provider_error``     the provider refused the call and said why
+#   ``unreadable_answer``  the model answered something that is not the JSON asked for
+#   ``failed``             the pass raised before it could answer at all
+SUMMARY_NOTICE_NOT_CONFIGURED = "not_configured"
+SUMMARY_NOTICE_PROVIDER_ERROR = "provider_error"
+SUMMARY_NOTICE_UNREADABLE_ANSWER = "unreadable_answer"
+SUMMARY_NOTICE_FAILED = "failed"
 
 
 class ReleaseNoteCoordinates(BaseModel):
@@ -134,10 +182,41 @@ class ReleaseNotePreviewRequest(ReleaseNoteCoordinates):
     previous_version: str | None = Field(
         default=None,
         max_length=255,
-        description="Previous version; every commit after it belongs to this release",
+        description=(
+            "Previous version; every commit after it belongs to this release. Leave it out "
+            "to let the server resolve the predecessor from the repository's tags."
+        ),
     )
-    max_commits: int = Field(default=500, ge=1, le=5000)
+    max_commits: int = Field(
+        default=500,
+        ge=1,
+        le=5000,
+        description="Cap for the returned commit list (and for the scan behind it)",
+    )
     include_authors: bool = Field(default=True)
+    refresh: bool = Field(
+        default=False,
+        description=(
+            "Re-resolve the release scope instead of reusing the cached resolution, for when "
+            "a tag has just been created or moved"
+        ),
+    )
+    language: str | None = Field(
+        default=None,
+        max_length=16,
+        description=(
+            "Language of the generated prose (section titles and the summary), e.g. "
+            "'en', 'zh-CN', 'zh-TW'. Defaults to English."
+        ),
+    )
+    summarize: bool = Field(
+        default=False,
+        description=(
+            "Also ask the configured LLM for a summary paragraph and for a section per "
+            "commit. Ignored - the notes stay deterministic - when no LLM is configured "
+            "or the call fails."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_versions(self) -> ReleaseNotePreviewRequest:
@@ -183,9 +262,133 @@ class ReleaseNotePreviewResponse(BaseModel):
     """Generated release notes (markdown) plus the commits they were built from."""
 
     version: str
-    previous_version: str | None = None
+    previous_version: str | None = Field(
+        default=None,
+        description=(
+            "Release scope base: what the caller supplied, or the predecessor the server "
+            "resolved from the repository's tags"
+        ),
+    )
+    previous_sha: str | None = Field(
+        default=None, description="Revision the scope base was pinned to (when known)"
+    )
+    version_sha: str | None = Field(
+        default=None, description="Revision the released ref was pinned to (when known)"
+    )
+    previous_source: str = Field(
+        default=SOURCE_NONE,
+        description="How the base was obtained: 'explicit' | 'ancestor' | 'name_order' | 'none'",
+    )
+    previous_verified: bool = Field(
+        default=False,
+        description=(
+            "True only for a caller-supplied base or one proven to be an ancestor; a base "
+            "inferred from the tag order is reported as unverified"
+        ),
+    )
+    scope_reason: str = Field(
+        default=REASON_UNRESOLVED,
+        description=(
+            "'provided' | 'resolved' | 'first_release' | 'unresolved'. The last two mean the "
+            "commits come from the history reachable from the version rather than from a "
+            "release scope - a statement about the scope, never about the repository size"
+        ),
+    )
     suggested_name: str
     body: str
-    commit_count: int
+    commit_count: int = Field(
+        description=(
+            "Size of the release scope: exact when it was resolved completely, a lower bound "
+            "when a scan or the history listing hit its cap"
+        )
+    )
     commits: list[dict[str, Any]] = Field(default_factory=list)
-    truncated: bool = False
+    truncated: bool = Field(
+        default=False,
+        description="True when the returned commits are only part of that scope",
+    )
+    summary: str | None = Field(
+        default=None,
+        description="Summary paragraph of the release, when one was written for it",
+    )
+    summary_source: str = Field(
+        default=SUMMARY_DETERMINISTIC,
+        description=(
+            "'deterministic' | 'llm': whether the prose was derived from the commit subjects "
+            "alone or was written by the configured LLM"
+        ),
+    )
+    summary_notice: str | None = Field(
+        default=None,
+        description=(
+            "Why 'summary_source' stayed 'deterministic' although a summary was asked for: "
+            "'not_configured' | 'provider_error' | 'unreadable_answer' | 'failed'. Null when "
+            "no summary was asked for"
+        ),
+    )
+    summary_error: str | None = Field(
+        default=None,
+        description=(
+            "What the provider answered when it refused the call - its own message, with "
+            "the API key taken out of it and cut to a readable length"
+        ),
+    )
+
+
+class ReleaseNoteExportRequest(ReleaseNoteCoordinates):
+    """Choose the releases whose notes are exported as one markdown document."""
+
+    ids: list[int] | None = Field(
+        default=None,
+        max_length=EXPORT_MAX_RELEASES,
+        description=(
+            "The releases to export, in any order (the document is ordered like the release "
+            "list). Mutually exclusive with 'select_all'"
+        ),
+    )
+    select_all: bool = Field(
+        default=False,
+        description=(
+            "Export every release of the repository matching 'status' instead of naming them, "
+            "so a batch export does not have to enumerate the releases first"
+        ),
+    )
+    status: str | None = Field(
+        default=None,
+        description=(
+            "Filter for 'select_all': 'draft' or 'published'. Omit it to export both. "
+            "Ignored when 'ids' is used"
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> ReleaseNoteExportRequest:
+        if self.select_all and self.ids:
+            raise ValueError("select either 'ids' or 'select_all', not both")
+        if not self.select_all and not self.ids:
+            raise ValueError("'ids' or 'select_all' is required")
+        if self.status is not None and self.status not in ReleaseNoteStatus.VALUES:
+            raise ValueError("status must be draft or published")
+        return self
+
+
+class ReleaseNoteExportResponse(BaseModel):
+    """One markdown document holding the exported releases."""
+
+    filename: str = Field(..., description="Suggested filename for the document")
+    content: str = Field(..., description="The markdown document")
+    count: int = Field(..., description="Number of releases written into the document")
+    skipped_ids: list[int] = Field(
+        default_factory=list,
+        description=(
+            "Requested releases that do not exist or belong to another repository - they are "
+            "left out instead of failing the export"
+        ),
+    )
+    truncated: bool = Field(
+        default=False,
+        description=(
+            "True when more releases matched than one export holds, so the document only "
+            "carries the newest ones"
+        ),
+    )

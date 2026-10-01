@@ -31,6 +31,39 @@
     <!-- Theme Color -->
     <meta name="theme-color" content="#409eff" />
     <meta name="msapplication-TileColor" content="#409eff" />
+
+    <!-- The app mounts only after the auth handshake, so this stands in for it:
+         a blank page during that wait told the reader nothing. -->
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
+      #boot-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        min-height: 100vh;
+        color: #909399;
+        font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
+          'Microsoft YaHei', Arial, sans-serif;
+        font-size: 14px;
+      }
+      #boot-loading .boot-spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid #dcdfe6;
+        border-top-color: #409eff;
+        border-radius: 50%;
+        animation: boot-spin 0.8s linear infinite;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
     
     <!-- PWA -->
     <meta name="application-name" content="PR Ledger" />
@@ -41,7 +74,12 @@
     <meta name="mobile-web-app-capable" content="yes" />
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div id="boot-loading" role="status" aria-live="polite">
+        <span class="boot-spinner" aria-hidden="true"></span>
+        <span class="boot-text">Loading…</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

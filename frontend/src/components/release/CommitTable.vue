@@ -85,6 +85,7 @@ import dayjs from 'dayjs'
 import type { CommitInfo } from '@/api/releaseDiff'
 import { useJira } from '@/composables/useJira'
 import { jiraTicketSegments } from '@/utils/jira'
+import { copyTextToClipboard } from '@/utils/export/markdown'
 
 const props = withDefaults(
   defineProps<{
@@ -137,10 +138,10 @@ function messageSegments(message?: string | null) {
 }
 
 async function copy(value: string) {
-  try {
-    await navigator.clipboard.writeText(value)
+  if (await copyTextToClipboard(value)) {
     ElMessage.success(t('releaseDiff.copied'))
-  } catch {
+  } else {
+    // the clipboard was refused: show the text so it can be copied by hand
     ElMessage.info(value)
   }
 }

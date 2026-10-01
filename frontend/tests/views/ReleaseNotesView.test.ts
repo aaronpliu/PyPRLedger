@@ -1,16 +1,24 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import ElementPlus, { ElMessageBox } from 'element-plus'
+import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ReleaseNotesView from '@/views/releases/ReleaseNotesView.vue'
 import { projectsApi } from '@/api/projects'
 import { rbacApi } from '@/api/rbac'
 import { releaseDiffApi } from '@/api/releaseDiff'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
+import { llmApi } from '@/api/llm'
 import { resetJiraSettings } from '@/composables/useJira'
 import { useAuthStore } from '@/stores/auth'
+import { copyTextToClipboard, downloadMarkdown } from '@/utils/export/markdown'
 import enMessages from '@/locales/en.json'
+
+// The document comes from the backend: the browser only hands the bytes over
+vi.mock('@/utils/export/markdown', () => ({
+  downloadMarkdown: vi.fn(),
+  copyTextToClipboard: vi.fn().mockResolvedValue(true),
+}))
 
 vi.mock('@/api/projects', () => ({
   projectsApi: {
@@ -35,6 +43,13 @@ vi.mock('@/api/releaseDiff', () => ({
   },
 }))
 
+// The AI summary switch is only offered when the deployment has an LLM
+vi.mock('@/api/llm', () => ({
+  llmApi: {
+    getConfig: vi.fn(),
+  },
+}))
+
 vi.mock('@/api/releaseNotes', () => ({
   releaseNotesApi: {
     list: vi.fn(),
@@ -45,6 +60,7 @@ vi.mock('@/api/releaseNotes', () => ({
     preview: vi.fn(),
     push: vi.fn(),
     importReleases: vi.fn(),
+    exportNotes: vi.fn(),
   },
 }))
 
@@ -52,7 +68,7 @@ vi.mock('@/api/releaseNotes', () => ({
 vi.mock('md-editor-v3', () => ({
   MdEditor: {
     name: 'MdEditor',
-    props: ['modelValue', 'theme'],
+    props: ['modelValue', 'theme', 'toolbars', 'previewTheme', 'language'],
     emits: ['update:modelValue'],
     template:
       '<textarea class="md-editor-stub" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
@@ -147,16 +163,30 @@ const PREVIEW_COMMIT = {
   url: 'https://git.local/commits/abc1234',
 }
 
+/** The scope of a tag whose predecessor the server resolved and verified. */
+const RESOLVED_SCOPE = {
+  previous_version: 'v1.1.0' as string | null,
+  previous_sha: null as string | null,
+  version_sha: null as string | null,
+  previous_source: 'ancestor' as const,
+  previous_verified: true,
+  scope_reason: 'resolved' as const,
+}
+
 /** Preview payload (the note body is irrelevant for the tag -> commits view). */
-function preview(commits: (typeof PREVIEW_COMMIT)[] = []) {
+function preview(
+  commits: (typeof PREVIEW_COMMIT)[] = [],
+  overrides: Record<string, unknown> = {},
+) {
   return {
     version: 'v1.2.0',
-    previous_version: 'v1.1.0' as string | null,
+    ...RESOLVED_SCOPE,
     suggested_name: 'v1.2.0',
     body: '## What’s Changed',
     commit_count: commits.length,
     commits,
     truncated: false,
+    ...overrides,
   }
 }
 
@@ -183,6 +213,13 @@ function selectByPlaceholder(wrapper: AnyWrapper, placeholder: string) {
   return wrapper
     .findAllComponents({ name: 'ElSelect' })
     .find((select: AnyWrapper) => select.props('placeholder') === placeholder)
+}
+
+/** The pager of the reading column (the navigator carries one of its own). */
+function detailPager(wrapper: AnyWrapper) {
+  return wrapper
+    .findAllComponents({ name: 'ElPagination' })
+    .find((pager: AnyWrapper) => pager.classes().includes('detail-pagination'))
 }
 
 /** Switch the navigator between the releases and the tags tab. */
@@ -213,6 +250,23 @@ async function selectRepository(wrapper: AnyWrapper) {
   await nextTick()
 }
 
+/** Names of the tags on the visible page of the tag navigator. */
+function tagNames(wrapper: AnyWrapper) {
+  return wrapper
+    .findAll('.nav-item.tag-item .nav-item-name')
+    .map((name: AnyWrapper) => name.text())
+}
+
+/** Type into the search box of the tag navigator. */
+async function setTagSearch(wrapper: AnyWrapper, value: string) {
+  const input = wrapper.find(
+    `input[placeholder="${enMessages.releaseNotes.tags_search_placeholder}"]`,
+  )
+  expect(input.exists()).toBe(true)
+  await input.setValue(value)
+  await flushPromises()
+}
+
 describe('ReleaseNotesView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -227,6 +281,8 @@ describe('ReleaseNotesView', () => {
     vi.mocked(releaseNotesApi.remove).mockResolvedValue({ message: 'ok' })
     // JIRA is off unless a test asks for it
     vi.mocked(rbacApi.getJiraSettings).mockResolvedValue({ base_url: '', project_keys: [] })
+    // no LLM configured unless a test asks for one
+    vi.mocked(llmApi.getConfig).mockResolvedValue({ enabled: false, model: '', base_url: '' })
     resetJiraSettings()
   })
 
@@ -405,6 +461,142 @@ describe('ReleaseNotesView', () => {
     expect(wrapper.text()).toContain(
       enMessages.releaseNotes.generated.replace('{count}', '3'),
     )
+    // no LLM configured: the AI summary is not offered and is not asked for
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.ai_summary_unavailable)
+    expect(releaseNotesApi.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ summarize: false, language: 'en' }),
+    )
+  })
+
+  it('asks for an AI summary when the deployment has an LLM', async () => {
+    vi.mocked(llmApi.getConfig).mockResolvedValue({
+      enabled: true,
+      model: 'test-model',
+      base_url: 'https://llm.local/v1',
+    })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue({
+      ...preview([], { version: 'v1.1.0', commit_count: 3 }),
+      summary: 'Adds single sign-on.',
+      summary_source: 'llm',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const aiSummary = wrapper
+      .findAllComponents({ name: 'ElCheckbox' })
+      .find((box: AnyWrapper) => box.text() === enMessages.releaseNotes.ai_summary)
+    expect(aiSummary).toBeDefined()
+    await aiSummary!.vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.generate_notes)[0].trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ summarize: true }),
+    )
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.generated_with_ai)
+  })
+
+  it('says so when the AI summary it asked for could not be made', async () => {
+    vi.mocked(llmApi.getConfig).mockResolvedValue({
+      enabled: true,
+      model: 'test-model',
+      base_url: 'https://llm.local/v1',
+    })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue({
+      ...preview([], { version: 'v1.1.0', commit_count: 3 }),
+      summary: null,
+      summary_source: 'deterministic',
+      summary_notice: 'not_configured',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const aiSummary = wrapper
+      .findAllComponents({ name: 'ElCheckbox' })
+      .find((box: AnyWrapper) => box.text() === enMessages.releaseNotes.ai_summary)
+    await aiSummary!.vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    // nothing has been asked of the server yet, so the switch explains itself
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.ai_summary_help)
+    expect(wrapper.text()).not.toContain(
+      enMessages.releaseNotes.ai_summary_fallback_not_configured,
+    )
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.generate_notes)[0].trigger('click')
+    await flushPromises()
+
+    // the notes on screen came from the commit subjects, and the form says why
+    expect(wrapper.text()).toContain(
+      enMessages.releaseNotes.ai_summary_fallback_not_configured,
+    )
+    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.generated_with_ai)
+  })
+
+  it('shows what the LLM answered when it refused the call', async () => {
+    vi.mocked(llmApi.getConfig).mockResolvedValue({
+      enabled: true,
+      model: 'test-model',
+      base_url: 'https://llm.local/v1',
+    })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue({
+      ...preview([], { version: 'v1.1.0', commit_count: 3 }),
+      summary: null,
+      summary_source: 'deterministic',
+      summary_notice: 'provider_error',
+      summary_error: 'HTTP 404: model `test-model` not found',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const aiSummary = wrapper
+      .findAllComponents({ name: 'ElCheckbox' })
+      .find((box: AnyWrapper) => box.text() === enMessages.releaseNotes.ai_summary)
+    await aiSummary!.vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.generate_notes)[0].trigger('click')
+    await flushPromises()
+
+    // the reason, and the answer that names what to change
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.ai_summary_fallback_provider_error)
+    expect(wrapper.text()).toContain('HTTP 404: model `test-model` not found')
+  })
+
+  it('edits the notes with the rendered markdown beside them', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const editor = wrapper.findComponent({ name: 'MdEditor' })
+    // the toolbar offers the preview: what is being typed can be read as it will
+    // be published, and the markdown can be put aside for a moment
+    expect(editor.props('toolbars')).toEqual(
+      expect.arrayContaining(['preview', 'previewOnly', 'catalog']),
+    )
+    // the preview is the one a reader gets, not a second rendering of its own
+    expect(editor.props('previewTheme')).toBe('github')
+    expect(editor.props('language')).toBe('en-US')
   })
 
   it('deletes a release after confirmation', async () => {
@@ -522,7 +714,7 @@ describe('ReleaseNotesView', () => {
     expect(columns[1].find('.md-preview-stub').exists()).toBe(true)
   })
 
-  it('shows the notes of the selected release in the second column', async () => {
+  it('shows every release of the page and marks the one in focus', async () => {
     vi.mocked(releaseNotesApi.list).mockResolvedValue({
       total: 2,
       items: [
@@ -535,9 +727,12 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    // the newest release is selected by default
+    // the newest release is in focus, and both releases of the page are rendered
     expect(wrapper.find('.nav-item.active').text()).toContain('v1.1.0')
-    expect(wrapper.find('.md-preview-stub').text()).toContain('add login page')
+    const entries = wrapper.findAll('.note-entry')
+    expect(entries).toHaveLength(2)
+    expect(entries[0].find('.md-preview-stub').text()).toContain('add login page')
+    expect(entries[1].find('.md-preview-stub').text()).toContain('Later release')
 
     const items = wrapper.findAll('.nav-item')
     const later = items.find((item) => item.text().includes('v1.2.0'))!
@@ -545,8 +740,11 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
 
     expect(wrapper.find('.nav-item.active').text()).toContain('v1.2.0')
-    expect(wrapper.find('.md-preview-stub').text()).toContain('Later release')
-    // the released meta of the selection is shown above the notes
+    // the navigator brings the entry into focus instead of replacing the others
+    expect(wrapper.findAll('.note-entry')).toHaveLength(2)
+    expect(wrapper.findAll('.note-entry.focused')).toHaveLength(1)
+    expect(wrapper.find('.note-entry.focused').attributes('data-note-id')).toBe('2')
+    // the released meta of a release is shown above its notes
     expect(wrapper.text()).toContain(
       enMessages.releaseNotes.released_by.replace('{author}', 'alice'),
     )
@@ -583,6 +781,64 @@ describe('ReleaseNotesView', () => {
     const preview = wrapper.find('.md-preview-stub').text()
     expect(preview).toContain('- ship the login fix PRL-123')
     expect(preview).not.toContain('browse/PRL-123')
+  })
+
+  it('opens with the coordinate panel shown and folds it away on demand', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const toggle = wrapper.find('[data-test="coordinates-toggle"]')
+    const panel = wrapper.find('.context-card .panel-body')
+
+    // the panel a first visit fills in is open on arrival
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(panel.classes()).not.toContain('is-collapsed')
+
+    await toggle.trigger('click')
+
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    expect(toggle.classes()).toContain('is-collapsed')
+    // folded away rather than unmounted, so what was picked is still there
+    expect(panel.classes()).toContain('is-collapsed')
+    expect(panel.find('form').exists()).toBe(true)
+
+    await toggle.trigger('click')
+
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(panel.classes()).not.toContain('is-collapsed')
+  })
+
+  it('searches the tag list by name', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.0.0', 'v1.1.0', 'v2.0.0-rc1'],
+    } as never)
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    // newest first, as every other tag picker orders them
+    expect(tagNames(wrapper)).toEqual(['v2.0.0-rc1', 'v1.1.0', 'v1.0.0'])
+
+    await setTagSearch(wrapper, '1.1')
+
+    expect(tagNames(wrapper)).toEqual(['v1.1.0'])
+
+    await setTagSearch(wrapper, 'rc')
+
+    expect(tagNames(wrapper)).toEqual(['v2.0.0-rc1'])
+
+    // a search that matches nothing says so instead of looking like an empty repo
+    await setTagSearch(wrapper, 'nope')
+    expect(tagNames(wrapper)).toEqual([])
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.tags_no_match)
+    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.tags_empty)
+
+    // and clearing it brings the whole list back
+    await setTagSearch(wrapper, '')
+    expect(tagNames(wrapper)).toEqual(['v2.0.0-rc1', 'v1.1.0', 'v1.0.0'])
   })
 
   it('badges the selected tag instead of the release of the other tab', async () => {
@@ -705,14 +961,17 @@ describe('ReleaseNotesView', () => {
 
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
 
-    // the newest tag is selected and scoped against the next older one
+    // The tag is scoped by the server: the browser only holds a page of tags, so
+    // it must not decide the predecessor itself.
     expect(releaseNotesApi.preview).toHaveBeenCalledWith(
       expect.objectContaining({
         project_key: 'ALPHA',
         repository_slug: 'alpha-api',
         version: 'v1.2.0',
-        previous_version: 'v1.1.0',
       }),
+    )
+    expect(vi.mocked(releaseNotesApi.preview).mock.calls[0][0]).not.toHaveProperty(
+      'previous_version',
     )
     expect(wrapper.text()).toContain(
       enMessages.releaseNotes.tag_commits_title.replace('{tag}', 'v1.2.0'),
@@ -722,7 +981,16 @@ describe('ReleaseNotesView', () => {
     )
     expect(wrapper.find('.commit-table').text()).toContain('abc1234')
 
-    // the oldest tag has no predecessor: its full history is listed
+    // the oldest tag has no predecessor: the scope says so instead of reporting a
+    // repository limit
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([], {
+        previous_version: null,
+        previous_source: 'none',
+        previous_verified: false,
+        scope_reason: 'first_release',
+      }),
+    )
     const oldest = wrapper
       .findAll('.tag-item')
       .find((item) => item.text() === 'v1.0.0')!
@@ -730,10 +998,100 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
 
     expect(releaseNotesApi.preview).toHaveBeenLastCalledWith(
-      expect.objectContaining({ version: 'v1.0.0', previous_version: undefined }),
+      expect.objectContaining({ version: 'v1.0.0' }),
+    )
+    expect(vi.mocked(releaseNotesApi.preview).mock.calls[1][0]).not.toHaveProperty(
+      'previous_version',
     )
     expect(wrapper.text()).toContain(
-      enMessages.releaseNotes.full_history.replace('{tag}', 'v1.0.0'),
+      enMessages.releaseNotes.scope_first_release.replace('{tag}', 'v1.0.0'),
+    )
+  })
+
+  it('shows the revisions the scope was pinned to next to the refs', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([], {
+        previous_sha: '1111111aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        version_sha: '2222222bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    expect(wrapper.text()).toContain('v1.1.0 (1111111)...v1.2.0 (2222222)')
+  })
+
+  it('warns when the predecessor was inferred from the tag order', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([], { previous_source: 'name_order', previous_verified: false }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    // the scope is still used, but the panel says it was not proven
+    expect(wrapper.text()).toContain('v1.1.0...v1.2.0')
+    expect(wrapper.find('.el-alert').text()).toContain(
+      enMessages.releaseNotes.scope_inferred.replace('{from}', 'v1.1.0'),
+    )
+  })
+
+  it('reports an unresolved scope instead of the repository history', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([PREVIEW_COMMIT], {
+        previous_version: null,
+        previous_source: 'none',
+        previous_verified: false,
+        scope_reason: 'unresolved',
+      }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    expect(wrapper.text()).toContain(
+      enMessages.releaseNotes.scope_unresolved.replace('{tag}', 'v1.2.0'),
+    )
+    expect(wrapper.find('.el-alert').exists()).toBe(false)
+  })
+
+  it('reports a trimmed listing as a display limit of the scope', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([PREVIEW_COMMIT], { commit_count: 12, truncated: true }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    expect(wrapper.find('.el-alert').text()).toContain(
+      enMessages.releaseNotes.commits_trimmed
+        .replace('{shown}', '1')
+        .replace('{count}', '12'),
     )
   })
 
@@ -819,7 +1177,41 @@ describe('ReleaseNotesView', () => {
       expect.objectContaining({ limit: 10, offset: 20 }),
     )
     expect(wrapper.find('.nav-item.active').text()).toContain(wanted.tag_name)
-    expect(wrapper.find('.md-preview-stub').text()).toContain(wanted.body)
+    // the release is rendered as one entry of that page, with its notes
+    const entry = wrapper.find(`[data-note-id="${wanted.id}"]`)
+    expect(entry.exists()).toBe(true)
+    expect(entry.find('.md-preview-stub').text()).toContain(wanted.body)
+  })
+
+  it('links the version title of a release back to its tag', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 2,
+      items: [
+        release(),
+        release({ id: 2, tag_name: 'v1.0.0', name: 'v1.0.0', is_latest: false }),
+      ],
+    })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const link = wrapper.findAll('.note-entry')[1].find('.note-entry-tag-link')
+    expect(link.text()).toBe('v1.0.0')
+
+    await link.trigger('click')
+    await flushPromises()
+
+    // the title is the mirror of the note icon: it opens the tags tab on that tag
+    expect(activeTabLabel(wrapper)).toBe(enMessages.releaseNotes.panel_tags)
+    const active = wrapper.find('.nav-item.active')
+    expect(active.classes()).toContain('tag-item')
+    expect(active.text()).toContain('v1.0.0')
+    // selecting it loads the commits the tag released
+    expect(releaseNotesApi.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ version: 'v1.0.0' }),
+    )
   })
 
   it('walks the capped pages of the release list when indexing the tags', async () => {
@@ -886,6 +1278,13 @@ describe('ReleaseNotesView', () => {
 
     const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
     expect(tagSelect.props('modelValue')).toBe('v1.2.0')
+
+    // the draft inherits the scope the server resolved for the selected tag
+    const previousSelect = selectByPlaceholder(
+      wrapper,
+      enMessages.releaseNotes.previous_tag_placeholder,
+    )
+    expect(previousSelect.props('modelValue')).toBe('v1.1.0')
   })
 
   it('paginates the releases on the server', async () => {
@@ -1180,5 +1579,320 @@ describe('ReleaseNotesView', () => {
       1,
       expect.objectContaining({ status: 'published', previous_tag: 'v1.0.0' }),
     )
+  })
+
+  it('carries the badges of each release on its own entry', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 3,
+      items: [
+        release({
+          id: 1,
+          tag_name: 'v3.0.0-rc.1',
+          name: 'Candidate',
+          is_latest: false,
+          is_prerelease: true,
+        }),
+        release({
+          id: 2,
+          tag_name: 'v2.0.0',
+          name: 'DraftTwo',
+          is_latest: false,
+          status: 'draft',
+        }),
+        release({ id: 3, tag_name: 'v1.0.0', name: 'LatestOne', is_latest: true }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const entries = wrapper.findAll('.note-entry')
+    expect(entries[0].text()).toContain(enMessages.releaseNotes.badge_prerelease)
+    expect(entries[0].text()).not.toContain(enMessages.releaseNotes.badge_draft)
+    expect(entries[1].text()).toContain(enMessages.releaseNotes.badge_draft)
+    expect(entries[2].text()).toContain(enMessages.releaseNotes.badge_latest)
+  })
+
+  it('acts on the release of the entry that was clicked', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 2,
+      items: [
+        release({ id: 11, tag_name: 'v1.1.0', name: 'Newer' }),
+        release({ id: 10, tag_name: 'v1.0.0', name: 'Older', is_latest: false }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const older = wrapper.findAll('.note-entry')[1]
+    const edit = older
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseNotes.edit_release)!
+    await edit.trigger('click')
+    await flushPromises()
+
+    // the entry's own release is edited, not the one in focus
+    const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
+    expect(tagSelect.props('modelValue')).toBe('v1.0.0')
+  })
+
+  it('pages the releases from the reading column too', async () => {
+    const many = Array.from({ length: 25 }, (_, index) =>
+      release({ id: index + 1, tag_name: `v1.${25 - index}.0`, name: `v1.${25 - index}.0` }),
+    )
+    vi.mocked(releaseNotesApi.list).mockImplementation(async (params) => {
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 10
+      return { total: many.length, items: many.slice(offset, offset + limit) }
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const pager = detailPager(wrapper)
+    expect(pager).toBeDefined()
+    pager!.vm.$emit('update:current-page', 2)
+    await flushPromises()
+
+    expect(releaseNotesApi.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 10, limit: 10 }),
+    )
+    expect(wrapper.findAll('.note-entry')).toHaveLength(10)
+  })
+
+  it('collapses a long note and expands it on demand', async () => {
+    const longBody = Array.from({ length: 30 }, (_, index) => `- line ${index}`).join('\n')
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 2,
+      items: [
+        release({ id: 1, tag_name: 'v2.0.0', name: 'Long', body: longBody }),
+        release({
+          id: 2,
+          tag_name: 'v1.0.0',
+          name: 'Short',
+          body: '- one line',
+          is_latest: false,
+        }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const longEntry = wrapper.findAll('.note-entry')[0]
+    const shortEntry = wrapper.findAll('.note-entry')[1]
+
+    expect(longEntry.find('.release-body').classes()).toContain('collapsed')
+    expect(longEntry.find('.note-expand').text()).toBe(enMessages.releaseNotes.show_more)
+    // a note that fits needs no control
+    expect(shortEntry.find('.note-expand').exists()).toBe(false)
+    expect(shortEntry.find('.release-body').classes()).not.toContain('collapsed')
+
+    await longEntry.find('.note-expand').trigger('click')
+    await flushPromises()
+
+    expect(longEntry.find('.release-body').classes()).not.toContain('collapsed')
+    expect(longEntry.find('.note-expand').text()).toBe(enMessages.releaseNotes.show_less)
+  })
+
+  it('invites the reader to draft the first release of an empty repository', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({ total: 0, items: [] })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    expect(wrapper.find('.detail-card .el-empty').text()).toContain(
+      enMessages.releaseNotes.empty,
+    )
+  })
+
+  it('steps back a page when the last release of a page is deleted', async () => {
+    const many = Array.from({ length: 11 }, (_, index) =>
+      release({ id: index + 1, tag_name: `v1.${11 - index}.0`, name: `v1.${11 - index}.0` }),
+    )
+    vi.mocked(releaseNotesApi.list).mockImplementation(async (params) => {
+      const offset = params?.offset ?? 0
+      const limit = params?.limit ?? 10
+      return { total: many.length, items: many.slice(offset, offset + limit) }
+    })
+    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as any)
+
+    try {
+      const wrapper = mountView()
+      await flushPromises()
+      await selectRepository(wrapper)
+
+      detailPager(wrapper)!.vm.$emit('update:current-page', 2)
+      await flushPromises()
+      expect(wrapper.findAll('.note-entry')).toHaveLength(1)
+
+      const remove = wrapper
+        .find('.note-entry')
+        .findAll('button')
+        .find((button) => button.text() === enMessages.releaseNotes.delete)!
+      await remove.trigger('click')
+      await flushPromises()
+
+      // page 2 held nothing else: the reader steps back instead of facing an empty list
+      expect(releaseNotesApi.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ offset: 0 }),
+      )
+      expect(wrapper.findAll('.note-entry').length).toBeGreaterThan(0)
+    } finally {
+      confirmSpy.mockRestore()
+    }
+  })
+})
+
+// --------------------------------------------------------------------------- #
+// Export
+// --------------------------------------------------------------------------- #
+
+function exported(overrides: Record<string, unknown> = {}) {
+  return {
+    filename: 'releasenotes-ALPHA-alpha-api-v1.1.0.md',
+    content: '# Release notes - ALPHA/alpha-api',
+    count: 1,
+    skipped_ids: [] as number[],
+    truncated: false,
+    ...overrides,
+  }
+}
+
+describe('ReleaseNotesView export', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    signIn(['review_admin'])
+    vi.mocked(projectsApi.getAllProjects).mockResolvedValue(PROJECTS as any)
+    vi.mocked(projectsApi.getProjectRepositories).mockResolvedValue(REPOSITORIES as any)
+    vi.mocked(projectsApi.getCloudWorkspaces).mockResolvedValue([])
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue(REFS as any)
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 2,
+      items: [
+        release({ id: 11, tag_name: 'v1.1.0', name: 'Newer' }),
+        release({ id: 10, tag_name: 'v1.0.0', name: 'Older', is_latest: false }),
+      ],
+    })
+    vi.mocked(releaseNotesApi.exportNotes).mockResolvedValue(exported())
+    vi.mocked(copyTextToClipboard).mockResolvedValue(true)
+  })
+
+  /** Mount the page and pick the repository (loads the releases). */
+  async function mountAndSelect() {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    return wrapper
+  }
+
+  /** The header checkbox first, then one per release row. */
+  function exportCheckboxes(wrapper: AnyWrapper) {
+    return wrapper.findAllComponents({ name: 'ElCheckbox' })
+  }
+
+  it('exports the releases ticked in the list', async () => {
+    const wrapper = await mountAndSelect()
+
+    exportCheckboxes(wrapper)[1].vm.$emit('change', true)
+    await flushPromises()
+
+    await wrapper.find('[data-test="export-selected"]').trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.exportNotes).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: [11] }),
+    )
+    expect(downloadMarkdown).toHaveBeenCalledWith(
+      '# Release notes - ALPHA/alpha-api',
+      'releasenotes-ALPHA-alpha-api-v1.1.0.md',
+    )
+  })
+
+  it('exports every release of the repository', async () => {
+    const wrapper = await mountAndSelect()
+
+    exportCheckboxes(wrapper)[0].vm.$emit('change', true)
+    await flushPromises()
+
+    await wrapper.find('[data-test="export-selected"]').trigger('click')
+    await flushPromises()
+
+    const payload = vi.mocked(releaseNotesApi.exportNotes).mock.calls[0][0]
+    expect(payload.select_all).toBe(true)
+    expect(payload).not.toHaveProperty('ids')
+  })
+
+  it('does not offer the export while nothing is selected', async () => {
+    const wrapper = await mountAndSelect()
+
+    const button = () => wrapper.find('[data-test="export-selected"]').element as HTMLButtonElement
+    expect(button().disabled).toBe(true)
+
+    exportCheckboxes(wrapper)[1].vm.$emit('change', true)
+    await flushPromises()
+
+    expect(button().disabled).toBe(false)
+  })
+
+  it('exports the open release from the detail header', async () => {
+    const wrapper = await mountAndSelect()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.export_one)[0].trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.exportNotes).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: [11] }),
+    )
+  })
+
+  it('reports the releases that were skipped or cut', async () => {
+    vi.mocked(releaseNotesApi.exportNotes).mockResolvedValue(
+      exported({ count: 12, truncated: true, skipped_ids: [7] }),
+    )
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+
+    const wrapper = await mountAndSelect()
+    exportCheckboxes(wrapper)[1].vm.$emit('change', true)
+    await flushPromises()
+
+    await wrapper.find('[data-test="export-selected"]').trigger('click')
+    await flushPromises()
+
+    const messages = warning.mock.calls.map((call) => String(call[0]))
+    expect(messages.some((text) => text.includes('only the newest 12'))).toBe(true)
+    expect(messages.some((text) => text.includes('no longer exist'))).toBe(true)
+  })
+
+  it('copies the open release to the clipboard', async () => {
+    const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as any)
+    const wrapper = await mountAndSelect()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.copy_one)[0].trigger('click')
+    await flushPromises()
+
+    // the same document the download would use, and nothing downloaded
+    expect(copyTextToClipboard).toHaveBeenCalledWith('# Release notes - ALPHA/alpha-api')
+    expect(downloadMarkdown).not.toHaveBeenCalled()
+    expect(success).toHaveBeenCalled()
+  })
+
+  it('reports a clipboard the platform refused', async () => {
+    vi.mocked(copyTextToClipboard).mockResolvedValue(false)
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+    const wrapper = await mountAndSelect()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.copy_one)[0].trigger('click')
+    await flushPromises()
+
+    expect(
+      warning.mock.calls.some((call) => String(call[0]).includes('clipboard')),
+    ).toBe(true)
   })
 })

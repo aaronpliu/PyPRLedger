@@ -408,6 +408,44 @@ class BitbucketCloudProvider(BaseGitProvider):
                 names.append(name)
         return names
 
+    async def list_tags_with_commits(
+        self,
+        project_key: str,
+        repository_slug: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Fetch tags with the commit each one points at.
+
+        Maps to GET /2.0/repositories/{workspace}/{repo}/refs/tags. Cloud reports
+        the commit under ``target`` (``hash`` + ``date``). When ``target`` is a tag
+        object instead - an annotated tag - the commit sits one level deeper, so the
+        nested target is followed rather than storing the tag object's own id.
+        """
+        url = f"{self._base_url}/repositories/{project_key}/{repository_slug}/refs/tags"
+        logger.info(
+            f"Listing tags with commits on Bitbucket Cloud: {project_key}/{repository_slug}"
+        )
+
+        values = await self._fetch_paged_values(url, {}, limit)
+        entries: list[dict[str, Any]] = []
+        for value in values:
+            target = value.get("target") or {}
+            target_type = str(target.get("type") or "").strip().lower()
+            is_annotated = (target_type == "tag") if target_type else None
+            if is_annotated and isinstance(target.get("target"), dict):
+                target = target["target"]
+
+            entries.append(
+                {
+                    "name": value.get("name") or value.get("displayId"),
+                    "sha": target.get("hash"),
+                    "date": to_epoch_ms(target.get("date")),
+                    "is_annotated": is_annotated,
+                }
+            )
+
+        return self.normalize_tag_entries(entries)
+
     @staticmethod
     def _as_server_commits(raw_commits: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Map Cloud commit payloads to the Bitbucket Server shape.

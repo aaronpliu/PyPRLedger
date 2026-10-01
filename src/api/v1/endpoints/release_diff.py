@@ -1,13 +1,19 @@
 """Release diff endpoints.
 
-Exposes read-only operations over the git provider compare API:
+Operations over the git provider compare API:
 
-* ``POST /release/diff/compare`` - compare two release refs and report whether
-  every commit of the old release is contained in the new release.
+* ``POST /release/diff/compare`` - the single comparison: is everything from the
+  source release contained in the target release (the verdict), and what does the
+  target add on top of it? Answered by provider differences, so the verdict is
+  definitive or explicitly inconclusive.
 * ``POST /release/diff/check``   - check whether one or more commits belong to
-  a target release.
+  a target release (each commit answered by the provider).
 * ``POST /release/diff/refs``    - list tags / branches of a repository so the UI
   can suggest release refs (arbitrary refs can still be typed manually).
+
+The baseline a comparison is narrowed against is optional and belongs to that
+comparison alone: it narrows two releases of one line, and a repository holds
+several lines.
 
 All endpoints are backed by the Bitbucket Server REST API (or the GitHub
 Enterprise equivalent) through the provider abstraction.
@@ -49,21 +55,19 @@ def get_release_diff_service() -> ReleaseDiffService:
     response_model=ReleaseCompareResponse,
     summary="Compare two release versions",
     description=(
-        "Compare an old release ref against a new release ref and report whether every "
-        "old release commit is reachable from the new release. Uses the Bitbucket Server "
-        "`/rest/api/latest/projects/{projectKey}/repos/{repositorySlug}/compare/commits` "
-        "endpoint under the hood.\n\n"
-        "`old_release_ref` / `new_release_ref` answer the containment question "
-        "(is the old release fully included in the new one).\n\n"
-        "`old_release_base_ref` / `new_release_base_ref` are optional and only narrow the "
-        "commit set that counts as *belonging to* each release: with a base ref the release "
-        "scope is `base_ref..release_ref`, without it every commit reachable from the "
-        "release ref is used (capped by `max_commits`). Example - consecutive releases "
-        "v1.1.0 -> v1.2.0 -> v1.3.0:\n"
+        "One comparison answers both halves of the question:\n\n"
+        "* `verdict` - is every commit of `source_ref` contained in `target_ref`? It is "
+        "derived from the provider difference `source_ref \\ target_ref`, so it is "
+        "definitive (`contained` / `missing`) or explicitly `inconclusive` - never a pass "
+        "derived from a truncated listing.\n"
+        "* `missing_commits` / `added_commits` - what the target lacks and what it adds.\n\n"
+        "`baseline_ref` is optional and narrows **both** directions: difference commits "
+        "that already existed at the baseline are ignored, which is what 'the work this "
+        "line did since the fork point' means. It belongs to this comparison alone, since "
+        "a repository holds several release lines with a fork point each.\n"
         "```json\n"
         "{\n"
-        '  "old_release_ref": "v1.2.0", "old_release_base_ref": "v1.1.0",\n'
-        '  "new_release_ref": "v1.3.0", "new_release_base_ref": "v1.2.0"\n'
+        '  "source_ref": "v1.1.5", "target_ref": "v2.3.0", "baseline_ref": "v1.0.0"\n'
         "}\n"
         "```"
     ),
@@ -73,7 +77,7 @@ async def compare_releases(
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     service: Annotated[ReleaseDiffService, Depends(get_release_diff_service)],
 ) -> ReleaseCompareResponse:
-    """Compare two releases and return missing / added commits."""
+    """Compare two releases and return the verdict plus the missing / added commits."""
     try:
         return await service.compare_releases(payload)
     except GitServiceException as e:

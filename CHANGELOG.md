@@ -5,6 +5,112 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+---
+## [1.24.1] - 2026-10-01
+
+**Backend Version**: 1.24.1
+**Frontend Version**: 1.19.1
+
+### Added
+- Loading progress, global and per area: every request in flight raises a thin top progress bar - the axios client opens and closes one slot per request, and background traffic such as heartbeats and notification polling stays off it - the bar's fill eases open and closed rather than jumping - and a shared `ContentLoader` (a skeleton for list areas, a small spinner for inline waits, and a label naming what is asked) marks the areas that wait on the git provider: the tags and branches of the Release Diff page, and the tags, the releases and the tag commits of the Release Notes page. Both are suppressed for readers who asked for reduced motion
+- Fold the repository coordinates of the Releases and the Release Notes pages away: the header of each page carries a toggle (open on arrival, with `aria-expanded` kept in step) and the coordinates are hidden rather than unmounted, so the repository that was picked stays picked
+- Search the tag list of the Release Notes page by name: the search narrows the list before it is paged, says so when nothing matches (instead of looking like an empty repository), and a jump from a release to its tag clears a search that would have hidden it
+
+### Changed
+- Switching repository clears the comparison: the source, target and baseline fields are reset, and the verdict of the previous repository is dropped rather than left on screen, instead of carrying a stale ref into the repository that was just picked. A link that reopens a check still restores the selection it carries
+- The handoff to the commit check is a strip, not a button: it leads with the number of missing SHAs and names where they land ("Deliver to card 2 - Check Commits"), and an arrow follows the direction of the cards - beside on the wide layout, down once they stack. Confirming it flies a token carrying the count into the check card's input and rings the card on arrival, so the delivery is confirmed where it lands instead of only in a toast. The flight is skipped when the destination is off screen, under `prefers-reduced-motion`, or without the animation API: the handover of the SHAs itself never depends on it
+- The shared "Export Both (HTML)" and "Screenshot Both" actions moved into the header of the Releases card, vertically centred beside the fold toggle, instead of a toolbar of their own between the card and the two tools: they act on the results below, so they stay reachable with the coordinates folded away
+- The baseline field of a comparison takes the full width of its row with a one-line help text, instead of half a row whose hint wrapped into a two-line block
+
+### Removed
+- The per-repository baseline store: the `release_check_baseline` table, its `GET` / `PUT` / `DELETE /release/diff/baseline` endpoints, the `release_diff` RBAC resource that guarded writes to it, the `use_stored_baseline` request flag and the `baseline_stored` response field. A baseline belongs to a release *line*, and one repository holds several - `feature/2026Oct` releases 2.2610.x while `feature/2026Dec` releases 2.2612.x - each with a fork point of its own, so a single stored baseline was wrong for every line but one. Applying it to a comparison that never asked for it was worse: the Baseline field read as "no baseline" while the comparison was silently narrowed. The baseline is now what the field says it is, an optional part of one comparison, carried in the request (and in the page URL) instead of in a table. The migrations are withdrawn rather than superseded: `033` was applied in the test environment only, which is rolled back to `032`, so no environment keeps the table and no migration is needed for the withdrawal. An environment that did apply `033` is rolled back to `032` **before** it takes this release, since `downgrade` needs the file it undoes; the sequence is in `docs/DEPLOYMENT_GUIDE.md`
+
+### Fixed
+- A first load of the tags tab looked like an empty repository: "No tags" was shown while the provider was still being asked. It now shows the loader instead, and so does the app's first paint, which sat on a blank page until the auth handshake finished - a boot indicator in `index.html` stands in until the app mounts
+- Define the translation keys the source asks for but the locale files never carried, which rendered as the key itself - `releaseDiff.truncated_warning` and `releaseDiff.commit_set_bounded_title` in the exported release comparison report, `common.updating` on the forced password change button, `common.close` on the reviews banner, `common.enable_all` / `common.disable_all` on the notification preferences, and the whole `confirm` section (`confirm.delete_avatar`) on the avatar dialog. A test now checks that every `t('...')` literal of the source is defined and that the three locales hold the same keys, so a missing key fails the build instead of reaching a report nobody can correct afterwards; it also found `admin.delegations`, a key only the Chinese locales carried and nothing asked for
+
+---
+
+## [1.24.0] - 2026-09-29
+
+**Backend Version**: 1.24.0
+**Frontend Version**: 1.19.0
+
+### Added
+- Export release notes as one markdown document: `POST /release/notes/export` builds it from the stored releases and answers with the document, a suggested filename, how many releases it holds and an explicit report of anything it had to skip or cut. A selection is either explicit ids (what the page has ticked) or the whole filtered set, so exporting every published version of a repository no longer means paging the list in the browser first; the document has one shape and one author - the server writes the title, a summary line and one section per release (its heading, plus a draft / pre-release marker when one applies) with the stored body verbatim - so the page, an API consumer and CI produce byte-identical files. Bodies are copied as written: JIRA keys and author mentions are not rewritten, because linking them is a display concern the screen already handles. One export holds at most 200 releases, and reaching that bound is reported instead of quietly producing a partial document. The page gains a checkbox per release, "select all (filtered)" and "Export selected (N)" in the header, and "Export markdown" for the release that is open.
+- Read a page of releases as a list instead of one release at a time: the reading column renders every release of the current page in full - title and tag, the latest / pre-release / draft badges, author and date, the released range and the notes - and each entry carries its own actions (edit, publish, push and delete for the managing roles; export and copy for any reader; the provider link when the release has one), so a release can be acted on without being selected first. The pagination now drives both columns and is reachable from the bottom of the list as well as from the navigator, and clicking a navigator entry scrolls the reading column to that release and marks it instead of replacing the column and hiding the other releases of the page: reviewing a quarter of a release train is one page instead of ten clicks.
+
+### Changed
+- Link the version title of a release to the tag it was cut from: the title of an entry is an anchor that opens the tags tab on that tag and loads the commits it released - the mirror of the note icon that walks from a tag to its release. The tag navigator is paginated in the browser, so the page holding the tag is opened before the item is scrolled to, and the tag name travels on the element itself rather than in a selector built out of it. The title keeps the weight of the entry it names and reads as a link only on hover and on focus.
+
+### Documentation
+- Two OpenSpec changes describe the work above: `add-release-note-export` (the export contract, the document shape and its bounds) and `list-release-notes-per-page` (reading a page of releases as a list, with the navigator as a jump index).
+
+---
+
+## [1.23.2] - 2026-09-29
+
+**Backend Version**: 1.23.2
+**Frontend Version**: 1.18.2
+
+### Added
+- Report why an AI summary did not happen instead of falling back silently: a preview that was asked for one answers with `summary_notice`, and the notes form says under the switch that the sections came from the commit subjects
+
+### Fixed
+- Call the configured LLM when it has no API key: a model served on localhost takes no credential, and demanding one kept the request from being made at all - the summary was skipped as "not configured" while the provider logged nothing; the `Authorization` header is now sent only when a key is set (an empty `Bearer ` is something providers refuse), and a pass that cannot be made names the piece of configuration that is missing
+- Report why an AI summary failed instead of answering with a bare "did not come back": the completion client no longer throws the provider's response away (the status and body are what name the problem - an unknown model, a bad key, a prompt the model will not take - and the API key is taken out of them before they are logged or returned), the reason travels as `summary_notice` (`not_configured` | `provider_error` | `unreadable_answer` | `failed`) with the provider's own message in `summary_error`, and the notes form shows both; the request also carries only the messages, the model and `stream`, since a parameter a given model refuses (`temperature`, `max_tokens`) turns a question it can answer into a 400
+- Keep the AI summary from failing on a release of any size: the model is asked only about the commits whose subject does not say what the change is - the rest of the scope stays in the prompt as the context of the summary - so it answers a handful of entries instead of one per commit, and the completion no longer puts a token limit of its own on the answer (800 was room for about 35 entries, so anything larger came back cut off mid-JSON and was reported as a failed call); an answer that does come back cut off is read pair by pair rather than dropped for a syntax error
+- Leave merge commits out of the generated release notes: an integration is not a change of its own - what the release added is listed through the commits the merge brought in, in the same scope - so "Merge branch" and "Merge pull request" subjects no longer fill the "Other Changes" section; they are left out of the AI prompt for the same reason, and a scope that holds nothing else renders as the empty scope it is
+
+---
+
+## [1.23.1] - 2026-09-29
+
+**Backend Version**: 1.23.1
+**Frontend Version**: 1.18.1
+
+### Added
+- Preview the release notes while writing them: the editor toolbar toggles the rendered note (`preview`), the note alone (`preview-only`) and a table of contents, rendered with the same theme as a published note
+- Group release notes into Keep a Changelog sections from the wording of a commit subject: a ticket key, a pull request number or a bracketed tag in front of it no longer hides the wording, and subjects that are not conventional commits (or not in English) are grouped instead of landing in "Other Changes" as one flat list
+- Summarize a release with the configured LLM: an opt-in "AI summary" on the notes form adds a summary paragraph and a section per commit, answered through the existing LLM proxy configuration (System Settings -> LLM) and falling back to the deterministic notes when no LLM is enabled or the call fails
+- Write the generated notes in the language of the caller (section titles and the summary; English, 简体中文, 繁體中文)
+
+### Fixed
+- Reverse the Bitbucket Server comparison direction: `/compare/commits` streams the commits reachable from `from` but not from `to` (`git log to..from`), so the provider now exchanges the two refs in the query to honour the documented `to_ref \ from_ref` contract; a newer release was previously reported as missing the commits it added, and a release note was built from the empty `previous \ version` difference ("No commits found")
+
+---
+
+## [1.23.0] - 2026-09-28
+
+**Backend Version**: 1.23.0
+**Frontend Version**: 1.18.0
+
+### Added
+- Resolve the release scope of a tag on the server: the predecessor is taken from the repository's tags (verified as an ancestor when one is found, otherwise the previous tag in version order), so the commits of a tag are a provider *difference* instead of everything reachable from it
+- Add `list_tags_with_commits()` to every git provider (Bitbucket Server, Bitbucket Cloud, GitHub Enterprise), returning each tag with the commit it points to and, when the provider reports one, the commit date; an annotated tag is dereferenced by the provider so the tag object is never mistaken for a commit
+- Report the scope behind a release preview (`previous_source`, `previous_verified`, `scope_reason`, `previous_sha`, `version_sha`) and show the short revision next to each ref of the tags panel
+- Store the comparison baseline per repository (`release_check_baseline`, migration 033) and narrow a comparison against it, so a merge check only inspects the work of the release being checked
+- Answer "does this commit belong to that release?" one commit at a time through the provider (`contains_commit`), so a release holding more commits than any listing cap is still judged exactly
+
+### Fixed
+- Report the merge check with a three-state verdict (`contained` / `missing` / `inconclusive`) derived from the provider-side difference: a comparison that was cut short is no longer presented as a pass
+- Compute the missing direction as `source \ target`, so shared history cancels out and a repository with years of history no longer needs a commit listing to answer "was this merged?"
+- Label a tag that has no predecessor as a first release (and an undeterminable scope as such) instead of reporting "the commit list reached Max Commits" - the old message described a listing limit, not the scope question that had actually gone unanswered
+- Warn in the tags panel when the predecessor could only be inferred from the tag order, while still using that scope
+- Ask the notes comparison with the resolved revisions, so a tag moved between resolving the scope and comparing cannot change what a release note was built from
+
+### Improved
+- Report the trimmed commit list of a release as a display limit ("showing the first N of M"): the count is the scope, and a scan that hit its cap is reported separately
+- Prefill a drafted release with the predecessor the server resolved, and re-resolve the scope of the selected tag when the tag list is refreshed
+- Restyle the reminder message shown in the release notes panel
+
+### Documentation
+- Add the OpenSpec changes `simplify-release-missing-check`, `enhance-release-note-scope` and `add-app-release-diff`
+
+---
+
 ## [1.22.2] - 2026-09-27
 
 **Backend Version**: 1.22.2
