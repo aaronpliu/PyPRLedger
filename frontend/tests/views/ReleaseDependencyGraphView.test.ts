@@ -7,12 +7,6 @@ import enMessages from '@/locales/en.json'
 
 // The shape of the option the chart hands to the (stubbed) canvas - only what
 // the assertions below read.
-interface ChartOptionLink {
-  source: string
-  target: string
-  constraint?: string
-  pinned?: boolean
-}
 interface ChartOptionNode {
   name: string
   itemStyle?: { opacity?: number }
@@ -21,7 +15,6 @@ interface ReleaseDependencyGraphChartOption {
   series: [
     {
       data: ChartOptionNode[]
-      edgeLabel: { formatter: (params: { dataType?: string; data?: ChartOptionLink }) => string }
     },
   ]
 }
@@ -86,27 +79,6 @@ describe('ReleaseDependencyGraphView', () => {
     expect(wrapper.text()).toContain('2.0.0')
     // nothing is dimmed before a pick is spent
     expect(nodeOpacity(chartOption(wrapper), 'packageE')).toBe(1)
-  })
-
-  it('labels only the app edges with the version they pin', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-
-    const { edgeLabel } = chartOption(wrapper).series[0]
-    // the app names packageC by the exact version the release ships
-    expect(
-      edgeLabel.formatter({
-        dataType: 'edge',
-        data: { source: 'app', target: 'packageC', constraint: '1.4.2', pinned: true },
-      }),
-    ).toBe('@1.4.2')
-    // a package names its dependencies by range: the bare relationship reads
-    expect(
-      edgeLabel.formatter({
-        dataType: 'edge',
-        data: { source: 'packageA', target: 'packageD', constraint: '>=2.2610.0 <=2.2610.100', pinned: false },
-      }),
-    ).toBe('')
   })
 
   it('shows the picked package with the constraints its edges declare', async () => {

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   isExactVersion,
   markCircularLinks,
+  pinnedEdgeLabels,
   releaseToGraph,
   relatedHighlight,
   withinDepth,
@@ -185,6 +186,30 @@ describe('relatedHighlight', () => {
 
     // only the app and packageC name packageG
     expect(nodes).toEqual(new Set(['packageG', 'app', 'packageC']))
+  })
+})
+
+describe('pinnedEdgeLabels', () => {
+  const graph = graphOf('2.0.0')
+
+  it('keeps the edges the app names by exact version', () => {
+    // the app names its direct dependencies by the exact version it ships
+    // against - the six pins are the versions its lines carry
+    expect(pinnedEdgeLabels(graph.links).map((link) => link.constraint)).toEqual([
+      '2.0.0',
+      '2.0.0',
+      '1.4.2',
+      '3.1.0',
+      '1.9.4',
+      '0.8.7',
+    ])
+  })
+
+  it('leaves the edges a package names by range off the lines', () => {
+    // the packages among themselves declare ranges: the bare relationship reads
+    // as noise rather than information on the line
+    const labels = pinnedEdgeLabels(graph.links)
+    expect(labels.every((link) => link.source === 'app')).toBe(true)
   })
 })
 

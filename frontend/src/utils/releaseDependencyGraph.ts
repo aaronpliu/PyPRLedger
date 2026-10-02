@@ -94,6 +94,16 @@ export function releaseToGraph(release: ReleaseDependencyGraphRelease): ReleaseD
   return { version: release.version, releasedAt: release.releasedAt, data: { nodes, links } }
 }
 
+/**
+ * The versions the graph's edges carry on their lines: an edge answers to "at
+ * which version" only when one was asked for. An exact version pins and reads
+ * on the line, while a package's own range declares the bare relationship and
+ * reads there as noise rather than information.
+ */
+export function pinnedEdgeLabels(links: ReleaseDependencyGraphLink[]): ReleaseDependencyGraphLink[] {
+  return links.filter((link) => link.pinned && link.constraint)
+}
+
 /** The nodes and edges kept in full colour around a picked node. */
 export interface ReleaseDependencyGraphHighlight {
   nodes: Set<string>

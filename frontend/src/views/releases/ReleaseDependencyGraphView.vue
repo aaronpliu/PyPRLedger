@@ -50,7 +50,7 @@
       />
 
       <el-row v-else :gutter="16">
-        <el-col :xs="24" :md="16">
+        <el-col :xs="24" :md="18">
           <ReleaseDependencyGraphChart
             :nodes="viewData.nodes"
             :links="viewData.links"
@@ -61,7 +61,7 @@
               t('releaseDependencyGraph.category_workspace'),
               t('releaseDependencyGraph.category_dependency'),
             ]"
-            height="560px"
+            height="max(560px, calc(100vh - 380px))"
             data-test="release-dependency-graph-chart"
             @node-click="onNodeClick"
           />
@@ -75,7 +75,7 @@
           </p>
         </el-col>
 
-        <el-col :xs="24" :md="8">
+        <el-col :xs="24" :md="6">
           <div class="detail-panel" data-test="detail-panel">
             <p class="detail-stats">
               {{ t('releaseDependencyGraph.stats_nodes', { count: viewData.nodes.length }) }}
