@@ -107,7 +107,8 @@
     "systemSettings": "系統設定",
     "releases": "版本",
     "releaseComparison": "版本對比",
-    "releaseNotes": "版本說明"
+    "releaseNotes": "版本說明",
+    "releaseDependencyGraph": "發佈依賴關係圖"
   },
   "auth": {
     "login_title": "登入到 PR Ledger",
@@ -1135,5 +1136,31 @@
     "target_branch": "目標分支",
     "target_branch_placeholder": "預設分支",
     "target_branch_help": "僅在 tag 不存在時使用：GitHub 會依該分支建立 tag"
+  },
+  "releaseDependencyGraph": {
+    "title": "發佈依賴關係圖",
+    "subtitle": "{version} 各套件的相互依賴關係——點選節點，查看它相依什麼、被什麼相依。",
+    "version_label": "發佈版本",
+    "released_at": "發佈於 {date}",
+    "constraint_note": "邊上只呈現應用鎖定的直連版本；全部聲明的約束見右側面板。",
+    "depth_1": "直接依賴",
+    "depth_2": "兩級",
+    "depth_all": "全部",
+    "transitive": "完整閉包",
+    "transitive_help": "高亮所選套件遞迴拉入的全部相依，而不只是它的直接相依。",
+    "circular_hint": "紅色虛線：循環依賴",
+    "loading": "正在讀取依賴關係圖",
+    "category_project": "專案",
+    "category_workspace": "工作區套件",
+    "category_dependency": "外部相依",
+    "category": "類型",
+    "stats_nodes": "套件：{count}",
+    "stats_links": "相依邊：{count}",
+    "empty_hint": "在圖中選擇一個節點，查看它的依賴關係。",
+    "dependencies": "相依",
+    "dependents": "被相依",
+    "no_dependencies": "無",
+    "no_dependents": "沒有被任何套件相依",
+    "circular_warning": "該套件處於循環相依中。"
   }
 }

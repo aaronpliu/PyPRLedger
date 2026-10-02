@@ -107,7 +107,8 @@
     "systemSettings": "系统设置",
     "releases": "版本",
     "releaseComparison": "版本对比",
-    "releaseNotes": "版本说明"
+    "releaseNotes": "版本说明",
+    "releaseDependencyGraph": "发布依赖关系图"
   },
   "auth": {
     "login_title": "登录到 PR Ledger",
@@ -1135,5 +1136,31 @@
     "target_branch": "目标分支",
     "target_branch_placeholder": "默认分支",
     "target_branch_help": "仅在 tag 不存在时使用：GitHub 会基于该分支创建 tag"
+  },
+  "releaseDependencyGraph": {
+    "title": "发布依赖关系图",
+    "subtitle": "{version} 各软件包的相互依赖关系——点选节点，查看它依赖什么、被什么依赖。",
+    "version_label": "发布版本",
+    "released_at": "发布于 {date}",
+    "constraint_note": "边上只呈现应用锁定的直连版本；全部声明的约束见右侧面板。",
+    "depth_1": "直接依赖",
+    "depth_2": "两级",
+    "depth_all": "全部",
+    "transitive": "完整闭包",
+    "transitive_help": "高亮所选包递归拉入的全部依赖，而不只是它的直接依赖。",
+    "circular_hint": "红色虚线：循环依赖",
+    "loading": "正在读取依赖关系图",
+    "category_project": "项目",
+    "category_workspace": "工作区包",
+    "category_dependency": "外部依赖",
+    "category": "类型",
+    "stats_nodes": "包：{count}",
+    "stats_links": "依赖边：{count}",
+    "empty_hint": "在图中选择一个节点，查看它的依赖关系。",
+    "dependencies": "依赖",
+    "dependents": "被依赖",
+    "no_dependencies": "无",
+    "no_dependents": "没有被任何包依赖",
+    "circular_warning": "该包处于循环依赖中。"
   }
 }

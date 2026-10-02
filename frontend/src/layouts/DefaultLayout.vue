@@ -46,6 +46,7 @@
                 <template #title>{{ t('menu.releases') }}</template>
                 <el-menu-item index="/releases">{{ t('menu.releaseComparison') }}</el-menu-item>
                 <el-menu-item index="/releases/notes">{{ t('menu.releaseNotes') }}</el-menu-item>
+                <el-menu-item index="/releases/dependency-graph">{{ t('menu.releaseDependencyGraph') }}</el-menu-item>
               </el-sub-menu>
               <el-menu-item index="/notifications">{{ t('menu.notifications') }}</el-menu-item>
             </el-menu>
