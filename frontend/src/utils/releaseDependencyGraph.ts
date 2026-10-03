@@ -39,6 +39,8 @@ export interface ReleaseDependencyGraphData {
  */
 export interface ReleaseDependencyGraphPackage {
   id: string
+  /** Display name; defaults to the id when absent. */
+  name?: string
   /** 0 = project, 1 = dependency, 2 = workspace package. */
   category: number
   version: string
@@ -57,6 +59,54 @@ export interface ReleaseDependencyGraph {
   version: string
   releasedAt: string
   data: ReleaseDependencyGraphData
+}
+
+/** What kind of ref a dependency file was produced at. */
+export type DependencyRefType = 'tag' | 'branch' | 'commit'
+
+/** The ref a dependency file was produced at. */
+export interface DependencyFileRef {
+  /** Ref name as the provider reports it - a tag name or a branch name. */
+  name: string
+  type: DependencyRefType
+  /** Commit the file was produced at; absent when the producer did not record it. */
+  commit?: string
+}
+
+/**
+ * The dependency file of one repository at one ref: the contract between
+ * whatever walks the package.json files of a monorepo and this view.
+ *
+ * Cycles are not part of the file - they are derived from ``packages`` when the
+ * file is read, so a producer never has to compute them. A dependency named by
+ * ``dependencies`` but absent from ``packages`` still becomes a node, as an
+ * external dependency (category 1).
+ */
+export interface DependencyFile {
+  /** Schema version of this file; bumped when the shape changes. */
+  schema_version: string
+  project_key: string
+  repository_slug: string
+  ref: DependencyFileRef
+  /** When the file was produced; a branch has no release date of its own. */
+  generated_at?: string
+  packages: ReleaseDependencyGraphPackage[]
+}
+
+/** A dependency file readied for the canvas. */
+export type DependencyFileGraph = DependencyFile & ReleaseDependencyGraph
+
+/**
+ * Read one dependency file for the canvas: its packages become the graph, and
+ * the edges that close a cycle are marked here, once.
+ */
+export function dependencyFileToGraph(file: DependencyFile): DependencyFileGraph {
+  const graph = releaseToGraph({
+    version: file.ref.name,
+    releasedAt: file.generated_at ?? '',
+    packages: file.packages,
+  })
+  return { ...file, ...graph, data: markCircularLinks(graph.data) }
 }
 
 /**

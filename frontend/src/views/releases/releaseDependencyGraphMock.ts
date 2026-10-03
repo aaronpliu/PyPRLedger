@@ -1,26 +1,30 @@
-import { markCircularLinks, releaseToGraph } from '@/utils/releaseDependencyGraph'
+import { dependencyFileToGraph } from '@/utils/releaseDependencyGraph'
 import type {
-  ReleaseDependencyGraph,
-  ReleaseDependencyGraphRelease,
+  DependencyFile,
+  DependencyFileGraph,
 } from '@/utils/releaseDependencyGraph'
 
 /**
  * Stand-in for the dependency files a monorepo dependency script is expected to
- * emit: one per release, in the shape of the package.json files it walked -
- * the app naming its direct dependencies by exact version, the packages it
- * pulls in naming theirs by range. So the graph reads the way the repository
- * works: the app's edges carry the version it ships against, the edges among
- * the packages carry the bare relationship. Newest release first, so the view
- * can open on the latest.
+ * emit: one per repository ref, in the shape of the package.json files it
+ * walked - the app naming its direct dependencies by exact version, the
+ * packages it pulls in naming theirs by range. So the graph reads the way the
+ * repository works: the app's edges carry the version it ships against, the
+ * edges among the packages carry the bare relationship.
  *
- * The three releases tell the story of the graph changing over time: 1.0.0 knew
+ * The three tags tell the story of the graph changing over time: 1.0.0 knew
  * seven packages, 1.1.0 added G, and 2.0.0 wired the full shape - including
- * the cycle where D reaches back to A, which A also pulls in.
+ * the cycle where D reaches back to A, which A also pulls in. The branch is
+ * what the script produces outside a release: the same walk, at whatever main
+ * points at now.
  */
-export const MOCK_RELEASES: ReleaseDependencyGraphRelease[] = [
+export const MOCK_DEPENDENCY_FILES: DependencyFile[] = [
   {
-    version: '2.0.0',
-    releasedAt: '2026-09-30',
+    schema_version: '1.0',
+    project_key: 'CORE',
+    repository_slug: 'app',
+    ref: { name: 'v2.0.0', type: 'tag', commit: '9f3c1ab' },
+    generated_at: '2026-09-30',
     packages: [
       {
         id: 'app',
@@ -81,8 +85,11 @@ export const MOCK_RELEASES: ReleaseDependencyGraphRelease[] = [
     ],
   },
   {
-    version: '1.1.0',
-    releasedAt: '2026-08-02',
+    schema_version: '1.0',
+    project_key: 'CORE',
+    repository_slug: 'app',
+    ref: { name: 'v1.1.0', type: 'tag', commit: '2d71e05' },
+    generated_at: '2026-08-02',
     packages: [
       {
         id: 'app',
@@ -139,8 +146,11 @@ export const MOCK_RELEASES: ReleaseDependencyGraphRelease[] = [
     ],
   },
   {
-    version: '1.0.0',
-    releasedAt: '2026-06-15',
+    schema_version: '1.0',
+    project_key: 'CORE',
+    repository_slug: 'app',
+    ref: { name: 'v1.0.0', type: 'tag', commit: 'b04c7f9' },
+    generated_at: '2026-06-15',
     packages: [
       {
         id: 'app',
@@ -191,18 +201,91 @@ export const MOCK_RELEASES: ReleaseDependencyGraphRelease[] = [
       { id: 'packageF', category: 1, version: '1.7.0', dependencies: {} },
     ],
   },
+  {
+    schema_version: '1.0',
+    project_key: 'CORE',
+    repository_slug: 'app',
+    ref: { name: 'main', type: 'branch', commit: 'c58a3d1' },
+    generated_at: '2026-10-01',
+    packages: [
+      {
+        id: 'app',
+        category: 0,
+        version: '2.1.0-SNAPSHOT',
+        dependencies: {
+          packageA: '2.0.0',
+          packageB: '2.0.0',
+          packageC: '1.4.2',
+          packageE: '3.1.0',
+          packageF: '1.9.4',
+          packageG: '0.8.7',
+          packageH: '0.1.0',
+        },
+      },
+      {
+        id: 'packageA',
+        category: 2,
+        version: '2.0.0',
+        dependencies: {
+          packageD: '>=2.2610.0 <=2.2610.100',
+          packageE: '>=3.0.0 <4.0.0',
+          packageC: '>=1.4.0 <2.0.0',
+        },
+      },
+      {
+        id: 'packageB',
+        category: 2,
+        version: '2.0.0',
+        dependencies: {
+          packageC: '>=1.4.0 <2.0.0',
+          packageF: '>=1.9.0 <2.0.0',
+          packageA: '>=2.0.0 <3.0.0',
+        },
+      },
+      {
+        id: 'packageC',
+        category: 2,
+        version: '1.4.2',
+        dependencies: {
+          packageE: '>=3.0.0 <4.0.0',
+          packageF: '>=1.9.0 <2.0.0',
+          packageG: '>=0.8.0 <1.0.0',
+        },
+      },
+      {
+        id: 'packageD',
+        category: 2,
+        version: '2.2610.44',
+        dependencies: {
+          packageE: '>=3.0.0 <4.0.0',
+          packageA: '>=2.0.0 <3.0.0',
+        },
+      },
+      { id: 'packageE', category: 1, version: '3.1.0', dependencies: {} },
+      { id: 'packageF', category: 1, version: '1.9.4', dependencies: {} },
+      { id: 'packageG', category: 1, version: '0.8.7', dependencies: {} },
+      { id: 'packageH', category: 1, version: '0.1.0', dependencies: {} },
+    ],
+  },
 ]
 
 /**
- * Stands in for fetching one release's dependency file; the real page swaps
- * this for the endpoint that serves it. The circular edges are marked here,
- * once, the way the script is expected to hand them over.
+ * Stands in for the endpoint that serves one ref's dependency file. A ref the
+ * stand-in has nothing for falls back to the newest file it holds, so the
+ * canvas still shows the shape of the repository instead of an empty page.
  */
-export function loadMockReleaseDependencyGraph(version: string): Promise<ReleaseDependencyGraph> {
-  const release = MOCK_RELEASES.find((entry) => entry.version === version)
-  if (!release) {
-    return Promise.reject(new Error(`No dependency file for release ${version}`))
-  }
-  const graph = releaseToGraph(release)
-  return Promise.resolve({ ...graph, data: markCircularLinks(graph.data) })
+export function loadMockDependencyFile(
+  projectKey: string,
+  repositorySlug: string,
+  ref: string,
+): Promise<DependencyFileGraph> {
+  const file =
+    MOCK_DEPENDENCY_FILES.find((entry) => entry.ref.name === ref) ?? MOCK_DEPENDENCY_FILES[0]
+  return Promise.resolve(
+    dependencyFileToGraph({
+      ...file,
+      project_key: projectKey,
+      repository_slug: repositorySlug,
+    }),
+  )
 }

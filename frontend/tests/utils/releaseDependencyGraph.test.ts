@@ -7,8 +7,12 @@ import {
   relatedHighlight,
   withinDepth,
 } from '@/utils/releaseDependencyGraph'
-import type { ReleaseDependencyGraphData } from '@/utils/releaseDependencyGraph'
-import { MOCK_RELEASES } from '@/views/releases/releaseDependencyGraphMock'
+import type {
+  DependencyFile,
+  ReleaseDependencyGraphData,
+  ReleaseDependencyGraphRelease,
+} from '@/utils/releaseDependencyGraph'
+import { MOCK_DEPENDENCY_FILES } from '@/views/releases/releaseDependencyGraphMock'
 
 /**
  * The shape the question asked about: projectA pulls packageA and packageB,
@@ -35,11 +39,20 @@ function fixture(): ReleaseDependencyGraphData {
   }
 }
 
-/** The dependency file of one mock release, read as the graph the view draws. */
-function graphOf(version: string): ReleaseDependencyGraphData {
-  const release = MOCK_RELEASES.find((entry) => entry.version === version)
-  if (!release) throw new Error(`No mock release ${version}`)
-  return releaseToGraph(release).data
+/** One dependency file, read in the release shape the walk hands over. */
+function asRelease(file: DependencyFile): ReleaseDependencyGraphRelease {
+  return {
+    version: file.ref.name,
+    releasedAt: file.generated_at ?? '',
+    packages: file.packages,
+  }
+}
+
+/** The dependency file of one mock ref, read as the graph the view draws. */
+function graphOf(ref: string): ReleaseDependencyGraphData {
+  const file = MOCK_DEPENDENCY_FILES.find((entry) => entry.ref.name === ref)
+  if (!file) throw new Error(`No mock dependency file for ${ref}`)
+  return releaseToGraph(asRelease(file)).data
 }
 
 describe('withinDepth', () => {
@@ -87,7 +100,7 @@ describe('withinDepth', () => {
   })
 
   it('shows only what the app names at depth one, on the mock data', () => {
-    const view = withinDepth(graphOf('2.0.0'), 1)
+    const view = withinDepth(graphOf('v2.0.0'), 1)
 
     // the app and the six packages its dependency file names
     expect(view.nodes).toHaveLength(7)
@@ -99,7 +112,7 @@ describe('withinDepth', () => {
   })
 
   it('adds what the dependencies name at depth two', () => {
-    const view = withinDepth(graphOf('2.0.0'), 2)
+    const view = withinDepth(graphOf('v2.0.0'), 2)
 
     // every package of the release is two hops away at most
     expect(view.nodes).toHaveLength(8)
@@ -120,13 +133,13 @@ describe('markCircularLinks', () => {
   })
 
   it('leaves the release that knows no cycle alone', () => {
-    const data = markCircularLinks(graphOf('1.0.0'))
+    const data = markCircularLinks(graphOf('v1.0.0'))
 
     expect(data.links.filter((link) => link.circular)).toHaveLength(0)
   })
 
   it('marks the edge that closes a cycle in the release that has one', () => {
-    const data = markCircularLinks(graphOf('2.0.0'))
+    const data = markCircularLinks(graphOf('v2.0.0'))
 
     const circular = data.links.filter((link) => link.circular)
     expect(circular).toHaveLength(1)
@@ -172,7 +185,7 @@ describe('relatedHighlight', () => {
   })
 
   it('terminates on a cycle instead of spinning between two packages', () => {
-    const { nodes } = relatedHighlight(graphOf('2.0.0'), 'app', true)
+    const { nodes } = relatedHighlight(graphOf('v2.0.0'), 'app', true)
 
     // the closure crosses the packageA <-> packageD cycle once
     expect(nodes.has('packageA')).toBe(true)
@@ -182,7 +195,7 @@ describe('relatedHighlight', () => {
   })
 
   it('shows a leaf with nothing but its dependents', () => {
-    const { nodes } = relatedHighlight(graphOf('2.0.0'), 'packageG', false)
+    const { nodes } = relatedHighlight(graphOf('v2.0.0'), 'packageG', false)
 
     // only the app and packageC name packageG
     expect(nodes).toEqual(new Set(['packageG', 'app', 'packageC']))
@@ -190,7 +203,7 @@ describe('relatedHighlight', () => {
 })
 
 describe('pinnedEdgeLabels', () => {
-  const graph = graphOf('2.0.0')
+  const graph = graphOf('v2.0.0')
 
   it('keeps the edges the app names by exact version', () => {
     // the app names its direct dependencies by the exact version it ships
@@ -228,7 +241,7 @@ describe('isExactVersion', () => {
 })
 
 describe('releaseToGraph', () => {
-  const latest = MOCK_RELEASES[0]
+  const latest = asRelease(MOCK_DEPENDENCY_FILES[0])
 
   it('pins the app to exact versions and lets the packages declare ranges', () => {
     const { data } = releaseToGraph(latest)
@@ -257,12 +270,12 @@ describe('releaseToGraph', () => {
   it('reads the release metadata along with the graph', () => {
     const graph = releaseToGraph(latest)
 
-    expect(graph.version).toBe('2.0.0')
+    expect(graph.version).toBe('v2.0.0')
     expect(graph.releasedAt).toBe('2026-09-30')
   })
 
   it('draws a different graph for every release', () => {
-    const first = releaseToGraph(MOCK_RELEASES[2]).data
+    const first = releaseToGraph(asRelease(MOCK_DEPENDENCY_FILES[2])).data
     const latestGraph = releaseToGraph(latest).data
 
     // 1.0.0 never named packageG, 2.0.0 does

@@ -5,6 +5,31 @@ import { createI18n } from 'vue-i18n'
 import ReleaseDependencyGraphView from '@/views/releases/ReleaseDependencyGraphView.vue'
 import enMessages from '@/locales/en.json'
 
+// The repository and its refs come from the provider in the running app; the
+// stand-ins hand over the one project, the one repository and the refs the
+// assertions below read.
+vi.mock('@/api/projects', () => ({
+  projectsApi: {
+    getAllProjects: async () => [{ project_key: 'CORE', project_name: 'Core' }],
+    getProjectRepositories: async () => [
+      { repository_slug: 'app', repository_name: 'Application' },
+    ],
+    getCloudWorkspaces: async () => [],
+  },
+}))
+
+vi.mock('@/api/releaseDiff', () => ({
+  releaseDiffApi: {
+    listRefs: async () => ({
+      project_key: 'CORE',
+      repository_slug: 'app',
+      git_provider: 'bitbucket_server',
+      tags: ['v2.0.0', 'v1.1.0', 'v1.0.0'],
+      branches: ['main'],
+    }),
+  },
+}))
+
 // The shape of the option the chart hands to the (stubbed) canvas - only what
 // the assertions below read.
 interface ChartOptionNode {
@@ -49,7 +74,27 @@ function mountView() {
   })
 }
 
-function chartOption(wrapper: ReturnType<typeof mountView>): ReleaseDependencyGraphChartOption {
+type View = ReturnType<typeof mountView>
+
+/**
+ * Walk the picker the way a reader does: a project, then a repository, which
+ * loads the refs and opens the newest tag. A ref given here is picked after.
+ */
+async function openOn(wrapper: View, ref?: string) {
+  const pick = async (index: number, value: string) => {
+    wrapper.findAllComponents(ElSelect)[index].vm.$emit('update:modelValue', value)
+    await flushPromises()
+    await flushPromises()
+  }
+
+  await pick(0, 'CORE')
+  await pick(1, 'app')
+  if (ref) {
+    await pick(3, ref)
+  }
+}
+
+function chartOption(wrapper: View): ReleaseDependencyGraphChartOption {
   const chart = wrapper.findComponent({ name: 'VChartStub' })
   return chart.props('option') as unknown as ReleaseDependencyGraphChartOption
 }
@@ -58,7 +103,7 @@ function nodeOpacity(option: ReleaseDependencyGraphChartOption, id: string): num
   return option.series[0].data.find((node) => node.name === id)?.itemStyle?.opacity
 }
 
-function clickNode(wrapper: ReturnType<typeof mountView>, id: string) {
+function clickNode(wrapper: View, id: string) {
   wrapper.findComponent({ name: 'VChartStub' }).vm.$emit('click', {
     dataType: 'node',
     data: { id },
@@ -66,9 +111,18 @@ function clickNode(wrapper: ReturnType<typeof mountView>, id: string) {
 }
 
 describe('ReleaseDependencyGraphView', () => {
-  it('opens on the complete graph of the latest release, nothing picked', async () => {
+  it('waits for a repository before it draws anything', async () => {
     const wrapper = mountView()
     await flushPromises()
+
+    expect(wrapper.text()).toContain('Pick a project and a repository')
+    expect(wrapper.find('[data-test="release-dependency-graph-chart"]').exists()).toBe(false)
+  })
+
+  it('opens on the newest tag of the repository, nothing picked', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openOn(wrapper)
 
     // v2.0.0, the whole closure: eight packages, seventeen edges - the cycle
     // among them, not only the app's own six edges
@@ -76,7 +130,7 @@ describe('ReleaseDependencyGraphView', () => {
     expect(wrapper.text()).toContain('Dependencies: 17')
     expect(wrapper.text()).toContain('Pick a node in the graph')
     expect(wrapper.text()).toContain('2026-09-30')
-    expect(wrapper.text()).toContain('2.0.0')
+    expect(wrapper.text()).toContain('v2.0.0')
     // nothing is dimmed before a pick is spent
     expect(nodeOpacity(chartOption(wrapper), 'packageE')).toBe(1)
   })
@@ -84,6 +138,7 @@ describe('ReleaseDependencyGraphView', () => {
   it('shows the picked package with the constraints its edges declare', async () => {
     const wrapper = mountView()
     await flushPromises()
+    await openOn(wrapper)
 
     clickNode(wrapper, 'packageE')
     await flushPromises()
@@ -102,6 +157,7 @@ describe('ReleaseDependencyGraphView', () => {
   it('reads a range differently from an exact version', async () => {
     const wrapper = mountView()
     await flushPromises()
+    await openOn(wrapper)
 
     clickNode(wrapper, 'packageE')
     await flushPromises()
@@ -122,6 +178,7 @@ describe('ReleaseDependencyGraphView', () => {
   it('dims everything the picked package does not touch', async () => {
     const wrapper = mountView()
     await flushPromises()
+    await openOn(wrapper)
 
     clickNode(wrapper, 'packageA')
     await flushPromises()
@@ -144,6 +201,7 @@ describe('ReleaseDependencyGraphView', () => {
   it('walks the full closure when the transitive switch is on', async () => {
     const wrapper = mountView()
     await flushPromises()
+    await openOn(wrapper)
 
     clickNode(wrapper, 'app')
     await flushPromises()
@@ -162,6 +220,7 @@ describe('ReleaseDependencyGraphView', () => {
   it('clears the pick when the same package is clicked again', async () => {
     const wrapper = mountView()
     await flushPromises()
+    await openOn(wrapper)
 
     clickNode(wrapper, 'packageE')
     await flushPromises()
@@ -175,6 +234,7 @@ describe('ReleaseDependencyGraphView', () => {
   it('deepens the view when a panel dependency is off the canvas', async () => {
     const wrapper = mountView()
     await flushPromises()
+    await openOn(wrapper)
 
     // trim to what the app names: packageD is named by packageA, so it waits
     // off the canvas until the view is deepened
@@ -201,6 +261,7 @@ describe('ReleaseDependencyGraphView', () => {
   it('trims the closure to the picked depth', async () => {
     const wrapper = mountView()
     await flushPromises()
+    await openOn(wrapper)
 
     wrapper.findComponent(ElRadioGroup).vm.$emit('update:modelValue', '1')
     await flushPromises()
@@ -217,12 +278,10 @@ describe('ReleaseDependencyGraphView', () => {
     expect(wrapper.text()).toContain('Dependencies: 15')
   })
 
-  it('draws the graph of another release when the version is picked', async () => {
+  it('draws the graph of another ref when the tag is picked', async () => {
     const wrapper = mountView()
     await flushPromises()
-
-    wrapper.findComponent(ElSelect).vm.$emit('update:modelValue', '1.0.0')
-    await flushPromises()
+    await openOn(wrapper, 'v1.0.0')
 
     // v1.0.0 in full: seven packages, ten edges - a smaller graph, no cycle
     expect(wrapper.text()).toContain('Packages: 7')
@@ -232,15 +291,26 @@ describe('ReleaseDependencyGraphView', () => {
     expect(nodeOpacity(chartOption(wrapper), 'packageG')).toBeUndefined()
   })
 
-  it('clears a pick the picked release does not name', async () => {
+  it('draws the walk of a branch, not only of a tag', async () => {
     const wrapper = mountView()
     await flushPromises()
+    await openOn(wrapper, 'main')
+
+    // main carries what the walk produced at its tip: packageH is on it
+    expect(wrapper.text()).toContain('Packages: 9')
+    expect(wrapper.text()).toContain('2026-10-01')
+    expect(nodeOpacity(chartOption(wrapper), 'packageH')).toBe(1)
+  })
+
+  it('clears a pick the picked ref does not name', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openOn(wrapper)
 
     clickNode(wrapper, 'packageG')
     await flushPromises()
 
-    wrapper.findComponent(ElSelect).vm.$emit('update:modelValue', '1.0.0')
-    await flushPromises()
+    await openOn(wrapper, 'v1.0.0')
 
     expect(wrapper.text()).toContain('Pick a node in the graph')
   })
