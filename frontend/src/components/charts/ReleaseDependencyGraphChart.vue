@@ -114,11 +114,15 @@ interface GraphSeries {
 
 /** Layout positions live on the model, which the public API keeps private. */
 interface ChartInternals {
-  getModel(): { getSeriesByIndex(index: number): GraphSeries | undefined }
+  getModel?(): { getSeriesByIndex(index: number): GraphSeries | undefined } | undefined
 }
 
 function graphSeries(chart: ECharts): GraphSeries | undefined {
-  return (chart as unknown as ChartInternals).getModel().getSeriesByIndex(0)
+  // The model is absent on the first frames of a render - ECharts keeps it
+  // private and hands it over only once the graph is built - and reaching for
+  // it there throws out of the render handler on every frame of the animation.
+  const model = (chart as unknown as ChartInternals).getModel?.()
+  return model?.getSeriesByIndex(0)
 }
 
 /** One version pin, placed where its edge sits as the canvas draws it now. */
