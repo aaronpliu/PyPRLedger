@@ -1,0 +1,159 @@
+import { describe, expect, it } from 'vitest'
+import {
+  buildRows,
+  defaultSelection,
+  downgradeCount,
+  isMarked,
+  isRisk,
+  moveLabelKey,
+  moveSymbol,
+  moveTone,
+  summaryEntries,
+} from '@/utils/appVersionDiff'
+import type { AppVersionDiffMove } from '@/api/appVersionDiff'
+import { diffOf } from '../fixtures/appDiff'
+
+const TWO = ['v1.1.0', 'v2.0.0']
+const THREE = ['v1.1.0', 'v2.0.0', 'v9.9.9']
+
+function move(overrides: Partial<AppVersionDiffMove> = {}): AppVersionDiffMove {
+  return {
+    name: 'packageA',
+    source_version: '1.0.0',
+    target_version: '1.0.1',
+    state: 'changed',
+    direction: 'upgrade',
+    orderable: true,
+    ...overrides,
+  }
+}
+
+describe('buildRows', () => {
+  it('gives every package one cell per release, in column order', () => {
+    const rows = buildRows(diffOf({ refs: TWO }))
+
+    expect(rows.map((row) => row.name)).toEqual([
+      'packageA',
+      'packageB',
+      'packageC',
+      'packageD',
+      'packageE',
+      'packageF',
+    ])
+    expect(rows[0].cells.map((cell) => cell.ref)).toEqual(TWO)
+    expect(rows[0].cells.map((cell) => cell.version)).toEqual(['1.0.0', '1.0.1'])
+  })
+
+  it('keeps an absent version as an empty cell rather than a zero', () => {
+    const rows = buildRows(diffOf({ refs: TWO }))
+    const packageC = rows.find((row) => row.name === 'packageC')
+    const packageD = rows.find((row) => row.name === 'packageD')
+
+    expect(packageC?.cells.map((cell) => cell.version)).toEqual(['1.0.0', null])
+    expect(packageD?.cells.map((cell) => cell.version)).toEqual([null, '0.9.0'])
+  })
+
+  it('leaves the first column without a boundary and an unknown boundary without a move', () => {
+    const rows = buildRows(diffOf({ refs: THREE }))
+
+    // no boundary before the first column
+    expect(rows[0].cells[0].move).toBeUndefined()
+    // a boundary into a release with no record is unknown, not unchanged
+    expect(rows[0].cells[2].move).toBeNull()
+    expect(rows[0].cells[2].hasRecord).toBe(false)
+  })
+})
+
+describe('moveTone', () => {
+  it('reads a direction when there is one', () => {
+    expect(moveTone(move({ direction: 'upgrade' }))).toBe('upgrade')
+    expect(moveTone(move({ direction: 'downgrade' }))).toBe('downgrade')
+  })
+
+  it('separates a plain change from an upgrade', () => {
+    const unorderable = move({ direction: null, orderable: false })
+
+    expect(moveTone(unorderable)).toBe('changed')
+    // the tone is what drives the colour and the arrow, so it must not read as one
+    expect(moveTone(unorderable)).not.toBe('upgrade')
+  })
+
+  it('reads added, removed and unchanged', () => {
+    expect(moveTone(move({ state: 'added', direction: null }))).toBe('added')
+    expect(moveTone(move({ state: 'removed', direction: null }))).toBe('removed')
+    expect(moveTone(move({ state: 'unchanged', direction: null }))).toBe('none')
+  })
+
+  it('tells "no boundary" apart from "unknown boundary"', () => {
+    expect(moveTone(undefined)).toBe('none')
+    expect(moveTone(null)).toBe('unknown')
+  })
+})
+
+describe('isMarked / isRisk', () => {
+  it('marks everything except an unchanged or absent move', () => {
+    expect(isMarked(move({ direction: 'upgrade' }))).toBe(true)
+    expect(isMarked(move({ direction: null, orderable: false }))).toBe(true)
+    expect(isMarked(move({ state: 'unchanged', direction: null }))).toBe(false)
+    expect(isMarked(undefined)).toBe(false)
+  })
+
+  it('calls a downgrade a risk and nothing else one', () => {
+    expect(isRisk(move({ direction: 'downgrade' }))).toBe(true)
+    expect(isRisk(move({ direction: 'upgrade' }))).toBe(false)
+    // a change with no direction is not a risk, it is simply unknown
+    expect(isRisk(move({ direction: null, orderable: false }))).toBe(false)
+  })
+})
+
+describe('summaryEntries', () => {
+  it('reports the counts that moved, in a fixed order', () => {
+    const entries = summaryEntries(diffOf({ refs: TWO }).intervals[0].summary)
+
+    expect(entries).toEqual([
+      { state: 'changed', count: 3 },
+      { state: 'added', count: 1 },
+      { state: 'removed', count: 1 },
+    ])
+  })
+
+  it('reports nothing for an interval in which nothing moved', () => {
+    expect(summaryEntries({ changed: 0, added: 0, removed: 0, unchanged: 4 })).toEqual([])
+    expect(summaryEntries(undefined)).toEqual([])
+  })
+
+  it('counts the downgrades separately, as a risk', () => {
+    expect(downgradeCount(diffOf({ refs: TWO }).intervals[0].summary)).toBe(1)
+    expect(downgradeCount(undefined)).toBe(0)
+  })
+})
+
+describe('move symbols and labels', () => {
+  it('draws a different glyph per tone', () => {
+    expect(moveSymbol('upgrade')).toBe('↑')
+    expect(moveSymbol('downgrade')).toBe('↓')
+    expect(moveSymbol('added')).toBe('+')
+    expect(moveSymbol('removed')).toBe('−')
+    expect(moveSymbol('changed')).toBe('•')
+    expect(moveSymbol('unknown')).toBe('?')
+  })
+
+  it('names the tone by its translation key', () => {
+    expect(moveLabelKey('downgrade')).toBe('appDiff.move_downgrade')
+    expect(moveLabelKey('unknown')).toBe('appDiff.move_unknown')
+  })
+})
+
+describe('defaultSelection', () => {
+  it('opens on the two most recent releases', () => {
+    expect(defaultSelection(['v2.0.0', 'v1.1.0', 'v1.0.0'], ['main'])).toEqual([
+      'v2.0.0',
+      'v1.1.0',
+    ])
+  })
+
+  it('falls back to the branches when there are not two tags', () => {
+    expect(defaultSelection(['v2.0.0'], ['main', 'develop'])).toEqual(['v2.0.0', 'main'])
+    expect(defaultSelection([], ['main'])).toEqual(['main'])
+  })
+})

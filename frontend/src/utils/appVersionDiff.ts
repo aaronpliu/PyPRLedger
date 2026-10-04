@@ -1,0 +1,124 @@
+import type {
+  AppVersionDiffMove,
+  AppVersionDiffResponse,
+} from '@/api/appVersionDiff'
+
+/**
+ * What a cell is: the version this release pinned, and how it moved into it.
+ *
+ * ``move`` is ``undefined`` on the first column (there is no boundary before it),
+ * ``null`` where the boundary touches a release with no record - which is
+ * unknown rather than unchanged - and the move itself everywhere else.
+ */
+export interface AppDiffCell {
+  ref: string
+  version: string | null
+  hasRecord: boolean
+  move: AppVersionDiffMove | null | undefined
+}
+
+export interface AppDiffRow {
+  name: string
+  cells: AppDiffCell[]
+}
+
+/** How a cell's move reads. `unknown` and `none` are deliberately different. */
+export type MoveTone =
+  | 'none'
+  | 'unknown'
+  | 'upgrade'
+  | 'downgrade'
+  | 'changed'
+  | 'added'
+  | 'removed'
+
+/** The states an interval summary reports, in the order they are shown. */
+export const SUMMARY_ORDER = ['changed', 'added', 'removed'] as const
+
+/**
+ * The rows the table draws, one per package, in the order the server returned
+ * them: cells follow the release columns, and each cell carries the move into it.
+ */
+export function buildRows(response: AppVersionDiffResponse): AppDiffRow[] {
+  return response.packages.map((pkg) => ({
+    name: pkg.name,
+    cells: response.releases.map((release, index) => ({
+      ref: release.ref,
+      version: pkg.versions[index] ?? null,
+      hasRecord: release.has_record,
+      move: index === 0 ? undefined : (pkg.moves[index - 1] ?? null),
+    })),
+  }))
+}
+
+/**
+ * How a move should read.
+ *
+ * A change with no direction stays `changed`: it must never be dressed up as an
+ * upgrade, which is exactly what a tone of `upgrade` would say.
+ */
+export function moveTone(move: AppVersionDiffMove | null | undefined): MoveTone {
+  if (move === undefined) return 'none'
+  if (move === null) return 'unknown'
+  if (move.state === 'unchanged') return 'none'
+  if (move.state === 'added') return 'added'
+  if (move.state === 'removed') return 'removed'
+  if (move.direction === 'upgrade') return 'upgrade'
+  if (move.direction === 'downgrade') return 'downgrade'
+  return 'changed'
+}
+
+/** Whether a move is a risk worth calling out: a downgrade, and nothing else. */
+export function isRisk(move: AppVersionDiffMove | null | undefined): boolean {
+  return moveTone(move) === 'downgrade'
+}
+
+/** Whether a move should be marked at all. */
+export function isMarked(move: AppVersionDiffMove | null | undefined): boolean {
+  return moveTone(move) !== 'none'
+}
+
+/** The counts worth showing for one interval, in the order they are shown. */
+export function summaryEntries(
+  summary: Record<string, number> | undefined,
+): { state: string; count: number }[] {
+  return SUMMARY_ORDER.filter((state) => (summary?.[state] ?? 0) > 0).map((state) => ({
+    state,
+    count: summary![state],
+  }))
+}
+
+/** The downgrades in a summary, which are reported as a risk rather than a count. */
+export function downgradeCount(summary: Record<string, number> | undefined): number {
+  return summary?.downgrade ?? 0
+}
+
+/** The i18n key for a move's tone. */
+export function moveLabelKey(tone: MoveTone): string {
+  return `appDiff.move_${tone}`
+}
+
+const MOVE_SYMBOLS: Record<MoveTone, string> = {
+  none: '·',
+  unknown: '?',
+  upgrade: '↑',
+  downgrade: '↓',
+  changed: '•',
+  added: '+',
+  removed: '−',
+}
+
+/** The glyph a marked move is drawn with. */
+export function moveSymbol(tone: MoveTone): string {
+  return MOVE_SYMBOLS[tone]
+}
+
+/**
+ * A default selection: the most recent releases, so the page answers something
+ * before the reader touches anything. The server returns tags newest first, so
+ * the first two are the natural pair.
+ */
+export function defaultSelection(tags: string[], branches: string[]): string[] {
+  const picked = [...tags, ...branches]
+  return picked.slice(0, 2)
+}

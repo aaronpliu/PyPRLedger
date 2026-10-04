@@ -120,11 +120,14 @@ The Releases group gains **App Diff**. The existing `Release Comparison` entry i
 
   "packages": [
     { "name": "packageA", "versions": ["1.0.0", "1.0.0", "1.1.0"],
-      "states": ["unchanged", "upgrade"] },
+      "moves": [ { "state": "unchanged", "direction": null, "orderable": true },
+                 { "state": "changed", "direction": "upgrade", "orderable": true } ] },
     { "name": "packageF", "versions": [null, "0.9.0", "0.9.0"],
-      "states": ["added", "unchanged"] },
+      "moves": [ { "state": "added", "direction": null, "orderable": true },
+                 { "state": "unchanged", "direction": null, "orderable": true } ] },
     { "name": "packageD", "versions": ["1.1.0", null, null],
-      "states": ["removed", "unchanged"] }
+      "moves": [ { "state": "removed", "direction": null, "orderable": true },
+                 null ] }
   ],
 
   "intervals": [
@@ -135,7 +138,7 @@ The Releases group gains **App Diff**. The existing `Release Comparison` entry i
 }
 ```
 
-`states[i]` describes the move from release `i` to release `i+1`; `changes` carries the same information grouped per interval, so the view can read either way. `verdict` is `incomplete` as soon as any selected release has no record.
+`moves[i]` describes the move from release `i` to release `i+1` - and is `null` when that boundary touches a release with no record, which is how "unknown" is told apart from "unchanged" in the payload itself. Each move is the whole object rather than a bare state so a row and an interval carry the same shape, and `intervals[].changes` repeats the non-unchanged ones grouped per interval, so the view can read either way without recomputing. `verdict` is `incomplete` as soon as any selected release has no record.
 
 ## Risks / Trade-offs
 

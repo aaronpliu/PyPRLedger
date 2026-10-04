@@ -120,6 +120,12 @@ const routes: RouteRecordRaw[] = [
         name: 'ReleaseDependencyGraph',
         component: () => import('@/views/releases/ReleaseDependencyGraphView.vue'),
       },
+      // App diff (two or more releases of one application, compared package by package)
+      {
+        path: 'releases/apps',
+        name: 'AppVersionDiff',
+        component: () => import('@/views/releases/AppDiffView.vue'),
+      },
       // Legacy path kept so old bookmarks keep working
       {
         path: 'release-diff',
