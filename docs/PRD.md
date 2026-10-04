@@ -236,7 +236,7 @@ BaseGitProvider (Abstract)
 - Provider resolution: `get_git_provider(project)` returns the correct adapter
 - Hybrid resolution: registry → payload hint → project config → default
 - Each provider implements: fetch PRs, fetch diffs, sync entities
-- Bitbucket Server/Data Center authentication: Bearer token (PAT) preferred over Basic auth (username + password/app password). When `BITBUCKET_TOKEN` is set, requests use `Authorization: Bearer <token>`; otherwise fall back to Basic auth.
+- Bitbucket Server/Data Center authentication: Bearer token (PAT) preferred over Basic auth (username + password/app password). When `BITBUCKET_SERVER_TOKEN` is set, requests use `Authorization: Bearer <token>`; otherwise fall back to Basic auth.
 
 ### 4.5 SSE Architecture
 
@@ -1206,7 +1206,7 @@ Standalone `monitoring/` directory with independent Docker Compose:
 | **RBAC** | Role-Based Access Control |
 | **Delegation** | Temporary transfer of permissions from one user to another |
 | **PAT** | Personal Access Token — a long-lived API authentication token |
-| **Bitbucket PAT** | Personal Access Token for Bitbucket Server/Data Center used as Bearer auth (`BITBUCKET_TOKEN`), preferred over Basic auth |
+| **Bitbucket PAT** | Personal Access Token for Bitbucket Server/Data Center used as Bearer auth (`BITBUCKET_SERVER_TOKEN`), preferred over Basic auth |
 | **Idle Timeout** | Maximum session inactivity period (default 60 min); token refresh does not extend it |
 | **SSE** | Server-Sent Events — a unidirectional real-time push technology |
 | **SSEBroker** | Singleton service that multiplexes 1 Redis pubsub across all SSE clients |

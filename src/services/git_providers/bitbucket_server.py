@@ -25,28 +25,27 @@ class BitbucketServerProvider(BaseGitProvider):
     """Provider for Bitbucket Server / Data Center REST API."""
 
     def __init__(self) -> None:
-        base_url = getattr(settings, "BITBUCKET_SERVER_URL", "http://localhost:7990")
-        self._server_url = base_url.rstrip("/")
+        self._server_url = settings.BITBUCKET_SERVER_URL.rstrip("/")
         self._base_url = f"{self._server_url}/rest/api/latest"
         self._headers: dict[str, str] = {"Accept": "application/json"}
 
         # Prefer a Personal Access Token (Bitbucket Server/Data Center) as Bearer auth.
         # Fall back to Basic auth (username + password/app password) when no token is set.
-        token = getattr(settings, "BITBUCKET_TOKEN", None)
+        token = settings.BITBUCKET_SERVER_TOKEN
+        user = settings.BITBUCKET_SERVER_USER
+        password = settings.BITBUCKET_SERVER_PASSWORD
         if token:
             self._headers["Authorization"] = f"Bearer {token}"
-        else:
-            user = getattr(settings, "BITBUCKET_USER", None)
-            password = getattr(settings, "BITBUCKET_PASSWORD", None)
-            if user and password:
-                credentials = f"{user}:{password}"
-                encoded = base64.b64encode(credentials.encode()).decode()
-                self._headers["Authorization"] = f"Basic {encoded}"
+        elif user and password:
+            credentials = f"{user}:{password}"
+            encoded = base64.b64encode(credentials.encode()).decode()
+            self._headers["Authorization"] = f"Basic {encoded}"
 
         if "Authorization" not in self._headers:
             logger.warning(
-                "Bitbucket Server credentials are not configured - set BITBUCKET_TOKEN or "
-                "BITBUCKET_USER + BITBUCKET_PASSWORD, otherwise API calls fail with 401"
+                "Bitbucket Server credentials are not configured - set "
+                "BITBUCKET_SERVER_TOKEN or BITBUCKET_SERVER_USER + BITBUCKET_SERVER_PASSWORD, "
+                "otherwise API calls fail with 401"
             )
         else:
             mode = "bearer_token" if token else f"basic(user={user})"

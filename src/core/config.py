@@ -168,18 +168,22 @@ class Settings(BaseSettings):
     BITBUCKET_SERVER_URL: str = Field(
         default="http://localhost:7990", description="Bitbucket Server/Data Center base URL"
     )
-    BITBUCKET_USER: str | None = Field(
-        default=None, description="Bitbucket username for Basic authentication"
+    BITBUCKET_SERVER_USER: str | None = Field(
+        default=None,
+        description="Bitbucket Server/Data Center username for Basic authentication",
     )
-    BITBUCKET_PASSWORD: str | None = Field(
-        default=None, description="Bitbucket password or app password for Basic authentication"
+    BITBUCKET_SERVER_PASSWORD: str | None = Field(
+        default=None,
+        description=(
+            "Bitbucket Server/Data Center password or app password for Basic authentication"
+        ),
     )
-    BITBUCKET_TOKEN: str | None = Field(
+    BITBUCKET_SERVER_TOKEN: str | None = Field(
         default=None,
         description=(
             "Bitbucket Server/Data Center Personal Access Token (PAT). When set, it is "
-            "preferred over BITBUCKET_USER/BITBUCKET_PASSWORD and sent as a Bearer token. "
-            "Only applicable to Bitbucket Server/Data Center (not Bitbucket Cloud)."
+            "preferred over BITBUCKET_SERVER_USER/BITBUCKET_SERVER_PASSWORD and sent as a "
+            "Bearer token. PATs exist on Server/Data Center only, not on Cloud."
         ),
     )
     BITBUCKET_CLOUD_API_URL: str = Field(
@@ -197,19 +201,17 @@ class Settings(BaseSettings):
     BITBUCKET_CLOUD_USER: str | None = Field(
         default=None,
         description=(
-            "Bitbucket Cloud username (Atlassian account). Falls back to BITBUCKET_USER "
-            "when unset - set it explicitly to use Server and Cloud side by side."
+            "Bitbucket Cloud username (Atlassian account). Falls back to "
+            "BITBUCKET_SERVER_USER when unset - set it explicitly to use Server and Cloud "
+            "side by side."
         ),
     )
     BITBUCKET_CLOUD_APP_PASSWORD: str | None = Field(
         default=None,
         description=(
-            "Bitbucket Cloud app password. Falls back to BITBUCKET_PASSWORD when unset - "
-            "set it explicitly to use Server and Cloud side by side."
+            "Bitbucket Cloud app password. Falls back to BITBUCKET_SERVER_PASSWORD when "
+            "unset - set it explicitly to use Server and Cloud side by side."
         ),
-    )
-    BITBUCKET_DEFAULT_WORKSPACE: str = Field(
-        default="default", description="Default workspace/project key for Bitbucket repositories"
     )
     BITBUCKET_CLOUD_WORKSPACES: str = Field(
         default="",
