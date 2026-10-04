@@ -37,6 +37,7 @@ import { GraphChart } from 'echarts/charts'
 import { TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { pinnedEdgeLabels, relatedHighlight } from '@/utils/releaseDependencyGraph'
+import { useTheme } from '@/composables/useTheme'
 import type {
   ReleaseDependencyGraphData,
   ReleaseDependencyGraphLink,
@@ -391,7 +392,14 @@ onBeforeUnmount(() => {
 // placed node is pinned and held from then on.
 const pinnedNodeIds = ref<string[]>([])
 
-const CATEGORY_COLORS = ['#409eff', '#67c23a', '#909399']
+const { primaryColor } = useTheme()
+
+// The application carries the accent; the other categories keep colours of
+// their own so a node's role stays readable whatever the accent is.
+const CATEGORY_COLORS: Record<number, string> = { 1: '#67c23a', 2: '#909399' }
+
+const categoryColor = (category: number): string =>
+  category === 0 ? primaryColor.value : (CATEGORY_COLORS[category] ?? '#909399')
 // Projects carry the page, workspace packages the middle, dependencies the mass.
 const CATEGORY_SYMBOL_SIZES = [52, 38, 26]
 // A dimmed node keeps a readable but retreating label: graph labels carry no
@@ -485,7 +493,7 @@ const chartOption = computed(() => ({
         fixed: pinnedNodeIds.value.includes(node.id),
         symbolSize: CATEGORY_SYMBOL_SIZES[node.category] ?? 26,
         itemStyle: {
-          color: CATEGORY_COLORS[node.category] ?? '#909399',
+          color: categoryColor(node.category),
           borderColor: '#ffffff',
           borderWidth: 1.5,
           opacity: isLitNode(node) ? 1 : DIM_OPACITY,

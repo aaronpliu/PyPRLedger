@@ -4,7 +4,7 @@
       <el-card shadow="always" class="prompt-card">
         <div class="prompt-content">
           <div class="prompt-icon">
-            <el-icon :size="48" color="#409eff"><Download /></el-icon>
+            <el-icon :size="48" :color="primaryColor"><Download /></el-icon>
           </div>
           <div class="prompt-text">
             <h3>Install PR Ledger</h3>
@@ -44,6 +44,9 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { Download } from '@element-plus/icons-vue'
 import { ElNotification } from 'element-plus'
+import { useTheme } from '@/composables/useTheme'
+
+const { primaryColor } = useTheme()
 
 const showInstallPrompt = ref(false)
 const isOffline = ref(false)

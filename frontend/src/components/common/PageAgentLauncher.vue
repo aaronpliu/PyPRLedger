@@ -132,13 +132,13 @@ function handleClick() {
   width: 54px;
   height: 54px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #409eff, #6366f1);
+  background: linear-gradient(135deg, var(--el-color-primary), var(--el-color-primary-dark-2));
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(64, 158, 255, 0.4);
+  box-shadow: 0 4px 14px rgba(var(--el-color-primary-rgb), 0.4);
   transition: box-shadow 0.3s ease, transform 0.2s ease;
   user-select: none;
   overflow: hidden;
@@ -146,8 +146,8 @@ function handleClick() {
 
 .page-agent-launcher:hover {
   transform: scale(1.12);
-  box-shadow: 0 6px 24px rgba(64, 158, 255, 0.55),
-    0 0 40px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 6px 24px rgba(var(--el-color-primary-rgb), 0.55),
+    0 0 40px rgba(var(--el-color-primary-rgb), 0.25);
 }
 
 .page-agent-launcher.is-active {

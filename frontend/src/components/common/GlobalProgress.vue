@@ -36,7 +36,7 @@ const { visible } = useProgress()
 .global-progress-track {
   height: 3px;
   overflow: hidden;
-  background: rgba(64, 158, 255, 0.18);
+  background: rgba(var(--el-color-primary-rgb), 0.18);
 }
 
 /* No total is knowable, so the bar states that work is happening rather than how

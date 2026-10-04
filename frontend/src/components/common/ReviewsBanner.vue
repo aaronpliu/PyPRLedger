@@ -80,7 +80,7 @@ onMounted(async () => {
 .reviews-banner {
   flex-shrink: 0;
   height: 28px;
-  background: linear-gradient(135deg, var(--el-color-primary), #6366f1);
+  background: linear-gradient(135deg, var(--el-color-primary), var(--el-color-primary-dark-2));
   color: #fff;
   font-size: 13px;
   line-height: 28px;
@@ -89,10 +89,9 @@ onMounted(async () => {
   padding: 0 20px;
 }
 
-/* Dark theme adjustment for the gradient */
+/* Dark theme adjustment — the gradient itself is the accent in both modes */
 [data-theme="dark"] .reviews-banner {
-  background: linear-gradient(135deg, #4f46e5, #6366f1);
-  box-shadow: 0 2px 12px rgba(79, 70, 229, 0.35);
+  box-shadow: 0 2px 12px rgba(var(--el-color-primary-rgb), 0.35);
   border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 

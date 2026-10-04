@@ -21,7 +21,7 @@
       <path
         v-if="linePath"
         :d="linePath"
-        :stroke="color"
+        :stroke="accentColor"
         :stroke-width="strokeWidth"
         fill="none"
         stroke-linecap="round"
@@ -36,7 +36,7 @@
         :cx="point.x"
         :cy="point.y"
         :r="dotRadius"
-        :fill="color"
+        :fill="accentColor"
         class="sparkline-dot"
         :class="{ 'sparkline-dot--last': index === data.length - 1 }"
       />
@@ -46,6 +46,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useTheme } from '@/composables/useTheme'
 
 interface Props {
   data: number[]
@@ -62,12 +63,16 @@ const props = withDefaults(defineProps<Props>(), {
   data: () => [],
   width: 200,
   height: '60px',
-  color: '#409eff',
+  // No colour default: with none given the line takes the accent in effect.
   strokeWidth: 2,
   showDots: false,
   dotRadius: 3,
   showArea: true,
 })
+
+const { primaryColor } = useTheme()
+
+const accentColor = computed(() => props.color || primaryColor.value)
 
 const svgRef = ref<SVGSVGElement>()
 
@@ -78,7 +83,7 @@ const heightNum = computed(() => {
 })
 
 // Calculate gradient color (slightly lighter version of main color)
-const gradientColor = computed(() => props.color)
+const gradientColor = computed(() => accentColor.value)
 
 // Generate line path
 const linePath = computed(() => {

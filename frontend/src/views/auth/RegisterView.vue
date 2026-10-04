@@ -407,8 +407,8 @@ const handleLanguageChange = (lang: string) => {
 }
 
 [data-theme='dark'] .card-subtitle {
-  background: rgba(64, 158, 255, 0.1);
-  border-color: rgba(64, 158, 255, 0.3);
+  background: rgba(var(--el-color-primary-rgb), 0.1);
+  border-color: rgba(var(--el-color-primary-rgb), 0.3);
 }
 
 .rainbow-line {

@@ -1771,17 +1771,14 @@ watch(
 .reviewer-avatar {
   vertical-align: middle;
   margin-right: 8px;
-  background: linear-gradient(135deg, #2563eb 0%, #0f766e 100%);
+  /* A two-hue brand gradient cannot survive an arbitrary accent, so the avatar
+     takes the accent ramp: lighter to darker, in both modes. */
+  background: linear-gradient(135deg, var(--el-color-primary) 0%, var(--el-color-primary-dark-2) 100%);
   color: #ffffff;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.22);
-}
-
-[data-theme='dark'] .reviewer-avatar {
-  background: linear-gradient(135deg, #3b82f6 0%, #14b8a6 100%);
-  box-shadow: 0 1px 4px rgba(20, 184, 166, 0.18);
+  box-shadow: 0 1px 3px rgba(var(--el-color-primary-rgb), 0.22);
 }
 
 .summary-text {

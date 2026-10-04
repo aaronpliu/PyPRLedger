@@ -13,6 +13,8 @@ import {
   LegendComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
+import { useTheme } from '@/composables/useTheme'
+import { hexToRgba } from '@/utils/themeColor'
 
 use([
   RadarChart,
@@ -33,6 +35,8 @@ const props = withDefaults(defineProps<Props>(), {
   title: 'Radar Analysis',
   height: '350px',
 })
+
+const { primaryColor } = useTheme()
 
 const chartOption = computed(() => ({
   title: {
@@ -60,7 +64,7 @@ const chartOption = computed(() => ({
     splitArea: {
       show: true,
       areaStyle: {
-        color: ['rgba(64, 158, 255, 0.05)', 'rgba(64, 158, 255, 0.1)'],
+        color: [hexToRgba(primaryColor.value, 0.05), hexToRgba(primaryColor.value, 0.1)],
       },
     },
   },

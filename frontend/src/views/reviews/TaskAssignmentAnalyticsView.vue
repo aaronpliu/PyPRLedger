@@ -196,7 +196,6 @@
             v-if="timePeriodData.length > 0"
             :title="''"
             :data="timePeriodData.map(d => ({ date: d.date, value: d.count }))"
-            color="#409eff"
             height="350px"
             :axis-label-color="chartColors.axisLabelColor"
             :axis-line-color="chartColors.axisLineColor"
@@ -1011,21 +1010,21 @@ onMounted(() => {
 /* ===== Card 1: Primary Style (Total Reviews) ===== */
 .stat-card--primary {
   background: var(--el-bg-color);
-  border: 2px solid #3b82f6;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  border: 2px solid var(--el-color-primary);
+  box-shadow: 0 4px 12px rgba(var(--el-color-primary-rgb), 0.15);
 }
 
 [data-theme='dark'] .stat-card--primary {
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 4px 12px rgba(var(--el-color-primary-rgb), 0.25);
 }
 
 .stat-card--primary:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 8px 20px rgba(var(--el-color-primary-rgb), 0.25);
 }
 
 .stat-card--primary .primary-icon {
-  color: #3b82f6;
+  color: var(--el-color-primary);
 }
 
 /* ===== Card 2: Success Style (Active Reviews) ===== */
