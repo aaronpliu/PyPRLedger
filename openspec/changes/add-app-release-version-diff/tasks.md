@@ -61,3 +61,12 @@
 - [x] 6.2 Read it once per adjacent pair whose releases both have a record, through the existing `ReleaseDiffService.compare_releases`, passing the two release refs and the request's refresh flag, and changing nothing in that service
 - [x] 6.3 Degrade per pair: record why a pair's commits could not be read - an unreachable provider, a release ref the provider does not know - instead of failing the request, and never report such a pair as one with no commits
 - [x] 6.4 Skip the whole code axis when the request does not ask for it, and cache it with the comparison it belongs to
+
+## 7. The application's own version
+
+- [x] 7.1 Read each release's own version alongside the dependencies it declares, and make it the first row of the matrix
+- [x] 7.2 Classify that row exactly as a dependency row is, and count it in each pair's summary, while `dependencies_moved` reports the dependency rows alone
+- [x] 7.3 Read a trailing `_<digits>` build suffix as build metadata, so `1.0.0_10000` to `1.1.0_10000` is an upgrade and a build bump within one version has no direction
+- [x] 7.4 Render the application's row first and distinguish it from the dependency rows, in all three locales
+- [x] 7.5 Tests, backend: the application's row and its direction, a build bump with no direction, `dependencies_moved` ignoring the application's own move, and the summary counting it
+- [x] 7.6 Tests, frontend: the application's row rendered first and marked, and the rebuild statement still driven by the dependency rows alone

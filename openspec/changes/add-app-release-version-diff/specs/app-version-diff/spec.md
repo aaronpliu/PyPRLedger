@@ -1,8 +1,29 @@
 ## ADDED Requirements
 
-### Requirement: Compare two or more application releases at direct-dependency level
+### Requirement: Compare two or more application releases, the application itself among them
 
-The system SHALL compare two or more releases of one application and present a version matrix: one column per selected release, in the order the releases are dated, and one row per direct dependency of the application across all selected releases. A dependency declared in only some of the releases SHALL appear in every column, with an empty cell where it is absent, so the row reads as one package rather than several. A comparison of fewer than two releases SHALL be rejected as a request that cannot be answered.
+The system SHALL compare two or more releases of one application and present a version matrix: one column per selected release, in the order the releases are dated, and one row per compared entry across all selected releases - **the application's own version first**, then each direct dependency the application declares. A dependency declared in only some of the releases SHALL appear in every column, with an empty cell where it is absent, so the row reads as one package rather than several. A comparison of fewer than two releases SHALL be rejected as a request that cannot be answered.
+
+The application's own version SHALL be read for every selected release and classified exactly as a dependency row is, so that a release which moved its own version while every dependency stayed put is reported as the change it is, rather than as a comparison in which nothing happened.
+
+#### Scenario: The application's own version moved
+
+- **WHEN** the application is `1.0.0` in one release and `1.1.0` in the next, and every dependency carries the same version in both
+- **THEN** the application's row SHALL be reported as changed, with its direction
+- **AND** the dependency rows SHALL be reported as unchanged
+
+#### Scenario: The application is a row of the matrix
+
+- **WHEN** a comparison is displayed
+- **THEN** the application's own version SHALL be the first row
+- **AND** that row SHALL be distinguishable from the dependency rows
+- **AND** the counts of each pair SHALL cover it together with the dependency rows
+
+#### Scenario: A build number does not carry a direction
+
+- **WHEN** the application moves from `1.0.0_10000` to `1.0.0_20000` - the same version, a later build
+- **THEN** the row SHALL be reported as changed with no direction
+- **AND** it MUST NOT be reported as an upgrade
 
 #### Scenario: A package present in every release
 
@@ -46,9 +67,15 @@ For every pair of adjacent columns the system SHALL report each dependency as un
 
 #### Scenario: No move between adjacent releases
 
-- **WHEN** every dependency carries the same version in two adjacent releases
+- **WHEN** the application and every dependency carry the same version in two adjacent releases
 - **THEN** that interval SHALL report no changes
 - **AND** its summary counts SHALL all be zero
+
+#### Scenario: The dependencies alone are reported for the rebuild reading
+
+- **WHEN** the application's own version moved between two adjacent releases while every dependency carried the same version
+- **THEN** the pair SHALL report that a dependency moved as false
+- **AND** the application's own move SHALL still be counted in the pair's summary
 
 ### Requirement: Releases are ordered along the release datetime timeline
 

@@ -1,6 +1,7 @@
 import type {
   AppVersionDiffCode,
   AppVersionDiffCommit,
+  AppVersionDiffInterval,
   AppVersionDiffMove,
   AppVersionDiffResponse,
 } from '@/api/appVersionDiff'
@@ -20,6 +21,8 @@ export interface AppDiffCell {
 }
 
 export interface AppDiffRow {
+  /** `application` for the application's own version, `dependency` for a package. */
+  kind: 'application' | 'dependency'
   name: string
   cells: AppDiffCell[]
 }
@@ -38,17 +41,19 @@ export type MoveTone =
 export const SUMMARY_ORDER = ['changed', 'added', 'removed'] as const
 
 /**
- * The rows the table draws, one per package, in the order the server returned
- * them: cells follow the release columns, and each cell carries the move into it.
+ * The rows the table draws, in the order the server returned them - the
+ * application's own version first: cells follow the release columns, and each
+ * cell carries the move into it.
  */
 export function buildRows(response: AppVersionDiffResponse): AppDiffRow[] {
-  return response.packages.map((pkg) => ({
-    name: pkg.name,
+  return response.rows.map((row) => ({
+    kind: row.kind,
+    name: row.name,
     cells: response.releases.map((release, index) => ({
       ref: release.ref,
-      version: pkg.versions[index] ?? null,
+      version: row.versions[index] ?? null,
       hasRecord: release.has_record,
-      move: index === 0 ? undefined : (pkg.moves[index - 1] ?? null),
+      move: index === 0 ? undefined : (row.moves[index - 1] ?? null),
     })),
   }))
 }
@@ -145,15 +150,17 @@ export function commitTotal(code: AppVersionDiffCode | null | undefined): number
  * The case the code axis exists for: a tag was moved to a new commit and what it
  * pins stayed identical, so the dependency axis alone would report that nothing
  * happened about a release that shipped different code.
+ *
+ * The reading comes from `dependencies_moved` rather than the pair's summary,
+ * because the summary also counts the application's own version - which can move
+ * on its own without a single dependency moving.
  */
 export function rebuiltWithUnchangedDependencies(
-  summary: Record<string, number> | undefined,
+  interval: AppVersionDiffInterval,
   code: AppVersionDiffCode | null | undefined,
 ): boolean {
   if (!code || code.unavailable) return false
-  const moved =
-    (summary?.changed ?? 0) + (summary?.added ?? 0) + (summary?.removed ?? 0) > 0
-  return !moved && commitTotal(code) > 0
+  return !interval.dependencies_moved && commitTotal(code) > 0
 }
 
 /** A commit's short form, and the first line of what it says. */

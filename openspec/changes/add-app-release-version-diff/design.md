@@ -75,6 +75,8 @@ Only the root node's `dependencies` map - what the application pinned - enters t
 
 A version is parsed into numeric components plus a pre-release part. Ordering follows semver precedence, including a pre-release sorting before its release (`1.2.0-rc.0 < 1.2.0`). A value that does not parse - a range, a tag-like string, `2.2602.1-demo-rc.2` in a form the parser cannot order - leaves the entry `changed` **without a direction**, and a downgrade is never rendered as an upgrade.
 
+A trailing `_<digits>` - the build suffix this project's releases carry (`1.0.0_10000`) - is read as build metadata and takes no part in the ordering, so `1.0.0_10000` to `1.1.0_10000` is an upgrade while a build bump within one version is a change with no direction.
+
 *Rationale:* the project publishes version-like refs and pre-release builds; a silent lexical comparison would render `2.9.0` as newer than `2.2601.0`.
 
 ### D6. Honesty about the horizon: a missing release makes the comparison incomplete
@@ -156,6 +158,14 @@ The axis is reported per pair and degrades on its own. A provider that cannot be
 The cost is one comparison per pair (N-1 for N releases), served from the release-diff cache when the same pair is compared again, and skippable per request.
 
 *Rationale:* the dependency axis alone cannot prove that nothing happened. A tag moved to a new commit while the versions it pins stayed identical yields an empty dependency axis, and the page would then say "no changes" about a release that shipped different code. The commits between the two release refs are exactly what answers that, and the tool that reads them already exists.
+
+### D12. The application's own version is a row, and the dependency-only signal is a field
+
+What changed includes the application's own version. A release that moved from `1.0.0_10000` to `1.1.0_10000` while every dependency stayed put is a different statement from a release in which nothing moved, and this page is where that should be legible. The application is therefore the first row of the matrix, read from the release record's own version - the key the dependency database holds it under, which is what the column header names - and classified and counted exactly like a dependency row.
+
+That makes one reading ambiguous: "the dependencies did not move" stops being the same as "the summary is empty", because the application's own row can move by itself. Each pair therefore also carries `dependencies_moved`, decided over the dependency rows alone, and that is the field the rebuild statement reads: no dependency moved, and the commits did.
+
+*Alternative:* leaving the application out of the matrix and letting the column header carry it (rejected: the header names the release, but nothing then says whether the application's own version moved, which is the first thing a reader of a version comparison looks for).
 
 ## Risks / Trade-offs
 

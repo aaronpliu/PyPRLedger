@@ -34,8 +34,14 @@ export interface AppVersionDiffMove {
   orderable: boolean
 }
 
-/** One row of the matrix: a package across every selected release. */
-export interface AppVersionDiffPackage {
+/**
+ * One row of the matrix: an entry across every selected release.
+ *
+ * The first row is the application itself - its own version is one of the things
+ * a release comparison is about - and the rest are the dependencies it declares.
+ */
+export interface AppVersionDiffRow {
+  kind: 'application' | 'dependency'
   name: string
   /** One entry per release, in the order they are presented; null where not declared. */
   versions: (string | null)[]
@@ -78,7 +84,13 @@ export interface AppVersionDiffInterval {
   target_ref: string
   /** False when a release of the pair has no record: the pair is unknown, not unchanged. */
   complete: boolean
+  /** Counts over every row, the application's own included. */
   summary: Record<string, number>
+  /**
+   * Whether any dependency row moved. Decided over the dependency rows alone, so
+   * the application moving its own version does not turn it true.
+   */
+  dependencies_moved: boolean
   changes: AppVersionDiffMove[]
   /** Null when the pair is incomplete or the request did not ask for the code axis. */
   code: AppVersionDiffCode | null
@@ -92,7 +104,8 @@ export interface AppVersionDiffResponse {
   releases: AppVersionDiffRelease[]
   verdict: 'identical' | 'changed' | 'incomplete'
   summary: Record<string, number>
-  packages: AppVersionDiffPackage[]
+  /** The matrix: the application's own version first, then its direct dependencies. */
+  rows: AppVersionDiffRow[]
   intervals: AppVersionDiffInterval[]
 }
 

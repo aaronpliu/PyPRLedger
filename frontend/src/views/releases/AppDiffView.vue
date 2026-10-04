@@ -263,7 +263,7 @@
               </p>
 
               <p
-                v-if="rebuiltWithUnchangedDependencies(interval.summary, interval.code)"
+                v-if="rebuiltWithUnchangedDependencies(interval, interval.code)"
                 class="rebuilt"
                 data-test="rebuilt"
               >
@@ -343,8 +343,26 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in rows" :key="row.name">
-              <th class="package-col" scope="row">{{ row.name }}</th>
+            <tr
+              v-for="row in rows"
+              :key="`${row.kind}:${row.name}`"
+              :class="{ 'row-application': row.kind === 'application' }"
+              :data-test="`row-${row.kind}`"
+            >
+              <th class="package-col" scope="row">
+                <span>{{ row.name }}</span>
+                <!-- the application's own version is a row like the others, and
+                     is marked so it does not read as one of its dependencies -->
+                <el-tag
+                  v-if="row.kind === 'application'"
+                  class="kind"
+                  size="small"
+                  type="primary"
+                  data-test="application-row"
+                >
+                  {{ t('appDiff.application') }}
+                </el-tag>
+              </th>
               <td
                 v-for="(cell, index) in row.cells"
                 :key="`${row.name}:${cell.ref}`"
@@ -847,6 +865,15 @@ watch(selectedRefs, (refs) => {
   left: 0;
   background: var(--el-bg-color);
   z-index: 1;
+}
+
+.matrix .package-col .kind {
+  margin-left: 8px;
+  font-weight: 400;
+}
+
+.matrix .row-application .package-col {
+  font-weight: 700;
 }
 
 .matrix thead .package-col {

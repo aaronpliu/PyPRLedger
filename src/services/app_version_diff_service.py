@@ -1,12 +1,18 @@
 """App Diff service.
 
-Compares two or more releases of one application at direct-dependency level.
+Compares two or more releases of one application, the application itself among them.
 
 Each release is read from the dependency source - the same one the Release
 Dependency Graph draws from - and the releases are placed on their datetime
-timeline. Every adjacent pair on that timeline is then compared package by
-package: the same question a repository comparison asks about one repository at
-two refs, asked about one package at two versions.
+timeline. Every adjacent pair on that timeline is then compared entry by entry -
+the application's own version first, then each dependency it declares: the same
+question a repository comparison asks about one repository at two refs, asked
+about one entry at two versions.
+
+The application's own version is a row for the same reason it is a row of any
+release comparison: a release that moved its version while every dependency
+stayed put is a change, and it would otherwise read as a comparison in which
+nothing happened.
 
 Two rules decide most of the behaviour: a release the source holds no record for
 makes its comparisons unknown rather than empty, and a pair of versions that
@@ -26,6 +32,8 @@ from src.core.exceptions import DependencyGraphNotFoundException
 from src.schemas.app_version_diff import (
     DIRECTION_DOWNGRADE,
     DIRECTION_UPGRADE,
+    KIND_APPLICATION,
+    KIND_DEPENDENCY,
     STATE_ADDED,
     STATE_CHANGED,
     STATE_REMOVED,
@@ -37,10 +45,10 @@ from src.schemas.app_version_diff import (
     AppVersionDiffCode,
     AppVersionDiffInterval,
     AppVersionDiffMove,
-    AppVersionDiffPackage,
     AppVersionDiffRelease,
     AppVersionDiffRequest,
     AppVersionDiffResponse,
+    AppVersionDiffRow,
 )
 from src.schemas.release_diff import VERDICT_INCONCLUSIVE, ReleaseCompareRequest
 from src.services.dependency_graph_service import DependencyGraphService
@@ -70,11 +78,13 @@ PROJECT_CATEGORY = 0
 CODE_RENDER_LIMIT = 30
 
 # A version as an application declares it: an optional `v`, up to three numeric
-# components, an optional pre-release, an optional build metadata suffix.
-# Anything else - a range, a branch-like label - is left unordered rather than
-# guessed at.
+# components, an optional pre-release, an optional build metadata suffix - and,
+# because this project's releases carry one, an optional trailing `_<digits>`
+# build number. Anything else - a range, a branch-like label - is left unordered
+# rather than guessed at.
 VERSION_PATTERN = re.compile(
-    r"^[vV]?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
+    r"^[vV]?(\d+)(?:\.(\d+))?(?:\.(\d+))?"
+    r"(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?(?:_\d+)?$"
 )
 
 ParsedVersion = tuple[int, int, int, "tuple[str, ...] | None"]
@@ -209,8 +219,8 @@ class AppVersionDiffService:
         reads = await self._read_releases(request, app_name, provider_name)
         release_entries = await self._place_on_timeline(request, reads, provider_name)
 
-        packages = self._build_matrix(release_entries)
-        intervals = self._compare_intervals(release_entries, packages)
+        rows = self._build_matrix(release_entries, app_name)
+        intervals = self._compare_intervals(release_entries, rows)
         if request.include_code:
             await self._attach_code(request, intervals, provider_name)
         response = self._build_response(
@@ -218,7 +228,7 @@ class AppVersionDiffService:
             app_name=app_name,
             provider_name=provider_name,
             releases=release_entries,
-            packages=packages,
+            rows=rows,
             intervals=intervals,
         )
 
@@ -231,7 +241,7 @@ class AppVersionDiffService:
                 "project_key": request.project_key,
                 "repository_slug": request.repository_slug,
                 "releases": [entry["ref"] for entry in release_entries],
-                "packages": len(packages),
+                "rows": len(rows),
                 "verdict": response.verdict,
                 "summary": response.summary,
             },
@@ -272,6 +282,7 @@ class AppVersionDiffService:
                         "index": index,
                         "has_record": False,
                         "declared": {},
+                        "app_version": None,
                         "recorded_at": None,
                     }
                 )
@@ -283,24 +294,31 @@ class AppVersionDiffService:
                     "index": index,
                     "has_record": True,
                     "declared": self._declared_dependencies(graph),
+                    # the application's own version, which is the key its record is held under
+                    "app_version": str(self._application_node(graph).get("version") or ref),
                     "recorded_at": graph.get("generated_at"),
                 }
             )
         return reads
 
     @staticmethod
-    def _declared_dependencies(graph: dict[str, Any]) -> dict[str, str]:
+    def _application_node(graph: dict[str, Any]) -> dict[str, Any]:
+        """The application's own node out of a graph of one release."""
+        for node in graph.get("packages") or []:
+            if node.get("category") == PROJECT_CATEGORY:
+                return node
+        return {}
+
+    @classmethod
+    def _declared_dependencies(cls, graph: dict[str, Any]) -> dict[str, str]:
         """What the application itself pinned, out of a graph of one release.
 
         Only the root node's map is read: the packages the source reports further
         down the closure are what the application pulls in, which is a different
         question and deliberately not compared here.
         """
-        for package in graph.get("packages") or []:
-            if package.get("category") == PROJECT_CATEGORY:
-                declared = package.get("dependencies") or {}
-                return {str(name): str(version) for name, version in declared.items()}
-        return {}
+        declared = cls._application_node(graph).get("dependencies") or {}
+        return {str(name): str(version) for name, version in declared.items()}
 
     # ------------------------------------------------------------------ #
     # Placing the releases on their timeline
@@ -390,36 +408,57 @@ class AppVersionDiffService:
     # The matrix and the comparisons
     # ------------------------------------------------------------------ #
 
-    def _build_matrix(self, releases: list[dict[str, Any]]) -> list[AppVersionDiffPackage]:
-        """One row per direct dependency, one column per release.
+    def _build_matrix(
+        self, releases: list[dict[str, Any]], app_name: str
+    ) -> list[AppVersionDiffRow]:
+        """The application's own version first, then one row per direct dependency.
 
-        The row set is the union of what the releases with records declare, so a
-        package only a later release added still has a row - with empty cells
-        before it - instead of appearing twice.
+        The dependency row set is the union of what the releases with records
+        declare, so a package only a later release added still has a row - with
+        empty cells before it - instead of appearing twice. Nothing is compared
+        before some release has a record: until then there is nothing to say.
         """
+        rows: list[AppVersionDiffRow] = []
+        if not any(release["has_record"] for release in releases):
+            return rows
+
+        rows.append(
+            AppVersionDiffRow(
+                kind=KIND_APPLICATION,
+                name=app_name,
+                versions=[
+                    release["app_version"] if release["has_record"] else None
+                    for release in releases
+                ],
+                moves=[],
+            )
+        )
+
         names = {
             name for release in releases if release["has_record"] for name in release["declared"]
         }
-        ordered = sorted(names, key=lambda name: (name.lower(), name))
-
-        packages: list[AppVersionDiffPackage] = []
-        for name in ordered:
+        for name in sorted(names, key=lambda name: (name.lower(), name)):
             versions: list[str | None] = [
                 release["declared"].get(name) if release["has_record"] else None
                 for release in releases
             ]
-            packages.append(AppVersionDiffPackage(name=name, versions=versions, moves=[]))
-        return packages
+            rows.append(
+                AppVersionDiffRow(kind=KIND_DEPENDENCY, name=name, versions=versions, moves=[])
+            )
+        return rows
 
     def _compare_intervals(
         self,
         releases: list[dict[str, Any]],
-        packages: list[AppVersionDiffPackage],
+        rows: list[AppVersionDiffRow],
     ) -> list[AppVersionDiffInterval]:
-        """Compare every adjacent pair, and fill each package's moves.
+        """Compare every adjacent pair, and fill each row's moves.
 
         A pair that involves a release with no record has no moves: what that
         release declared is unknown, so reporting "unchanged" would be a guess.
+        The summary counts every row, the application's own included;
+        ``dependencies_moved`` is decided over the dependency rows alone, which
+        is what the rebuild reading is built on.
         """
         intervals: list[AppVersionDiffInterval] = []
 
@@ -429,30 +468,33 @@ class AppVersionDiffService:
             complete = bool(source["has_record"] and target["has_record"])
             summary = empty_summary()
             changes: list[AppVersionDiffMove] = []
+            dependencies_moved = False
 
-            for package in packages:
+            for row in rows:
                 if not complete:
-                    package.moves.append(None)
+                    row.moves.append(None)
                     continue
 
-                source_version = package.versions[boundary]
-                target_version = package.versions[boundary + 1]
+                source_version = row.versions[boundary]
+                target_version = row.versions[boundary + 1]
                 state, direction, orderable = compare_versions(source_version, target_version)
                 summary[state] += 1
                 if direction:
                     summary[direction] += 1
 
                 move = AppVersionDiffMove(
-                    name=package.name,
+                    name=row.name,
                     source_version=source_version,
                     target_version=target_version,
                     state=state,
                     direction=direction,
                     orderable=orderable,
                 )
-                package.moves.append(move)
+                row.moves.append(move)
                 if state != STATE_UNCHANGED:
                     changes.append(move)
+                    if row.kind == KIND_DEPENDENCY:
+                        dependencies_moved = True
 
             intervals.append(
                 AppVersionDiffInterval(
@@ -460,6 +502,7 @@ class AppVersionDiffService:
                     target_ref=target["ref"],
                     complete=complete,
                     summary=summary,
+                    dependencies_moved=dependencies_moved,
                     changes=changes,
                 )
             )
@@ -527,7 +570,7 @@ class AppVersionDiffService:
         app_name: str,
         provider_name: str,
         releases: list[dict[str, Any]],
-        packages: list[AppVersionDiffPackage],
+        rows: list[AppVersionDiffRow],
         intervals: list[AppVersionDiffInterval],
     ) -> AppVersionDiffResponse:
         """Assemble the answer, including the one part that must never be faked."""
@@ -565,7 +608,7 @@ class AppVersionDiffService:
             ],
             verdict=verdict,
             summary=summary,
-            packages=packages,
+            rows=rows,
             intervals=intervals,
         )
 

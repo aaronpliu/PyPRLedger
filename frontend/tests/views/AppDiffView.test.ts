@@ -6,6 +6,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import AppDiffView from '@/views/releases/AppDiffView.vue'
 import enMessages from '@/locales/en.json'
 import { appVersionDiffApi } from '@/api/appVersionDiff'
+import { RELEASE_EARLIER, RELEASE_LATER, RELEASE_MISSING } from '../fixtures/appDiff'
 
 // The repository and its refs come from the provider in the running app; the
 // stand-ins hand over the one project, the one repository and the refs the
@@ -160,10 +161,36 @@ describe('AppDiffView', () => {
     await openOn(wrapper)
 
     const intervals = wrapper.find('[data-test="intervals"]')
-    expect(intervals.text()).toContain('3 changed')
+    // four changed: three dependencies and the application's own version
+    expect(intervals.text()).toContain('4 changed')
     expect(intervals.text()).toContain('1 added')
     expect(intervals.text()).toContain('1 removed')
     expect(intervals.text()).toContain('1 downgraded')
+  })
+
+  it("shows the application's own version as the first row of the matrix", async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    const matrix = wrapper.find('[data-test="matrix"]')
+    const headerRow = matrix.find('thead tr')
+    const firstRow = matrix.find('tbody tr')
+    expect(firstRow.find('th').text()).toContain('mylang')
+    expect(firstRow.find('[data-test="application-row"]').exists()).toBe(true)
+
+    // it is a row of the same table as the dependencies, above them
+    expect(matrix.findAll('tbody tr').length).toBe(7)
+    expect(firstRow.find('th').text()).not.toBe(headerRow.text())
+
+    // and its move is classified like theirs
+    expect(wrapper.find('[data-test="cell-mylang-1"]').classes()).toContain('cell-upgrade')
+  })
+
+  it('marks only the application row as the application', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    expect(wrapper.findAll('[data-test="application-row"]')).toHaveLength(1)
   })
 
   it('asks for two releases before it compares', async () => {
@@ -260,6 +287,29 @@ describe('AppDiffView', () => {
     // no counts and no toggle, so nothing reads as a pair without commits
     expect(wrapper.find('[data-test="code-counts"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="code-toggle"]').exists()).toBe(false)
+  })
+
+  it('compares three releases as two adjacent pairs, in timeline order', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    // picked out of order on purpose: the columns, and the pairs, follow the dates
+    await pick(wrapper, 3, [RELEASE_LATER, RELEASE_EARLIER, RELEASE_MISSING])
+
+    const headers = wrapper.findAll('[data-test="matrix"] thead th')
+    // the first header names the row column; the rest are the releases, by date
+    expect(headers[0].text()).toContain('Package')
+    expect(headers[1].text()).toContain(RELEASE_EARLIER)
+    expect(headers[2].text()).toContain(RELEASE_LATER)
+    expect(headers[3].text()).toContain(RELEASE_MISSING)
+
+    // three releases are three columns and two pairs: 1.0.0 -> 1.1.0, 1.1.0 -> 1.2.0
+    const intervals = wrapper.findAll('[data-test="intervals"] article')
+    expect(intervals).toHaveLength(2)
+    expect(intervals[0].text()).toContain(RELEASE_EARLIER)
+    expect(intervals[0].text()).toContain(RELEASE_LATER)
+    expect(intervals[1].text()).toContain(RELEASE_LATER)
+    expect(intervals[1].text()).toContain(RELEASE_MISSING)
   })
 
   it('shows no code axis for a pair it could not compare', async () => {

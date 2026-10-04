@@ -1172,6 +1172,7 @@
     "move_added": "Added",
     "move_removed": "Removed",
     "package": "Package",
+    "application": "app",
     "no_date": "no date",
     "no_record": "no record",
     "code_added": "{count} commits added",

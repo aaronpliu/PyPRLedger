@@ -16,7 +16,7 @@ import {
   summaryEntries,
 } from '@/utils/appVersionDiff'
 import type { AppVersionDiffMove } from '@/api/appVersionDiff'
-import { diffOf } from '../fixtures/appDiff'
+import { APP_NAME, diffOf } from '../fixtures/appDiff'
 
 const TWO = ['v1.1.0', 'v2.0.0']
 const THREE = ['v1.1.0', 'v2.0.0', 'v9.9.9']
@@ -40,10 +40,11 @@ function move(overrides: Partial<AppVersionDiffMove> = {}): AppVersionDiffMove {
 }
 
 describe('buildRows', () => {
-  it('gives every package one cell per release, in column order', () => {
+  it('gives every row one cell per release, in column order', () => {
     const rows = buildRows(diffOf({ refs: TWO }))
 
     expect(rows.map((row) => row.name)).toEqual([
+      APP_NAME,
       'packageA',
       'packageB',
       'packageC',
@@ -51,8 +52,24 @@ describe('buildRows', () => {
       'packageE',
       'packageF',
     ])
-    expect(rows[0].cells.map((cell) => cell.ref)).toEqual(TWO)
-    expect(rows[0].cells.map((cell) => cell.version)).toEqual(['1.0.0', '1.0.1'])
+    expect(rows[1].cells.map((cell) => cell.ref)).toEqual(TWO)
+    expect(rows[1].cells.map((cell) => cell.version)).toEqual(['1.0.0', '1.0.1'])
+  })
+
+  it("puts the application's own version first, and marks it as the application", () => {
+    const rows = buildRows(diffOf({ refs: TWO }))
+
+    expect(rows[0].kind).toBe('application')
+    expect(rows[0].name).toBe(APP_NAME)
+    expect(rows[0].cells.map((cell) => cell.version)).toEqual([
+      '1.0.0_10000',
+      '1.1.0_10000',
+    ])
+    // and it is classified like any other row
+    expect(rows[0].cells[1].move?.state).toBe('changed')
+    expect(rows[0].cells[1].move?.direction).toBe('upgrade')
+    // every row after it is a dependency
+    expect(rows.slice(1).every((row) => row.kind === 'dependency')).toBe(true)
   })
 
   it('keeps an absent version as an empty cell rather than a zero', () => {
@@ -121,8 +138,9 @@ describe('summaryEntries', () => {
   it('reports the counts that moved, in a fixed order', () => {
     const entries = summaryEntries(diffOf({ refs: TWO }).intervals[0].summary)
 
+    // four changed: three dependencies and the application's own version
     expect(entries).toEqual([
-      { state: 'changed', count: 3 },
+      { state: 'changed', count: 4 },
       { state: 'added', count: 1 },
       { state: 'removed', count: 1 },
     ])
@@ -203,32 +221,44 @@ describe('rebuiltWithUnchangedDependencies', () => {
     expect(interval.summary.changed).toBe(0)
     expect(interval.summary.added).toBe(0)
     expect(interval.summary.removed).toBe(0)
-    expect(rebuiltWithUnchangedDependencies(interval.summary, interval.code)).toBe(true)
+    expect(interval.dependencies_moved).toBe(false)
+    expect(rebuiltWithUnchangedDependencies(interval, interval.code)).toBe(true)
   })
 
   it('does not say it of a pair whose dependencies moved', () => {
     const interval = diffOf({ refs: TWO }).intervals[0]
 
-    expect(rebuiltWithUnchangedDependencies(interval.summary, interval.code)).toBe(false)
+    expect(rebuiltWithUnchangedDependencies(interval, interval.code)).toBe(false)
   })
 
   it('does not say it of a pair whose commits could not be read', () => {
     const interval = diffOf({ refs: ['v1.1.0', 'v4.0.0'] }).intervals[0]
 
-    expect(rebuiltWithUnchangedDependencies(interval.summary, interval.code)).toBe(false)
-    expect(rebuiltWithUnchangedDependencies(interval.summary, null)).toBe(false)
+    expect(rebuiltWithUnchangedDependencies(interval, interval.code)).toBe(false)
+    expect(rebuiltWithUnchangedDependencies(interval, null)).toBe(false)
   })
 
   it('does not say it of a pair that really did not change', () => {
     const interval = diffOf({ refs: TWO }).intervals[0]
 
     expect(
-      rebuiltWithUnchangedDependencies(interval.summary, {
+      rebuiltWithUnchangedDependencies(interval, {
         ...interval.code!,
         added_count: 0,
         missing_count: 0,
       }),
     ).toBe(false)
+  })
+
+  it('is not fooled by the application moving its own version alone', () => {
+    const base = diffOf({ refs: TWO }).intervals[0]
+    // the application's own row moved; no dependency did
+    const interval = { ...base, dependencies_moved: false }
+
+    // the pair's summary still counts the application's own move ...
+    expect(interval.summary.changed).toBeGreaterThan(0)
+    // ... while the rebuild reading answers about the dependencies, which did not
+    expect(rebuiltWithUnchangedDependencies(interval, interval.code)).toBe(true)
   })
 })
 

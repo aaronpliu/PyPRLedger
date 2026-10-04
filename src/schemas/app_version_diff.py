@@ -44,6 +44,11 @@ STATES: tuple[str, ...] = (
     STATE_REMOVED,
 )
 
+# What a row of the matrix compares: the application's own version, or one of
+# the dependencies it declares.
+KIND_APPLICATION = "application"
+KIND_DEPENDENCY = "dependency"
+
 # A comparison needs two releases to be a comparison at all, and a matrix stops
 # being readable well before it has twenty columns.
 MIN_RELEASES = 2
@@ -157,9 +162,18 @@ class AppVersionDiffMove(BaseModel):
     )
 
 
-class AppVersionDiffPackage(BaseModel):
-    """One row of the matrix: a package across every selected release."""
+class AppVersionDiffRow(BaseModel):
+    """One row of the matrix: an entry across every selected release.
 
+    The first row is the application itself - its own version is one of the
+    things a release comparison is about - and the rest are the dependencies it
+    declares.
+    """
+
+    kind: str = Field(
+        ...,
+        description="'application' for the application's own version, 'dependency' for a package",
+    )
     name: str
     versions: list[str | None] = Field(
         ...,
@@ -230,11 +244,22 @@ class AppVersionDiffInterval(BaseModel):
     )
     summary: dict[str, int] = Field(
         default_factory=dict,
-        description="Counts per state: unchanged, changed, upgrade, downgrade, added, removed",
+        description=(
+            "Counts per state over every row of the matrix, the application's own included: "
+            "unchanged, changed, upgrade, downgrade, added, removed"
+        ),
+    )
+    dependencies_moved: bool = Field(
+        default=False,
+        description=(
+            "Whether any dependency row moved. Decided over the dependency rows alone, so it "
+            "stays true to its name when the application's own version is the only thing that "
+            "moved - which is what the rebuild reading is built on."
+        ),
     )
     changes: list[AppVersionDiffMove] = Field(
         default_factory=list,
-        description="Every package that moved in this interval, in matrix row order",
+        description="Every row that moved in this interval, in matrix row order",
     )
     code: AppVersionDiffCode | None = Field(
         default=None,
@@ -269,5 +294,8 @@ class AppVersionDiffResponse(BaseModel):
         default_factory=dict,
         description="Totals over the complete intervals only",
     )
-    packages: list[AppVersionDiffPackage] = Field(default_factory=list)
+    rows: list[AppVersionDiffRow] = Field(
+        default_factory=list,
+        description="The matrix, the application's own version first, then its direct dependencies",
+    )
     intervals: list[AppVersionDiffInterval] = Field(default_factory=list)

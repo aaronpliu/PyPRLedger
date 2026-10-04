@@ -129,16 +129,22 @@ async def test_endpoint_compares_two_releases(async_client, authenticated_client
     assert body["releases"][1]["released_at"] == "2026-10-01"
     assert all(release["has_record"] for release in body["releases"])
 
-    packages = {package["name"]: package for package in body["packages"]}
+    # the application's own version is the first row, and the dependencies follow
+    assert body["rows"][0]["kind"] == "application"
+    assert body["rows"][0]["name"] == MOCK_APP_NAME
+    assert body["rows"][0]["versions"] == [MOCK_TAG, MOCK_BRANCH]
+
+    rows = {row["name"]: row for row in body["rows"]}
     # the branch added a module the tag did not declare
-    assert packages["packageF"]["versions"] == [None, "0.9.0"]
-    assert packages["packageF"]["moves"][0]["state"] == "added"
-    assert packages["packageA"]["moves"][0]["state"] == "unchanged"
+    assert rows["packageF"]["versions"] == [None, "0.9.0"]
+    assert rows["packageF"]["moves"][0]["state"] == "added"
+    assert rows["packageA"]["moves"][0]["state"] == "unchanged"
 
     interval = body["intervals"][0]
     assert interval["source_ref"] == MOCK_TAG
     assert interval["target_ref"] == MOCK_BRANCH
     assert interval["complete"] is True
+    assert interval["dependencies_moved"] is True
     assert interval["summary"]["added"] == 1
     assert body["verdict"] == "changed"
 

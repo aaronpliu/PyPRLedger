@@ -11,6 +11,7 @@ import type {
  * releases, and a third release the dependency source holds no record for.
  */
 
+export const APP_NAME = 'mylang'
 export const RELEASE_EARLIER = 'v1.1.0'
 export const RELEASE_LATER = 'v2.0.0'
 export const RELEASE_MISSING = 'v9.9.9'
@@ -102,50 +103,57 @@ function compared(): AppVersionDiffResponse {
     },
   ]
 
+  // the application's own version is a row like the others, and it moved too
+  const appMove: AppVersionDiffMove = {
+    name: APP_NAME,
+    source_version: '1.0.0_10000',
+    target_version: '1.1.0_10000',
+    state: 'changed',
+    direction: 'upgrade',
+    orderable: true,
+  }
+  const summary = {
+    unchanged: 1,
+    changed: 4,
+    upgrade: 2,
+    downgrade: 1,
+    added: 1,
+    removed: 1,
+  }
+
   return {
     project_key: 'CORE',
     repository_slug: 'app',
-    app_name: 'mylang',
+    app_name: APP_NAME,
     git_provider: 'bitbucket_server',
     releases: [
       { ref: RELEASE_EARLIER, released_at: '2026-09-01', has_record: true },
       { ref: RELEASE_LATER, released_at: '2026-10-01', has_record: true },
     ],
     verdict: 'changed',
-    summary: {
-      unchanged: 1,
-      changed: 3,
-      upgrade: 1,
-      downgrade: 1,
-      added: 1,
-      removed: 1,
-    },
-    packages: [
+    summary,
+    rows: [
       {
-        name: 'packageA',
-        versions: ['1.0.0', '1.0.1'],
-        moves: [moves[0]],
+        kind: 'application',
+        name: APP_NAME,
+        versions: ['1.0.0_10000', '1.1.0_10000'],
+        moves: [appMove],
       },
-      { name: 'packageB', versions: ['1.1.0', '1.1.0'], moves: [moves[1]] },
-      { name: 'packageC', versions: ['1.0.0', null], moves: [moves[2]] },
-      { name: 'packageD', versions: [null, '0.9.0'], moves: [moves[3]] },
-      { name: 'packageE', versions: ['2.1.0', '2.0.0'], moves: [moves[4]] },
-      { name: 'packageF', versions: ['1.0.0', '^2.0.0'], moves: [moves[5]] },
+      { kind: 'dependency', name: 'packageA', versions: ['1.0.0', '1.0.1'], moves: [moves[0]] },
+      { kind: 'dependency', name: 'packageB', versions: ['1.1.0', '1.1.0'], moves: [moves[1]] },
+      { kind: 'dependency', name: 'packageC', versions: ['1.0.0', null], moves: [moves[2]] },
+      { kind: 'dependency', name: 'packageD', versions: [null, '0.9.0'], moves: [moves[3]] },
+      { kind: 'dependency', name: 'packageE', versions: ['2.1.0', '2.0.0'], moves: [moves[4]] },
+      { kind: 'dependency', name: 'packageF', versions: ['1.0.0', '^2.0.0'], moves: [moves[5]] },
     ],
     intervals: [
       {
         source_ref: RELEASE_EARLIER,
         target_ref: RELEASE_LATER,
         complete: true,
-        summary: {
-          unchanged: 1,
-          changed: 3,
-          upgrade: 1,
-          downgrade: 1,
-          added: 1,
-          removed: 1,
-        },
-        changes: moves.filter((move) => move.state !== 'unchanged'),
+        summary,
+        dependencies_moved: true,
+        changes: [appMove, ...moves.filter((move) => move.state !== 'unchanged')],
         code: code(5),
       },
     ],
@@ -163,10 +171,10 @@ function withMissing(): AppVersionDiffResponse {
       { ref: RELEASE_MISSING, released_at: null, has_record: false },
     ],
     verdict: 'incomplete',
-    packages: base.packages.map((pkg) => ({
-      ...pkg,
-      versions: [...pkg.versions, null],
-      moves: [...pkg.moves, null],
+    rows: base.rows.map((row) => ({
+      ...row,
+      versions: [...row.versions, null],
+      moves: [...row.moves, null],
     })),
     intervals: [
       ...base.intervals,
@@ -175,6 +183,7 @@ function withMissing(): AppVersionDiffResponse {
         target_ref: RELEASE_MISSING,
         complete: false,
         summary: { unchanged: 0, changed: 0, upgrade: 0, downgrade: 0, added: 0, removed: 0 },
+        dependencies_moved: false,
         changes: [],
         // a pair that could not be compared has no code axis, which is not the
         // same as a pair with no commits
@@ -198,17 +207,19 @@ function rebuilt(): AppVersionDiffResponse {
       { ref: RELEASE_REBUILT, released_at: '2026-10-01', has_record: true },
     ],
     verdict: 'identical',
-    packages: base.packages.map((pkg) => ({
-      name: pkg.name,
-      versions: [pkg.versions[0], pkg.versions[0]],
-      moves: [unchanged(pkg.name, pkg.versions[0] as string)],
+    // the application's own version stays put as well: nothing but the commits moved
+    rows: base.rows.map((row) => ({
+      ...row,
+      versions: [row.versions[0], row.versions[0]],
+      moves: [unchanged(row.name, row.versions[0] as string)],
     })),
     intervals: [
       {
         source_ref: RELEASE_EARLIER,
         target_ref: RELEASE_REBUILT,
         complete: true,
-        summary: { unchanged: 6, changed: 0, upgrade: 0, downgrade: 0, added: 0, removed: 0 },
+        summary: { unchanged: 7, changed: 0, upgrade: 0, downgrade: 0, added: 0, removed: 0 },
+        dependencies_moved: false,
         changes: [],
         code: code(3),
       },

@@ -84,11 +84,17 @@ def record(
     dependencies: dict[str, str],
     packages: list[dict[str, Any]] | None = None,
     app_name: str = APP,
+    app_version: str | None = None,
 ) -> dict[str, Any]:
-    """One release record in the shape the dependency source answers with."""
+    """One release record in the shape the dependency source answers with.
+
+    ``app_version`` is the application's own version, which the record holds
+    under its key; it defaults to the ref, and a test that cares about the
+    dependencies alone can hold it still across two releases.
+    """
     return {
         "app_name": app_name,
-        "tagOrBranch": ref,
+        "tagOrBranch": app_version or ref,
         "created_at": created_at,
         "dependencies": dependencies,
         "packages": packages or [],
@@ -215,12 +221,56 @@ async def test_every_declared_package_gets_a_row():
 
     result = await service.compare(request("1.0.0", "1.1.0"), app_name=APP)
 
-    # the union of both releases, in one stable order, with empty cells kept
-    assert [package.name for package in result.packages] == ["a", "b", "c"]
-    versions = {package.name: package.versions for package in result.packages}
+    # the application first, then the union of both releases in one stable order
+    assert result.rows[0].kind == "application"
+    assert result.rows[0].name == APP
+    assert [row.name for row in result.rows[1:]] == ["a", "b", "c"]
+    versions = {row.name: row.versions for row in result.rows}
     assert versions["a"] == ["1.0.0", "1.0.0"]
     assert versions["b"] == ["1.0.0", None]
     assert versions["c"] == [None, "0.1.0"]
+
+
+async def test_the_application_is_the_first_row_and_carries_its_own_version():
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0_10000"): record("1.0.0_10000", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0_10000"): record("1.1.0_10000", "2026-10-01", {"packageA": "1.0.0"}),
+        }
+    )
+
+    result = await service.compare(request("1.0.0_10000", "1.1.0_10000"), app_name=APP)
+
+    application = result.rows[0]
+    assert application.kind == "application"
+    assert application.name == APP
+    assert application.versions == ["1.0.0_10000", "1.1.0_10000"]
+    # classified like any other row, and marked as not a dependency
+    assert application.moves[0].state == "changed"
+    assert application.moves[0].direction == "upgrade"
+    assert all(row.kind == "dependency" for row in result.rows[1:])
+    # the only dependency did not move, so the pair's dependency reading is false
+    assert result.intervals[0].dependencies_moved is False
+    # while the summary still counts the application's own move
+    assert result.intervals[0].summary["changed"] == 1
+    assert result.verdict == "changed"
+
+
+async def test_a_build_number_moves_the_row_without_a_direction():
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0_10000"): record("1.0.0_10000", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.0.0_20000"): record("1.0.0_20000", "2026-10-01", {"packageA": "1.0.0"}),
+        }
+    )
+
+    result = await service.compare(request("1.0.0_10000", "1.0.0_20000"), app_name=APP)
+
+    move = result.rows[0].moves[0]
+    assert move.state == "changed"
+    # a build number carries no precedence, so it must never read as an upgrade
+    assert move.direction is None
+    assert result.intervals[0].summary["upgrade"] == 0
 
 
 async def test_a_version_move_is_classified_and_counted():
@@ -251,7 +301,9 @@ async def test_a_version_move_is_classified_and_counted():
 
     result = await service.compare(request("1.0.0", "1.1.0"), app_name=APP)
 
-    moves = {package.name: package.moves[0] for package in result.packages}
+    moves = {row.name: row.moves[0] for row in result.rows}
+    # the application's own version moved too, and is counted with the rest
+    assert moves[APP].state == "changed"
     assert moves["packageA"].state == "unchanged"
     assert (moves["packageB"].state, moves["packageB"].direction) == ("changed", "upgrade")
     assert moves["packageC"].state == "unchanged"
@@ -260,9 +312,12 @@ async def test_a_version_move_is_classified_and_counted():
 
     interval = result.intervals[0]
     assert interval.complete is True
+    assert interval.dependencies_moved is True
+    # six rows: the application, four dependencies, and one the later release added
     assert interval.summary["unchanged"] == 2
-    assert interval.summary["changed"] == 1
-    assert interval.summary["upgrade"] == 1
+    # changed counts what moved within both releases: the application and packageB
+    assert interval.summary["changed"] == 2
+    assert interval.summary["upgrade"] == 2
     assert interval.summary["downgrade"] == 0
     assert interval.summary["added"] == 1
     assert interval.summary["removed"] == 1
@@ -279,7 +334,8 @@ async def test_a_downgrade_is_reported_as_one():
 
     result = await service.compare(request("1.0.0", "1.1.0"), app_name=APP)
 
-    move = result.packages[0].moves[0]
+    move = result.rows[1].moves[0]
+    assert move.name == "packageA"
     assert move.direction == "downgrade"
     assert result.intervals[0].summary["downgrade"] == 1
 
@@ -287,14 +343,18 @@ async def test_a_downgrade_is_reported_as_one():
 async def test_an_unorderable_move_is_never_counted_as_an_upgrade():
     service, _, _ = build_service(
         {
-            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": ">=1.0.0 <1.9.0"}),
-            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": ">=1.1.0 <2.0.0"}),
+            (APP, "1.0.0"): record(
+                "1.0.0", "2026-09-01", {"packageA": ">=1.0.0 <1.9.0"}, app_version="3.0.0"
+            ),
+            (APP, "1.1.0"): record(
+                "1.1.0", "2026-10-01", {"packageA": ">=1.1.0 <2.0.0"}, app_version="3.0.0"
+            ),
         }
     )
 
     result = await service.compare(request("1.0.0", "1.1.0"), app_name=APP)
 
-    move = result.packages[0].moves[0]
+    move = result.rows[1].moves[0]
     assert move.state == "changed"
     assert move.direction is None
     assert move.orderable is False
@@ -310,6 +370,7 @@ async def test_only_the_applications_direct_dependencies_are_compared():
                 "2026-09-01",
                 {"packageA": "1.0.0"},
                 packages=[{"package_name": "packageA", "version": "1.0.0", "dependencies": {}}],
+                app_version="3.0.0",
             ),
             (APP, "1.1.0"): record(
                 "1.1.0",
@@ -317,21 +378,30 @@ async def test_only_the_applications_direct_dependencies_are_compared():
                 {"packageA": "1.0.0"},
                 # a transitive package moves, and must not enter the matrix
                 packages=[{"package_name": "packageA", "version": "9.9.9", "dependencies": {}}],
+                app_version="3.0.0",
             ),
         }
     )
 
     result = await service.compare(request("1.0.0", "1.1.0"), app_name=APP)
 
-    assert [package.name for package in result.packages] == ["packageA"]
+    # the application, then the one dependency it declares - the transitive
+    # package that moved is not part of this comparison
+    assert [row.name for row in result.rows] == [APP, "packageA"]
+    assert result.intervals[0].dependencies_moved is False
     assert result.verdict == "identical"
 
 
 async def test_releases_that_match_everywhere_read_as_identical():
+    # the application holds its own version still as well: nothing moved at all
     service, _, _ = build_service(
         {
-            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
-            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.0.0"}),
+            (APP, "1.0.0"): record(
+                "1.0.0", "2026-09-01", {"packageA": "1.0.0"}, app_version="2.0.0"
+            ),
+            (APP, "1.1.0"): record(
+                "1.1.0", "2026-10-01", {"packageA": "1.0.0"}, app_version="2.0.0"
+            ),
         }
     )
 
@@ -340,6 +410,7 @@ async def test_releases_that_match_everywhere_read_as_identical():
     assert result.verdict == "identical"
     assert result.intervals[0].changes == []
     assert result.summary["changed"] == 0
+    assert result.rows[0].moves[0].state == "unchanged"
 
 
 # ---------------------------------------------------------------------- #
@@ -450,17 +521,22 @@ async def test_an_incomplete_interval_is_never_reported_as_no_changes():
     interval = result.intervals[0]
     assert interval.complete is False
     assert interval.changes == []
+    assert interval.dependencies_moved is False
     # nothing is known, so nothing is counted and nothing is claimed
     assert sum(interval.summary.values()) == 0
     assert result.verdict == "incomplete"
-    assert result.packages[0].moves == [None]
+    assert result.rows[0].moves == [None]
 
 
 async def test_the_intervals_that_can_be_compared_are_still_reported():
     service, _, _ = build_service(
         {
-            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
-            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.0.1"}),
+            (APP, "1.0.0"): record(
+                "1.0.0", "2026-09-01", {"packageA": "1.0.0"}, app_version="3.0.0"
+            ),
+            (APP, "1.1.0"): record(
+                "1.1.0", "2026-10-01", {"packageA": "1.0.1"}, app_version="3.0.0"
+            ),
         }
     )
 
@@ -479,7 +555,7 @@ async def test_an_application_the_source_does_not_know_has_no_columns():
 
     result = await service.compare(request("1.0.0", "1.1.0"), app_name=APP)
 
-    assert result.packages == []
+    assert result.rows == []
     assert all(release.has_record is False for release in result.releases)
     assert result.verdict == "incomplete"
 
@@ -558,8 +634,12 @@ async def test_a_pair_with_no_dependency_change_still_reports_its_commits():
     diff = FakeDiff(added=7)
     service, _, _ = build_service(
         {
-            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
-            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.0.0"}),
+            (APP, "1.0.0"): record(
+                "1.0.0", "2026-09-01", {"packageA": "1.0.0"}, app_version="3.0.0"
+            ),
+            (APP, "1.1.0"): record(
+                "1.1.0", "2026-10-01", {"packageA": "1.0.0"}, app_version="3.0.0"
+            ),
         },
         diff=diff,
     )
@@ -570,6 +650,7 @@ async def test_a_pair_with_no_dependency_change_still_reports_its_commits():
     assert interval.summary["changed"] == 0
     assert interval.summary["added"] == 0
     assert interval.summary["removed"] == 0
+    assert interval.dependencies_moved is False
     # so the page can say that commits moved while the dependencies did not
     assert interval.code.added_count == 7
 
@@ -577,8 +658,12 @@ async def test_a_pair_with_no_dependency_change_still_reports_its_commits():
 async def test_a_pair_whose_commits_cannot_be_read_keeps_its_dependencies():
     service, _, _ = build_service(
         {
-            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
-            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.0.1"}),
+            (APP, "1.0.0"): record(
+                "1.0.0", "2026-09-01", {"packageA": "1.0.0"}, app_version="3.0.0"
+            ),
+            (APP, "1.1.0"): record(
+                "1.1.0", "2026-10-01", {"packageA": "1.0.1"}, app_version="3.0.0"
+            ),
         },
         diff=FakeDiff(fail="provider unreachable"),
     )
@@ -591,7 +676,7 @@ async def test_a_pair_whose_commits_cannot_be_read_keeps_its_dependencies():
     assert interval.code.added_commits == []
     # and the dependency axis stands
     assert interval.summary["upgrade"] == 1
-    assert result.packages[0].moves[0].direction == "upgrade"
+    assert result.rows[1].moves[0].direction == "upgrade"
 
 
 async def test_an_incomplete_pair_is_not_asked_for_its_commits():

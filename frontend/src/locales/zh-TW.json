@@ -1172,6 +1172,7 @@
     "move_added": "新增",
     "move_removed": "移除",
     "package": "套件",
+    "application": "應用",
     "no_date": "無日期",
     "no_record": "無記錄",
     "code_added": "{count} 個提交",
