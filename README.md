@@ -1,10 +1,10 @@
 # PRLedger
 
-A production-ready FastAPI + Vue 3 PR Code Review Result Storage System with MySQL, Redis, and Prometheus integration. Supports **Bitbucket Server** and **GitHub Enterprise** as Git providers.
+A production-ready FastAPI + Vue 3 PR Code Review Result Storage System with MySQL, Redis, and Prometheus integration. Supports **Bitbucket Server**, **Bitbucket Cloud**, and **GitHub Enterprise** as Git providers.
 
 ## Features
 
-- **Multi-Git Provider**: Per-project provider tracking supporting Bitbucket Server and GitHub Enterprise concurrently, with hybrid provider resolution (registry → payload hint → default)
+- **Multi-Git Provider**: Per-project provider tracking supporting Bitbucket Server, Bitbucket Cloud, and GitHub Enterprise concurrently, with hybrid provider resolution (project registry entry → payload hint → Bitbucket Server)
 - **RESTful API**: Complete REST API for managing pull request reviews, users, projects, and auto-assignment rules
 - **Auto-Assignment Rules**: Configurable rules to automatically assign reviewers based on project, repository, branch, PR author, and status conditions — with priority ordering, date ranges, and enable/disable toggling
 - **Multi-Reviewer System**: Support for multiple reviewers per pull request, each with independent assignments, status tracking (pending → in_progress → completed), and scoring
@@ -16,7 +16,9 @@ A production-ready FastAPI + Vue 3 PR Code Review Result Storage System with MyS
 - **Notifications**: In-app notification system with preference management and real-time SSE (Server-Sent Events) streaming
 - **Personal Access Tokens**: Token-based API authentication with expiration and scoping
 - **Export**: Export review data to PDF, Excel, CSV, or JSON with `page_size=0` sentinel for full dataset export
-- **Frontend**: Vue 3 + Element Plus SPA with review listing, detail views, task assignment management, analytics dashboards, and rule management UI
+- **Release Tooling**: Standalone release comparison (verdicts per commit against a target release) and GitHub-style release notes, both driven by the same repository coordinates and the same provider resolution as the rest of the app
+- **Release Dependency Graph**: Reads what one repository ref shipped from the dependency database and draws it — the modules the application pinned to an exact version, the ranges packages declare between themselves, and the cycles a closure contains — in one consolidated call per ref
+- **Frontend**: Vue 3 + Element Plus SPA with review listing, detail views, task assignment management, release tooling, analytics dashboards, and rule management UI
 - **Database Integration**: MySQL database with SQLAlchemy ORM and Alembic migrations
 - **Caching Layer**: Redis integration for improved performance
 - **Monitoring**: Prometheus metrics collection with Grafana dashboards
@@ -34,14 +36,18 @@ PyPRLedger/
 ├── docs/                         # Documentation
 ├── frontend/                     # Vue 3 + Element Plus SPA
 │   └── src/
-│       ├── api/                  # API client modules (reviews, users, projects, etc.)
+│       ├── api/                  # API client modules (reviews, users, projects, releases, etc.)
 │       ├── components/           # Reusable Vue components
+│       │   └── charts/           # ECharts wrappers (incl. ReleaseDependencyGraphChart)
+│       ├── constants/            # Shared constants (GIT_PROVIDER_OPTIONS)
 │       ├── layouts/              # Layout components (Default, Admin)
 │       ├── locales/              # i18n translations (en, zh-CN, zh-TW)
 │       ├── router/               # Vue Router configuration
 │       ├── stores/               # Pinia stores
-│       ├── utils/export/         # Export utilities (PDF, Excel, CSV, JSON)
-│       └── views/                # Page views (reviews, scores, admin, auth, dashboard)
+│       ├── utils/                # Utilities
+│       │   ├── export/           # Export utilities (PDF, Excel, CSV, JSON)
+│       │   └── releaseDependencyGraph.ts  # Graph model, cycle marking, depth filtering
+│       └── views/                # Page views (reviews, scores, releases, admin, auth, dashboard)
 ├── grafana/                      # Grafana configuration
 ├── logs/                         # Application logs
 ├── openspec/                     # OpenSpec spec-driven development artifacts
@@ -51,6 +57,7 @@ PyPRLedger/
 ├── scripts/                      # Utility scripts
 │   ├── release/                  # Release automation scripts
 │   ├── bump_version.py           # Version management
+│   ├── mock_dependency_api.py    # Serves mock dependency database responses over HTTP
 │   └── validate_commit_msg.py    # Commit message validation
 ├── src/                          # Application source code
 │   ├── api/v1/endpoints/         # API endpoint handlers
@@ -63,6 +70,9 @@ PyPRLedger/
 │   │   ├── project_registry.py   # Project registry
 │   │   ├── projects.py           # Project endpoints
 │   │   ├── rbac.py               # Role management
+│   │   ├── release_dependency_graph.py  # Release dependency graph (dependency database)
+│   │   ├── release_diff.py       # Release comparison, ref listing, commit check
+│   │   ├── release_notes.py      # Version releases and their notes
 │   │   ├── reviews.py            # Review CRUD, scores, trends, export
 │   │   ├── search.py             # Global search
 │   │   ├── sse.py                # SSE streaming
@@ -94,11 +104,14 @@ PyPRLedger/
 │   │   ├── auth.py               # Auth schemas
 │   │   ├── auto_assign_rule.py   # Auto-assignment rule schemas (NEW v1.17.0)
 │   │   ├── delegation.py         # Delegation schemas
+│   │   ├── dependency_graph.py   # Dependency graph request/response schemas
 │   │   ├── notification.py       # Notification schemas
 │   │   ├── personal_access_token.py  # PAT schemas
 │   │   ├── project.py            # Project schemas
 │   │   ├── pull_request.py       # Review + score schemas
 │   │   ├── rbac.py               # Role schemas
+│   │   ├── release_diff.py       # Release comparison schemas
+│   │   ├── release_note.py       # Version release schemas
 │   │   ├── repository.py         # Repository schemas
 │   │   ├── review.py             # Multi-reviewer response schemas
 │   │   └── user.py               # User schemas
@@ -108,9 +121,13 @@ PyPRLedger/
 │   │   ├── auto_assign_service.py    # Auto-assignment engine (NEW v1.17.0)
 │   │   ├── avatar_service.py     # Avatar upload
 │   │   ├── bitbucket_service.py  # Bitbucket API integration (wrapped by git_providers)
+│   │   ├── dependency_api_client.py  # Dependency database client (mockable)
+│   │   ├── dependency_graph_service.py  # Consolidates a ref's graph + Redis cache
 │   │   ├── entity_sync_service.py    # Auto-sync entities from Git providers
+│   │   ├── git_provider_resolver.py  # Resolves a repository's provider from the registry
 │   │   ├── git_providers/        # Multi-provider abstraction
 │   │   │   ├── base.py           # Abstract BaseGitProvider
+│   │   │   ├── bitbucket_cloud.py    # Bitbucket Cloud adapter
 │   │   │   ├── bitbucket_server.py   # Bitbucket Server adapter
 │   │   │   └── github_enterprise.py  # GitHub Enterprise provider
 │   │   ├── multi_reviewer_service.py # Multi-reviewer assignment + notifications
@@ -119,6 +136,11 @@ PyPRLedger/
 │   │   ├── project_registry_service.py  # Registry management
 │   │   ├── project_service.py    # Project service
 │   │   ├── rbac_service.py       # RBAC permission checking
+│   │   ├── release_diff_service.py   # Release comparison + commit membership checks
+│   │   ├── release_note_export.py    # Markdown export of release notes
+│   │   ├── release_note_llm_service.py   # Optional AI summary pass over release notes
+│   │   ├── release_note_scope_service.py # The release ref a tag is measured against
+│   │   ├── release_note_service.py   # Version releases and their notes
 │   │   ├── review_score_service.py    # Score management
 │   │   ├── review_service.py     # Core review CRUD + listing
 │   │   ├── review_validation_service.py  # Raw review validation
@@ -136,7 +158,12 @@ PyPRLedger/
 │   ├── conftest.py               # Pytest fixtures
 │   ├── test_auto_assign_service.py   # Auto-assignment tests (NEW)
 │   ├── test_delegation.py        # Delegation tests
+│   ├── test_dependency_api_client.py     # Dependency database client tests
+│   ├── test_dependency_graph_service.py  # Dependency graph consolidation tests
+│   ├── test_git_provider_resolver.py     # Provider resolution tests
 │   ├── test_notification_service.py  # Notification tests
+│   ├── test_release_dependency_graph_endpoint.py  # Dependency graph endpoint tests
+│   ├── test_release_note_scope.py    # Release scope tests
 │   ├── test_review_visibility.py     # Review visibility tests
 │   └── test_sse.py               # SSE tests
 ├── .env.example
@@ -373,6 +400,22 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
 - `GET /api/v1/audit/logs` — Query audit logs (paginated, filterable)
 - `GET /api/v1/audit/export` — Export audit logs to CSV
 
+### Releases (`/api/v1/release`) — standalone release tooling
+
+- `POST /api/v1/release/diff/compare` — Compare two release versions
+- `POST /api/v1/release/diff/refs` — List tags and branches of a repository
+- `POST /api/v1/release/diff/check` — Check commits against a target release
+- `POST /api/v1/release/dependency-graph/read` — Read the dependency graph of one ref (consolidated from the dependency database, cached per ref)
+- `GET /api/v1/release/notes` — List the releases of a repository
+- `POST /api/v1/release/notes` — Draft or publish a version release
+- `GET /api/v1/release/notes/{note_id}` — Get one version release
+- `PUT /api/v1/release/notes/{note_id}` — Update a version release
+- `DELETE /api/v1/release/notes/{note_id}` — Delete a version release
+- `POST /api/v1/release/notes/preview` — Draft release notes for a version
+- `POST /api/v1/release/notes/export` — Export the notes of one or more releases as markdown
+- `POST /api/v1/release/notes/import` — Import the releases of a repository from the git provider
+- `POST /api/v1/release/notes/{note_id}/push` — Publish a release on the git provider
+
 ## Frontend
 
 A Vue 3 + Element Plus SPA is available in `frontend/`.
@@ -385,7 +428,7 @@ npm install
 npm run dev
 ```
 
-The frontend will be available at `http://localhost:5173` and proxies API requests to `http://localhost:8000`.
+The dev server listens on `http://localhost:3001` by default (`VITE_DEV_PORT`) and proxies `VITE_API_BASE_URL` to `http://127.0.0.1:9097` (`VITE_API_PROXY_TARGET`) — both overridable in `frontend/.env`.
 
 ### Frontend Pages
 
@@ -399,6 +442,9 @@ The frontend will be available at `http://localhost:5173` and proxies API reques
 | `/task-assignment/analytics` | Assignment analytics dashboard | review_admin |
 | `/scores` | Score list with filters | Authenticated users |
 | `/scores/analytics` | Score analytics dashboard | Authenticated users |
+| `/releases` | Release comparison — check a release against a ref, per-commit verdicts | Authenticated users |
+| `/releases/notes` | Release notes (GitHub Releases style): draft, export/import, publish | Authenticated users |
+| `/releases/dependency-graph` | Release dependency graph of one repository ref | Authenticated users |
 | `/notifications` | Notification list and preferences | Authenticated users |
 | `/profile` | User profile | Authenticated users |
 | `/myadmin/*` | System administration panel | system_admin |
@@ -414,12 +460,28 @@ Key configuration options:
 - `REDIS_*`: Redis cache configuration
 - `TIMEZONE`: Application timezone (default: Asia/Shanghai)
 - `USE_UTC_IN_DB`: Store datetime in UTC in database (default: True, recommended)
-- `BITBUCKET_*`: Bitbucket Server API configuration (URL, credentials, default workspace)
+- `BITBUCKET_SERVER_*`: Bitbucket Server/Data Center URL, credentials, and PAT
+- `BITBUCKET_CLOUD_*`: Bitbucket Cloud API URL, credentials, and workspace suggestions
 - `GITHUB_ENTERPRISE_URL`: GitHub Enterprise base URL (e.g., `https://github.example.com`)
 - `GITHUB_ENTERPRISE_TOKEN`: GitHub Enterprise personal access token
+- `DEPENDENCY_API_*`: Dependency database (base URL, token, release path). `DEPENDENCY_API_MOCK` (default `True`) answers from canned data, so the Release Dependency Graph works before the database is reachable
 - `PROMETHEUS_ENABLED`: Enable/disable Prometheus metrics
 - `RATE_LIMIT_*`: Rate limiting configuration
-- `CACHE_TTL_*`: Cache TTL settings
+- `CACHE_TTL_*`: Cache TTL settings (includes `CACHE_TTL_DEPENDENCY_GRAPH`)
+
+#### Upgrading from 1.24.x or earlier
+
+`BITBUCKET_USER`, `BITBUCKET_PASSWORD`, and `BITBUCKET_TOKEN` are now `BITBUCKET_SERVER_USER`, `BITBUCKET_SERVER_PASSWORD`, and `BITBUCKET_SERVER_TOKEN`. The old names are no longer read, so update `.env` **before** deploying — otherwise Bitbucket Server requests fail with 401. `BITBUCKET_CLOUD` and `BITBUCKET_DEFAULT_WORKSPACE` were removed: the provider is decided per repository.
+
+### Git Provider Resolution
+
+Which provider a repository is read with is decided per repository, never globally:
+
+1. The `project_registry` entry for `(project_key, repository_slug)` — authoritative
+2. The `git_provider` field of the request payload — for repositories not yet registered
+3. Fallback: `bitbucket_server`
+
+Bitbucket Cloud additionally needs the workspace holding the repository; when a request omits `workspace_slug`, the repository's project key is used.
 
 ### Timezone Configuration
 
@@ -456,6 +518,8 @@ The system uses MySQL with the following tables:
 | `audit_log` | Audit trail for operations |
 | `system_settings` | Key-value system configuration |
 | `organization_group` | Organization hierarchy (groups/teams) |
+
+The Release Dependency Graph is **not** stored locally: it is consolidated per request from the external dependency database, with the answer cached in Redis. `project_registry` is what maps a repository to the application that database knows.
 
 ### Running Migrations
 

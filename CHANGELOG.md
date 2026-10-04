@@ -8,6 +8,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ---
+
+## [1.26.0] - 2026-10-04
+
+**Backend Version**: 1.26.0
+**Frontend Version**: 1.21.0
+
+### Added
+- The **App Diff** page (`/releases/apps`): pick an application and two or more of its releases, and read a version matrix - one column per release in the order their datetimes put them, one row per compared entry. The application's own version is the first row, beside the dependencies it declares, so a release that moved its own version while every dependency stayed put reads as the change it is instead of as a comparison in which nothing happened. Every pair of adjacent releases is compared with the vocabulary the repository comparison already uses - unchanged, changed with a direction, added, removed - with pre-release precedence honoured (`1.2.0-rc.0 < 1.2.0`), a trailing build suffix read as build metadata (`1.0.0_10000` to `1.1.0_10000` is an upgrade; a build bump within one version is a change with no direction), and a version that cannot be ordered left as changed without a direction - never as an upgrade. The pair's summary also carries whether any *dependency* moved, so the rebuild reading below stays about the dependencies even when the application moved its own version
+- The **code axis** beside the dependency axis: for every pair, the commits between the two release refs, read through the existing repository comparison rather than a new one. What the later release adds and what it does not contain of the earlier one are reported separately, with the counts exact and the rendered lists capped. This is what keeps a rebuilt release visible: a tag moved to a new commit while the versions it pins stayed identical yields no dependency change at all, and the page states that commits moved while the dependencies did not rather than leaving the empty axis to speak for itself
+- `POST /api/v1/release/apps/diff`, which consolidates those reads: the repository is resolved to an application through the project registry - the dependency source holds what an *application* shipped - every release is read from the same dependency source the Release Dependency Graph draws from, and the whole answer is cached against the refs it was computed for. A `refresh` flag reads past that cache, because a tag can be moved and a cached reading is keyed by ref name
+- Degradation that is per part rather than per page: a release the dependency source holds no record for is marked as such and makes the pairs that touch it **incomplete** - never "no changes" - while the pairs that can be compared are still reported; and a pair whose commits cannot be read (an unreachable provider, or a release ref the git provider does not know, which the dependency source's key for a release need not be) carries the reason instead of an empty commit list. A comparison with no records at all shows its empty state rather than an empty matrix. Reading is open to any authenticated user and nothing on the page writes anywhere
+- The App Diff entry in the Releases menu, with the repository comparison, release notes and dependency graph entries left as they were, and the selection carried in the URL so a comparison can be linked and reopened
+
+### Removed
+- The `add-app-release-diff` proposal, replaced by `add-app-release-version-diff`. Its premise was that the dependency manifest lives in the application's repository and has to be read from the git provider through a new file-content primitive, a snapshot table per release, and a package-to-repository mapping maintained beside it. The dependency source answers for a release instead, so none of that machinery was needed for this comparison
+
+---
+
+## [1.25.0] - 2026-10-04
+
+**Backend Version**: 1.25.0
+**Frontend Version**: 1.20.0
+
+### Added
+- The Release Dependency Graph page (`/releases/dependency-graph`): it reads what one repository ref shipped and draws it, so the shape of a release line - and the cycles inside it - can be seen at a glance instead of reconstructed by hand. The repository is picked with the same coordinates as the Release Comparison and the Release Notes pages (project key, repository slug, git provider, and the Cloud workspace when the provider needs one), the ref picker groups the repository's tags and branches and takes any ref that can be typed, and both come from the endpoints those pages already call. A node is drawn by its category - the application, the packages of the workspace, and the packages a dependency file names but does not describe - the depth control and the transitive toggle narrow the canvas when a closure is too wide to read, and picking a node dims everything unrelated to it. The ref the graph was read at, and whether it is a tag or a branch, stay in the header while it is on screen
+- Consolidate the dependency database into that graph: `POST /api/v1/release/dependency-graph/read` resolves the repository to an application through the project registry - the database holds what an *application* shipped, and the registry is what maps a repository to one - then asks it once and returns the merged answer as a dependency file. `DependencyApiClient` asks one question of one endpoint, and the answer already holds both what the application declared for its modules (an exact version each) and what every package the database knows declared for its own dependencies, so nothing on this side walks a graph: building the closure is the database's business, and a client that walked it would pay a call per level and stall on the first repository big enough to matter. An answer is cached in Redis under `CACHE_TTL_DEPENDENCY_GRAPH` (an hour by default, since a ref's graph only moves when the database is rebuilt for that ref), and a payload beyond 500 nodes is truncated rather than turned into an unreadable canvas. A ref the database holds no record for is a 404 naming the application and the ref, a database that cannot be reached is a 502, and while `DEPENDENCY_API_MOCK` is true (the default) the answer comes from canned data so the page works before the database is reachable - `scripts/mock_dependency_api.py` serves the same data over HTTP for an end-to-end run
+- Resolve the git provider of a repository from the registry: a request no longer has to carry the provider itself for a repository to be read correctly, and a Cloud repository is not reached as Server because a payload happened to leave the field out. The registry entry for `(project_key, repository_slug)` decides, the payload stays the fallback for repositories that are not registered, and Server stays the last resort - the precedence the configuration already documented, now applied by the code on all five endpoints that talk to a provider (three of the Release Comparison, two of the Release Notes). The provider lists of those two pages come from one `GIT_PROVIDER_OPTIONS` constant instead of three hand-written options each, so the pages cannot drift apart, and Bitbucket Cloud carries a tag of its own rather than reading like a failure
+
+### Changed
+- One Bitbucket prefix per platform: `BITBUCKET_USER`, `BITBUCKET_PASSWORD` and `BITBUCKET_TOKEN` are now `BITBUCKET_SERVER_USER`, `BITBUCKET_SERVER_PASSWORD` and `BITBUCKET_SERVER_TOKEN`. The old names named neither platform while the Cloud fields fell back to them, so a Cloud-only deployment read "Bitbucket Server" in its own configuration and a token meant for Server could be sent to Cloud. The Cloud fields keep their fallback and now say which field they fall back to. `BITBUCKET_CLOUD` and `BITBUCKET_DEFAULT_WORKSPACE` are removed rather than renamed, because neither had a reader: the provider is decided per repository, which left a global switch saying only what the request already said, and it did not route traffic even when set - worse than not existing - while the default workspace was declared and never read. **Every environment updates its `.env` before it takes this release**: the old names are not read, so a deployment that keeps them finds no credentials and the provider answers 401
+
+### Fixed
+- Visiting the Release Dependency Graph took the whole application down: the handler that keeps the edge labels in step with the force layout read `chart.getModel()`, an ECharts internal the library documents as not meant for callers and that is absent on the first frames of a render. The handler runs on every frame of the layout animation, so the exception was thrown out of the render pipeline again and again, the canvas never finished drawing, and no other page could be opened afterwards - the menu answered and the routes did not. The model is now read only when it is there: labels are positioned exactly as before, and a frame that arrives before the graph is built does nothing instead of throwing
+
+---
+
 ## [1.24.1] - 2026-10-01
 
 **Backend Version**: 1.24.1
@@ -924,9 +960,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-
-## [Unreleased]
-
 ### Added
 - **Release Manager Skill** - Automated release workflow integration
   - New `release-manager` skill for consistent version management
@@ -1503,8 +1536,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Development Workflow**: Simplified version management without package installation overhead
 
 ---
-
-## [Unreleased]
 
 ### Changed
 - **Consolidated Review Endpoints** - Merged `POST /api/v1/reviews` and `POST /api/v1/reviews/upsert` into a single upsert endpoint

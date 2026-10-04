@@ -106,28 +106,23 @@ class BitbucketCloudProvider(BaseGitProvider):
     """Provider for Bitbucket Cloud (bitbucket.org) REST API 2.0."""
 
     def __init__(self) -> None:
-        base_url = getattr(settings, "BITBUCKET_CLOUD_API_URL", None) or CLOUD_API_URL
-        self._base_url = base_url.rstrip("/")
+        self._base_url = (settings.BITBUCKET_CLOUD_API_URL or CLOUD_API_URL).rstrip("/")
         self._headers: dict[str, str] = {"Accept": "application/json"}
 
         # Cloud accepts OAuth2 / workspace access tokens as Bearer credentials.
         # Without a token we fall back to Basic auth with an app password.
-        token = getattr(settings, "BITBUCKET_CLOUD_TOKEN", None)
+        token = settings.BITBUCKET_CLOUD_TOKEN
+        # The Cloud pair is separate from the Server pair, so both providers can run
+        # side by side; a single-credential setup may leave it unset and let the
+        # Server pair stand in.
+        user = settings.BITBUCKET_CLOUD_USER or settings.BITBUCKET_SERVER_USER
+        password = settings.BITBUCKET_CLOUD_APP_PASSWORD or settings.BITBUCKET_SERVER_PASSWORD
         if token:
             self._headers["Authorization"] = f"Bearer {token}"
-        else:
-            # Cloud credentials are separate from Server, so both providers can be
-            # used side by side - they fall back to the shared Server credentials.
-            user = getattr(settings, "BITBUCKET_CLOUD_USER", None) or getattr(
-                settings, "BITBUCKET_USER", None
-            )
-            password = getattr(settings, "BITBUCKET_CLOUD_APP_PASSWORD", None) or getattr(
-                settings, "BITBUCKET_PASSWORD", None
-            )
-            if user and password:
-                credentials = f"{user}:{password}"
-                encoded = base64.b64encode(credentials.encode()).decode()
-                self._headers["Authorization"] = f"Basic {encoded}"
+        elif user and password:
+            credentials = f"{user}:{password}"
+            encoded = base64.b64encode(credentials.encode()).decode()
+            self._headers["Authorization"] = f"Basic {encoded}"
 
         if "Authorization" not in self._headers:
             logger.warning(

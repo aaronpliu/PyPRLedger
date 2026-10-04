@@ -747,7 +747,7 @@ async def test_endpoint_refs_rejects_limit_above_maximum(
     assert response.status_code == 422
 
 
-async def test_endpoint_refs_returns_502_on_git_failure(async_client) -> None:
+async def test_endpoint_refs_returns_502_on_git_failure(async_client, db_session) -> None:
     class FailingProvider(FakeGitProvider):
         async def list_refs(self, *args: Any, **kwargs: Any) -> dict[str, list[str]]:
             raise GitServiceException("Bitbucket is unreachable")
@@ -755,7 +755,11 @@ async def test_endpoint_refs_returns_502_on_git_failure(async_client) -> None:
     async def _current_user() -> AuthUser:
         return AuthUser(id=1, username="tester", email="tester@example.com")
 
+    async def _db_session() -> Any:
+        yield db_session
+
     app.dependency_overrides[get_current_user_with_token] = _current_user
+    app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_release_diff_service] = lambda: build_service(FailingProvider())
     try:
         response = await async_client.post(
@@ -767,6 +771,7 @@ async def test_endpoint_refs_returns_502_on_git_failure(async_client) -> None:
         )
     finally:
         app.dependency_overrides.pop(get_current_user_with_token, None)
+        app.dependency_overrides.pop(get_db_session, None)
         app.dependency_overrides.pop(get_release_diff_service, None)
 
     assert response.status_code == 502
@@ -842,7 +847,9 @@ async def test_endpoint_returns_bad_request_for_unknown_provider(
     assert response.status_code == 400
 
 
-async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monkeypatch) -> None:
+async def test_endpoint_end_to_end_with_mocked_bitbucket_api(
+    async_client, monkeypatch, db_session
+) -> None:
     """Exercise the full stack against a mocked Bitbucket Server REST API."""
     from urllib.parse import parse_qs, urlparse
 
@@ -890,7 +897,11 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
     async def _current_user() -> AuthUser:
         return AuthUser(id=1, username="tester", email="tester@example.com")
 
+    async def _db_session() -> Any:
+        yield db_session
+
     app.dependency_overrides[get_current_user_with_token] = _current_user
+    app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_release_diff_service] = lambda: ReleaseDiffService()
     try:
         compare_response = await async_client.post(
@@ -920,6 +931,7 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(async_client, monke
         )
     finally:
         app.dependency_overrides.pop(get_current_user_with_token, None)
+        app.dependency_overrides.pop(get_db_session, None)
         app.dependency_overrides.pop(get_release_diff_service, None)
 
     assert compare_response.status_code == 200
@@ -998,7 +1010,7 @@ async def test_check_excludes_commits_before_the_release_base() -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider) -> None:
+async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider, db_session) -> None:
     class FailingProvider(FakeGitProvider):
         async def compare_commits(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
             raise GitServiceException("Bitbucket is unreachable")
@@ -1006,7 +1018,11 @@ async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider) 
     async def _current_user() -> AuthUser:
         return AuthUser(id=1, username="tester", email="tester@example.com")
 
+    async def _db_session() -> Any:
+        yield db_session
+
     app.dependency_overrides[get_current_user_with_token] = _current_user
+    app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_release_diff_service] = lambda: build_service(FailingProvider())
     try:
         response = await async_client.post(
@@ -1020,6 +1036,7 @@ async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider) 
         )
     finally:
         app.dependency_overrides.pop(get_current_user_with_token, None)
+        app.dependency_overrides.pop(get_db_session, None)
         app.dependency_overrides.pop(get_release_diff_service, None)
 
     assert response.status_code == 502

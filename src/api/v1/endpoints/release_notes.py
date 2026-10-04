@@ -42,6 +42,7 @@ from src.schemas.release_note import (
     ReleaseNoteResponse,
     ReleaseNoteUpdateRequest,
 )
+from src.services.git_provider_resolver import with_repository_provider
 from src.services.rbac_service import RBACService
 from src.services.release_note_service import ReleaseNoteService
 from src.utils.log import get_logger
@@ -285,11 +286,13 @@ async def export_release_notes(
 async def import_release_notes(
     payload: ReleaseNoteImportRequest,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> ReleaseNoteImportResponse:
     """Import version releases from the git provider."""
     await ensure_permission(rbac_service, current_user, "manage")
+    payload = await with_repository_provider(payload, db)
 
     try:
         imported, updated, skipped, notes = await service.import_from_provider(payload)
@@ -455,11 +458,13 @@ async def push_release_note(
     note_id: int,
     payload: ReleaseNotePushRequest,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> ReleaseNoteResponse:
     """Publish a stored release on the git provider."""
     await ensure_permission(rbac_service, current_user, "manage")
+    payload = await with_repository_provider(payload, db)
 
     try:
         note = await service.push_to_provider(note_id, payload)

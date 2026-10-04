@@ -85,6 +85,36 @@ class Settings(BaseSettings):
         ),
     )
 
+    CACHE_TTL_DEPENDENCY_GRAPH: int = Field(
+        default=3600,
+        description=(
+            "Cache TTL (seconds) for a consolidated dependency graph. The graph of one ref "
+            "only moves when the dependency database is rebuilt for that ref."
+        ),
+    )
+
+    # Dependency database - the system of record for what an application shipped
+    DEPENDENCY_API_BASE_URL: str = Field(
+        default="", description="Base URL of the dependency database API"
+    )
+    DEPENDENCY_API_TOKEN: str = Field(
+        default="", description="Bearer token for the dependency database API"
+    )
+    DEPENDENCY_API_MOCK: bool = Field(
+        default=True,
+        description=(
+            "Answer from canned dependency data instead of calling the database. Point "
+            "DEPENDENCY_API_BASE_URL at the real service and turn this off to switch over."
+        ),
+    )
+    DEPENDENCY_API_RELEASE_PATH: str = Field(
+        default="/api/v1/appReleaseInfo",
+        description=(
+            "Path returning one application ref: the modules it declared with their "
+            "exact versions, and what every package the database knows declared for its own"
+        ),
+    )
+
     # Security configuration
     SECRET_KEY: str = Field(default="development-secret-key-change-in-production")
     ALGORITHM: str = "HS256"
@@ -135,25 +165,25 @@ class Settings(BaseSettings):
     REVIEW_MAX_SCORE: int = Field(default=10)
 
     # Bitbucket API configuration
-    BITBUCKET_CLOUD: bool = Field(
-        default=False,
-        description="Whether to use Bitbucket Cloud (True) or Server/Data Center (False)",
-    )
     BITBUCKET_SERVER_URL: str = Field(
         default="http://localhost:7990", description="Bitbucket Server/Data Center base URL"
     )
-    BITBUCKET_USER: str | None = Field(
-        default=None, description="Bitbucket username for Basic authentication"
+    BITBUCKET_SERVER_USER: str | None = Field(
+        default=None,
+        description="Bitbucket Server/Data Center username for Basic authentication",
     )
-    BITBUCKET_PASSWORD: str | None = Field(
-        default=None, description="Bitbucket password or app password for Basic authentication"
+    BITBUCKET_SERVER_PASSWORD: str | None = Field(
+        default=None,
+        description=(
+            "Bitbucket Server/Data Center password or app password for Basic authentication"
+        ),
     )
-    BITBUCKET_TOKEN: str | None = Field(
+    BITBUCKET_SERVER_TOKEN: str | None = Field(
         default=None,
         description=(
             "Bitbucket Server/Data Center Personal Access Token (PAT). When set, it is "
-            "preferred over BITBUCKET_USER/BITBUCKET_PASSWORD and sent as a Bearer token. "
-            "Only applicable to Bitbucket Server/Data Center (not Bitbucket Cloud)."
+            "preferred over BITBUCKET_SERVER_USER/BITBUCKET_SERVER_PASSWORD and sent as a "
+            "Bearer token. PATs exist on Server/Data Center only, not on Cloud."
         ),
     )
     BITBUCKET_CLOUD_API_URL: str = Field(
@@ -171,19 +201,17 @@ class Settings(BaseSettings):
     BITBUCKET_CLOUD_USER: str | None = Field(
         default=None,
         description=(
-            "Bitbucket Cloud username (Atlassian account). Falls back to BITBUCKET_USER "
-            "when unset - set it explicitly to use Server and Cloud side by side."
+            "Bitbucket Cloud username (Atlassian account). Falls back to "
+            "BITBUCKET_SERVER_USER when unset - set it explicitly to use Server and Cloud "
+            "side by side."
         ),
     )
     BITBUCKET_CLOUD_APP_PASSWORD: str | None = Field(
         default=None,
         description=(
-            "Bitbucket Cloud app password. Falls back to BITBUCKET_PASSWORD when unset - "
-            "set it explicitly to use Server and Cloud side by side."
+            "Bitbucket Cloud app password. Falls back to BITBUCKET_SERVER_PASSWORD when "
+            "unset - set it explicitly to use Server and Cloud side by side."
         ),
-    )
-    BITBUCKET_DEFAULT_WORKSPACE: str = Field(
-        default="default", description="Default workspace/project key for Bitbucket repositories"
     )
     BITBUCKET_CLOUD_WORKSPACES: str = Field(
         default="",

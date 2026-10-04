@@ -22,6 +22,7 @@ export const DEFAULT_GIT_PROVIDER = GitProvider.BITBUCKET_SERVER
  */
 export const GIT_PROVIDER_OPTIONS = [
   { value: GitProvider.BITBUCKET_SERVER, label: 'Bitbucket Server' },
+  { value: GitProvider.BITBUCKET_CLOUD, label: 'Bitbucket Cloud' },
   { value: GitProvider.GITHUB_ENTERPRISE, label: 'GitHub Enterprise' },
 ] as const
 
@@ -40,6 +41,8 @@ export function getGitProviderTagType(provider: string): '' | 'success' | 'warni
   switch (provider) {
     case GitProvider.BITBUCKET_SERVER:
       return ''
+    case GitProvider.BITBUCKET_CLOUD:
+      return 'warning'
     case GitProvider.GITHUB_ENTERPRISE:
       return 'success'
     default:

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from src import __version__
 from src.api.v1.endpoints import (
+    app_version_diff,
     audit,
     auth,
     auto_task_assignment,  # Auto-assignment rule management
@@ -12,6 +13,7 @@ from src.api.v1.endpoints import (
     project_registry,
     projects,
     rbac,
+    release_dependency_graph,
     release_diff,
     release_notes,
     reviews,
@@ -70,6 +72,12 @@ api_router.include_router(release_diff.router, tags=["release-diff"])
 
 # Release notes (version releases with their notes, GitHub Releases style)
 api_router.include_router(release_notes.router, tags=["release-notes"])
+
+# Release dependency graph (consolidated from the dependency database)
+api_router.include_router(release_dependency_graph.router, tags=["release-dependency-graph"])
+
+# App diff (two or more releases of one application, compared package by package)
+api_router.include_router(app_version_diff.router, tags=["app-version-diff"])
 
 # LLM Proxy endpoint (for PageAgent AI assistant)
 api_router.include_router(llm_proxy.router, tags=["llm-proxy"])

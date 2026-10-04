@@ -24,7 +24,9 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.database import get_db_session
 from src.core.exceptions import GitServiceException
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
@@ -36,6 +38,7 @@ from src.schemas.release_diff import (
     ReleaseRefsRequest,
     ReleaseRefsResponse,
 )
+from src.services.git_provider_resolver import with_repository_provider
 from src.services.release_diff_service import ReleaseDiffService
 from src.utils.log import get_logger
 
@@ -75,9 +78,11 @@ def get_release_diff_service() -> ReleaseDiffService:
 async def compare_releases(
     payload: ReleaseCompareRequest,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[ReleaseDiffService, Depends(get_release_diff_service)],
 ) -> ReleaseCompareResponse:
     """Compare two releases and return the verdict plus the missing / added commits."""
+    payload = await with_repository_provider(payload, db)
     try:
         return await service.compare_releases(payload)
     except GitServiceException as e:
@@ -117,9 +122,11 @@ async def compare_releases(
 async def list_release_refs(
     payload: ReleaseRefsRequest,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[ReleaseDiffService, Depends(get_release_diff_service)],
 ) -> ReleaseRefsResponse:
     """List tags and branches for ref suggestions."""
+    payload = await with_repository_provider(payload, db)
     try:
         return await service.list_refs(payload)
     except GitServiceException as e:
@@ -159,9 +166,11 @@ async def list_release_refs(
 async def check_release_commits(
     payload: ReleaseCommitCheckRequest,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[ReleaseDiffService, Depends(get_release_diff_service)],
 ) -> ReleaseCommitCheckResponse:
     """Check whether the requested commits belong to the target release."""
+    payload = await with_repository_provider(payload, db)
     try:
         return await service.check_commits(payload)
     except GitServiceException as e:

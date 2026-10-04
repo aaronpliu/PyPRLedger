@@ -449,6 +449,37 @@ class GitServiceException(AppException):
         )
 
 
+class DependencyApiException(AppException):
+    """Dependency database error"""
+
+    def __init__(self, message: str = "Dependency database error", **context: Any):
+        super().__init__(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"error": "dependency_api_error", "message": message, **context},
+            message_key="errors.dependency_api_error",
+        )
+
+
+class DependencyGraphNotFoundException(AppException):
+    """No dependency record for the coordinates asked for"""
+
+    def __init__(self, app_name: str, ref: str):
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": "dependency_graph_not_found",
+                "message": (
+                    f"No dependency record for application '{app_name}' at ref '{ref}'. "
+                    "The application may not be registered, or its build may not have been "
+                    "scanned."
+                ),
+                "app_name": app_name,
+                "ref": ref,
+            },
+            message_key="errors.dependency_graph_not_found",
+        )
+
+
 class ErrorResponse(BaseModel):
     """Standard error response model"""
 
