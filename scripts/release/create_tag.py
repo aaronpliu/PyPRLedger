@@ -43,8 +43,20 @@ def create_tag(version, auto_confirm=False):
 
     # Show verification
     print("\nVerification:")
-    subprocess.run(["git", "tag", "-l", "|", "tail", "-5"], shell=True)
-    subprocess.run(["git", "show", tag_name, "--no-patch", "--format='%ai %s'"], shell=True)
+    # These used to pass shell=True together with a list. On POSIX only the first
+    # element is then the command string and the rest become arguments to the
+    # shell itself, so "git tag -l | tail -5" ran a bare `git` and printed its
+    # usage instead of the tags. Capture the output and slice it in Python.
+    recent = subprocess.run(
+        ["git", "tag", "--sort=-v:refname", "-l"], capture_output=True, text=True
+    )
+    if recent.returncode != 0:
+        print(f"  Could not list tags: {recent.stderr.strip()}", file=sys.stderr)
+    else:
+        for line in recent.stdout.splitlines()[:5]:
+            print(f"  {line}")
+
+    subprocess.run(["git", "show", tag_name, "--no-patch", "--format=%ai %s"])
     return 0
 
 
