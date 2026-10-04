@@ -215,6 +215,63 @@ describe('AppDiffView', () => {
     expect(wrapper.find('[data-test="matrix"]').exists()).toBe(false)
   })
 
+  it('reports the commits between a pair', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    expect(wrapper.find('[data-test="code-counts"]').text()).toContain('5 commits added')
+    expect(wrapper.find('[data-test="code-unavailable"]').exists()).toBe(false)
+  })
+
+  it('opens the commit list on demand', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    expect(wrapper.find('[data-test="commits"]').exists()).toBe(false)
+
+    await wrapper.find('[data-test="code-toggle"]').trigger('click')
+
+    const commits = wrapper.find('[data-test="commits"]')
+    expect(commits.text()).toContain('a1b2c3d')
+    expect(commits.text()).toContain('Add the new module')
+  })
+
+  it('says a release was rebuilt when only its commits moved', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    await pick(wrapper, 3, ['v1.1.0', 'v3.0.0'])
+
+    // the dependency axis has nothing to report ...
+    expect(wrapper.find('[data-test="interval-unchanged"]').exists()).toBe(true)
+    // ... and the page does not leave it at that
+    expect(wrapper.find('[data-test="rebuilt"]').exists()).toBe(true)
+  })
+
+  it('says the commits could not be read instead of showing none', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    await pick(wrapper, 3, ['v1.1.0', 'v4.0.0'])
+
+    expect(wrapper.find('[data-test="code-unavailable"]').text()).toContain(
+      'provider unreachable',
+    )
+    // no counts and no toggle, so nothing reads as a pair without commits
+    expect(wrapper.find('[data-test="code-counts"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="code-toggle"]').exists()).toBe(false)
+  })
+
+  it('shows no code axis for a pair it could not compare', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    await pick(wrapper, 3, ['v2.0.0', 'v1.1.0', 'v9.9.9'])
+
+    // the incomplete pair carries no code axis at all
+    expect(wrapper.findAll('[data-test="code-axis"]')).toHaveLength(1)
+  })
+
   it('restores the comparison a link carries', async () => {
     const wrapper = await mountView(
       '?project_key=CORE&repository_slug=app&refs=v1.0.0,v1.1.0,v2.0.0',

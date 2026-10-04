@@ -1,4 +1,6 @@
 import type {
+  AppVersionDiffCode,
+  AppVersionDiffCommit,
   AppVersionDiffMove,
   AppVersionDiffResponse,
 } from '@/api/appVersionDiff'
@@ -121,4 +123,44 @@ export function moveSymbol(tone: MoveTone): string {
 export function defaultSelection(tags: string[], branches: string[]): string[] {
   const picked = [...tags, ...branches]
   return picked.slice(0, 2)
+}
+
+/** How a pair's code axis reads. `unavailable` and `none` are deliberately different. */
+export type CodeTone = 'unavailable' | 'none' | 'commits'
+
+export function codeTone(code: AppVersionDiffCode | null | undefined): CodeTone {
+  if (!code || code.unavailable) return 'unavailable'
+  return commitTotal(code) > 0 ? 'commits' : 'none'
+}
+
+/** How many commits a pair reports, in both directions. Zero when it could not be read. */
+export function commitTotal(code: AppVersionDiffCode | null | undefined): number {
+  if (!code || code.unavailable) return 0
+  return code.added_count + code.missing_count
+}
+
+/**
+ * Whether a pair's dependencies did not move while its commits did.
+ *
+ * The case the code axis exists for: a tag was moved to a new commit and what it
+ * pins stayed identical, so the dependency axis alone would report that nothing
+ * happened about a release that shipped different code.
+ */
+export function rebuiltWithUnchangedDependencies(
+  summary: Record<string, number> | undefined,
+  code: AppVersionDiffCode | null | undefined,
+): boolean {
+  if (!code || code.unavailable) return false
+  const moved =
+    (summary?.changed ?? 0) + (summary?.added ?? 0) + (summary?.removed ?? 0) > 0
+  return !moved && commitTotal(code) > 0
+}
+
+/** A commit's short form, and the first line of what it says. */
+export function shortCommitId(commit: AppVersionDiffCommit): string {
+  return commit.display_id || commit.id.slice(0, 7)
+}
+
+export function commitSubject(commit: AppVersionDiffCommit): string {
+  return (commit.message ?? '').split('\n')[0]
 }

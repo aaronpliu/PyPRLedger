@@ -34,6 +34,7 @@ from src.schemas.app_version_diff import (
     VERDICT_CHANGED,
     VERDICT_IDENTICAL,
     VERDICT_INCOMPLETE,
+    AppVersionDiffCode,
     AppVersionDiffInterval,
     AppVersionDiffMove,
     AppVersionDiffPackage,
@@ -41,9 +42,14 @@ from src.schemas.app_version_diff import (
     AppVersionDiffRequest,
     AppVersionDiffResponse,
 )
+from src.schemas.release_diff import VERDICT_INCONCLUSIVE, ReleaseCompareRequest
 from src.services.dependency_graph_service import DependencyGraphService
 from src.services.git_providers import BaseGitProvider, get_git_provider
-from src.services.release_diff_service import resolve_provider_name, resolve_remote_project_key
+from src.services.release_diff_service import (
+    ReleaseDiffService,
+    resolve_provider_name,
+    resolve_remote_project_key,
+)
 from src.utils.log import get_logger
 from src.utils.metrics import MetricsCollector
 from src.utils.metrics import metrics as metrics_collector
@@ -58,6 +64,10 @@ CACHE_TYPE = "app_version_diff"
 # The application itself is the graph's root, and the dependencies it declares
 # are what this comparison is about.
 PROJECT_CATEGORY = 0
+
+# How many commits of each direction are carried per pair. The counts are exact
+# either way; only the rendered lists are capped, and the payload says so.
+CODE_RENDER_LIMIT = 30
 
 # A version as an application declares it: an optional `v`, up to three numeric
 # components, an optional pre-release, an optional build metadata suffix.
@@ -163,11 +173,14 @@ class AppVersionDiffService:
         metrics: MetricsCollector | None = None,
         cache: RedisCache | None = None,
         graph_service: DependencyGraphService | None = None,
+        diff_service: ReleaseDiffService | None = None,
         provider_factory: Callable[[str], BaseGitProvider] = get_git_provider,
     ) -> None:
         self.metrics = metrics or metrics_collector
         self.cache = cache or RedisCache()
         self.graph_service = graph_service or DependencyGraphService(metrics=self.metrics)
+        # The code axis is the repository comparison, called rather than rewritten.
+        self.diff_service = diff_service or ReleaseDiffService(metrics=self.metrics)
         self._provider_factory = provider_factory
 
     async def compare(
@@ -198,6 +211,8 @@ class AppVersionDiffService:
 
         packages = self._build_matrix(release_entries)
         intervals = self._compare_intervals(release_entries, packages)
+        if request.include_code:
+            await self._attach_code(request, intervals, provider_name)
         response = self._build_response(
             request=request,
             app_name=app_name,
@@ -451,6 +466,60 @@ class AppVersionDiffService:
 
         return intervals
 
+    async def _attach_code(
+        self,
+        request: AppVersionDiffRequest,
+        intervals: list[AppVersionDiffInterval],
+        provider_name: str,
+    ) -> None:
+        """Read the commits between every pair that can be compared.
+
+        One pair at a time, and a pair that cannot be read is recorded as such
+        with the reason. A provider that is down, or that does not know a release
+        ref - the dependency source keys a release by a value that need not be a
+        ref the git provider knows - must not cost the comparison its dependency
+        axis, and must never read as a pair that had no commits.
+        """
+        for interval in intervals:
+            if not interval.complete:
+                continue
+            try:
+                comparison = await self.diff_service.compare_releases(
+                    ReleaseCompareRequest(
+                        project_key=request.project_key,
+                        repository_slug=request.repository_slug,
+                        git_provider=provider_name,
+                        workspace_slug=request.workspace_slug,
+                        refresh=request.refresh,
+                        source_ref=interval.source_ref,
+                        target_ref=interval.target_ref,
+                        render_limit=CODE_RENDER_LIMIT,
+                    )
+                )
+            except Exception as e:
+                logger.warning(
+                    "Could not read the commits between two releases",
+                    extra={
+                        "project_key": request.project_key,
+                        "repository_slug": request.repository_slug,
+                        "source_ref": interval.source_ref,
+                        "target_ref": interval.target_ref,
+                        "error": str(e),
+                    },
+                )
+                interval.code = AppVersionDiffCode(verdict=VERDICT_INCONCLUSIVE, unavailable=str(e))
+                continue
+
+            interval.code = AppVersionDiffCode(
+                verdict=comparison.verdict,
+                scan_complete=comparison.scan_complete,
+                added_count=comparison.added_count,
+                missing_count=comparison.missing_count,
+                added_commits=comparison.added_commits,
+                missing_commits=comparison.missing_commits,
+                truncated=comparison.rendered_truncated,
+            )
+
     def _build_response(
         self,
         *,
@@ -505,12 +574,17 @@ class AppVersionDiffService:
     # ------------------------------------------------------------------ #
 
     def _cache_key(self, request: AppVersionDiffRequest, app_name: str, provider_name: str) -> str:
-        """Keyed by the set of releases, so the order they were chosen in is not a key."""
+        """Keyed by the set of releases, so the order they were chosen in is not a key.
+
+        Whether the code axis was read is part of the key: a comparison answered
+        without the commits is not the answer to a request that asked for them.
+        """
         parts = [
             app_name,
             request.project_key,
             request.repository_slug,
             provider_name,
+            str(request.include_code),
             *sorted(request.refs),
         ]
         digest = hashlib.sha256("|".join(str(part) for part in parts).encode()).hexdigest()

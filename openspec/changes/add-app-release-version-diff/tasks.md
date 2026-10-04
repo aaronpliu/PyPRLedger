@@ -31,6 +31,8 @@
 - [x] 3.10 Add a refresh action that asks for the comparison again with the cache bypassed
 - [x] 3.11 Keep the selection in the URL and restore it when such a URL is opened
 - [x] 3.12 Cover the waits and the empty states: coordinates not chosen, fewer than two releases, and an application with no records at all
+- [x] 3.13 Render the code axis of each pair: the commits the later release adds and the commits it does not contain of the earlier one, capped, with the reason shown where it could not be read
+- [x] 3.14 State it when the dependencies of a pair did not move but its commits did, and mark a pair whose commits could not be read instead of showing it as a pair without commits
 
 ## 4. Navigation and copy
 
@@ -50,3 +52,12 @@
 - [x] 5.8 Frontend: selection (the two most recent by default, add and remove), the URL state, and the refresh action
 - [x] 5.9 Run the backend suite with `pytest`, then `vitest` and `vue-tsc --noEmit` for the frontend
 - [ ] 5.10 Confirm against a real application with at least three releases that the column order matches the release dates, that a package untouched across all of them reads as unchanged, and that the three existing release pages are unaffected
+- [x] 5.11 Backend: the code axis runs for the complete pairs only, both directions are reported, a provider that cannot answer degrades that pair alone, and the axis is skipped when the request does not ask for it
+- [x] 5.12 Frontend: the commit lists per pair, the "dependencies unchanged but commits changed" statement, and the pair whose commits could not be read
+
+## 6. The code axis
+
+- [x] 6.1 Extend the response with the code axis of a pair: the verdict of the repository comparison, what the later release adds, what it does not contain of the earlier one, the commits themselves, and whether either list was capped
+- [x] 6.2 Read it once per adjacent pair whose releases both have a record, through the existing `ReleaseDiffService.compare_releases`, passing the two release refs and the request's refresh flag, and changing nothing in that service
+- [x] 6.3 Degrade per pair: record why a pair's commits could not be read - an unreachable provider, a release ref the provider does not know - instead of failing the request, and never report such a pair as one with no commits
+- [x] 6.4 Skip the whole code axis when the request does not ask for it, and cache it with the comparison it belongs to

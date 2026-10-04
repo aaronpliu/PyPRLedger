@@ -18,6 +18,7 @@ from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.main import app
 from src.models.auth_user import AuthUser
+from src.schemas.release_diff import ReleaseCompareRequest, ReleaseCompareResponse
 from src.services.app_version_diff_service import AppVersionDiffService
 from src.services.dependency_graph_service import DependencyGraphService
 from src.services.dependency_mock_data import MOCK_APP_NAME, MOCK_BRANCH, MOCK_TAG
@@ -45,8 +46,34 @@ class FakeRegistry(ProjectRegistryService):
         return self.app_name
 
 
+class FakeDiff:
+    """The repository comparison, so the endpoint never reaches a git provider."""
+
+    def __init__(self, added: int = 4) -> None:
+        self.added = added
+        self.calls: list[tuple[str, str]] = []
+
+    async def compare_releases(self, request: ReleaseCompareRequest) -> ReleaseCompareResponse:
+        self.calls.append((request.source_ref, request.target_ref))
+        return ReleaseCompareResponse(
+            project_key=request.project_key,
+            repository_slug=request.repository_slug,
+            git_provider="bitbucket_server",
+            source_ref=request.source_ref,
+            target_ref=request.target_ref,
+            verdict="contained",
+            scan_complete=True,
+            added_count=self.added,
+        )
+
+
 @pytest.fixture
-def authenticated_client(db_session):
+def fake_diff() -> FakeDiff:
+    return FakeDiff()
+
+
+@pytest.fixture
+def authenticated_client(db_session, fake_diff):
     """Test client with auth, the registry and the comparison service overridden."""
 
     async def _current_user() -> AuthUser:
@@ -61,6 +88,7 @@ def authenticated_client(db_session):
     app.dependency_overrides[get_app_version_diff_service] = lambda: AppVersionDiffService(
         cache=FakeCache(),
         graph_service=DependencyGraphService(cache=FakeCache()),
+        diff_service=fake_diff,
     )
     yield
     for dependency in (
@@ -144,6 +172,43 @@ async def test_endpoint_compares_more_than_two_releases(async_client, authentica
     body = response.json()
     assert len(body["releases"]) == 3
     assert len(body["intervals"]) == 2
+
+
+async def test_endpoint_reports_the_commits_between_a_pair(
+    async_client, authenticated_client, fake_diff
+) -> None:
+    response = await async_client.post(
+        "/api/v1/release/apps/diff", json=payload(MOCK_TAG, MOCK_BRANCH)
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    # the pair is the two releases in timeline order
+    assert fake_diff.calls == [(MOCK_TAG, MOCK_BRANCH)]
+    interval = body["intervals"][0]
+    assert interval["code"]["verdict"] == "contained"
+    assert interval["code"]["added_count"] == 4
+    assert interval["code"]["unavailable"] is None
+
+
+async def test_endpoint_leaves_the_code_axis_out_when_not_asked(
+    async_client, authenticated_client, fake_diff
+) -> None:
+    response = await async_client.post(
+        "/api/v1/release/apps/diff",
+        json={
+            "project_key": "CORE",
+            "repository_slug": "app",
+            "git_provider": "bitbucket_server",
+            "refs": [MOCK_TAG, MOCK_BRANCH],
+            "include_code": False,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert fake_diff.calls == []
+    assert response.json()["intervals"][0]["code"] is None
 
 
 async def test_endpoint_rejects_a_single_release(async_client, authenticated_client) -> None:

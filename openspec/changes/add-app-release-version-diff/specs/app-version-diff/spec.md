@@ -156,3 +156,37 @@ The Releases navigation group SHALL gain an entry for the application-level comp
 
 - **WHEN** a user opens the repository comparison, release notes or dependency graph
 - **THEN** each SHALL behave as it did before this change
+
+### Requirement: The code axis is reported together with the dependency axis
+
+For every pair of adjacent releases whose releases both have a record, the system SHALL report the commits between them, so that a release whose dependencies did not move is not read as a release in which nothing happened: a tag can be moved to a new commit while the versions it pins stay identical, and such a rebuild would otherwise read as an empty comparison. The commit delta SHALL be reported in both directions - what the later release adds, and what it does not contain of the earlier one - and each list SHALL say whether it was capped.
+
+#### Scenario: A pair reports the commits between its releases
+
+- **WHEN** two adjacent releases differ in commits
+- **THEN** the commits the later release adds SHALL be reported for that pair
+- **AND** the commits of the earlier release the later one does not contain SHALL be reported separately
+- **AND** each list SHALL state whether it was capped
+
+#### Scenario: Dependencies unchanged but commits changed
+
+- **WHEN** every dependency carries the same version in two adjacent releases and the later release carries commits
+- **THEN** the dependency summary for that pair SHALL report no changes
+- **AND** the commits SHALL still be reported for that pair
+- **AND** the view SHALL state that commits moved while the dependencies did not
+
+### Requirement: A code axis that cannot be read degrades on its own
+
+When the commits between two adjacent releases cannot be read - the git provider is unreachable, or it does not know one of the release refs, which the dependency source's key for a release need not be - the system SHALL record the reason for that pair, SHALL leave the dependency axis of that pair and every other pair intact, and MUST NOT report such a pair as a pair with no commits. The dependency axis alone SHALL remain a usable answer.
+
+#### Scenario: The provider does not know a release ref
+
+- **WHEN** the git provider cannot resolve one of the release refs
+- **THEN** that pair's code axis SHALL carry the reason it could not be read
+- **AND** that pair's dependency comparison SHALL still be reported
+
+#### Scenario: The provider is unreachable
+
+- **WHEN** the git provider cannot be reached at all
+- **THEN** every pair's code axis SHALL carry the reason
+- **AND** the comparison SHALL NOT be presented as a comparison with no commits

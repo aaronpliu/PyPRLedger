@@ -240,6 +240,77 @@
               {{ t('appDiff.risk_downgrade', { count: downgradeCount(interval.summary) }) }}
             </span>
           </div>
+
+          <!-- The commits between the two releases. A pair whose commits could
+               not be read says so: an empty list would read as "none". -->
+          <div v-if="interval.code" class="code" data-test="code-axis">
+            <p
+              v-if="interval.code.unavailable"
+              class="code-unavailable"
+              data-test="code-unavailable"
+            >
+              {{ t('appDiff.code_unavailable', { reason: interval.code.unavailable }) }}
+            </p>
+
+            <template v-else>
+              <p class="code-counts" data-test="code-counts">
+                <span :class="`code-${codeTone(interval.code)}`">
+                  {{ t('appDiff.code_added', { count: interval.code.added_count }) }}
+                </span>
+                <span v-if="interval.code.missing_count" data-test="code-missing">
+                  · {{ t('appDiff.code_missing', { count: interval.code.missing_count }) }}
+                </span>
+              </p>
+
+              <p
+                v-if="rebuiltWithUnchangedDependencies(interval.summary, interval.code)"
+                class="rebuilt"
+                data-test="rebuilt"
+              >
+                {{ t('appDiff.rebuilt') }}
+              </p>
+
+              <el-button
+                v-if="commitTotal(interval.code)"
+                link
+                type="primary"
+                data-test="code-toggle"
+                @click="toggleCommits(intervalKey(interval))"
+              >
+                {{
+                  isExpanded(intervalKey(interval))
+                    ? t('appDiff.code_hide')
+                    : t('appDiff.code_show')
+                }}
+              </el-button>
+
+              <div v-if="isExpanded(intervalKey(interval))" class="commits" data-test="commits">
+                <template v-if="interval.code.added_commits.length">
+                  <h4>{{ t('appDiff.code_added_heading') }}</h4>
+                  <ul>
+                    <li v-for="commit in interval.code.added_commits" :key="commit.id">
+                      <code>{{ shortCommitId(commit) }}</code>
+                      <span class="subject">{{ commitSubject(commit) }}</span>
+                    </li>
+                  </ul>
+                </template>
+
+                <template v-if="interval.code.missing_commits.length">
+                  <h4>{{ t('appDiff.code_missing_heading') }}</h4>
+                  <ul>
+                    <li v-for="commit in interval.code.missing_commits" :key="commit.id">
+                      <code>{{ shortCommitId(commit) }}</code>
+                      <span class="subject">{{ commitSubject(commit) }}</span>
+                    </li>
+                  </ul>
+                </template>
+
+                <p v-if="interval.code.truncated" class="truncated" data-test="code-truncated">
+                  {{ t('appDiff.code_truncated') }}
+                </p>
+              </div>
+            </template>
+          </div>
         </article>
       </section>
 
@@ -321,6 +392,9 @@ import { appVersionDiffApi } from '@/api/appVersionDiff'
 import type { AppVersionDiffResponse } from '@/api/appVersionDiff'
 import {
   buildRows,
+  codeTone,
+  commitSubject,
+  commitTotal,
   defaultSelection,
   downgradeCount,
   isMarked,
@@ -328,9 +402,11 @@ import {
   moveLabelKey,
   moveSymbol,
   moveTone,
+  rebuiltWithUnchangedDependencies,
+  shortCommitId,
   summaryEntries,
 } from '@/utils/appVersionDiff'
-import type { AppDiffCell, AppDiffRow, MoveTone } from '@/utils/appVersionDiff'
+import type { AppDiffCell, AppDiffRow } from '@/utils/appVersionDiff'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -502,6 +578,23 @@ function cellClass(cell: AppDiffCell) {
 
 function versionClass(cell: AppDiffCell) {
   return { unknown: !cell.hasRecord, absent: cell.hasRecord && !cell.version }
+}
+
+/** A pair's identity, for the commit lists a reader opens by hand. */
+function intervalKey(interval: { source_ref: string; target_ref: string }): string {
+  return `${interval.source_ref}->${interval.target_ref}`
+}
+
+const expandedCommits = ref<string[]>([])
+
+function isExpanded(key: string): boolean {
+  return expandedCommits.value.includes(key)
+}
+
+function toggleCommits(key: string) {
+  expandedCommits.value = isExpanded(key)
+    ? expandedCommits.value.filter((item) => item !== key)
+    : [...expandedCommits.value, key]
 }
 
 function syncUrl() {
@@ -810,5 +903,77 @@ watch(selectedRefs, (refs) => {
 
 .version.absent {
   color: var(--el-text-color-placeholder);
+}
+
+.code {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--el-border-color-lighter);
+  font-size: 12px;
+}
+
+.code-counts {
+  margin: 0;
+  color: var(--el-text-color-regular);
+}
+
+.code-counts .code-commits {
+  font-weight: 600;
+}
+
+.code-counts .code-none {
+  color: var(--el-text-color-secondary);
+}
+
+.code-unavailable {
+  margin: 0;
+  color: var(--el-color-warning-dark-2);
+}
+
+.rebuilt {
+  margin: 6px 0 0;
+  color: var(--el-color-warning-dark-2);
+  font-weight: 600;
+}
+
+.commits {
+  margin-top: 6px;
+}
+
+.commits h4 {
+  margin: 6px 0 2px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--el-text-color-secondary);
+}
+
+.commits ul {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.commits li {
+  display: flex;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.commits code {
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+}
+
+.commits .subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.truncated {
+  margin: 4px 0 0;
+  color: var(--el-text-color-secondary);
+  font-style: italic;
 }
 </style>

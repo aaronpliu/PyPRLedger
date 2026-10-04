@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
 
+from src.schemas.release_diff import CommitInfo
+
 
 # Verdict of a whole comparison.
 #
@@ -87,6 +89,14 @@ class AppVersionDiffRequest(BaseModel):
             "Bypass the cache and read every release from the dependency source again. A "
             "tag can be moved, so a reader who suspects one should not have to wait for the "
             "cache to expire."
+        ),
+    )
+    include_code: bool = Field(
+        default=True,
+        description=(
+            "Read the commits between every pair of adjacent releases as well. The dependency "
+            "axis is answered either way; this only decides whether the code axis is read, "
+            "which costs one repository comparison per pair."
         ),
     )
 
@@ -167,6 +177,45 @@ class AppVersionDiffPackage(BaseModel):
     )
 
 
+class AppVersionDiffCode(BaseModel):
+    """The commits between two adjacent releases.
+
+    The dependency axis cannot prove that nothing happened - a tag moved to a new
+    commit while the versions it pins stayed identical yields no dependency
+    change at all - so what landed between the two refs is read alongside it.
+    """
+
+    verdict: str = Field(
+        ...,
+        description=(
+            "The repository comparison's verdict for the pair: 'contained' when the later "
+            "release holds everything of the earlier one, 'missing' otherwise, "
+            "'inconclusive' when the difference could not be enumerated completely."
+        ),
+    )
+    scan_complete: bool = Field(
+        default=False,
+        description="Whether the missing direction was enumerated completely",
+    )
+    added_count: int = Field(default=0, description="Commits the later release adds")
+    missing_count: int = Field(
+        default=0,
+        description="Commits of the earlier release the later one does not contain",
+    )
+    added_commits: list[CommitInfo] = Field(default_factory=list)
+    missing_commits: list[CommitInfo] = Field(default_factory=list)
+    truncated: bool = Field(
+        default=False, description="Whether more commits exist than the rendered lists carry"
+    )
+    unavailable: str | None = Field(
+        default=None,
+        description=(
+            "Why the commits could not be read - an unreachable provider, a release ref the "
+            "provider does not know. Null when they were read, including when there are none."
+        ),
+    )
+
+
 class AppVersionDiffInterval(BaseModel):
     """One adjacent pair of releases, compared."""
 
@@ -186,6 +235,14 @@ class AppVersionDiffInterval(BaseModel):
     changes: list[AppVersionDiffMove] = Field(
         default_factory=list,
         description="Every package that moved in this interval, in matrix row order",
+    )
+    code: AppVersionDiffCode | None = Field(
+        default=None,
+        description=(
+            "The commits between the two releases. Null when the pair is incomplete or the "
+            "request did not ask for the code axis - which is not the same as a pair with no "
+            "commits, so it must not be presented as one."
+        ),
     )
 
 

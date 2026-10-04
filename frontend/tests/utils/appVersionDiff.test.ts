@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildRows,
+  codeTone,
+  commitSubject,
+  commitTotal,
   defaultSelection,
   downgradeCount,
   isMarked,
@@ -8,6 +11,8 @@ import {
   moveLabelKey,
   moveSymbol,
   moveTone,
+  rebuiltWithUnchangedDependencies,
+  shortCommitId,
   summaryEntries,
 } from '@/utils/appVersionDiff'
 import type { AppVersionDiffMove } from '@/api/appVersionDiff'
@@ -15,6 +20,12 @@ import { diffOf } from '../fixtures/appDiff'
 
 const TWO = ['v1.1.0', 'v2.0.0']
 const THREE = ['v1.1.0', 'v2.0.0', 'v9.9.9']
+const REBUILT = ['v1.1.0', 'v3.0.0']
+
+/** The code axis of the ordinary comparison. */
+function codeOf(refs: string[] = TWO) {
+  return diffOf({ refs }).intervals[0].code
+}
 
 function move(overrides: Partial<AppVersionDiffMove> = {}): AppVersionDiffMove {
   return {
@@ -155,5 +166,85 @@ describe('defaultSelection', () => {
   it('falls back to the branches when there are not two tags', () => {
     expect(defaultSelection(['v2.0.0'], ['main', 'develop'])).toEqual(['v2.0.0', 'main'])
     expect(defaultSelection([], ['main'])).toEqual(['main'])
+  })
+})
+
+describe('codeTone', () => {
+  it('tells a pair with commits from one without', () => {
+    expect(codeTone(codeOf())).toBe('commits')
+    expect(codeTone({ ...codeOf()!, added_count: 0, missing_count: 0 })).toBe('none')
+  })
+
+  it('separates "could not be read" from "no commits"', () => {
+    expect(codeTone(codeOf(['v1.1.0', 'v4.0.0']))).toBe('unavailable')
+    expect(codeTone(null)).toBe('unavailable')
+    expect(codeTone(undefined)).toBe('unavailable')
+    // and the two must not collapse into one another
+    expect(codeTone(null)).not.toBe(codeTone({ ...codeOf()!, added_count: 0 }))
+  })
+})
+
+describe('commitTotal', () => {
+  it('counts both directions', () => {
+    expect(commitTotal(codeOf())).toBe(5)
+    expect(commitTotal({ ...codeOf()!, added_count: 2, missing_count: 3 })).toBe(5)
+  })
+
+  it('counts nothing for an axis that could not be read', () => {
+    expect(commitTotal(codeOf(['v1.1.0', 'v4.0.0']))).toBe(0)
+    expect(commitTotal(null)).toBe(0)
+  })
+})
+
+describe('rebuiltWithUnchangedDependencies', () => {
+  it('spots a release rebuilt under the same versions', () => {
+    const interval = diffOf({ refs: REBUILT }).intervals[0]
+
+    expect(interval.summary.changed).toBe(0)
+    expect(interval.summary.added).toBe(0)
+    expect(interval.summary.removed).toBe(0)
+    expect(rebuiltWithUnchangedDependencies(interval.summary, interval.code)).toBe(true)
+  })
+
+  it('does not say it of a pair whose dependencies moved', () => {
+    const interval = diffOf({ refs: TWO }).intervals[0]
+
+    expect(rebuiltWithUnchangedDependencies(interval.summary, interval.code)).toBe(false)
+  })
+
+  it('does not say it of a pair whose commits could not be read', () => {
+    const interval = diffOf({ refs: ['v1.1.0', 'v4.0.0'] }).intervals[0]
+
+    expect(rebuiltWithUnchangedDependencies(interval.summary, interval.code)).toBe(false)
+    expect(rebuiltWithUnchangedDependencies(interval.summary, null)).toBe(false)
+  })
+
+  it('does not say it of a pair that really did not change', () => {
+    const interval = diffOf({ refs: TWO }).intervals[0]
+
+    expect(
+      rebuiltWithUnchangedDependencies(interval.summary, {
+        ...interval.code!,
+        added_count: 0,
+        missing_count: 0,
+      }),
+    ).toBe(false)
+  })
+})
+
+describe('commit rendering helpers', () => {
+  it('shortens a commit to its display id', () => {
+    const commit = codeOf()!.added_commits[0]
+
+    expect(shortCommitId(commit)).toBe('a1b2c3d')
+    expect(shortCommitId({ ...commit, display_id: null })).toBe('a1b2c3d')
+  })
+
+  it('takes the first line of what a commit says', () => {
+    const commit = codeOf()!.added_commits[0]
+
+    expect(commitSubject(commit)).toBe('Add the new module')
+    expect(commitSubject({ ...commit, message: 'Subject\n\nBody line' })).toBe('Subject')
+    expect(commitSubject({ ...commit, message: null })).toBe('')
   })
 })

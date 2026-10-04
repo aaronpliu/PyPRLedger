@@ -10,6 +10,8 @@ export interface AppVersionDiffRequest {
   refs: string[]
   /** Bypass the cache and read every release from the dependency source again. */
   refresh?: boolean
+  /** Read the commits between every pair as well. Defaults to true. */
+  include_code?: boolean
 }
 
 /** One selected release, placed on the timeline by the server. */
@@ -41,6 +43,35 @@ export interface AppVersionDiffPackage {
   moves: (AppVersionDiffMove | null)[]
 }
 
+/** One commit of a pair's delta, as the repository comparison reports it. */
+export interface AppVersionDiffCommit {
+  id: string
+  display_id: string | null
+  author_name: string | null
+  author_username: string | null
+  author_email: string | null
+  author_timestamp: number | null
+  message: string | null
+  url: string | null
+}
+
+/**
+ * The commits between two adjacent releases.
+ *
+ * `unavailable` carries the reason they could not be read - which is not the
+ * same as a pair with no commits, and must never be shown as one.
+ */
+export interface AppVersionDiffCode {
+  verdict: 'contained' | 'missing' | 'inconclusive'
+  scan_complete: boolean
+  added_count: number
+  missing_count: number
+  added_commits: AppVersionDiffCommit[]
+  missing_commits: AppVersionDiffCommit[]
+  truncated: boolean
+  unavailable: string | null
+}
+
 /** One adjacent pair of releases, compared. */
 export interface AppVersionDiffInterval {
   source_ref: string
@@ -49,6 +80,8 @@ export interface AppVersionDiffInterval {
   complete: boolean
   summary: Record<string, number>
   changes: AppVersionDiffMove[]
+  /** Null when the pair is incomplete or the request did not ask for the code axis. */
+  code: AppVersionDiffCode | null
 }
 
 export interface AppVersionDiffResponse {

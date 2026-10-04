@@ -1,4 +1,5 @@
 import type {
+  AppVersionDiffCommit,
   AppVersionDiffMove,
   AppVersionDiffResponse,
 } from '@/api/appVersionDiff'
@@ -13,6 +14,35 @@ import type {
 export const RELEASE_EARLIER = 'v1.1.0'
 export const RELEASE_LATER = 'v2.0.0'
 export const RELEASE_MISSING = 'v9.9.9'
+export const RELEASE_REBUILT = 'v3.0.0'
+export const RELEASE_UNAVAILABLE = 'v4.0.0'
+
+function commit(id: string, subject: string): AppVersionDiffCommit {
+  return {
+    id,
+    display_id: id.slice(0, 7),
+    author_name: 'Tester',
+    author_username: 'tester',
+    author_email: 'tester@example.com',
+    author_timestamp: 1780000000000,
+    message: subject,
+    url: `https://example.com/commits/${id}`,
+  }
+}
+
+/** The commits one pair of releases carries. */
+function code(added: number, missing = 0) {
+  return {
+    verdict: 'contained' as const,
+    scan_complete: true,
+    added_count: added,
+    missing_count: missing,
+    added_commits: [commit('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', 'Add the new module')],
+    missing_commits: [],
+    truncated: false,
+    unavailable: null,
+  }
+}
 
 function unchanged(name: string, version: string): AppVersionDiffMove {
   return {
@@ -116,6 +146,7 @@ function compared(): AppVersionDiffResponse {
           removed: 1,
         },
         changes: moves.filter((move) => move.state !== 'unchanged'),
+        code: code(5),
       },
     ],
   }
@@ -145,12 +176,82 @@ function withMissing(): AppVersionDiffResponse {
         complete: false,
         summary: { unchanged: 0, changed: 0, upgrade: 0, downgrade: 0, added: 0, removed: 0 },
         changes: [],
+        // a pair that could not be compared has no code axis, which is not the
+        // same as a pair with no commits
+        code: null,
       },
     ],
   }
 }
 
-/** The answer for a request: the missing-record case once that release is asked for. */
+/**
+ * A release rebuilt under the same versions: no dependency moved, and the
+ * commits did. This is the case the code axis exists for.
+ */
+function rebuilt(): AppVersionDiffResponse {
+  const base = compared()
+
+  return {
+    ...base,
+    releases: [
+      { ref: RELEASE_EARLIER, released_at: '2026-09-01', has_record: true },
+      { ref: RELEASE_REBUILT, released_at: '2026-10-01', has_record: true },
+    ],
+    verdict: 'identical',
+    packages: base.packages.map((pkg) => ({
+      name: pkg.name,
+      versions: [pkg.versions[0], pkg.versions[0]],
+      moves: [unchanged(pkg.name, pkg.versions[0] as string)],
+    })),
+    intervals: [
+      {
+        source_ref: RELEASE_EARLIER,
+        target_ref: RELEASE_REBUILT,
+        complete: true,
+        summary: { unchanged: 6, changed: 0, upgrade: 0, downgrade: 0, added: 0, removed: 0 },
+        changes: [],
+        code: code(3),
+      },
+    ],
+  }
+}
+
+/**
+ * A pair whose commits could not be read: the reason is carried, which is the
+ * only reading that is not a lie about there being no commits.
+ */
+function unreadable(): AppVersionDiffResponse {
+  const base = compared()
+
+  return {
+    ...base,
+    releases: [
+      { ref: RELEASE_EARLIER, released_at: '2026-09-01', has_record: true },
+      { ref: RELEASE_UNAVAILABLE, released_at: '2026-10-01', has_record: true },
+    ],
+    intervals: [
+      {
+        ...base.intervals[0],
+        target_ref: RELEASE_UNAVAILABLE,
+        code: {
+          verdict: 'inconclusive',
+          scan_complete: false,
+          added_count: 0,
+          missing_count: 0,
+          added_commits: [],
+          missing_commits: [],
+          truncated: false,
+          unavailable: 'provider unreachable',
+        },
+      },
+    ],
+  }
+}
+
+/** The answer for a request: which case depends on the releases that were asked for. */
 export function diffOf(payload: { refs: string[] }): AppVersionDiffResponse {
-  return payload.refs.includes(RELEASE_MISSING) ? withMissing() : compared()
+  if (payload.refs.includes(RELEASE_MISSING)) return withMissing()
+  if (payload.refs.includes(RELEASE_REBUILT)) return rebuilt()
+  if (payload.refs.includes(RELEASE_UNAVAILABLE)) return unreadable()
+  return compared()
 }

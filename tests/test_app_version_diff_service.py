@@ -12,6 +12,7 @@ import pytest
 
 from src.core.exceptions import DependencyApiException
 from src.schemas.app_version_diff import AppVersionDiffRequest
+from src.schemas.release_diff import ReleaseCompareRequest, ReleaseCompareResponse
 from src.services.app_version_diff_service import (
     AppVersionDiffService,
     compare_versions,
@@ -94,27 +95,60 @@ def record(
     }
 
 
+class FakeDiff:
+    """The repository comparison, answering with what it was handed."""
+
+    def __init__(self, added: int = 0, missing: int = 0, fail: str | None = None) -> None:
+        self.added = added
+        self.missing = missing
+        self.fail = fail
+        self.calls: list[tuple[str, str]] = []
+        self.requests: list[ReleaseCompareRequest] = []
+
+    async def compare_releases(self, request: ReleaseCompareRequest) -> ReleaseCompareResponse:
+        self.calls.append((request.source_ref, request.target_ref))
+        self.requests.append(request)
+        if self.fail:
+            raise RuntimeError(self.fail)
+        return ReleaseCompareResponse(
+            project_key=request.project_key,
+            repository_slug=request.repository_slug,
+            git_provider="bitbucket_server",
+            source_ref=request.source_ref,
+            target_ref=request.target_ref,
+            verdict="contained",
+            scan_complete=True,
+            added_count=self.added,
+            missing_count=self.missing,
+        )
+
+
 def build_service(
     records: dict[tuple[str, str], dict[str, Any]],
     tags: list[dict[str, Any]] | None = None,
     client: Any | None = None,
+    diff: FakeDiff | None = None,
 ) -> tuple[AppVersionDiffService, FakeCache, FakeProvider]:
     cache = FakeCache()
     provider = FakeProvider(tags)
     graph = DependencyGraphService(cache=FakeCache(), client=client or FakeClient(records))
     service = AppVersionDiffService(
-        cache=cache, graph_service=graph, provider_factory=lambda name: provider
+        cache=cache,
+        graph_service=graph,
+        diff_service=diff or FakeDiff(),
+        provider_factory=lambda name: provider,
     )
     return service, cache, provider
 
 
-def request(*refs: str, refresh: bool = False) -> AppVersionDiffRequest:
+def request(*refs: str, refresh: bool = False, include_code: bool = True) -> AppVersionDiffRequest:
     return AppVersionDiffRequest(
         project_key=PROJECT,
         repository_slug=REPOSITORY,
         git_provider="bitbucket_server",
         refs=list(refs),
         refresh=refresh,
+        include_code=include_code,
     )
 
 
@@ -490,3 +524,128 @@ async def test_refresh_reads_the_source_again():
     await service.compare(request("1.0.0", "1.1.0", refresh=True), app_name=APP)
 
     assert cache.writes == 2
+
+
+# ---------------------------------------------------------------------- #
+# The code axis
+# ---------------------------------------------------------------------- #
+
+
+def three_releases() -> dict[tuple[str, str], dict[str, Any]]:
+    return {
+        (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
+        (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.0.0"}),
+        (APP, "1.2.0"): record("1.2.0", "2026-11-01", {"packageA": "1.0.1"}),
+    }
+
+
+async def test_the_code_axis_runs_for_every_pair_that_can_be_compared():
+    diff = FakeDiff(added=3)
+    service, _, _ = build_service(three_releases(), diff=diff)
+
+    result = await service.compare(request("1.0.0", "1.1.0", "1.2.0"), app_name=APP)
+
+    # one comparison per pair, in timeline order
+    assert diff.calls == [("1.0.0", "1.1.0"), ("1.1.0", "1.2.0")]
+    assert result.intervals[0].code.added_count == 3
+    assert result.intervals[1].code.added_count == 3
+    # the counts are exact; only the rendered lists are capped
+    assert diff.requests[0].render_limit == 30
+
+
+async def test_a_pair_with_no_dependency_change_still_reports_its_commits():
+    # the case the code axis exists for: a tag was rebuilt, its versions did not move
+    diff = FakeDiff(added=7)
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.0.0"}),
+        },
+        diff=diff,
+    )
+
+    result = await service.compare(request("1.0.0", "1.1.0"), app_name=APP)
+
+    interval = result.intervals[0]
+    assert interval.summary["changed"] == 0
+    assert interval.summary["added"] == 0
+    assert interval.summary["removed"] == 0
+    # so the page can say that commits moved while the dependencies did not
+    assert interval.code.added_count == 7
+
+
+async def test_a_pair_whose_commits_cannot_be_read_keeps_its_dependencies():
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.0.1"}),
+        },
+        diff=FakeDiff(fail="provider unreachable"),
+    )
+
+    result = await service.compare(request("1.0.0", "1.1.0"), app_name=APP)
+
+    interval = result.intervals[0]
+    # the reason is carried rather than an empty commit list that reads as "none"
+    assert interval.code.unavailable == "provider unreachable"
+    assert interval.code.added_commits == []
+    # and the dependency axis stands
+    assert interval.summary["upgrade"] == 1
+    assert result.packages[0].moves[0].direction == "upgrade"
+
+
+async def test_an_incomplete_pair_is_not_asked_for_its_commits():
+    diff = FakeDiff(added=1)
+    service, _, _ = build_service(
+        {(APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"})},
+        diff=diff,
+    )
+
+    result = await service.compare(request("1.0.0", "1.9.0"), app_name=APP)
+
+    assert diff.calls == []
+    assert result.intervals[0].complete is False
+    assert result.intervals[0].code is None
+
+
+async def test_the_code_axis_is_skipped_when_it_is_not_asked_for():
+    diff = FakeDiff(added=1)
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.0.0"}),
+        },
+        diff=diff,
+    )
+
+    result = await service.compare(request("1.0.0", "1.1.0", include_code=False), app_name=APP)
+
+    assert diff.calls == []
+    assert result.intervals[0].code is None
+
+
+async def test_a_comparison_without_the_code_axis_is_cached_apart():
+    service, cache, _ = build_service(three_releases(), diff=FakeDiff(added=1))
+
+    without = await service.compare(request("1.0.0", "1.1.0", include_code=False), app_name=APP)
+    with_code = await service.compare(request("1.0.0", "1.1.0"), app_name=APP)
+
+    assert without.intervals[0].code is None
+    # the answer to the other request is not served as if it carried the commits
+    assert with_code.intervals[0].code is not None
+    assert cache.writes == 2
+
+
+async def test_refresh_reaches_the_provider_comparison_too():
+    diff = FakeDiff(added=1)
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.0.0"}),
+        },
+        diff=diff,
+    )
+
+    await service.compare(request("1.0.0", "1.1.0", refresh=True), app_name=APP)
+
+    assert diff.requests[0].refresh is True

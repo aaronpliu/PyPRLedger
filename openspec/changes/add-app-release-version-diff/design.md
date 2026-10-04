@@ -17,7 +17,8 @@ Existing building blocks to reuse: `DependencyGraphService` (dependency database
 **Goals:**
 
 - Compare two or more application releases at direct-dependency level, ordered along the release datetime timeline, and show what moved between adjacent releases - upgrade, downgrade, added, removed - without the reader having to open a page per release.
-- Read everything from the source the Release Dependency Graph already trusts, so the two pages can never disagree about what a release contains.
+- Pair that with the **code axis**: what commits landed between two releases, so a release rebuilt under a moved tag is visible as a rebuild instead of reading as an empty comparison.
+- Read everything from the sources the project already trusts - the dependency database for the versions, the repository comparison for the commits - so no page can disagree with another about what a release contains.
 - Never claim a conclusion the data does not support: a release with no dependency record makes the comparison incomplete, and a version that cannot be ordered is reported as changed without a direction.
 
 **Non-Goals:**
@@ -26,7 +27,7 @@ Existing building blocks to reuse: `DependencyGraphService` (dependency database
 - Resolving a package back to its repository, and drilling from a changed package into a repository comparison.
 - Reading `package.json` (or any file) through the git providers, and storing snapshots of manifests.
 - Any change to `ReleasesView`, `ReleaseNotesView` or `ReleaseDependencyGraphView` behaviour, and any change to existing endpoints or payloads.
-- Comparing arbitrary refs for an application release view; branches and commits stay in the repository comparison.
+- Comparing arbitrary refs the way the repository comparison does - this page compares the refs that were chosen as releases, and their commits are read for the intervals between them rather than offered as a free-form pair.
 - Export or report generation for this page.
 
 ## Decisions
@@ -131,20 +132,38 @@ The Releases group gains **App Diff**. The existing `Release Comparison` entry i
   ],
 
   "intervals": [
-    { "from": "1.0.0", "to": "1.1.0", "complete": true,
+    { "source_ref": "1.0.0", "target_ref": "1.1.0", "complete": true,
       "summary": { "changed": 1, "upgrade": 1, "downgrade": 0, "added": 1, "removed": 1 },
-      "changes": [ /* per package */ ] }
+      "changes": [ /* per package */ ],
+      "code": { "verdict": "contained", "scan_complete": true,
+                "added_count": 7, "missing_count": 0,
+                "added_commits": [ /* capped at 30 */ ], "missing_commits": [],
+                "truncated": false, "unavailable": null } }
   ]
 }
 ```
 
 `moves[i]` describes the move from release `i` to release `i+1` - and is `null` when that boundary touches a release with no record, which is how "unknown" is told apart from "unchanged" in the payload itself. Each move is the whole object rather than a bare state so a row and an interval carry the same shape, and `intervals[].changes` repeats the non-unchanged ones grouped per interval, so the view can read either way without recomputing. `verdict` is `incomplete` as soon as any selected release has no record.
 
+`intervals[].code` is `null` in two cases that are not the same as a pair with no commits: the pair is incomplete, or the request did not ask for the code axis. When it is present and the commits could not be read, `unavailable` carries the reason and the commit lists are empty - the view reads `unavailable` first, so an empty list is never shown as "none".
+
+### D11. The code axis is the repository comparison, run once per adjacent pair
+
+Each adjacent pair whose releases both have a record is compared with the existing `ReleaseDiffService.compare_releases` - the same call, on the same repository, with the earlier release as the source ref and the later one as the target. What the later release adds, and what it does not contain of the earlier one, are then reported exactly as the repository comparison reports them for two refs. Nothing in that service changes: it is called, not extended.
+
+The axis is reported per pair and degrades on its own. A provider that cannot be reached, or that does not know a release ref - the dependency database keys a release by a value that need not be a ref the git provider knows - records why for that pair and leaves that pair's dependency comparison, and every other pair, intact. Reporting such a pair as one with no commits would be the same lie as reporting a release with no record as unchanged.
+
+The cost is one comparison per pair (N-1 for N releases), served from the release-diff cache when the same pair is compared again, and skippable per request.
+
+*Rationale:* the dependency axis alone cannot prove that nothing happened. A tag moved to a new commit while the versions it pins stayed identical yields an empty dependency axis, and the page would then say "no changes" about a release that shipped different code. The commits between the two release refs are exactly what answers that, and the tool that reads them already exists.
+
 ## Risks / Trade-offs
 
 - [Direct dependencies only, so a transitive bump is invisible] -> Accepted and stated in the UI. The closure is a separate question, and the Release Dependency Graph answers it per ref.
 - [Two releases that differ only in a range the application declares] -> Ranges are out of scope by D4; a version-like but unorderable value is `changed` without a direction rather than a guessed upgrade.
-- [A moved tag makes a cached reading stale] -> D8's refresh, and the cache TTL is the existing one-hour window.
+- [A moved tag makes a cached reading stale] -> D8's refresh, and the cache TTL is the existing one-hour window. The code axis carries the refresh through to the provider comparison as well, so a refresh reads the commits again too.
+- [The dependency source's key for a release is not a ref the git provider knows] -> That pair's code axis records the reason and its dependency comparison stands; the page says the commits could not be read rather than that there were none.
+- [N-1 provider comparisons on one page view] -> Each is one call per pair, cached by the existing release-diff cache, capped in what it renders, and skippable per request.
 - [The database lags behind the repository, so a release exists as a tag long before it has a record] -> D6 renders that as `incomplete` with the column marked, which is the honest reading and points the reader at the database rather than at the page.
 - [A repository that is not registered resolves to the `Unknown` application and therefore has no records] -> Same path as a missing record; `get_app_name` auto-registers the repository, so the second visit onward has an application (with no dependency data until the database is scanned for it).
 - [Ordering a branch among tags] -> D3's third rule keeps it in place instead of inventing a date.
@@ -159,5 +178,4 @@ The Releases group gains **App Diff**. The existing `Release Comparison` entry i
 ## Open Questions
 
 - **Release datetime precedence.** D3 puts the dependency record's `created_at` first and the tag date second. If the database's `created_at` turns out to be a backfill or a scan timestamp rather than the release time, the order should be inverted. To confirm against a real record with a known release date.
-- **Whether the code axis is wanted here.** The repository comparison's expensive half - the commits between two refs - is not part of this design; the dependency axis alone cannot prove that the code did not change when every version matches. If that case matters, one `compare_releases` call per adjacent interval would answer it, and a requirement would be added.
 - **How many releases the page should accept at once.** The matrix stays readable for a handful of releases; the practical cap (and what the picker defaults to beyond the two most recent) is a UI decision to settle during implementation.
