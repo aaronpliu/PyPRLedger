@@ -943,9 +943,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-
-## [Unreleased]
-
 ### Added
 - **Release Manager Skill** - Automated release workflow integration
   - New `release-manager` skill for consistent version management
@@ -1522,8 +1519,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Development Workflow**: Simplified version management without package installation overhead
 
 ---
-
-## [Unreleased]
 
 ### Changed
 - **Consolidated Review Endpoints** - Merged `POST /api/v1/reviews` and `POST /api/v1/reviews/upsert` into a single upsert endpoint
