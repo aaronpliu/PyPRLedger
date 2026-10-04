@@ -1201,7 +1201,12 @@ async function flyMissingToken(count: number, landing: Element | null) {
   token.remove()
 }
 
-onBeforeUnmount(() => window.clearTimeout(handoffTimer))
+onBeforeUnmount(() => {
+  window.clearTimeout(handoffTimer)
+  // A debounce that outlives the view fires a provider call for a component
+  // that is gone, and writes to state nothing is rendering any more.
+  clearTimeout(refsTimer)
+})
 
 // ------------------------------------------------------------------ #
 // Reporting: standalone HTML report + screenshot sharing
