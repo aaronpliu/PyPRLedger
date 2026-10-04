@@ -29,9 +29,7 @@ from urllib.parse import parse_qs, urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.services.dependency_mock_data import (  # noqa: E402
-    MOCK_APP_NAME,
-    MOCK_BRANCH,
-    MOCK_TAG,
+    known_app_names,
     release_info_for,
 )
 
@@ -84,7 +82,7 @@ def main() -> None:
 
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Serving {RELEASE_PATH} on http://{args.host}:{args.port}")
-    print(f"  application: {MOCK_APP_NAME} (refs: {MOCK_TAG}, {MOCK_BRANCH})")
+    print(f"  applications: {', '.join(known_app_names())}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

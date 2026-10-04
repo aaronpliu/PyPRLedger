@@ -6,7 +6,13 @@ import pytest
 
 from src.core.exceptions import DependencyGraphNotFoundException
 from src.services.dependency_graph_service import DependencyGraphService
-from src.services.dependency_mock_data import MOCK_APP_NAME, MOCK_BRANCH, MOCK_TAG
+from src.services.dependency_mock_data import (
+    MOCK_APP_NAME,
+    MOCK_BRANCH,
+    MOCK_SECOND_APP_NAME,
+    MOCK_SECOND_TAG,
+    MOCK_TAG,
+)
 
 
 class FakeCache:
@@ -42,9 +48,13 @@ def packages_of(graph: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {entry["id"]: entry for entry in graph["packages"]}
 
 
-async def build(service: DependencyGraphService, ref: str = MOCK_TAG) -> dict[str, Any]:
+async def build(
+    service: DependencyGraphService,
+    ref: str = MOCK_TAG,
+    app_name: str = MOCK_APP_NAME,
+) -> dict[str, Any]:
     return await service.build(
-        app_name=MOCK_APP_NAME, project_key="CORE", repository_slug="app", ref=ref
+        app_name=app_name, project_key="CORE", repository_slug="app", ref=ref
     )
 
 
@@ -96,12 +106,12 @@ async def test_every_package_of_the_record_reaches_the_graph(service):
     graph = await build(service)
 
     assert sorted(packages_of(graph)) == [
+        MOCK_APP_NAME,
         "packageA",
         "packageB",
         "packageC",
         "packageD",
         "packageE",
-        MOCK_APP_NAME,
     ]
 
 
@@ -121,6 +131,36 @@ async def test_a_branch_reads_its_own_record(service):
     assert graph["generated_at"] == "2026-10-01"
     assert "packageF" in packages[MOCK_APP_NAME]["dependencies"]
     assert packages["packageF"]["dependencies"] == {"packageE": ">=0.8.0 <1.0.0"}
+
+
+async def test_another_application_reads_its_own_graph(service):
+    graph = await build(service, MOCK_SECOND_TAG, MOCK_SECOND_APP_NAME)
+    packages = packages_of(graph)
+
+    assert graph["ref"]["name"] == MOCK_SECOND_TAG
+    assert graph["generated_at"] == "2026-09-28"
+    assert packages[MOCK_SECOND_APP_NAME]["category"] == 0
+    assert packages[MOCK_SECOND_APP_NAME]["dependencies"] == {
+        "mcpCore": "0.1.0",
+        "mcpTransport": "0.2.0",
+    }
+
+    # two modules over a shared core, and nothing of the other application
+    assert sorted(packages) == [
+        "mcpCommon",
+        "mcpCore",
+        "mcpProtocol",
+        "mcpTransport",
+        MOCK_SECOND_APP_NAME,
+    ]
+    assert packages["mcpCore"]["category"] == 2
+    assert packages["mcpCore"]["dependencies"] == {
+        "mcpProtocol": ">=0.1.0 <0.2.0",
+        "mcpCommon": ">=0.1.0 <0.2.0",
+    }
+    # named by three packages and described by none: a leaf
+    assert packages["mcpCommon"]["category"] == 1
+    assert packages["mcpCommon"]["dependencies"] == {}
 
 
 async def test_the_graph_is_served_from_the_cache_the_second_time():

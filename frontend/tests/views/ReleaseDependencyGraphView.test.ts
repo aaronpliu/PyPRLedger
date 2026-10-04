@@ -10,7 +10,10 @@ import enMessages from '@/locales/en.json'
 // assertions below read.
 vi.mock('@/api/projects', () => ({
   projectsApi: {
-    getAllProjects: async () => [{ project_key: 'CORE', project_name: 'Core' }],
+    getAllProjects: async () => [
+      { project_key: 'CORE', project_name: 'Core' },
+      { project_key: 'GHE', project_name: 'GitHub', git_provider: 'github_enterprise' },
+    ],
     getProjectRepositories: async () => [
       { repository_slug: 'app', repository_name: 'Application' },
     ],
@@ -133,6 +136,17 @@ describe('ReleaseDependencyGraphView', () => {
 
     expect(wrapper.text()).toContain('Pick a project and a repository')
     expect(wrapper.find('[data-test="release-dependency-graph-chart"]').exists()).toBe(false)
+  })
+
+  it('auto selects the git provider of the chosen project', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents(ElSelect)
+    await selects[0].vm.$emit('update:modelValue', 'GHE')
+    await flushPromises()
+
+    expect(selects[2].props('modelValue')).toBe('github_enterprise')
   })
 
   it('opens on the newest tag of the repository, nothing picked', async () => {

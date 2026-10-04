@@ -165,10 +165,6 @@ class Settings(BaseSettings):
     REVIEW_MAX_SCORE: int = Field(default=10)
 
     # Bitbucket API configuration
-    BITBUCKET_CLOUD: bool = Field(
-        default=False,
-        description="Whether to use Bitbucket Cloud (True) or Server/Data Center (False)",
-    )
     BITBUCKET_SERVER_URL: str = Field(
         default="http://localhost:7990", description="Bitbucket Server/Data Center base URL"
     )

@@ -62,6 +62,23 @@ class ProjectRegistryService:
             )
             return self.DEFAULT_APP_NAME
 
+    async def get_git_provider(
+        self, project_key: str, repository_slug: str, db: AsyncSession
+    ) -> str | None:
+        """
+        Resolve the git provider a repository is registered under
+
+        Args:
+            project_key: The project key
+            repository_slug: The repository slug
+            db: Database session
+
+        Returns:
+            The provider name, or None when the pair is not registered
+        """
+        registry_entry = await self._get_registry_entry(project_key, repository_slug, db)
+        return registry_entry.git_provider if registry_entry else None
+
     async def get_app_names_batch(
         self, project_repo_pairs: list[tuple[str, str]], db: AsyncSession
     ) -> dict[tuple[str, str], str]:

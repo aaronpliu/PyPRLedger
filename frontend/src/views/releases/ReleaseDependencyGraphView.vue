@@ -105,9 +105,12 @@
                 :placeholder="t('releaseDiff.git_provider_placeholder')"
                 style="width: 100%"
               >
-                <el-option label="bitbucket_server" value="bitbucket_server" />
-                <el-option label="bitbucket_cloud" value="bitbucket_cloud" />
-                <el-option label="github_enterprise" value="github_enterprise" />
+                <el-option
+                  v-for="option in GIT_PROVIDER_OPTIONS"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
               </el-select>
             </el-form-item>
           </el-col>
@@ -286,6 +289,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { GIT_PROVIDER_OPTIONS } from '@/constants/gitProvider'
 import { useI18n } from 'vue-i18n'
 import ReleaseDependencyGraphChart from '@/components/charts/ReleaseDependencyGraphChart.vue'
 import ContentLoader from '@/components/common/ContentLoader.vue'
@@ -450,12 +454,24 @@ onMounted(() => {
   void loadProjects()
 })
 
-watch(selectedProjectKey, (key) => {
+// The project catalog carries the provider each repository lives on, so picking
+// a project fills it in - the reader never has to know which one it is.
+watch(selectedProjectKey, async (projectKey) => {
+  const project = projects.value.find((item) => item.project_key === projectKey)
+
   repo.value.repository_slug = ''
+  repo.value.git_provider = project?.git_provider || null
   tags.value = []
   branches.value = []
   selectedRef.value = ''
-  void loadRepositories(key)
+
+  // Unknown project keys (typed manually) have no local repository catalog
+  if (project) {
+    await loadRepositories(projectKey)
+  }
+  if (isCloudProvider.value) {
+    void ensureWorkspaceSuggestions()
+  }
 })
 
 watch(hasCoordinates, (ready) => {

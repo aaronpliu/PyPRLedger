@@ -95,9 +95,12 @@
                 :placeholder="t('releaseDiff.git_provider_placeholder')"
                 style="width: 100%"
               >
-                <el-option label="bitbucket_server" value="bitbucket_server" />
-                <el-option label="bitbucket_cloud" value="bitbucket_cloud" />
-                <el-option label="github_enterprise" value="github_enterprise" />
+                <el-option
+                  v-for="option in GIT_PROVIDER_OPTIONS"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
               </el-select>
             </el-form-item>
           </el-col>
@@ -773,6 +776,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { GIT_PROVIDER_OPTIONS } from '@/constants/gitProvider'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Close, Document, InfoFilled, Refresh, Search } from '@element-plus/icons-vue'
