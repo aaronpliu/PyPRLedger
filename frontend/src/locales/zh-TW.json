@@ -1155,6 +1155,7 @@
     "tags_group": "標籤",
     "branches_group": "分支",
     "pick_repository": "選擇專案和倉庫，以讀取其相依檔案。",
+    "no_data": "該 ref 沒有相依資料。",
     "category_project": "專案",
     "category_workspace": "工作區套件",
     "category_dependency": "外部相依",

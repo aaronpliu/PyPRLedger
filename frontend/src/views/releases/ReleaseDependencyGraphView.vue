@@ -178,6 +178,11 @@
         min-height="480px"
       />
 
+      <el-empty
+        v-else-if="!fullGraph.nodes.length"
+        :description="t('releaseDependencyGraph.no_data')"
+      />
+
       <el-row v-else :gutter="16">
         <el-col :xs="24" :md="18">
           <ReleaseDependencyGraphChart
@@ -238,6 +243,7 @@
                       {{ entry.node.name ?? entry.node.id }}
                     </button>
                     <span
+                      v-if="entry.constraint"
                       class="detail-constraint"
                       :class="{ 'is-range': !entry.pinned }"
                       :title="entry.constraint"
@@ -257,6 +263,7 @@
                       {{ entry.node.name ?? entry.node.id }}
                     </button>
                     <span
+                      v-if="entry.constraint"
                       class="detail-constraint"
                       :class="{ 'is-range': !entry.pinned }"
                       :title="entry.constraint"
@@ -282,12 +289,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ReleaseDependencyGraphChart from '@/components/charts/ReleaseDependencyGraphChart.vue'
 import ContentLoader from '@/components/common/ContentLoader.vue'
-import { withinDepth } from '@/utils/releaseDependencyGraph'
+import { dependencyFileToGraph, withinDepth } from '@/utils/releaseDependencyGraph'
 import type {
   ReleaseDependencyGraphData,
   ReleaseDependencyGraphNode,
 } from '@/utils/releaseDependencyGraph'
-import { loadMockDependencyFile } from './releaseDependencyGraphMock'
 import { projectsApi } from '@/api/projects'
 import type {
   CloudWorkspaceOption,
@@ -295,6 +301,7 @@ import type {
   RepositorySummary,
 } from '@/api/projects'
 import { releaseDiffApi } from '@/api/releaseDiff'
+import { releaseDependencyGraphApi } from '@/api/releaseDependencyGraph'
 
 const { t } = useI18n()
 
@@ -416,22 +423,18 @@ async function loadRefs() {
   }
 }
 
-/** Reads the dependency file of one ref and swaps the canvas onto it. */
+/** Reads the dependency graph of one ref and swaps the canvas onto it. */
 async function loadGraph(target: string) {
   loading.value = true
   try {
-    // Stands in for the endpoint that serves the ref's dependency JSON.
-    const loaded = await loadMockDependencyFile(
-      selectedProjectKey.value,
-      selectedRepositorySlug.value,
-      target,
-    )
-    fullGraph.value = loaded.data
-    renderedRef.value = loaded.ref.name
-    releasedAt.value = loaded.generated_at ?? ''
+    const file = await releaseDependencyGraphApi.read({ ...coordinates(), ref: target })
+    const graph = dependencyFileToGraph(file)
+    fullGraph.value = graph.data
+    renderedRef.value = graph.ref.name
+    releasedAt.value = graph.generated_at ?? ''
     // A ref change can leave the picked node behind: clear the pick rather than
     // dim a graph against a package the new file does not name.
-    if (selectedId.value && !loaded.data.nodes.some((node) => node.id === selectedId.value)) {
+    if (selectedId.value && !graph.data.nodes.some((node) => node.id === selectedId.value)) {
       selectedId.value = null
     }
   } catch {

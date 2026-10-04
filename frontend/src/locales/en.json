@@ -1155,6 +1155,7 @@
     "tags_group": "Tags",
     "branches_group": "Branches",
     "pick_repository": "Pick a project and a repository to read its dependency file.",
+    "no_data": "No dependency data for this ref.",
     "category_project": "Project",
     "category_workspace": "Workspace package",
     "category_dependency": "Dependency",

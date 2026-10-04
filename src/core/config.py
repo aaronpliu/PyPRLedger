@@ -85,6 +85,36 @@ class Settings(BaseSettings):
         ),
     )
 
+    CACHE_TTL_DEPENDENCY_GRAPH: int = Field(
+        default=3600,
+        description=(
+            "Cache TTL (seconds) for a consolidated dependency graph. The graph of one ref "
+            "only moves when the dependency database is rebuilt for that ref."
+        ),
+    )
+
+    # Dependency database - the system of record for what an application shipped
+    DEPENDENCY_API_BASE_URL: str = Field(
+        default="", description="Base URL of the dependency database API"
+    )
+    DEPENDENCY_API_TOKEN: str = Field(
+        default="", description="Bearer token for the dependency database API"
+    )
+    DEPENDENCY_API_MOCK: bool = Field(
+        default=True,
+        description=(
+            "Answer from canned dependency data instead of calling the database. Point "
+            "DEPENDENCY_API_BASE_URL at the real service and turn this off to switch over."
+        ),
+    )
+    DEPENDENCY_API_RELEASE_PATH: str = Field(
+        default="/api/v1/appReleaseInfo",
+        description=(
+            "Path returning one application ref: the modules it declared with their "
+            "exact versions, and what every package the database knows declared for its own"
+        ),
+    )
+
     # Security configuration
     SECRET_KEY: str = Field(default="development-secret-key-change-in-production")
     ALGORITHM: str = "HS256"

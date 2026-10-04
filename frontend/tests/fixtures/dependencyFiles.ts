@@ -1,24 +1,16 @@
-import { dependencyFileToGraph } from '@/utils/releaseDependencyGraph'
-import type {
-  DependencyFile,
-  DependencyFileGraph,
-} from '@/utils/releaseDependencyGraph'
+import type { DependencyFile } from '@/utils/releaseDependencyGraph'
 
 /**
- * Stand-in for the dependency files a monorepo dependency script is expected to
- * emit: one per repository ref, in the shape of the package.json files it
- * walked - the app naming its direct dependencies by exact version, the
- * packages it pulls in naming theirs by range. So the graph reads the way the
- * repository works: the app's edges carry the version it ships against, the
- * edges among the packages carry the bare relationship.
+ * The dependency files the tests read, in the shape the API serves: one per
+ * ref, mirroring the package.json files a monorepo walk produces - the project
+ * naming its modules by exact version, the packages naming theirs by range.
  *
  * The three tags tell the story of the graph changing over time: 1.0.0 knew
- * seven packages, 1.1.0 added G, and 2.0.0 wired the full shape - including
- * the cycle where D reaches back to A, which A also pulls in. The branch is
- * what the script produces outside a release: the same walk, at whatever main
- * points at now.
+ * seven packages, 1.1.0 added G, and 2.0.0 wired the full shape - including the
+ * cycle where D reaches back to A, which A also pulls in. The branch is what a
+ * walk outside a release produces: the same shape, at whatever main points at.
  */
-export const MOCK_DEPENDENCY_FILES: DependencyFile[] = [
+export const DEPENDENCY_FILES: DependencyFile[] = [
   {
     schema_version: '1.0',
     project_key: 'CORE',
@@ -269,23 +261,7 @@ export const MOCK_DEPENDENCY_FILES: DependencyFile[] = [
   },
 ]
 
-/**
- * Stands in for the endpoint that serves one ref's dependency file. A ref the
- * stand-in has nothing for falls back to the newest file it holds, so the
- * canvas still shows the shape of the repository instead of an empty page.
- */
-export function loadMockDependencyFile(
-  projectKey: string,
-  repositorySlug: string,
-  ref: string,
-): Promise<DependencyFileGraph> {
-  const file =
-    MOCK_DEPENDENCY_FILES.find((entry) => entry.ref.name === ref) ?? MOCK_DEPENDENCY_FILES[0]
-  return Promise.resolve(
-    dependencyFileToGraph({
-      ...file,
-      project_key: projectKey,
-      repository_slug: repositorySlug,
-    }),
-  )
+/** The file the given ref names, falling back to the newest one. */
+export function dependencyFileOf(ref: string): DependencyFile {
+  return DEPENDENCY_FILES.find((entry) => entry.ref.name === ref) ?? DEPENDENCY_FILES[0]
 }

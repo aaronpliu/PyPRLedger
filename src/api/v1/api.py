@@ -12,6 +12,7 @@ from src.api.v1.endpoints import (
     project_registry,
     projects,
     rbac,
+    release_dependency_graph,
     release_diff,
     release_notes,
     reviews,
@@ -70,6 +71,9 @@ api_router.include_router(release_diff.router, tags=["release-diff"])
 
 # Release notes (version releases with their notes, GitHub Releases style)
 api_router.include_router(release_notes.router, tags=["release-notes"])
+
+# Release dependency graph (consolidated from the dependency database)
+api_router.include_router(release_dependency_graph.router, tags=["release-dependency-graph"])
 
 # LLM Proxy endpoint (for PageAgent AI assistant)
 api_router.include_router(llm_proxy.router, tags=["llm-proxy"])

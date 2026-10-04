@@ -24,11 +24,27 @@ vi.mock('@/api/releaseDiff', () => ({
       project_key: 'CORE',
       repository_slug: 'app',
       git_provider: 'bitbucket_server',
-      tags: ['v2.0.0', 'v1.1.0', 'v1.0.0'],
+      tags: ['v2.0.0', 'v1.1.0', 'v1.0.0', 'v9.9.9'],
       branches: ['main'],
     }),
   },
 }))
+
+// The dependency database answers for the refs the fixture holds; one ref has
+// no record, the way a repository whose build was never scanned has none.
+vi.mock('@/api/releaseDependencyGraph', async () => {
+  const { dependencyFileOf } = await import('../fixtures/dependencyFiles')
+  return {
+    releaseDependencyGraphApi: {
+      read: async (payload: { ref: string }) => {
+        if (payload.ref === 'v9.9.9') {
+          throw new Error('no dependency record')
+        }
+        return dependencyFileOf(payload.ref)
+      },
+    },
+  }
+})
 
 // The shape of the option the chart hands to the (stubbed) canvas - only what
 // the assertions below read.
@@ -313,5 +329,14 @@ describe('ReleaseDependencyGraphView', () => {
     await openOn(wrapper, 'v1.0.0')
 
     expect(wrapper.text()).toContain('Pick a node in the graph')
+  })
+
+  it('says so when the dependency database holds nothing for the ref', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openOn(wrapper, 'v9.9.9')
+
+    expect(wrapper.text()).toContain('No dependency data for this ref')
+    expect(wrapper.find('[data-test="release-dependency-graph-chart"]').exists()).toBe(false)
   })
 })

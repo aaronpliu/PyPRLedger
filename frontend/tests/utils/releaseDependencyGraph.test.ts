@@ -12,7 +12,7 @@ import type {
   ReleaseDependencyGraphData,
   ReleaseDependencyGraphRelease,
 } from '@/utils/releaseDependencyGraph'
-import { MOCK_DEPENDENCY_FILES } from '@/views/releases/releaseDependencyGraphMock'
+import { DEPENDENCY_FILES } from '../fixtures/dependencyFiles'
 
 /**
  * The shape the question asked about: projectA pulls packageA and packageB,
@@ -50,7 +50,7 @@ function asRelease(file: DependencyFile): ReleaseDependencyGraphRelease {
 
 /** The dependency file of one mock ref, read as the graph the view draws. */
 function graphOf(ref: string): ReleaseDependencyGraphData {
-  const file = MOCK_DEPENDENCY_FILES.find((entry) => entry.ref.name === ref)
+  const file = DEPENDENCY_FILES.find((entry) => entry.ref.name === ref)
   if (!file) throw new Error(`No mock dependency file for ${ref}`)
   return releaseToGraph(asRelease(file)).data
 }
@@ -241,7 +241,7 @@ describe('isExactVersion', () => {
 })
 
 describe('releaseToGraph', () => {
-  const latest = asRelease(MOCK_DEPENDENCY_FILES[0])
+  const latest = asRelease(DEPENDENCY_FILES[0])
 
   it('pins the app to exact versions and lets the packages declare ranges', () => {
     const { data } = releaseToGraph(latest)
@@ -275,7 +275,7 @@ describe('releaseToGraph', () => {
   })
 
   it('draws a different graph for every release', () => {
-    const first = releaseToGraph(asRelease(MOCK_DEPENDENCY_FILES[2])).data
+    const first = releaseToGraph(asRelease(DEPENDENCY_FILES[2])).data
     const latestGraph = releaseToGraph(latest).data
 
     // 1.0.0 never named packageG, 2.0.0 does
