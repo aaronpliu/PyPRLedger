@@ -17,6 +17,7 @@ vi.mock('@/stores/auth', () => ({
 
 import request from '@/utils/request'
 import { resetProgress, useProgress } from '@/composables/useProgress'
+import { CLIENT_DEVICE_HEADER } from '@/utils/deviceInfo'
 
 /** An adapter that holds the request open until ``release`` is called, so a test
  * can look at the progress state while the request is still in flight. */
@@ -75,5 +76,22 @@ describe('request progress wiring', () => {
     release()
     await pending
     expect(active.value).toBe(false)
+  })
+})
+
+describe('device reporting on requests', () => {
+  it('carries the device record on every request, the login included', async () => {
+    const seen: Array<Record<string, unknown>> = []
+    request.defaults.adapter = async (config) => {
+      seen.push((config.headers ?? {}) as Record<string, unknown>)
+      return { data: { ok: true }, status: 200, statusText: 'OK', headers: {}, config }
+    }
+
+    // The login is the request that creates the session, so it matters most.
+    await request.post('/auth/login', { username: 'tester', password: 'secret' })
+    await request.get('/release/notes')
+
+    expect(seen).toHaveLength(2)
+    seen.forEach((headers) => expect(headers[CLIENT_DEVICE_HEADER]).toBeTruthy())
   })
 })

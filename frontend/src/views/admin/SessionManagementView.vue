@@ -63,16 +63,25 @@
             {{ row.ip_address || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="User Agent" min-width="260">
+        <el-table-column label="Device" min-width="260">
           <template #default="{ row }">
-            <div class="device-cell" :title="getDeviceDetails(row.user_agent).rawUserAgent || ''">
+            <div class="device-cell" :title="getDeviceDetails(row).rawUserAgent || ''">
               <div class="device-label-row">
-                <el-icon class="device-icon"><component :is="getDeviceIcon(row.user_agent)" /></el-icon>
-                <span class="device-label">{{ getDeviceDetails(row.user_agent).label }}</span>
+                <el-icon class="device-icon"><component :is="getDeviceIcon(row)" /></el-icon>
+                <span class="device-label">{{ getDeviceDetails(row).label }}</span>
                 <el-tag v-if="row.is_current" size="small" type="primary">This device</el-tag>
+                <el-tag
+                  v-if="getDeviceDetails(row).precision === 'approximate'"
+                  size="small"
+                  type="info"
+                  effect="plain"
+                  title="This browser reports no client hints, so these values are read from its user agent and may be out of date."
+                >
+                  Approximate
+                </el-tag>
               </div>
               <div class="device-meta">
-                {{ getDeviceDetails(row.user_agent).browserLabel }} · {{ getDeviceDetails(row.user_agent).osLabel }}
+                {{ getDeviceDetails(row).browserLabel }} · {{ getDeviceDetails(row).osLabel }}
               </div>
             </div>
           </template>
@@ -113,7 +122,7 @@ import { Cellphone, Monitor } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { authApi } from '@/api/auth'
 import type { AuthSession } from '@/types'
-import { getSessionDeviceDetails } from '@/utils/device'
+import { describeSession } from '@/utils/device'
 
 const loading = ref(false)
 const sessions = ref<AuthSession[]>([])
@@ -124,12 +133,12 @@ const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
 }
 
-const getDeviceDetails = (userAgent: string | null | undefined) => {
-  return getSessionDeviceDetails(userAgent)
+const getDeviceDetails = (session: AuthSession) => {
+  return describeSession(session.device, session.user_agent)
 }
 
-const getDeviceIcon = (userAgent: string | null | undefined) => {
-  const category = getDeviceDetails(userAgent).category
+const getDeviceIcon = (session: AuthSession) => {
+  const category = getDeviceDetails(session).category
   if (category === 'mobile') return Cellphone
   if (category === 'tablet') return Cellphone
   return Monitor

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -17,6 +18,7 @@ from src.schemas.auth import (
     LoginRequest,
     LogoutRequest,
     RegisterRequest,
+    SessionDeviceInfo,
     TokenRefreshRequest,
     TokenResponse,
     UserinfoResponse,
@@ -28,13 +30,44 @@ from src.services.rbac_service import RBACService
 router = APIRouter(prefix="/auth")
 
 
-def get_request_client_context(request: Request) -> tuple[str | None, str | None]:
-    """Extract client IP and user agent for session metadata."""
+CLIENT_DEVICE_HEADER = "X-Client-Device"
+
+# The device record is display metadata, so it is bounded rather than trusted:
+# an oversized blob is ignored, not written into the session.
+MAX_CLIENT_DEVICE_HEADER_LENGTH = 2048
+
+
+def _decode_base64_url(value: str) -> bytes:
+    """Decode URL-safe base64, tolerating the missing padding a client may send."""
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+def parse_client_device_header(raw: str | None) -> SessionDeviceInfo | None:
+    """Decode the structured device record a client reports about itself.
+
+    The header carries URL-safe base64 of a small JSON object, sent by the
+    frontend on every request. A malformed header is ignored rather than
+    rejected: it is display metadata, and must never keep someone from logging in.
+    """
+    if not raw or len(raw) > MAX_CLIENT_DEVICE_HEADER_LENGTH:
+        return None
+    try:
+        return SessionDeviceInfo.model_validate_json(_decode_base64_url(raw.strip()))
+    except ValueError:
+        return None
+
+
+def get_request_client_context(
+    request: Request,
+) -> tuple[str | None, str | None, SessionDeviceInfo | None]:
+    """Extract client IP, user agent, and reported device details for session metadata."""
     forwarded_for = request.headers.get("X-Forwarded-For")
     ip_address = forwarded_for.split(",")[0].strip() if forwarded_for else None
     if not ip_address and request.client:
         ip_address = request.client.host
-    return ip_address, request.headers.get("User-Agent")
+    user_agent = request.headers.get("User-Agent")
+    device = parse_client_device_header(request.headers.get(CLIENT_DEVICE_HEADER))
+    return ip_address, user_agent, device
 
 
 def get_auth_service(db: Annotated[AsyncSession, Depends(get_db_session)]) -> AuthService:
@@ -59,11 +92,12 @@ async def login(
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> TokenResponse:
     """Login endpoint"""
-    ip_address, user_agent = get_request_client_context(request)
+    ip_address, user_agent, device = get_request_client_context(request)
     return await auth_service.authenticate(
         login_data,
         ip_address=ip_address,
         user_agent=user_agent,
+        device=device,
     )
 
 
@@ -80,11 +114,12 @@ async def register(
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> TokenResponse:
     """Registration endpoint"""
-    ip_address, user_agent = get_request_client_context(request)
+    ip_address, user_agent, device = get_request_client_context(request)
     return await auth_service.register(
         register_data,
         ip_address=ip_address,
         user_agent=user_agent,
+        device=device,
     )
 
 
@@ -100,11 +135,12 @@ async def refresh_tokens(
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> TokenResponse:
     """Refresh token endpoint."""
-    ip_address, user_agent = get_request_client_context(request)
+    ip_address, user_agent, device = get_request_client_context(request)
     return await auth_service.refresh_tokens(
         refresh_request.refresh_token,
         ip_address=ip_address,
         user_agent=user_agent,
+        device=device,
     )
 
 
@@ -136,11 +172,12 @@ async def heartbeat(
 
     try:
         await auth_service.touch_session(token)
-        ip_address, user_agent = get_request_client_context(request)
+        ip_address, user_agent, device = get_request_client_context(request)
         await auth_service.sync_session_client_context(
             token,
             ip_address=ip_address,
             user_agent=user_agent,
+            device=device,
         )
     except Exception as e:
         raise HTTPException(
@@ -180,11 +217,12 @@ async def get_current_user_info(
 
     try:
         auth_user = await auth_service.get_current_user(token)
-        ip_address, user_agent = get_request_client_context(request)
+        ip_address, user_agent, device = get_request_client_context(request)
         await auth_service.sync_session_client_context(
             token,
             ip_address=ip_address,
             user_agent=user_agent,
+            device=device,
         )
         return await auth_service.get_user_info(auth_user)
     except Exception as e:
@@ -219,11 +257,12 @@ async def change_password(
 
     try:
         auth_user = await auth_service.get_current_user(token)
-        ip_address, user_agent = get_request_client_context(request)
+        ip_address, user_agent, device = get_request_client_context(request)
         await auth_service.sync_session_client_context(
             token,
             ip_address=ip_address,
             user_agent=user_agent,
+            device=device,
         )
         await auth_service.change_password(
             auth_user,

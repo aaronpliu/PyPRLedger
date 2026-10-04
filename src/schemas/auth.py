@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+
+# A device description is stored in the session and rendered in a table cell, so
+# nothing in it needs to be longer than this.
+MAX_DEVICE_FIELD_LENGTH = 64
 
 
 class LoginRequest(BaseModel):
@@ -85,6 +91,53 @@ class LogoutRequest(BaseModel):
     refresh_token: str | None = Field(None, description="Refresh token to revoke")
 
 
+class SessionDeviceInfo(BaseModel):
+    """Structured device metadata a client reports about itself.
+
+    The user agent string no longer describes the device it is sent from:
+    Chromium freezes the browser build (``Chrome/140.0.0.0``), replaces the
+    Android device model with ``K``, and reports Windows 11 as Windows 10, while
+    Safari pins macOS to 10.15.7 and reports an iPad as a Mac. User-Agent Client
+    Hints carry the real values, but only Chromium exposes them — so ``source``
+    records which of the two the values came from, and the session list shows
+    the difference.
+
+    Client-supplied and therefore untrusted: every field is length-capped, and
+    the values are only ever rendered — never used to authenticate or authorize.
+    """
+
+    source: Literal["client-hints", "user-agent"] = Field(
+        description="Where the values came from: precise client hints, or the user agent"
+    )
+    category: Literal["desktop", "mobile", "tablet"] | None = Field(
+        default=None, description="Device class, corrected from the user agent when needed"
+    )
+    platform: str | None = Field(default=None, max_length=MAX_DEVICE_FIELD_LENGTH)
+    platform_version: str | None = Field(default=None, max_length=MAX_DEVICE_FIELD_LENGTH)
+    model: str | None = Field(default=None, max_length=MAX_DEVICE_FIELD_LENGTH)
+    browser_full_version: str | None = Field(default=None, max_length=MAX_DEVICE_FIELD_LENGTH)
+
+    @field_validator(
+        "platform",
+        "platform_version",
+        "model",
+        "browser_full_version",
+        mode="before",
+    )
+    @classmethod
+    def _sanitize(cls, value: Any) -> str | None:
+        """Trim an overlong value and drop a wrongly-typed one.
+
+        One strange field should cost that field, not the whole record: the
+        useful parts of a device description are still worth keeping.
+        """
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return None
+        return value.strip()[:MAX_DEVICE_FIELD_LENGTH] or None
+
+
 class AuthSessionResponse(BaseModel):
     """Active refresh session metadata"""
 
@@ -93,6 +146,7 @@ class AuthSessionResponse(BaseModel):
     username: str
     ip_address: str | None = None
     user_agent: str | None = None
+    device: SessionDeviceInfo | None = None
     created_at: datetime
     last_activity_at: datetime
     expires_in_seconds: int
