@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.26.1] - 2026-10-04
+
+**Backend Version**: 1.26.1
+**Frontend Version**: 1.21.1
+
+### Added
+- A login session now describes its device instead of guessing at it from the user agent, which no longer answers the question it appears to. Chromium freezes the browser build (`Chrome/140.0.0.0`), replaces the Android device model with the letter `K`, and reports Windows 11 as Windows 10, while Safari pins macOS at 10.15.7 and reports an iPad as a Macintosh. Each browser now reports what it can about itself - User-Agent Client Hints where they exist, the user agent string where they do not - alongside its requests, and the server stores that record on the session. The session list reads the record first and falls back to the user agent field by field, and marks a row as approximate when client hints were unavailable, so a value read from a user agent is not mistaken for a measured one. Client hints recover the real platform version, the full browser build and the device model, and an iPad - indistinguishable from a Macintosh in the user agent - is recognised by its touch points. Sessions created before this are upgraded on their next request. The record is supplied by the client and is therefore display metadata only: it is bounded in length, ignored when malformed, never allowed to cost anyone a login, and never used to authorise anything
+- The accent colour of the interface is now the user's to choose, from the switcher in the header or the Appearance tab added to the profile page. Element Plus compiles its palette - the primary colour *and* the shades derived from it - into the stylesheet, so overriding that one variable would have recoloured buttons while leaving every hover, disabled, striped and selected state on the default blue; the whole ramp is therefore regenerated at runtime, using the same arithmetic Element Plus compiles from SCSS, which blends towards white on light surfaces and towards the dark surface on dark ones, with `dark-2` moving lighter in dark mode. Because the surface differs by mode, the ramp is rebuilt whenever the mode changes, and the stored choice is in place before the first paint. Eight presets and a colour picker are offered, the picker warns when a colour is too light for the white text drawn on it, and choosing the default again removes the override rather than rewriting it. The accent is stored per browser
+
+### Changed
+- Colours that were hardcoded across the interface now follow the accent: the palette's blue wherever it was a piece of the interface, the chart defaults, the reviewer avatars, the dashboard bars, the application node of the dependency graph, and the PDF and HTML exports, which bake the accent in as they are generated because a static document cannot follow a change made afterwards. Deliberately *not* migrated are the colours that encode meaning rather than brand - issue severity (`low`/`medium`/`high`/`critical`), score bands (`excellent`/`good`/`acceptable`) and the per-type colours of search results. Following the accent would let a red accent render a low-severity issue identically to a critical one, or collapse two entity types onto a single colour. Chart colours are read reactively, so a chart follows a change to the accent instead of freezing the value it was built with
+
+### Fixed
+- Leaving the Release Comparison page within the debounce window of a repository change left a timer running, which then fired a provider call for a component that no longer existed and wrote to state nothing was rendering any more. The pending ref-suggestion debounce is now cleared on unmount, beside the handoff timer that already was
+- The test covering the Refresh action's cache bypass was passing for the wrong reason: it asserted that the automatic ref load had already happened, which could only be true if a timer left pending by an earlier test happened to fire in time, and it failed deterministically when run on its own. It now waits for the request it asserts on; the debounce behind that request is a real timer, so the wait is explicit rather than assumed
+
+---
+
 ## [1.26.0] - 2026-10-04
 
 **Backend Version**: 1.26.0
