@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.26.0] - 2026-10-04
+
+**Backend Version**: 1.26.0
+**Frontend Version**: 1.21.0
+
+### Added
+- The **App Diff** page (`/releases/apps`): pick an application and two or more of its releases, and read a version matrix - one column per release in the order their datetimes put them, one row per compared entry. The application's own version is the first row, beside the dependencies it declares, so a release that moved its own version while every dependency stayed put reads as the change it is instead of as a comparison in which nothing happened. Every pair of adjacent releases is compared with the vocabulary the repository comparison already uses - unchanged, changed with a direction, added, removed - with pre-release precedence honoured (`1.2.0-rc.0 < 1.2.0`), a trailing build suffix read as build metadata (`1.0.0_10000` to `1.1.0_10000` is an upgrade; a build bump within one version is a change with no direction), and a version that cannot be ordered left as changed without a direction - never as an upgrade. The pair's summary also carries whether any *dependency* moved, so the rebuild reading below stays about the dependencies even when the application moved its own version
+- The **code axis** beside the dependency axis: for every pair, the commits between the two release refs, read through the existing repository comparison rather than a new one. What the later release adds and what it does not contain of the earlier one are reported separately, with the counts exact and the rendered lists capped. This is what keeps a rebuilt release visible: a tag moved to a new commit while the versions it pins stayed identical yields no dependency change at all, and the page states that commits moved while the dependencies did not rather than leaving the empty axis to speak for itself
+- `POST /api/v1/release/apps/diff`, which consolidates those reads: the repository is resolved to an application through the project registry - the dependency source holds what an *application* shipped - every release is read from the same dependency source the Release Dependency Graph draws from, and the whole answer is cached against the refs it was computed for. A `refresh` flag reads past that cache, because a tag can be moved and a cached reading is keyed by ref name
+- Degradation that is per part rather than per page: a release the dependency source holds no record for is marked as such and makes the pairs that touch it **incomplete** - never "no changes" - while the pairs that can be compared are still reported; and a pair whose commits cannot be read (an unreachable provider, or a release ref the git provider does not know, which the dependency source's key for a release need not be) carries the reason instead of an empty commit list. A comparison with no records at all shows its empty state rather than an empty matrix. Reading is open to any authenticated user and nothing on the page writes anywhere
+- The App Diff entry in the Releases menu, with the repository comparison, release notes and dependency graph entries left as they were, and the selection carried in the URL so a comparison can be linked and reopened
+
+### Removed
+- The `add-app-release-diff` proposal, replaced by `add-app-release-version-diff`. Its premise was that the dependency manifest lives in the application's repository and has to be read from the git provider through a new file-content primitive, a snapshot table per release, and a package-to-repository mapping maintained beside it. The dependency source answers for a release instead, so none of that machinery was needed for this comparison
+
+---
+
 ## [1.25.0] - 2026-10-04
 
 **Backend Version**: 1.25.0
