@@ -169,10 +169,13 @@ def update_changelog(backend_version, frontend_version):
         # Replace the section
         lines[existing_idx:end_idx] = [new_section]
     else:
-        # Find insert position (after header, before first release)
-        insert_idx = 0
+        # Insert below the header and below the `## [Unreleased]` section, which
+        # belongs at the top of the file, and above the newest release. Taking the
+        # first heading outright inserted the new section above `[Unreleased]`, so
+        # that section sank one release lower on every run.
+        insert_idx = len(lines)
         for i, line in enumerate(lines):
-            if line.startswith("## ["):
+            if line.startswith("## [") and not line.startswith("## [Unreleased]"):
                 insert_idx = i
                 break
         lines.insert(insert_idx, new_section)

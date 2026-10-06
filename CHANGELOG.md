@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.26.2] - 2026-10-06
+
+**Backend Version**: 1.26.2
+**Frontend Version**: 1.21.2
+
+### Changed
+- Banners take turns instead of stacking. Any number can be within their window at once, and the bar grew a row per banner, pushing whatever is below it down by 28px each time; it now keeps one row and moves through them every six seconds, with a dot per banner so the rest can be read without waiting. It holds while the pointer is over the bar or focus is inside it, so nothing changes under a reader part way through, pauses in a background tab, and gives a full turn to a banner picked by hand. One banner means no dots and no rotation. Each keeps its own level colour, and the one dismissed is the one on show
+- Adding banners no longer grows the settings page. Every banner was an open form of six fields, so the page grew with each one and adding another meant opening another form in place; it is now a list of what matters about each banner, with the editing in a dialog and a switch on each row to take a banner in or out of service. Actions save as they are taken rather than collecting behind a single Save, and a write that fails leaves the switch showing what is stored instead of a state that was never saved, because the row follows the value the server accepted
+- Banner settings now hold a list, and the single banner they used to hold is folded into that list on the first read, keeping its identity, so a banner scheduled before this is neither lost nor shown twice. Values that could not be rendered are refused at the boundary rather than stored
+- The language switcher shows the writing system - `A` and `文` - rather than a flag. A flag names a country rather than a language, which is how Simplified and Traditional Chinese both ended up under the same one; the control now shows every script on offer at once in a fixed order, with the language in effect in full colour, and it is one component shared by the header and the three signed-out pages rather than a copy of the markup in each
+- The release notes list shows a whole page. It was clamped to roughly seven entries with the rest scrolling inside it, which contradicted the page size the pagination beside it offers and left two ways to move through one list
+
+### Fixed
+- Creating a release tag prints the tags it was asked to verify. The check ran `git tag -l | tail -5` through a shell with the command given as a list, so only the first element was the command and the rest became arguments to the shell, and the listing never ran - the verification reported git's usage text instead of the tag list, and the tag summary after it was mangled the same way
+
+---
+
 ## [1.26.1] - 2026-10-04
 
 **Backend Version**: 1.26.1
