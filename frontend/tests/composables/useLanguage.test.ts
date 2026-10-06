@@ -27,6 +27,16 @@ describe('useLanguage Composable', () => {
     expect(languageStore.availableLanguages.length).toBe(3)
   })
 
+  it('should describe each language by the script it is written in', () => {
+    const languageStore = useLanguage()
+    // A flag names a country rather than a language, which is how both Chinese
+    // variants ended up sharing one.
+    languageStore.availableLanguages.forEach((language) => {
+      expect(['latin', 'cjk']).toContain(language.script)
+      expect(language).not.toHaveProperty('flag')
+    })
+  })
+
   it('should set language correctly', () => {
     const languageStore = useLanguage()
     languageStore.setLanguage('zh-CN')
@@ -40,15 +50,23 @@ describe('useLanguage Composable', () => {
     expect(name).toBe('English')
   })
 
-  it('should get language flag', () => {
+  it('should offer a glyph per script for the switcher', () => {
     const languageStore = useLanguage()
-    const flag = languageStore.getLanguageFlag('en')
-    expect(flag).toBe('🇺🇸')
+    expect(languageStore.glyphForScript('latin')).toBe('A')
+    expect(languageStore.glyphForScript('cjk')).toBe('文')
+  })
+
+  it('should report the script of the language in effect', () => {
+    const languageStore = useLanguage()
+    expect(languageStore.currentScript.value).toBe('latin')
+
+    languageStore.setLanguage('zh-CN')
+
+    expect(languageStore.currentScript.value).toBe('cjk')
   })
 
   it('should handle unknown language code', () => {
     const languageStore = useLanguage()
     expect(languageStore.getLanguageName('unknown')).toBe('unknown')
-    expect(languageStore.getLanguageFlag('unknown')).toBe('🌐')
   })
 })

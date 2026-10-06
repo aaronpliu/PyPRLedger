@@ -80,23 +80,7 @@
       <!-- Theme and Language Switchers -->
       <div class="auth-switchers">
         <ThemeSwitcher />
-        <el-dropdown @command="handleLanguageChange" trigger="click">
-          <span class="language-flag">
-            {{ languageStore.getLanguageFlag(languageStore.currentLanguage as any) }}
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu role="menu" aria-label="Language options">
-              <el-dropdown-item
-                v-for="lang in languageStore.availableLanguages"
-                :key="lang.code"
-                :command="lang.code"
-                role="menuitem"
-              >
-                {{ lang.flag }} {{ lang.name }}
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <LanguageSwitcher />
       </div>
     </div>
   </div>
@@ -111,14 +95,13 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { rbacApi } from '@/api/rbac'
 import { useI18n } from 'vue-i18n'
-import { useLanguage } from '@/composables/useLanguage'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import AuthBackground from '@/components/auth/AuthBackground.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const { t } = useI18n()
-const languageStore = useLanguage()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -184,10 +167,6 @@ const handleLogin = async () => {
   })
 }
 
-const handleLanguageChange = (lang: string) => {
-  languageStore.setLanguage(lang as any)
-  ElMessage.success(`Language changed to ${languageStore.getLanguageName(lang)}`)
-}
 </script>
 
 <style scoped>
@@ -431,13 +410,6 @@ const handleLanguageChange = (lang: string) => {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.language-flag {
-  font-size: 20px;
-  cursor: pointer;
-  line-height: 1;
-  user-select: none;
 }
 
 /* Responsive Design */

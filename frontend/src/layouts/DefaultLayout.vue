@@ -61,23 +61,7 @@
           <NotificationBell />
 
           <!-- Language Switcher -->
-          <el-dropdown @command="handleLanguageChange" trigger="click">
-            <span class="language-flag">
-              {{ languageStore.getLanguageFlag(languageStore.currentLanguage as any) }}
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu role="menu" aria-label="Language options">
-                <el-dropdown-item
-                  v-for="lang in languageStore.availableLanguages"
-                  :key="lang.code"
-                  :command="lang.code"
-                  role="menuitem"
-                >
-                  {{ lang.flag }} {{ lang.name }}
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <LanguageSwitcher />
 
           <!-- Theme Switcher -->
           <ThemeSwitcher />
@@ -136,11 +120,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { useLanguage } from '@/composables/useLanguage'
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
 import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
 import ReviewsBanner from '@/components/common/ReviewsBanner.vue'
 import { UI_VERSION, COPYRIGHT, fetchApiVersion, getApiVersion } from '@/config/versions'
@@ -150,7 +134,6 @@ const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
-const languageStore = useLanguage()
 
 // API version state
 const apiVersion = ref<string>('loading...')
@@ -217,10 +200,6 @@ const handleCommand = (command: string) => {
   }
 }
 
-const handleLanguageChange = (lang: string) => {
-  languageStore.setLanguage(lang as any)
-  ElMessage.success(`Language changed to ${languageStore.getLanguageName(lang)}`)
-}
 </script>
 
 <style scoped>
@@ -289,13 +268,6 @@ const handleLanguageChange = (lang: string) => {
   align-items: center;
   gap: 16px;
   flex: 0 0 auto;
-}
-
-.language-flag {
-  font-size: 20px;
-  cursor: pointer;
-  line-height: 1;
-  user-select: none;
 }
 
 .user-info {
