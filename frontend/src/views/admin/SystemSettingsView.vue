@@ -96,76 +96,202 @@
         </div>
       </template>
 
-      <el-form label-width="200px" style="max-width: 600px;">
-        <!-- Banner Enabled Toggle -->
-        <el-form-item :label="t('admin.systemSettings.bannerEnabled')">
-          <el-switch
-            v-model="bannerSettings.enabled"
-            :active-text="t('common.enabled')"
-            :inactive-text="t('common.disabled')"
-            :loading="bannerSaving"
-          />
-        </el-form-item>
+      <!-- Every banner in one list, so the page stays the same length however
+           many there are; adding and editing happen in a dialog. -->
+      <div class="banner-toolbar">
+        <el-button type="primary" data-test="banner-add" @click="openEditor()">
+          {{ t('admin.systemSettings.bannerAdd') }}
+        </el-button>
+      </div>
 
-        <!-- Banner Content -->
-        <el-form-item :label="t('admin.systemSettings.bannerContent')">
-          <el-input
-            v-model="bannerSettings.content"
-            type="textarea"
-            :rows="3"
-            :placeholder="t('admin.systemSettings.bannerContentPlaceholder')"
-            clearable
-          />
-        </el-form-item>
+      <el-empty
+        v-if="banners.length === 0"
+        :description="t('admin.systemSettings.bannerEmpty')"
+        :image-size="60"
+      />
 
-        <!-- Banner Date Range -->
-        <el-form-item :label="t('admin.systemSettings.bannerDateRange')">
-          <el-date-picker
-            v-model="bannerDateRange"
-            type="datetimerange"
-            range-separator="—"
-            :start-placeholder="'Start Date'"
-            :end-placeholder="'End Date'"
-            value-format="YYYY-MM-DDTHH:mm:ssZ"
-            style="width: 100%"
-          />
-          <div class="setting-description">
-            {{ t('admin.systemSettings.bannerDateRangeDesc') }}
-          </div>
-        </el-form-item>
+      <el-table v-else :data="banners" row-key="id">
+        <el-table-column :label="t('admin.systemSettings.bannerContent')" min-width="240">
+          <template #default="{ row }">
+            <span class="banner-content-cell" :title="row.content">{{ row.content }}</span>
+          </template>
+        </el-table-column>
 
-        <!-- Save Button & Preview -->
-        <el-form-item>
+        <el-table-column :label="t('admin.systemSettings.bannerLevel')" width="110">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.level">{{ levelLabel(row.level) }}</el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column :label="t('admin.systemSettings.bannerWindow')" min-width="200">
+          <template #default="{ row }">
+            <span class="banner-window-text">{{ windowLabel(row) }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column
+          :label="t('admin.systemSettings.bannerPriority')"
+          width="90"
+          align="center"
+        >
+          <template #default="{ row }">{{ row.priority }}</template>
+        </el-table-column>
+
+        <!-- Wide enough for both state labels: a switch shows the one it is in
+             beside the track, not inside it. -->
+        <el-table-column :label="t('admin.systemSettings.bannerStatus')" width="210">
+          <template #default="{ row }">
+            <!-- One-way bound on purpose: the switch shows the stored state, so a
+                 write that fails leaves it where it was instead of lying. -->
+            <el-switch
+              :model-value="row.enabled"
+              :disabled="bannerSaving"
+              :active-text="t('common.enabled')"
+              :inactive-text="t('common.disabled')"
+              data-test="banner-enabled"
+              @change="(value: string | number | boolean) => toggleBannerEnabled(row, value as boolean)"
+            />
+          </template>
+        </el-table-column>
+
+        <el-table-column
+          :label="t('admin.systemSettings.bannerActions')"
+          width="140"
+          align="right"
+        >
+          <template #default="{ row, $index }">
+            <el-button link type="primary" data-test="banner-edit" @click="openEditor(row)">
+              {{ t('common.edit') }}
+            </el-button>
+            <el-button link type="danger" data-test="banner-remove" @click="confirmRemove($index)">
+              {{ t('common.delete') }}
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- Add and edit share one dialog -->
+      <el-dialog
+        v-model="editorVisible"
+        :title="editingId ? t('admin.systemSettings.bannerEdit') : t('admin.systemSettings.bannerAdd')"
+        width="560px"
+        :close-on-click-modal="false"
+      >
+        <el-form v-if="editing" label-width="150px">
+          <el-form-item :label="t('admin.systemSettings.bannerEnabled')">
+            <el-switch
+              v-model="editing.enabled"
+              :active-text="t('common.enabled')"
+              :inactive-text="t('common.disabled')"
+            />
+          </el-form-item>
+
+          <el-form-item :label="t('admin.systemSettings.bannerContent')" required>
+            <el-input
+              v-model="editing.content"
+              type="textarea"
+              :rows="2"
+              :placeholder="t('admin.systemSettings.bannerContentPlaceholder')"
+              clearable
+            />
+          </el-form-item>
+
+          <el-form-item :label="t('admin.systemSettings.bannerLevel')">
+            <el-radio-group v-model="editing.level">
+              <el-radio-button value="info">
+                {{ t('admin.systemSettings.bannerLevelInfo') }}
+              </el-radio-button>
+              <el-radio-button value="warning">
+                {{ t('admin.systemSettings.bannerLevelWarning') }}
+              </el-radio-button>
+              <el-radio-button value="success">
+                {{ t('admin.systemSettings.bannerLevelSuccess') }}
+              </el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+
+          <el-form-item :label="t('admin.systemSettings.bannerPriority')">
+            <el-input-number v-model="editing.priority" :min="0" :max="99" />
+            <div class="setting-description">
+              {{ t('admin.systemSettings.bannerPriorityDesc') }}
+            </div>
+          </el-form-item>
+
+          <el-form-item :label="t('admin.systemSettings.bannerDateRange')">
+            <div class="banner-window">
+              <el-date-picker
+                v-model="editing.start_date"
+                type="datetime"
+                :placeholder="t('admin.systemSettings.bannerStart')"
+                value-format="YYYY-MM-DDTHH:mm:ssZ"
+              />
+              <span class="banner-window-separator">—</span>
+              <el-date-picker
+                v-model="editing.end_date"
+                type="datetime"
+                :placeholder="t('admin.systemSettings.bannerEnd')"
+                value-format="YYYY-MM-DDTHH:mm:ssZ"
+              />
+            </div>
+            <div class="setting-description">
+              {{ t('admin.systemSettings.bannerDateRangeDesc') }}
+            </div>
+          </el-form-item>
+
+          <el-form-item :label="t('admin.systemSettings.bannerLink')">
+            <el-input
+              v-model="editing.link_url"
+              :placeholder="t('admin.systemSettings.bannerLinkUrl')"
+              clearable
+            />
+            <el-input
+              v-model="editing.link_label"
+              class="banner-link-label"
+              :placeholder="t('admin.systemSettings.bannerLinkLabel')"
+              clearable
+            />
+            <div class="setting-description">
+              {{ t('admin.systemSettings.bannerLinkDesc') }}
+            </div>
+          </el-form-item>
+
+          <el-form-item
+            v-if="editing.content.trim()"
+            :label="t('admin.systemSettings.bannerPreview')"
+          >
+            <div class="banner-preview-box">
+              <el-alert
+                :title="editing.content"
+                :type="editing.level"
+                show-icon
+                :closable="false"
+              />
+            </div>
+          </el-form-item>
+        </el-form>
+
+        <template #footer>
+          <el-button @click="editorVisible = false">{{ t('common.cancel') }}</el-button>
           <el-button
             type="primary"
+            data-test="banner-save"
             :loading="bannerSaving"
-            @click="handleBannerSave"
+            @click="saveEditor"
           >
             {{ t('common.save') }}
           </el-button>
-        </el-form-item>
-
-        <!-- Banner Preview -->
-        <el-form-item v-if="bannerSettings.content" :label="t('admin.systemSettings.bannerPreview')">
-          <div class="banner-preview-box">
-            <el-alert
-              :title="bannerSettings.content"
-              type="info"
-              show-icon
-              :closable="false"
-            />
-          </div>
-        </el-form-item>
-      </el-form>
+        </template>
+      </el-dialog>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { rbacApi, type BannerConfig } from '@/api/rbac'
+import dayjs from 'dayjs'
+import { createBanner, rbacApi, type BannerItem, type BannerLevel } from '@/api/rbac'
 
 const { t } = useI18n()
 
@@ -184,25 +310,116 @@ const llmSettings = ref({
 const saving = ref(false)
 const llmSaving = ref(false)
 
-const bannerSettings = ref<BannerConfig>({
-  enabled: false,
-  content: '',
-  start_date: '',
-  end_date: '',
-})
-const bannerDateRange = ref<[string, string] | null>(null)
+const banners = ref<BannerItem[]>([])
 const bannerSaving = ref(false)
 
-// Sync date picker with banner settings
-watch(bannerDateRange, (range) => {
-  if (range) {
-    bannerSettings.value.start_date = range[0]
-    bannerSettings.value.end_date = range[1]
-  } else {
-    bannerSettings.value.start_date = ''
-    bannerSettings.value.end_date = ''
+// Adding and editing share one dialog, so the list stays the only thing on the page.
+const editorVisible = ref(false)
+const editing = ref<BannerItem | null>(null)
+const editingId = ref<string | null>(null)
+
+const LEVEL_LABEL_KEYS: Record<BannerLevel, string> = {
+  info: 'admin.systemSettings.bannerLevelInfo',
+  warning: 'admin.systemSettings.bannerLevelWarning',
+  success: 'admin.systemSettings.bannerLevelSuccess',
+}
+
+const levelLabel = (level: BannerLevel) => t(LEVEL_LABEL_KEYS[level])
+
+/** The window as the list shows it; no bound at all reads as "always". */
+function windowLabel(banner: BannerItem): string {
+  if (!banner.start_date && !banner.end_date) {
+    return t('admin.systemSettings.bannerAlways')
   }
-})
+  const bound = (value: string) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '—')
+  return `${bound(banner.start_date)} → ${bound(banner.end_date)}`
+}
+
+function openEditor(banner?: BannerItem) {
+  editingId.value = banner ? banner.id : null
+  // Edit a copy: the list must not change until the save goes through.
+  editing.value = banner ? { ...banner } : createBanner()
+  editorVisible.value = true
+}
+
+/** A cleared picker hands back null; the endpoint takes an empty string for that. */
+function normalizeBanner(banner: BannerItem): BannerItem {
+  return {
+    ...banner,
+    content: banner.content.trim(),
+    start_date: banner.start_date || '',
+    end_date: banner.end_date || '',
+    link_url: (banner.link_url || '').trim(),
+    link_label: (banner.link_label || '').trim(),
+  }
+}
+
+/**
+ * Write the whole collection, which is the shape the endpoint takes.
+ *
+ * The list on screen is only replaced once the write went through, so a failed
+ * save leaves what is shown matching what is stored.
+ */
+async function persistBanners(next: BannerItem[]): Promise<boolean> {
+  bannerSaving.value = true
+  try {
+    const response = await rbacApi.updateBanner({ banners: next.map(normalizeBanner) })
+    banners.value = (response.banners ?? next).map(normalizeBanner)
+    return true
+  } catch (error: any) {
+    console.error('Failed to save banner settings:', error)
+    ElMessage.error(error.response?.data?.detail || t('admin.systemSettings.saveFailed'))
+    return false
+  } finally {
+    bannerSaving.value = false
+  }
+}
+
+async function saveEditor() {
+  const banner = editing.value
+  if (!banner) return
+  if (!banner.content.trim()) {
+    ElMessage.warning(t('admin.systemSettings.bannerContentRequired'))
+    return
+  }
+
+  const edited = normalizeBanner(banner)
+  const next = editingId.value
+    ? banners.value.map((item) => (item.id === editingId.value ? edited : item))
+    : [...banners.value, edited]
+
+  if (await persistBanners(next)) {
+    editorVisible.value = false
+    ElMessage.success(t('admin.systemSettings.bannerSaveSuccess'))
+  }
+}
+
+/** Flip one banner on or off from the list, without opening the dialog. */
+async function toggleBannerEnabled(banner: BannerItem, enabled: boolean) {
+  const next = banners.value.map((item) => (item.id === banner.id ? { ...item, enabled } : item))
+  await persistBanners(next)
+}
+
+async function confirmRemove(index: number) {
+  try {
+    await ElMessageBox.confirm(
+      t('admin.systemSettings.bannerDeleteConfirm'),
+      t('common.delete'),
+      {
+        type: 'warning',
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
+      },
+    )
+  } catch {
+    return // dismissed
+  }
+
+  const next = banners.value.filter((_, position) => position !== index)
+  if (await persistBanners(next)) {
+    ElMessage.success(t('admin.systemSettings.bannerSaveSuccess'))
+  }
+}
 
 // Load settings on mount
 onMounted(async () => {
@@ -283,32 +500,14 @@ const handleLlmSave = async () => {
 const loadBannerSettings = async () => {
   try {
     const config = await rbacApi.getBanner()
-    bannerSettings.value = config
-    // Sync date picker with loaded values
-    if (config.start_date && config.end_date) {
-      bannerDateRange.value = [config.start_date, config.end_date]
-    } else {
-      bannerDateRange.value = null
-    }
+    banners.value = (config.banners ?? []).map(normalizeBanner)
   } catch (error) {
     console.error('Failed to load banner settings:', error)
     ElMessage.error(t('admin.systemSettings.loadFailed'))
   }
 }
 
-const handleBannerSave = async () => {
-  bannerSaving.value = true
-  try {
-    await rbacApi.updateBanner(bannerSettings.value)
-    await loadBannerSettings()
-    ElMessage.success(t('admin.systemSettings.bannerSaveSuccess'))
-  } catch (error: any) {
-    console.error('Failed to save banner settings:', error)
-    ElMessage.error(error.response?.data?.detail || t('admin.systemSettings.saveFailed'))
-  } finally {
-    bannerSaving.value = false
-  }
-}
+
 </script>
 
 <style scoped>
@@ -332,10 +531,55 @@ const handleBannerSave = async () => {
 }
 
 .banner-preview-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   width: 100%;
   border: 1px dashed var(--el-border-color);
   border-radius: 4px;
   padding: 8px;
   background: var(--el-fill-color-lighter);
+}
+
+.banner-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+/* Long wording is cut in the cell rather than widening the table. */
+.banner-content-cell {
+  display: block;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.banner-window-text {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
+.banner-window {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.banner-window-separator {
+  color: var(--el-text-color-secondary);
+}
+
+.banner-link-label {
+  margin-top: 8px;
+}
+
+/* A table cell breaks words to fit; the switch's state label must stay in one
+   piece, since a broken "Enab / led" is what it looks like when it does not. */
+:deep(.el-switch__label) {
+  white-space: nowrap;
 }
 </style>

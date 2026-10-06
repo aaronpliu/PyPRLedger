@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -394,27 +397,179 @@ async def get_jira_settings(
 # ============================================================================
 
 
+# ----------------------------------------------------------------------------
+# Reviews page banners
+#
+# The banners are one JSON array under a single setting, because they are a
+# collection: several can be scheduled at once and several can be within their
+# window together. They used to be four scalar settings describing exactly one
+# banner (enabled / content / start_date / end_date); those keys are still read
+# when the array has never been written, so an installation that has not been
+# re-saved keeps showing the banner it already had.
+# ----------------------------------------------------------------------------
+
+BANNER_SETTING_KEY = "banner_items"
+LEGACY_BANNER_KEYS = (
+    "banner_enabled",
+    "banner_content",
+    "banner_start_date",
+    "banner_end_date",
+)
+BANNER_LEVELS = ("info", "warning", "success")
+MAX_BANNERS = 20
+MAX_BANNER_CONTENT_LENGTH = 500
+MAX_BANNER_LINK_LENGTH = 500
+
+
+def _stable_id(*parts: str) -> str:
+    """A short id that is the same every time it is derived from the same parts."""
+    digest = hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()
+    return f"banner-{digest[:12]}"
+
+
+def _validated_date(value: object) -> str:
+    """Keep an ISO 8601 window bound, or empty for "no bound"."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        # Element Plus writes a trailing Z, which fromisoformat takes from 3.11.
+        datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"'{text}' is not a valid date") from exc
+    return text
+
+
+def _validated_link(value: object) -> str:
+    """Keep an http(s) or site-relative link.
+
+    The value ends up in an anchor's href, so a scheme like ``javascript:`` would
+    be a scripting vector for whoever can edit settings.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if len(text) > MAX_BANNER_LINK_LENGTH:
+        raise ValueError(f"a banner link is longer than {MAX_BANNER_LINK_LENGTH} characters")
+    if text.startswith(("/", "https://", "http://")):
+        return text
+    raise ValueError("a banner link must be http(s) or start with /")
+
+
+def _coerced_flag(value: object) -> bool:
+    """Read a boolean that may arrive as the string the settings table stores."""
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return bool(value)
+
+
+def _normalize_banner(raw: object) -> dict:
+    """Validate one banner and bound every field of it."""
+    if not isinstance(raw, dict):
+        raise ValueError("each banner must be an object")
+
+    content = str(raw.get("content") or "").strip()
+    if not content:
+        raise ValueError("a banner needs content")
+    if len(content) > MAX_BANNER_CONTENT_LENGTH:
+        raise ValueError(f"banner content is longer than {MAX_BANNER_CONTENT_LENGTH} characters")
+
+    level = str(raw.get("level") or "info").strip().lower()
+    if level not in BANNER_LEVELS:
+        level = "info"
+
+    start_date = _validated_date(raw.get("start_date"))
+    end_date = _validated_date(raw.get("end_date"))
+
+    try:
+        priority = int(raw.get("priority") or 0)
+    except (TypeError, ValueError):
+        priority = 0
+
+    # A banner saved without an id gets one derived from what it says, so that
+    # dismissing it survives until its wording changes.
+    banner_id = str(raw.get("id") or "").strip()
+    if not banner_id:
+        banner_id = _stable_id(content, start_date, end_date)
+
+    return {
+        "id": banner_id,
+        "enabled": _coerced_flag(raw.get("enabled", False)),
+        "content": content,
+        "start_date": start_date,
+        "end_date": end_date,
+        "level": level,
+        "link_url": _validated_link(raw.get("link_url")),
+        "link_label": str(raw.get("link_label") or "").strip()[:MAX_BANNER_LINK_LENGTH],
+        "priority": priority,
+    }
+
+
+def _parse_stored_banners(value: str) -> list[dict] | None:
+    """Read the stored array, or None when it has never been written.
+
+    Anything unreadable is reported and treated as absent: the banners are display
+    data, and a hand-edited row should not take the settings page down.
+    """
+    if not value or not value.strip():
+        return None
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        logger.warning("Banner settings are not valid JSON; falling back to the legacy keys")
+        return None
+    if not isinstance(parsed, list):
+        logger.warning("Banner settings are not a list; falling back to the legacy keys")
+        return None
+
+    banners: list[dict] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        try:
+            banners.append(_normalize_banner(item))
+        except ValueError as exc:
+            logger.warning("Skipping an unusable stored banner: %s", exc)
+    return banners
+
+
+async def _banners_from_legacy_settings(rbac_service: RBACService) -> list[dict]:
+    """Fold the four scalar settings into the list they preceded."""
+    enabled = await rbac_service.get_setting(LEGACY_BANNER_KEYS[0], default_value="false")
+    content = await rbac_service.get_setting(LEGACY_BANNER_KEYS[1], default_value="")
+    start_date = await rbac_service.get_setting(LEGACY_BANNER_KEYS[2], default_value="")
+    end_date = await rbac_service.get_setting(LEGACY_BANNER_KEYS[3], default_value="")
+    if not content.strip():
+        return []
+    return [
+        _normalize_banner(
+            {
+                "id": _stable_id(content, start_date, end_date),
+                "enabled": enabled,
+                "content": content,
+                "start_date": start_date,
+                "end_date": end_date,
+            }
+        )
+    ]
+
+
 @router.get(
     "/settings/banner",
     response_model=dict,
     summary="Get reviews page banner config",
-    description="Returns banner content, enabled status, and optional date range display window",
+    description="Returns the announcement banners of the reviews page, each with its own window",
 )
 async def get_banner_settings(
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> dict:
     """Get reviews page banner configuration"""
     try:
-        enabled_str = await rbac_service.get_setting("banner_enabled", default_value="false")
-        content = await rbac_service.get_setting("banner_content", default_value="")
-        start_date = await rbac_service.get_setting("banner_start_date", default_value="")
-        end_date = await rbac_service.get_setting("banner_end_date", default_value="")
-        return {
-            "enabled": enabled_str.lower() == "true",
-            "content": content,
-            "start_date": start_date,
-            "end_date": end_date,
-        }
+        stored = await rbac_service.get_setting(BANNER_SETTING_KEY, default_value="")
+        banners = _parse_stored_banners(stored)
+        if banners is None:
+            banners = await _banners_from_legacy_settings(rbac_service)
+        return {"banners": banners}
     except Exception as e:
         logger.error(f"Failed to get banner settings: {e}")
         raise HTTPException(
@@ -427,54 +582,47 @@ async def get_banner_settings(
     "/settings/banner",
     response_model=dict,
     summary="Update reviews page banner config",
-    description="Update banner content, enabled status, and date range. Requires manage settings permission.",
+    description="Replace the announcement banners of the reviews page. Requires manage settings permission.",
 )
 async def update_banner_settings(
     setting_data: dict,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> dict:
-    """Update reviews page banner configuration"""
+    """Replace the reviews page banners"""
     await rbac_service.require_permission(current_user.id, "manage", "settings")
 
     try:
-        if "enabled" in setting_data:
-            value_str = str(setting_data["enabled"]).lower()
-            await rbac_service.update_setting(
-                setting_key="banner_enabled",
-                setting_value=value_str,
-                updated_by=current_user.id,
-                description="Enable or disable the reviews page announcement banner",
-            )
+        raw_banners = setting_data.get("banners")
+        if raw_banners is None:
+            # A page that predates the list shape sends one banner's fields. Only a
+            # complete one is accepted, so a partial write cannot wipe the list.
+            if "content" not in setting_data:
+                raise ValueError("banners is required")
+            raw_banners = [setting_data]
 
-        if "content" in setting_data:
-            await rbac_service.update_setting(
-                setting_key="banner_content",
-                setting_value=setting_data["content"],
-                updated_by=current_user.id,
-                description="Announcement banner text shown on the Reviews page",
-            )
+        if not isinstance(raw_banners, list):
+            raise ValueError("banners must be a list")
+        if len(raw_banners) > MAX_BANNERS:
+            raise ValueError(f"at most {MAX_BANNERS} banners are supported")
 
-        if "start_date" in setting_data:
-            await rbac_service.update_setting(
-                setting_key="banner_start_date",
-                setting_value=setting_data["start_date"],
-                updated_by=current_user.id,
-                description="Optional start date for the banner (ISO 8601, empty = no limit)",
-            )
+        banners = [_normalize_banner(item) for item in raw_banners]
 
-        if "end_date" in setting_data:
-            await rbac_service.update_setting(
-                setting_key="banner_end_date",
-                setting_value=setting_data["end_date"],
-                updated_by=current_user.id,
-                description="Optional end date for the banner (ISO 8601, empty = no limit)",
-            )
+        # The settings store only updates a row it already has, and reading one is
+        # how it comes into existence (`RBACService.get_setting` creates it on a
+        # miss). Without this, the first save on a fresh installation would fail.
+        await rbac_service.get_setting(BANNER_SETTING_KEY, default_value="")
 
-        return {"message": "Banner settings updated successfully"}
+        await rbac_service.update_setting(
+            setting_key=BANNER_SETTING_KEY,
+            setting_value=json.dumps(banners, ensure_ascii=False),
+            updated_by=current_user.id,
+            description="Announcement banners of the reviews page, as a JSON array",
+        )
+        return {"message": "Banner settings updated successfully", "banners": banners}
     except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
     except Exception as e:
