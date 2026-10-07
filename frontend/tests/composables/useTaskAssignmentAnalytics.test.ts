@@ -290,4 +290,34 @@ describe('useTaskAssignmentAnalytics period windows', () => {
 
     expect(analytics.aggregateIssuesBySeverity('weekly')).toEqual([])
   })
+
+  it('takes a wider window when one is given', () => {
+    // Thirty weeks back: outside the configured 26, inside a 52-week window.
+    const analytics = analyticsWith([
+      review({ created_date: dayjs(NOW).subtract(30, 'week').toISOString() }),
+    ])
+
+    expect(analytics.aggregateByTimePeriod('weekly')).toEqual([])
+
+    const widened = analytics.aggregateByTimePeriod('weekly', 52)
+    expect(widened).toHaveLength(52)
+    expect(widened.reduce((sum, point) => sum + point.count, 0)).toBe(1)
+    // The review is the 31st point from the end, and the rest are zero.
+    expect(widened[52 - 31].count).toBe(1)
+  })
+
+  it('keeps both charts on the widened axis', () => {
+    const analytics = analyticsWith([
+      review({ created_date: NOW, issue_severities: ['high'] }),
+      review({ created_date: dayjs(NOW).subtract(30, 'week').toISOString(), issue_severities: ['low'] }),
+    ])
+
+    const trend = analytics.aggregateByTimePeriod('weekly', 52)
+    const severity = analytics.aggregateIssuesBySeverity('weekly', 52)
+
+    expect(trend).toHaveLength(52)
+    severity.forEach((series) => {
+      expect(series.data.map((point) => point.date)).toEqual(trend.map((point) => point.date))
+    })
+  })
 })

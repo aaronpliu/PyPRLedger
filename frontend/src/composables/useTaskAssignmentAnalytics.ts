@@ -3,26 +3,13 @@ import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import isoWeek from 'dayjs/plugin/isoWeek'
 import type { ReviewV2 } from '@/api/taskAssignment'
+import { ANALYTICS_PERIOD_WINDOWS, type AnalyticsPeriod } from '@/config/analytics'
 
 // ISO weeks: a week that straddles new year belongs to its week-year, not to the
 // calendar year its days happen to fall in.
 dayjs.extend(isoWeek)
 
-export type AnalyticsPeriod = 'daily' | 'weekly' | 'monthly'
-
-/**
- * How many periods each window shows.
- *
- * The trend charts show a window rather than all of history. Without one the axis
- * carried a point for every period that had ever held a review, so a long history
- * drew a hundred-odd points evenly spaced whatever the gaps between them were,
- * and the page had to load every review to draw it.
- */
-const PERIOD_WINDOWS: Record<AnalyticsPeriod, number> = {
-  daily: 180,
-  weekly: 26,
-  monthly: 6,
-}
+export type { AnalyticsPeriod }
 
 const PERIOD_STEPS: Record<AnalyticsPeriod, { unit: 'day' | 'week' | 'month'; startOf: 'day' | 'isoWeek' | 'month' }> = {
   daily: { unit: 'day', startOf: 'day' },
@@ -55,11 +42,15 @@ function periodKey(date: Dayjs, period: AnalyticsPeriod): string {
  *
  * Built from the calendar rather than from the reviews, so a period without
  * reviews is a real zero on the axis instead of a gap the line jumps over.
+ *
+ * The size defaults to `ANALYTICS_PERIOD_WINDOWS`; pass one to widen or narrow
+ * this call without touching the configured default.
  */
-function periodWindow(period: AnalyticsPeriod): string[] {
+function periodWindow(period: AnalyticsPeriod, windowSize?: number): string[] {
   const { unit, startOf } = PERIOD_STEPS[period]
+  const count = windowSize ?? ANALYTICS_PERIOD_WINDOWS[period]
   const buckets: string[] = []
-  for (let ago = PERIOD_WINDOWS[period] - 1; ago >= 0; ago--) {
+  for (let ago = count - 1; ago >= 0; ago--) {
     buckets.push(periodKey(dayjs().startOf(startOf).subtract(ago, unit), period))
   }
   return buckets
@@ -124,8 +115,11 @@ export function useTaskAssignmentAnalytics() {
   /**
    * Aggregate reviews by time period (daily/weekly/monthly)
    */
-  const aggregateByTimePeriod = (period: AnalyticsPeriod): TimePeriodData[] => {
-    const buckets = periodWindow(period)
+  const aggregateByTimePeriod = (
+    period: AnalyticsPeriod,
+    windowSize?: number
+  ): TimePeriodData[] => {
+    const buckets = periodWindow(period, windowSize)
     const grouped: Record<string, TimePeriodData> = {}
     // The window is the axis, in the order the calendar puts it in: no sorting,
     // and no leap over a period that happens to have no reviews.
@@ -317,9 +311,12 @@ export function useTaskAssignmentAnalytics() {
   /**
    * Aggregate issue counts by severity over time periods
    */
-  const aggregateIssuesBySeverity = (period: AnalyticsPeriod): SeveritySeries[] => {
+  const aggregateIssuesBySeverity = (
+    period: AnalyticsPeriod,
+    windowSize?: number
+  ): SeveritySeries[] => {
     // Same window and same keys as the trend chart, so the two line up on the axis.
-    const buckets = periodWindow(period)
+    const buckets = periodWindow(period, windowSize)
     const grouped: Record<string, Record<IssueSeverity, number>> = {}
     buckets.forEach((key) => {
       grouped[key] = { low: 0, medium: 0, high: 0, critical: 0 }
