@@ -145,3 +145,4 @@ logs/*
 
 # Ignore codebuddy
 .codebuddy/
+frontend/tsconfig.tsbuildinfo

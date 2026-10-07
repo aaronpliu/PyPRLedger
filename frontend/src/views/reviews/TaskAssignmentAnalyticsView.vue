@@ -94,13 +94,13 @@
             <div class="stat-card__icon primary-icon">
               <el-icon :size="32"><Document /></el-icon>
             </div>
-            <div class="stat-card__value animated-counter">{{ animatedTotalReviews.toLocaleString() }}</div>
-            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.total_reviews') }}</div>
+            <div class="stat-card__value animated-counter">{{ animatedTotalPRs.toLocaleString() }}</div>
+            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.total_prs') }}</div>
           </div>
         </div>
       </el-col>
 
-      <!-- Card 2: Active Reviews -->
+      <!-- Card 2: Active PRs -->
       <el-col :xs="24" :sm="12" :md="6">
         <div class="stat-card stat-card--success">
           <div class="stat-card__content">
@@ -108,13 +108,15 @@
               <div class="stat-card__icon success-icon">
                 <el-icon :size="32"><TrendCharts /></el-icon>
               </div>
-              <div class="live-indicator">
-                <span class="pulse-dot"></span>
-                <span>Live</span>
-              </div>
+              <el-tooltip
+                :content="t('task_assignment.analytics.summary.active_prs_hint')"
+                placement="top"
+              >
+                <el-icon class="stat-card__hint" :size="16"><QuestionFilled /></el-icon>
+              </el-tooltip>
             </div>
-            <div class="stat-card__value">{{ animatedActiveReviews.toLocaleString() }}</div>
-            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.active_reviews') }}</div>
+            <div class="stat-card__value">{{ animatedActivePRs.toLocaleString() }}</div>
+            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.active_prs') }}</div>
           </div>
         </div>
       </el-col>
@@ -583,21 +585,21 @@ const avgAssignmentsSparkline = computed(() => {
 })
 
 // Animated counter state
-const animatedTotalReviews = ref(0)
-const animatedActiveReviews = ref(0)
+const animatedTotalPRs = ref(0)
+const animatedActivePRs = ref(0)
 
 // Animate counters on data load
 watch(
-  () => summaryStats.value.totalReviews,
+  () => summaryStats.value.totalPRs,
   (newValue) => {
-    animateCounter(animatedTotalReviews, newValue, 1000)
+    animateCounter(animatedTotalPRs, newValue, 1000)
   }
 )
 
 watch(
-  () => summaryStats.value.activeReviews,
+  () => summaryStats.value.activePRs,
   (newValue) => {
-    animateCounter(animatedActiveReviews, newValue, 1000)
+    animateCounter(animatedActivePRs, newValue, 1000)
   }
 )
 
@@ -1051,43 +1053,10 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
 }
 
-.live-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #67c23a;
-  font-weight: 600;
-  padding: 4px 10px;
-  background: rgba(103, 194, 58, 0.1);
-  border-radius: 12px;
-  border: 1px solid rgba(103, 194, 58, 0.3);
-  transition: all 0.3s ease;
-}
-
-.stat-card--success:hover .live-indicator {
-  background: rgba(103, 194, 58, 0.15);
-  border-color: rgba(103, 194, 58, 0.4);
-}
-
-.pulse-dot {
-  width: 8px;
-  height: 8px;
-  background: #67c23a;
-  border-radius: 50%;
-  animation: pulse 2s ease-in-out infinite;
-  box-shadow: 0 0 8px rgba(103, 194, 58, 0.6);
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(1.2);
-  }
+/* Says what the number counts, rather than claiming to be live. */
+.stat-card__hint {
+  color: var(--el-text-color-secondary);
+  cursor: help;
 }
 
 /* ===== Card 3: Minimalist + Sparkline ===== */

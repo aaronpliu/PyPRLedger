@@ -618,9 +618,10 @@
     "analytics": {
       "page_title": "Task Assignment Analytics",
       "summary": {
-        "total_reviews": "Total Reviews",
-        "active_reviews": "Active Reviews",
-        "avg_assignments": "Avg Assignments",
+        "total_prs": "PRs Reviewed",
+        "active_prs": "Active PRs",
+        "active_prs_hint": "Pull requests with work still outstanding: a reviewer assignment is not completed yet, or nobody has been assigned.",
+        "avg_assignments": "Avg Assignments / PR",
         "scoring_rate": "Scoring Rate"
       },
       "charts": {

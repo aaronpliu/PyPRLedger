@@ -618,9 +618,10 @@
     "analytics": {
       "page_title": "任務分配分析",
       "summary": {
-        "total_reviews": "總審查數",
-        "active_reviews": "活躍審查數",
-        "avg_assignments": "平均分配數",
+        "total_prs": "已評審 PR 數",
+        "active_prs": "進行中 PR 數",
+        "active_prs_hint": "仍有未完成工作的 PR：存在尚未完成的評審人分配，或還沒有指派評審人。",
+        "avg_assignments": "平均分配數 / PR",
         "scoring_rate": "評分率"
       },
       "charts": {

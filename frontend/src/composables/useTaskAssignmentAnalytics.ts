@@ -34,12 +34,6 @@ export interface ReviewerData {
   pending: number
 }
 
-export interface ScoringStats {
-  totalAssigned: number
-  totalCompleted: number
-  completionRate: number
-}
-
 export interface SeveritySeriesPoint {
   date: string
   value: number
@@ -205,51 +199,77 @@ export function useTaskAssignmentAnalytics() {
   }
 
   /**
-   * Calculate overall scoring statistics
+   * Reviews grouped by the pull request they belong to.
    *
-   * Scoring rate is review-level: a review is considered "scored"
-   * if it has at least one score record (has_scores === true).
+   * A review row is stored per source file, so one PR can arrive as several; the
+   * repository is part of the key because a PR number is only unique within one.
    */
-  const calculateScoringStats = (): ScoringStats => {
-    const totalReviews = reviews.value.length
-    const scoredReviews = reviews.value.filter((r) => r.has_scores).length
-
-    const completionRate = totalReviews > 0
-      ? (scoredReviews / totalReviews) * 100
-      : 0
-
-    return {
-      totalAssigned: totalReviews,
-      totalCompleted: scoredReviews,
-      completionRate: Math.round(completionRate * 100) / 100,
-    }
+  const groupByPullRequest = (): Map<string, ReviewV2[]> => {
+    const grouped = new Map<string, ReviewV2[]>()
+    reviews.value.forEach((review) => {
+      const key = `${review.project_key}/${review.repository_slug}/${review.pull_request_id}`
+      const rows = grouped.get(key)
+      if (rows) {
+        rows.push(review)
+      } else {
+        grouped.set(key, [review])
+      }
+    })
+    return grouped
   }
 
   /**
-   * Get summary statistics
+   * Whether a pull request still has work outstanding.
+   *
+   * It is finished only once every reviewer on it has completed; a PR that is
+   * still waiting for a reviewer counts as outstanding too, since nothing about
+   * it is done.
+   */
+  const isInFlight = (rows: ReviewV2[]): boolean => {
+    const statuses = rows.flatMap((row) =>
+      (row.reviewers ?? []).map((assignment) => assignment.assignment_status)
+    )
+    return !(statuses.length > 0 && statuses.every((status) => status === 'completed'))
+  }
+
+  /**
+   * Summary statistics, every one of them counted per pull request.
+   *
+   * Pull request status is not the basis here: reviews are ingested when a PR is
+   * opened and nothing updates that status afterwards, so counting "open" rows
+   * only ever reproduced the total. Reviewer assignment status does move, so it
+   * is what tells work apart from finished work.
    */
   const getSummaryStats = computed(() => {
-    const totalReviews = reviews.value.length
-    const activeReviews = reviews.value.filter(
-      (r) => r.pull_request_status === 'open'
-    ).length
-    
-    const scoringStats = calculateScoringStats()
-    
-    // Calculate average assignments per review
-    const totalAssignments = reviews.value.reduce(
-      (sum, r) => sum + (r.reviewers?.length || 0),
-      0
-    )
-    const avgAssignments = totalReviews > 0 
-      ? Math.round((totalAssignments / totalReviews) * 100) / 100 
-      : 0
+    const byPullRequest = groupByPullRequest()
+
+    let activePRs = 0
+    let assignments = 0
+    let scoredPRs = 0
+
+    byPullRequest.forEach((rows) => {
+      if (isInFlight(rows)) {
+        activePRs++
+      }
+
+      // Reviewers are stored per row, so the same reviewer on several files of
+      // one PR is still one reviewer on that PR.
+      assignments += new Set(
+        rows.flatMap((row) => (row.reviewers ?? []).map((assignment) => assignment.reviewer))
+      ).size
+
+      if (rows.some((row) => row.has_scores)) {
+        scoredPRs++
+      }
+    })
+
+    const totalPRs = byPullRequest.size
 
     return {
-      totalReviews,
-      activeReviews,
-      avgAssignments,
-      scoringRate: scoringStats.completionRate,
+      totalPRs,
+      activePRs,
+      avgAssignments: totalPRs > 0 ? Math.round((assignments / totalPRs) * 100) / 100 : 0,
+      scoringRate: totalPRs > 0 ? Math.round((scoredPRs / totalPRs) * 10000) / 100 : 0,
     }
   })
 
@@ -350,7 +370,6 @@ export function useTaskAssignmentAnalytics() {
     aggregateByProject,
     aggregateByReviewer,
     aggregateIssuesBySeverity,
-    calculateScoringStats,
     getSummaryStats,
     loadReviews,
     setReviews,
