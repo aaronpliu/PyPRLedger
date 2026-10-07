@@ -56,7 +56,22 @@ def create_tag(version, auto_confirm=False):
         for line in recent.stdout.splitlines()[:5]:
             print(f"  {line}")
 
-    subprocess.run(["git", "show", tag_name, "--no-patch", "--format=%ai %s"])
+    # Captured rather than run straight to stdout. A child writing to the same
+    # stream while this process still holds buffered output prints ahead of it,
+    # so the summary appeared above the text that introduces it. Reading it back
+    # keeps the order the code reads in, and reports a failure instead of nothing.
+    summary = subprocess.run(
+        ["git", "show", tag_name, "--no-patch", "--format=%ai %s"], capture_output=True, text=True
+    )
+    if summary.returncode != 0:
+        print(f"  Could not read the tag back: {summary.stderr.strip()}", file=sys.stderr)
+    else:
+        # An annotated tag is echoed as its own object before the format line, so
+        # indent every line rather than the first one only.
+        for line in summary.stdout.strip().splitlines():
+            if line.strip():
+                print(f"  {line}")
+
     return 0
 
 
