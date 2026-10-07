@@ -103,7 +103,7 @@
           
           <!-- Page-level version info (shown at bottom of each page) -->
           <div class="page-version-info">
-            <span class="copyright">{{ COPYRIGHT }}</span>
+            <span class="copyright">{{ copyrightNotice() }}</span>
             <span class="version-separator">|</span>
             <span class="version-info">
               UI v{{ UI_VERSION }} | API v{{ apiVersion }}
@@ -126,7 +126,7 @@ import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
-import { UI_VERSION, COPYRIGHT, fetchApiVersion } from '@/config/versions'
+import { UI_VERSION, copyrightNotice, fetchApiVersion } from '@/config/versions'
 
 const { t } = useI18n()
 const authStore = useAuthStore()

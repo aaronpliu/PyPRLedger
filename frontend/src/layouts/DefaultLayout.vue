@@ -101,7 +101,7 @@
         
         <!-- Page-level version info (shown at bottom of each page) -->
         <div class="page-version-info">
-          <span class="copyright">{{ COPYRIGHT }}</span>
+          <span class="copyright">{{ copyrightNotice() }}</span>
           <span class="version-separator">|</span>
           <span class="version-info">
             UI v{{ UI_VERSION }} | API v{{ apiVersion }}
@@ -127,7 +127,7 @@ import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
 import ReviewsBanner from '@/components/common/ReviewsBanner.vue'
-import { UI_VERSION, COPYRIGHT, fetchApiVersion, getApiVersion } from '@/config/versions'
+import { UI_VERSION, copyrightNotice, fetchApiVersion, getApiVersion } from '@/config/versions'
 import { projectRegistryApi, type AppInfo } from '@/api/projectRegistry'
 
 const authStore = useAuthStore()
