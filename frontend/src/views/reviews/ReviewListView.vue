@@ -513,15 +513,26 @@
         </el-table-column>
         
         <!-- Actions -->
-        <el-table-column :label="t('reviews.actions')" width="175" fixed="right">
+        <el-table-column :label="t('reviews.actions')" width="140" fixed="right">
           <template #default="{ row }">
             <el-space>
               <el-button size="small" type="primary" @click.stop="viewReview(row)">
                 {{ t('reviews.view') }}
               </el-button>
-              <el-button size="small" @click.stop="showAssociateDialog(row)">
-                {{ t('reviews.associate', 'Link') }}
-              </el-button>
+              <!--
+                A link button rather than a bordered one: the box around a bare
+                icon is noise in a table row. It keeps the button element, so the
+                keyboard and the name below behave as they should.
+              -->
+              <el-tooltip :content="t('reviews.associate', 'Link')" placement="top">
+                <el-button
+                  link
+                  :aria-label="t('reviews.associate', 'Link')"
+                  @click.stop="showAssociateDialog(row)"
+                >
+                  <el-icon :size="18"><Link /></el-icon>
+                </el-button>
+              </el-tooltip>
             </el-space>
           </template>
         </el-table-column>
