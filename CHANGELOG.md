@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.26.3] - 2026-10-07
+
+**Backend Version**: 1.26.3
+**Frontend Version**: 1.21.3
+
+### Changed
+- The task assignment summary counts pull requests rather than review rows. Two of its cards could not disagree: reviews are created when a pull request is opened and nothing in the pipeline ever moves that status on, so "Active Reviews" - a count of rows marked open - reproduced the total exactly, under a badge claiming to be live. A review is also stored one row per source file, so a pull request reviewed file by file was counted more than once. Both cards now count distinct pull requests, "Active" meaning one that still has work outstanding - a reviewer assignment not completed, or nobody assigned yet, since nothing about such a request is done - and the badge has given way to the sentence defining it. Average assignments is per pull request with a reviewer counted once however many files they appear on, and the scoring rate is the share of pull requests that carry any score. What carries this is the reviewer assignment status, being the field that does move; pull request status is not consulted at all
+- The trend charts show a window rather than all of history: the last 180 days, 26 weeks or 6 months, whichever period is selected. A window puts a period without reviews on the axis as a zero instead of leaving it out, so a quiet stretch reads as one rather than as a straight line drawn across it, and the axis has a length that still says something about time. The size lives in `frontend/src/config/analytics.ts` and can be overridden per call, so widening one is a number rather than a rewrite
+- Two faults in the weekly axis went with it. The keys paired the calendar year with the ISO week number, which put 2025-12-29 and 2025-01-01 in the same bucket - a week that straddles new year belongs to its week-year, not to the year its days fall in; and being unpadded, `2026-W9` sorted after `2026-W10` as a string, so each January drew its weeks out of order. They are now the ISO week-year and a padded week number, and the buckets are built from the calendar in order rather than sorted as text, which is what keeps the two charts sharing the period selector on one axis
+- The Link action in the Code Reviews table is an icon. It was a bordered button spelling "Link", which took a word's worth of width to say what a chain glyph says, and the column narrowed to suit. It is still a button element, so it still takes focus and answers the keyboard, and it carries an accessible name and a tooltip to replace the word it no longer shows
+- The copyright notice widens by itself. It read "© 2026 Mobile, All rights reserved", held in a module constant and so fixed at build time - a deployment that outlived its year would go on claiming the old one - and it now reads `© 2026-2027` from the first of January, computed where it is rendered. The first year it covers is a single constant, and the range cannot run backwards whatever the clock says
+
+### Fixed
+- Creating a release tag prints its verification in the order it is meant to be read. The tag summary was written straight to stdout by a child process while the script still held buffered output, so it appeared above the lines introducing it; it is captured and indented along with the rest, and a failure to read the tag back is now reported instead of passing as silence
+
+---
+
 ## [1.26.2] - 2026-10-06
 
 **Backend Version**: 1.26.2
