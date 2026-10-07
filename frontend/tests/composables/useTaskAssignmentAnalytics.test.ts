@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import dayjs from 'dayjs'
+import isoWeek from 'dayjs/plugin/isoWeek'
 import { useTaskAssignmentAnalytics } from '@/composables/useTaskAssignmentAnalytics'
 import type { ReviewV2, ReviewerAssignment } from '@/api/taskAssignment'
+
+dayjs.extend(isoWeek)
 
 function reviewer(name: string, status: ReviewerAssignment['assignment_status'] = 'assigned'): ReviewerAssignment {
   return {
@@ -170,5 +174,120 @@ describe('useTaskAssignmentAnalytics summary', () => {
     ])
 
     expect(summary.scoringRate).toBe(100)
+  })
+})
+
+describe('useTaskAssignmentAnalytics period windows', () => {
+  // Noon UTC keeps the instant inside the same day (and week) in every zone.
+  const NOW = '2026-10-07T12:00:00Z'
+
+  function analyticsWith(reviews: ReviewV2[]) {
+    const analytics = useTaskAssignmentAnalytics()
+    analytics.setReviews(reviews)
+    return analytics
+  }
+
+  /** The key the composable builds for an instant, written out independently. */
+  function weekKeyOf(instant: string): string {
+    const date = dayjs(instant)
+    return `${date.isoWeekYear()}-W${String(date.isoWeek()).padStart(2, '0')}`
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(NOW))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('shows the last 180 days, 26 weeks and 6 months', () => {
+    const analytics = analyticsWith([review({ created_date: NOW })])
+
+    expect(analytics.aggregateByTimePeriod('daily')).toHaveLength(180)
+    expect(analytics.aggregateByTimePeriod('weekly')).toHaveLength(26)
+    expect(analytics.aggregateByTimePeriod('monthly')).toHaveLength(6)
+  })
+
+  it('puts a period with no reviews on the axis as a zero', () => {
+    const analytics = analyticsWith([
+      review({ id: 1, created_date: NOW }),
+      review({ id: 2, created_date: dayjs(NOW).subtract(3, 'week').toISOString() }),
+    ])
+
+    const counts = analytics.aggregateByTimePeriod('weekly').map((point) => point.count)
+
+    expect(counts).toHaveLength(26)
+    expect(counts.reduce((sum, count) => sum + count, 0)).toBe(2)
+    // The current week is the last point, three weeks back the fourth from the
+    // end, and the two weeks between them are on the axis with nothing in them.
+    expect(counts[counts.length - 1]).toBe(1)
+    expect(counts[counts.length - 4]).toBe(1)
+    expect(counts[counts.length - 2]).toBe(0)
+    expect(counts[counts.length - 3]).toBe(0)
+  })
+
+  it('runs oldest to newest, which the padded week number is what keeps', () => {
+    // Anchored in March so the window spans weeks 9 and 10 of the year, where
+    // unpadded keys sort as strings the wrong way round.
+    vi.setSystemTime(new Date('2026-03-04T12:00:00Z'))
+    const analytics = analyticsWith([review({ created_date: '2026-03-02T12:00:00Z' })])
+
+    const dates = analytics.aggregateByTimePeriod('weekly').map((point) => point.date)
+
+    expect(dates).toContain('2026-W09')
+    expect(dates).toContain('2026-W10')
+    expect([...dates].sort()).toEqual(dates)
+  })
+
+  it('leaves out what falls before the window', () => {
+    const analytics = analyticsWith([
+      review({ id: 1, created_date: dayjs(NOW).subtract(30, 'week').toISOString() }),
+    ])
+
+    // Nothing left in the window, so there is nothing to draw.
+    expect(analytics.aggregateByTimePeriod('weekly')).toEqual([])
+    expect(analytics.aggregateByTimePeriod('daily')).toEqual([])
+    expect(analytics.aggregateByTimePeriod('monthly')).toEqual([])
+  })
+
+  it('keys a new year week by its ISO week-year, not the calendar year', () => {
+    // 2025-12-29 opens ISO week 1 of 2026; the calendar year of that Monday is
+    // 2025, which is how it used to collide with the first week of 2025.
+    const instant = '2025-12-29T12:00:00Z'
+    vi.setSystemTime(new Date('2026-01-05T12:00:00Z'))
+    const analytics = analyticsWith([review({ created_date: instant })])
+
+    const points = analytics.aggregateByTimePeriod('weekly')
+
+    expect(weekKeyOf(instant)).toBe('2026-W01')
+    expect(points.map((point) => point.date)).toContain('2026-W01')
+    expect(points.filter((point) => point.count > 0)).toHaveLength(1)
+  })
+
+  it('gives the severity chart the same axis as the trend chart', () => {
+    const analytics = analyticsWith([
+      review({ id: 1, created_date: NOW, issue_severities: ['high', 'low'] }),
+      review({ id: 2, created_date: dayjs(NOW).subtract(2, 'month').toISOString(), issue_severities: ['critical'] }),
+    ])
+
+    const series = analytics.aggregateIssuesBySeverity('weekly')
+    const trend = analytics.aggregateByTimePeriod('weekly')
+
+    expect(series).toHaveLength(4)
+    series.forEach((severity) => {
+      expect(severity.data.map((point) => point.date)).toEqual(trend.map((point) => point.date))
+    })
+
+    const high = series.find((severity) => severity.name === 'High')
+    expect(high?.data.reduce((sum, point) => sum + point.value, 0)).toBe(1)
+    expect(series.find((severity) => severity.name === 'Critical')?.data.reduce((sum, p) => sum + p.value, 0)).toBe(1)
+  })
+
+  it('has nothing to draw when no review in the window carries an issue', () => {
+    const analytics = analyticsWith([review({ created_date: NOW })])
+
+    expect(analytics.aggregateIssuesBySeverity('weekly')).toEqual([])
   })
 })
