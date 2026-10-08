@@ -174,6 +174,14 @@
         :description="t('releaseDependencyGraph.pick_repository')"
       />
 
+      <!-- The refs are suggestions, not a choice: nothing is read until the reader
+           picks the tag or branch they came for -->
+      <el-empty
+        v-else-if="!selectedRef"
+        :description="t('releaseDependencyGraph.pick_ref')"
+        data-test="pick-ref"
+      />
+
       <ContentLoader
         v-else-if="loading"
         :rows="8"
@@ -188,6 +196,8 @@
 
       <el-row v-else :gutter="16">
         <el-col :xs="24" :md="18">
+          <!-- The names are indexed by category as the dependency file numbers
+               them: 0 the project, 1 a dependency, 2 a package it ships -->
           <ReleaseDependencyGraphChart
             :nodes="viewData.nodes"
             :links="viewData.links"
@@ -195,8 +205,8 @@
             :transitive="transitive"
             :category-names="[
               t('releaseDependencyGraph.category_project'),
-              t('releaseDependencyGraph.category_workspace'),
               t('releaseDependencyGraph.category_dependency'),
+              t('releaseDependencyGraph.category_workspace'),
             ]"
             height="max(560px, calc(100vh - 380px))"
             data-test="release-dependency-graph-chart"
@@ -416,10 +426,8 @@ async function loadRefs() {
     const response = await releaseDiffApi.listRefs({ ...coordinates(), limit: 200 })
     tags.value = response.tags
     branches.value = response.branches
-    const newest = tags.value[0] ?? branches.value[0]
-    if (newest) {
-      selectedRef.value = newest
-    }
+    // The refs are suggestions: the newest tag is offered, never picked. The graph
+    // is read when the reader chooses one.
   } catch {
     // Left empty: the picker stays empty and the canvas stays blank.
   } finally {
@@ -542,10 +550,12 @@ const inCycle = computed(() =>
   ),
 )
 
+// Indexed by category as the dependency file numbers them: 0 the project,
+// 1 a dependency, 2 a package the application ships.
 const categoryNames = [
   'releaseDependencyGraph.category_project',
-  'releaseDependencyGraph.category_workspace',
   'releaseDependencyGraph.category_dependency',
+  'releaseDependencyGraph.category_workspace',
 ]
 
 function categoryName(category: number): string {

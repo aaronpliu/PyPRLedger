@@ -53,12 +53,14 @@ vi.mock('@/api/releaseDependencyGraph', async () => {
 // the assertions below read.
 interface ChartOptionNode {
   name: string
+  symbolSize?: number
   itemStyle?: { opacity?: number }
 }
 interface ReleaseDependencyGraphChartOption {
   series: [
     {
       data: ChartOptionNode[]
+      categories: Array<{ name: string }>
     },
   ]
 }
@@ -95,22 +97,26 @@ function mountView() {
 
 type View = ReturnType<typeof mountView>
 
-/**
- * Walk the picker the way a reader does: a project, then a repository, which
- * loads the refs and opens the newest tag. A ref given here is picked after.
- */
-async function openOn(wrapper: View, ref?: string) {
-  const pick = async (index: number, value: string) => {
-    wrapper.findAllComponents(ElSelect)[index].vm.$emit('update:modelValue', value)
-    await flushPromises()
-    await flushPromises()
-  }
+/** Pick one of the form's selects, the way a reader does. */
+async function pick(wrapper: View, index: number, value: string) {
+  wrapper.findAllComponents(ElSelect)[index].vm.$emit('update:modelValue', value)
+  await flushPromises()
+  await flushPromises()
+}
 
-  await pick(0, 'CORE')
-  await pick(1, 'app')
-  if (ref) {
-    await pick(3, ref)
-  }
+/** Walk as far as the repository: the ref is still the reader's to pick. */
+async function openRepository(wrapper: View) {
+  await pick(wrapper, 0, 'CORE')
+  await pick(wrapper, 1, 'app')
+}
+
+/**
+ * Walk the picker the way a reader does: a project, a repository, then a ref.
+ * Nothing is read before that last choice is made.
+ */
+async function openOn(wrapper: View, ref: string = 'v2.0.0') {
+  await openRepository(wrapper)
+  await pick(wrapper, 3, ref)
 }
 
 function chartOption(wrapper: View): ReleaseDependencyGraphChartOption {
@@ -120,6 +126,10 @@ function chartOption(wrapper: View): ReleaseDependencyGraphChartOption {
 
 function nodeOpacity(option: ReleaseDependencyGraphChartOption, id: string): number | undefined {
   return option.series[0].data.find((node) => node.name === id)?.itemStyle?.opacity
+}
+
+function nodeSize(wrapper: View, id: string): number | undefined {
+  return chartOption(wrapper).series[0].data.find((node) => node.name === id)?.symbolSize
 }
 
 function clickNode(wrapper: View, id: string) {
@@ -149,10 +159,16 @@ describe('ReleaseDependencyGraphView', () => {
     expect(selects[2].props('modelValue')).toBe('github_enterprise')
   })
 
-  it('opens on the newest tag of the repository, nothing picked', async () => {
+  it('waits for a ref to be picked before it reads anything', async () => {
     const wrapper = mountView()
     await flushPromises()
-    await openOn(wrapper)
+    await openRepository(wrapper)
+
+    // the refs are suggestions of the provider, not a choice made for the reader
+    expect(wrapper.find('[data-test="pick-ref"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="release-dependency-graph-chart"]').exists()).toBe(false)
+
+    await pick(wrapper, 3, 'v2.0.0')
 
     // v2.0.0, the whole closure: eight packages, seventeen edges - the cycle
     // among them, not only the app's own six edges
@@ -163,6 +179,43 @@ describe('ReleaseDependencyGraphView', () => {
     expect(wrapper.text()).toContain('v2.0.0')
     // nothing is dimmed before a pick is spent
     expect(nodeOpacity(chartOption(wrapper), 'packageE')).toBe(1)
+  })
+
+  it('names and sizes each category the way the file numbers them', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openOn(wrapper)
+
+    // 0 = the project, 1 = a dependency, 2 = a package the application ships
+    expect(chartOption(wrapper).series[0].categories.map((entry) => entry.name)).toEqual([
+      'Project',
+      'Dependency',
+      'Workspace package',
+    ])
+
+    // the application is the largest, the packages it ships the middle, what it
+    // pulls in the smallest - never the other way round
+    expect(nodeSize(wrapper, 'app')).toBe(52)
+    expect(nodeSize(wrapper, 'packageA')).toBe(38)
+    expect(nodeSize(wrapper, 'packageE')).toBe(26)
+  })
+
+  it('names the role of a picked package the way the file numbers it', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openOn(wrapper)
+
+    // packageA (category 2) is a package the application ships...
+    clickNode(wrapper, 'packageA')
+    await flushPromises()
+    expect(wrapper.find('[data-test="detail-panel"]').text()).toContain('Workspace package')
+
+    // ...and packageE (category 1) is a dependency it pulls in
+    clickNode(wrapper, 'packageE')
+    await flushPromises()
+    const panel = wrapper.find('[data-test="detail-panel"]')
+    expect(panel.text()).toContain('Dependency')
+    expect(panel.text()).not.toContain('Workspace package')
   })
 
   it('shows the picked package with the constraints its edges declare', async () => {

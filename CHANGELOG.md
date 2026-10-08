@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Pick the ref instead of being handed one: the Release Dependency Graph and the App Diff selected the newest tag (or the first branch) the moment a repository was chosen, so the first thing on screen was a ref nobody had chosen - and, on the graph, a read of the dependency database nobody had asked for. The refs stay suggestions of the provider: the picker is filled, and nothing is read or compared until a tag or branch is picked, with the graph saying so in its own "pick a tag or branch to read" state. A link that names its refs still opens on them
+
+### Fixed
+- Name and size the roles of the dependency graph the way the dependency file numbers them: the chart read category 1 as a workspace package and 2 as a dependency while the file - and the dependency database - numbers 1 a dependency and 2 a package the application ships, so the legend, every node's tooltip, the role tag of the detail panel, the colours and the node sizes were each one role out: an external dependency was labelled "Workspace package" and drawn larger than the packages the application actually ships. The names, the colours and the sizes follow the file's numbering now, with tests pinning the order
+
 ### Documentation
 - `docs/DEPENDENCY_API_CONTRACT.md` writes down the interface the third-party dependency database must satisfy for the Release Dependency Graph and the App Diff: the request the two pages make (the repository resolved to an application through the project registry, then one call per ref), the response shape field by field with what each field is read as, how a two-level source - the module maps keyed by module name at the top level of the same object - folds into that shape at the endpoint rather than on this side, the status code that means "no record" rather than "broken", and a checklist for verifying an implementation against the canned data before the real database is reachable
 

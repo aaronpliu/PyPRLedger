@@ -1228,6 +1228,7 @@
     "tags_group": "标签",
     "branches_group": "分支",
     "pick_repository": "选择项目和仓库，以读取其依赖文件。",
+    "pick_ref": "选择一个标签或分支以读取。",
     "no_data": "该 ref 没有依赖数据。",
     "category_project": "项目",
     "category_workspace": "工作区包",

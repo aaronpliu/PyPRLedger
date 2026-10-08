@@ -77,10 +77,19 @@ async function pick(wrapper: View, index: number, value: unknown) {
   await flushPromises()
 }
 
-/** Walk the picker the way a reader does: a project, then a repository. */
-async function openOn(wrapper: View) {
+/** Walk as far as the repository: the releases are still the reader's to pick. */
+async function openRepository(wrapper: View) {
   await pick(wrapper, 0, 'CORE')
   await pick(wrapper, 1, 'app')
+}
+
+/**
+ * Walk the picker the way a reader does: a project, a repository, then the
+ * releases. Nothing is compared before those last choices are made.
+ */
+async function openOn(wrapper: View, refs: string[] = ['v2.0.0', 'v1.1.0']) {
+  await openRepository(wrapper)
+  await pick(wrapper, 3, refs)
 }
 
 function compare() {
@@ -99,9 +108,15 @@ describe('AppDiffView', () => {
     expect(wrapper.find('[data-test="matrix"]').exists()).toBe(false)
   })
 
-  it('opens on the two most recent releases', async () => {
+  it('compares nothing until the releases are picked', async () => {
     const wrapper = await mountView()
-    await openOn(wrapper)
+    await openRepository(wrapper)
+
+    // the releases are suggestions of the provider, not a choice made for the reader
+    expect(compare()).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-test="need-two"]').exists()).toBe(true)
+
+    await pick(wrapper, 3, ['v2.0.0', 'v1.1.0'])
 
     expect(compare()).toHaveBeenCalledWith(
       expect.objectContaining({ refs: ['v2.0.0', 'v1.1.0'], refresh: false }),

@@ -61,7 +61,9 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   selectedId: null,
   transitive: false,
-  categoryNames: () => ['Project', 'Workspace package', 'Dependency'],
+  // Indexed by category as the file numbers them: 0 project, 1 dependency,
+  // 2 the packages the application ships.
+  categoryNames: () => ['Project', 'Dependency', 'Workspace package'],
   height: '600px',
 })
 
@@ -394,14 +396,17 @@ const pinnedNodeIds = ref<string[]>([])
 
 const { primaryColor } = useTheme()
 
-// The application carries the accent; the other categories keep colours of
-// their own so a node's role stays readable whatever the accent is.
-const CATEGORY_COLORS: Record<number, string> = { 1: '#67c23a', 2: '#909399' }
+// The application carries the accent. Green is what the application ships - the
+// reading the detail panel gives the same node - and grey is what it pulls in, so
+// a node's role stays readable whatever the accent is.
+const CATEGORY_COLORS: Record<number, string> = { 1: '#909399', 2: '#67c23a' }
 
 const categoryColor = (category: number): string =>
   category === 0 ? primaryColor.value : (CATEGORY_COLORS[category] ?? '#909399')
-// Projects carry the page, workspace packages the middle, dependencies the mass.
-const CATEGORY_SYMBOL_SIZES = [52, 38, 26]
+// Indexed by category as the file numbers them: the projects carry the page, the
+// packages the application ships sit in the middle, and the dependencies it pulls
+// in are the mass behind them.
+const CATEGORY_SYMBOL_SIZES = [52, 26, 38]
 // A dimmed node keeps a readable but retreating label: graph labels carry no
 // opacity of their own, grey is how one reads as switched off.
 const DIM_LABEL_COLOR = '#c0c4cc'

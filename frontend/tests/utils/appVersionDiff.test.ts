@@ -4,7 +4,6 @@ import {
   codeTone,
   commitSubject,
   commitTotal,
-  defaultSelection,
   downgradeCount,
   isMarked,
   isRisk,
@@ -170,20 +169,6 @@ describe('move symbols and labels', () => {
   it('names the tone by its translation key', () => {
     expect(moveLabelKey('downgrade')).toBe('appDiff.move_downgrade')
     expect(moveLabelKey('unknown')).toBe('appDiff.move_unknown')
-  })
-})
-
-describe('defaultSelection', () => {
-  it('opens on the two most recent releases', () => {
-    expect(defaultSelection(['v2.0.0', 'v1.1.0', 'v1.0.0'], ['main'])).toEqual([
-      'v2.0.0',
-      'v1.1.0',
-    ])
-  })
-
-  it('falls back to the branches when there are not two tags', () => {
-    expect(defaultSelection(['v2.0.0'], ['main', 'develop'])).toEqual(['v2.0.0', 'main'])
-    expect(defaultSelection([], ['main'])).toEqual(['main'])
   })
 })
 
