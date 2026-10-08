@@ -149,6 +149,22 @@ async def test_endpoint_compares_two_releases(async_client, authenticated_client
     assert body["verdict"] == "changed"
 
 
+async def test_endpoint_asks_the_database_with_a_lower_case_app_name(
+    async_client, authenticated_client
+) -> None:
+    """The registry keeps the casing an administrator typed; the database is an enum."""
+    app.dependency_overrides[get_registry_service] = lambda: FakeRegistry("MyLang")
+
+    response = await async_client.post(
+        "/api/v1/release/apps/diff", json=payload(MOCK_TAG, MOCK_BRANCH)
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["app_name"] == MOCK_APP_NAME
+    assert all(release["has_record"] for release in body["releases"])
+
+
 async def test_endpoint_orders_the_releases_by_datetime(async_client, authenticated_client) -> None:
     response = await async_client.post(
         "/api/v1/release/apps/diff", json=payload(MOCK_BRANCH, MOCK_TAG)

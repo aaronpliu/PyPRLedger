@@ -58,7 +58,7 @@ Authorization: Bearer <DEPENDENCY_API_TOKEN>     (sent only when the token is co
 
 | Parameter | Value |
 |---|---|
-| `app_name` | The application the repository resolved to (project registry) |
+| `app_name` | The application the repository resolved to through the project registry, **lower-cased**: the database keys its applications by a lower-case enum, so a repository registered under `MyApp` is asked for as `myapp` |
 | `tagOrBranch` | The tag or branch the user picked on the page |
 
 | Client behaviour | Value |

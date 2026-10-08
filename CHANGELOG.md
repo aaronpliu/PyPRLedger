@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Ask the dependency database with a lower-case application name: the project registry holds the name an administrator typed, while the database keys its applications by a lower-case enum, so the name is lower-cased where the Release Dependency Graph and the App Diff resolve it - a repository registered as `MyApp` reaches the record held for `myapp`, and both pages name it that way
 - Pick the ref instead of being handed one: the Release Dependency Graph and the App Diff selected the newest tag (or the first branch) the moment a repository was chosen, so the first thing on screen was a ref nobody had chosen - and, on the graph, a read of the dependency database nobody had asked for. The refs stay suggestions of the provider: the picker is filled, and nothing is read or compared until a tag or branch is picked, with the graph saying so in its own "pick a tag or branch to read" state. A link that names its refs still opens on them
 
 ### Fixed

@@ -10,7 +10,7 @@ from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
 from src.schemas.dependency_graph import DependencyGraphRequest, DependencyGraphResponse
 from src.services.dependency_graph_service import DependencyGraphService
-from src.services.project_registry_service import ProjectRegistryService
+from src.services.project_registry_service import ProjectRegistryService, dependency_app_name
 from src.utils.log import get_logger
 
 
@@ -45,7 +45,10 @@ async def read_dependency_graph(
     service: Annotated[DependencyGraphService, Depends(get_dependency_graph_service)],
     registry: Annotated[ProjectRegistryService, Depends(get_registry_service)],
 ) -> DependencyGraphResponse:
-    app_name = await registry.get_app_name(payload.project_key, payload.repository_slug, db)
+    # the dependency database keys applications by a lower-case enum
+    app_name = dependency_app_name(
+        await registry.get_app_name(payload.project_key, payload.repository_slug, db)
+    )
     logger.info(
         "Reading dependency graph",
         extra={

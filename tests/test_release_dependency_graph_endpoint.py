@@ -126,6 +126,24 @@ async def test_endpoint_reports_an_application_the_database_does_not_know(
     assert response.json()["detail"]["error"] == "dependency_graph_not_found"
 
 
+async def test_endpoint_asks_the_database_with_a_lower_case_app_name(
+    async_client, authenticated_client
+) -> None:
+    """The registry keeps the casing an administrator typed; the database is an enum."""
+    app.dependency_overrides[get_registry_service] = lambda: FakeRegistry("MyLang")
+
+    response = await async_client.post(
+        "/api/v1/release/dependency-graph/read",
+        json={"project_key": "CORE", "repository_slug": "app", "ref": MOCK_TAG},
+    )
+
+    assert response.status_code == 200, response.text
+    packages = {entry["id"]: entry for entry in response.json()["packages"]}
+    # the record was found under the lower-case name, and the graph is built on it
+    assert MOCK_APP_NAME in packages
+    assert packages[MOCK_APP_NAME]["category"] == 0
+
+
 async def test_endpoint_rejects_a_request_without_a_ref(async_client, authenticated_client) -> None:
     response = await async_client.post(
         "/api/v1/release/dependency-graph/read",

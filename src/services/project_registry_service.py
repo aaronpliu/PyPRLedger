@@ -11,6 +11,17 @@ from src.models.project_registry import ProjectRegistry
 logger = logging.getLogger(__name__)
 
 
+def dependency_app_name(app_name: str) -> str:
+    """The application name the dependency database knows.
+
+    The registry holds the name an administrator typed, while the dependency
+    database keys its applications by a lower-case enum. The two are matched here
+    rather than by every caller, so a name that reads differently in the registry
+    still finds the record it names.
+    """
+    return app_name.strip().lower()
+
+
 class ProjectRegistryService:
     """Service for managing project-to-application registry"""
 
