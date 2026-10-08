@@ -1506,12 +1506,12 @@ function handleSSEOpen() {
 }
 
 .archived-toggle-switch {
-  --el-switch-on-color: #409eff;
+  --el-switch-on-color: var(--el-color-primary);
   --el-switch-off-color: #dcdfe6;
 }
 
 [data-theme='dark'] .archived-toggle-switch {
-  --el-switch-on-color: #409eff;
+  --el-switch-on-color: var(--el-color-primary);
   --el-switch-off-color: #4c4d4f;
 }
 </style>

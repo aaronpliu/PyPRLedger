@@ -1,10 +1,60 @@
 import { computed, ref } from 'vue'
 import dayjs from 'dayjs'
-import weekOfYear from 'dayjs/plugin/weekOfYear'
+import type { Dayjs } from 'dayjs'
+import isoWeek from 'dayjs/plugin/isoWeek'
 import type { ReviewV2 } from '@/api/taskAssignment'
+import { ANALYTICS_PERIOD_WINDOWS, type AnalyticsPeriod } from '@/config/analytics'
 
-// Enable weekOfYear plugin for weekly aggregation
-dayjs.extend(weekOfYear)
+// ISO weeks: a week that straddles new year belongs to its week-year, not to the
+// calendar year its days happen to fall in.
+dayjs.extend(isoWeek)
+
+export type { AnalyticsPeriod }
+
+const PERIOD_STEPS: Record<AnalyticsPeriod, { unit: 'day' | 'week' | 'month'; startOf: 'day' | 'isoWeek' | 'month' }> = {
+  daily: { unit: 'day', startOf: 'day' },
+  weekly: { unit: 'week', startOf: 'isoWeek' },
+  monthly: { unit: 'month', startOf: 'month' },
+}
+
+const pad2 = (value: number) => String(value).padStart(2, '0')
+
+/**
+ * The bucket a date falls in.
+ *
+ * The week number is padded so the keys read in the order they happen: as plain
+ * strings `2026-W9` sorts after `2026-W10`, which is how the axis came out of
+ * order every January.
+ */
+function periodKey(date: Dayjs, period: AnalyticsPeriod): string {
+  switch (period) {
+    case 'weekly':
+      return `${date.isoWeekYear()}-W${pad2(date.isoWeek())}`
+    case 'monthly':
+      return date.format('YYYY-MM')
+    default:
+      return date.format('YYYY-MM-DD')
+  }
+}
+
+/**
+ * Every bucket in the window, oldest first.
+ *
+ * Built from the calendar rather than from the reviews, so a period without
+ * reviews is a real zero on the axis instead of a gap the line jumps over.
+ *
+ * The size defaults to `ANALYTICS_PERIOD_WINDOWS`; pass one to widen or narrow
+ * this call without touching the configured default.
+ */
+function periodWindow(period: AnalyticsPeriod, windowSize?: number): string[] {
+  const { unit, startOf } = PERIOD_STEPS[period]
+  const count = windowSize ?? ANALYTICS_PERIOD_WINDOWS[period]
+  const buckets: string[] = []
+  for (let ago = count - 1; ago >= 0; ago--) {
+    buckets.push(periodKey(dayjs().startOf(startOf).subtract(ago, unit), period))
+  }
+  return buckets
+}
 
 export interface TimePeriodData {
   date: string
@@ -32,12 +82,6 @@ export interface ReviewerData {
   completed: number
   in_progress: number
   pending: number
-}
-
-export interface ScoringStats {
-  totalAssigned: number
-  totalCompleted: number
-  completionRate: number
 }
 
 export interface SeveritySeriesPoint {
@@ -72,50 +116,35 @@ export function useTaskAssignmentAnalytics() {
    * Aggregate reviews by time period (daily/weekly/monthly)
    */
   const aggregateByTimePeriod = (
-    period: 'daily' | 'weekly' | 'monthly'
+    period: AnalyticsPeriod,
+    windowSize?: number
   ): TimePeriodData[] => {
+    const buckets = periodWindow(period, windowSize)
     const grouped: Record<string, TimePeriodData> = {}
+    // The window is the axis, in the order the calendar puts it in: no sorting,
+    // and no leap over a period that happens to have no reviews.
+    buckets.forEach((key) => {
+      grouped[key] = { date: key, count: 0, assigned: 0, completed: 0 }
+    })
 
+    let inWindow = 0
     reviews.value.forEach((review) => {
-      const date = dayjs(review.created_date)
-      let key: string
+      const bucket = grouped[periodKey(dayjs(review.created_date), period)]
+      if (!bucket) return // Older than the window, so it belongs to no point.
+      inWindow++
 
-      switch (period) {
-        case 'daily':
-          key = date.format('YYYY-MM-DD')
-          break
-        case 'weekly':
-          key = `${date.year()}-W${date.week()}`
-          break
-        case 'monthly':
-          key = date.format('YYYY-MM')
-          break
-        default:
-          key = date.format('YYYY-MM-DD')
-      }
-
-      if (!grouped[key]) {
-        grouped[key] = {
-          date: key,
-          count: 0,
-          assigned: 0,
-          completed: 0,
-        }
-      }
-
-      grouped[key].count++
-      
-      // Count assignments
+      bucket.count++
       review.reviewers?.forEach((assignment) => {
-        grouped[key].assigned!++
+        bucket.assigned!++
         if (assignment.assignment_status === 'completed') {
-          grouped[key].completed!++
+          bucket.completed!++
         }
       })
     })
 
-    // Sort by date and convert to array
-    return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date))
+    // Nothing in the window: the chart says so rather than drawing a flat line
+    // and looking like a measurement.
+    return inWindow === 0 ? [] : buckets.map((key) => grouped[key])
   }
 
   /**
@@ -205,51 +234,77 @@ export function useTaskAssignmentAnalytics() {
   }
 
   /**
-   * Calculate overall scoring statistics
+   * Reviews grouped by the pull request they belong to.
    *
-   * Scoring rate is review-level: a review is considered "scored"
-   * if it has at least one score record (has_scores === true).
+   * A review row is stored per source file, so one PR can arrive as several; the
+   * repository is part of the key because a PR number is only unique within one.
    */
-  const calculateScoringStats = (): ScoringStats => {
-    const totalReviews = reviews.value.length
-    const scoredReviews = reviews.value.filter((r) => r.has_scores).length
-
-    const completionRate = totalReviews > 0
-      ? (scoredReviews / totalReviews) * 100
-      : 0
-
-    return {
-      totalAssigned: totalReviews,
-      totalCompleted: scoredReviews,
-      completionRate: Math.round(completionRate * 100) / 100,
-    }
+  const groupByPullRequest = (): Map<string, ReviewV2[]> => {
+    const grouped = new Map<string, ReviewV2[]>()
+    reviews.value.forEach((review) => {
+      const key = `${review.project_key}/${review.repository_slug}/${review.pull_request_id}`
+      const rows = grouped.get(key)
+      if (rows) {
+        rows.push(review)
+      } else {
+        grouped.set(key, [review])
+      }
+    })
+    return grouped
   }
 
   /**
-   * Get summary statistics
+   * Whether a pull request still has work outstanding.
+   *
+   * It is finished only once every reviewer on it has completed; a PR that is
+   * still waiting for a reviewer counts as outstanding too, since nothing about
+   * it is done.
+   */
+  const isInFlight = (rows: ReviewV2[]): boolean => {
+    const statuses = rows.flatMap((row) =>
+      (row.reviewers ?? []).map((assignment) => assignment.assignment_status)
+    )
+    return !(statuses.length > 0 && statuses.every((status) => status === 'completed'))
+  }
+
+  /**
+   * Summary statistics, every one of them counted per pull request.
+   *
+   * Pull request status is not the basis here: reviews are ingested when a PR is
+   * opened and nothing updates that status afterwards, so counting "open" rows
+   * only ever reproduced the total. Reviewer assignment status does move, so it
+   * is what tells work apart from finished work.
    */
   const getSummaryStats = computed(() => {
-    const totalReviews = reviews.value.length
-    const activeReviews = reviews.value.filter(
-      (r) => r.pull_request_status === 'open'
-    ).length
-    
-    const scoringStats = calculateScoringStats()
-    
-    // Calculate average assignments per review
-    const totalAssignments = reviews.value.reduce(
-      (sum, r) => sum + (r.reviewers?.length || 0),
-      0
-    )
-    const avgAssignments = totalReviews > 0 
-      ? Math.round((totalAssignments / totalReviews) * 100) / 100 
-      : 0
+    const byPullRequest = groupByPullRequest()
+
+    let activePRs = 0
+    let assignments = 0
+    let scoredPRs = 0
+
+    byPullRequest.forEach((rows) => {
+      if (isInFlight(rows)) {
+        activePRs++
+      }
+
+      // Reviewers are stored per row, so the same reviewer on several files of
+      // one PR is still one reviewer on that PR.
+      assignments += new Set(
+        rows.flatMap((row) => (row.reviewers ?? []).map((assignment) => assignment.reviewer))
+      ).size
+
+      if (rows.some((row) => row.has_scores)) {
+        scoredPRs++
+      }
+    })
+
+    const totalPRs = byPullRequest.size
 
     return {
-      totalReviews,
-      activeReviews,
-      avgAssignments,
-      scoringRate: scoringStats.completionRate,
+      totalPRs,
+      activePRs,
+      avgAssignments: totalPRs > 0 ? Math.round((assignments / totalPRs) * 100) / 100 : 0,
+      scoringRate: totalPRs > 0 ? Math.round((scoredPRs / totalPRs) * 10000) / 100 : 0,
     }
   })
 
@@ -257,11 +312,17 @@ export function useTaskAssignmentAnalytics() {
    * Aggregate issue counts by severity over time periods
    */
   const aggregateIssuesBySeverity = (
-    period: 'daily' | 'weekly' | 'monthly'
+    period: AnalyticsPeriod,
+    windowSize?: number
   ): SeveritySeries[] => {
-    // Initialize counts per severity per period
+    // Same window and same keys as the trend chart, so the two line up on the axis.
+    const buckets = periodWindow(period, windowSize)
     const grouped: Record<string, Record<IssueSeverity, number>> = {}
+    buckets.forEach((key) => {
+      grouped[key] = { low: 0, medium: 0, high: 0, critical: 0 }
+    })
 
+    let inWindow = 0
     reviews.value.forEach((review) => {
       // Prefer the lightweight pre-extracted severities; fall back to parsing
       // the full ai_suggestions payload when present (legacy data shape).
@@ -272,43 +333,26 @@ export function useTaskAssignmentAnalytics() {
 
       if (severities.length === 0) return
 
-      const date = dayjs(review.created_date)
-      let key: string
-
-      switch (period) {
-        case 'daily':
-          key = date.format('YYYY-MM-DD')
-          break
-        case 'weekly':
-          key = `${date.year()}-W${date.week()}`
-          break
-        case 'monthly':
-          key = date.format('YYYY-MM')
-          break
-        default:
-          key = date.format('YYYY-MM-DD')
-      }
-
-      if (!grouped[key]) {
-        grouped[key] = { low: 0, medium: 0, high: 0, critical: 0 }
-      }
+      const bucket = grouped[periodKey(dayjs(review.created_date), period)]
+      if (!bucket) return // Older than the window, so it belongs to no point.
+      inWindow++
 
       severities.forEach((severity) => {
         const sev = (severity || '').toLowerCase() as IssueSeverity
-        if (grouped[key][sev] !== undefined) {
-          grouped[key][sev]++
+        if (bucket[sev] !== undefined) {
+          bucket[sev]++
         }
       })
     })
 
-    const sortedKeys = Object.keys(grouped).sort()
+    if (inWindow === 0) return []
 
     return SEVERITY_ORDER.map((severity) => ({
       name: severity.charAt(0).toUpperCase() + severity.slice(1),
       color: SEVERITY_COLORS[severity],
-      data: sortedKeys.map((dateKey) => ({
-        date: dateKey,
-        value: grouped[dateKey][severity],
+      data: buckets.map((key) => ({
+        date: key,
+        value: grouped[key][severity],
       })),
     }))
   }
@@ -350,7 +394,6 @@ export function useTaskAssignmentAnalytics() {
     aggregateByProject,
     aggregateByReviewer,
     aggregateIssuesBySeverity,
-    calculateScoringStats,
     getSummaryStats,
     loadReviews,
     setReviews,

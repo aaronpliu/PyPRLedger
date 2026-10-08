@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Ask the dependency database with a lower-case application name: the project registry holds the name an administrator typed, while the database keys its applications by a lower-case enum, so the name is lower-cased where the Release Dependency Graph and the App Diff resolve it - a repository registered as `MyApp` reaches the record held for `myapp`, and both pages name it that way
+- Pick the ref instead of being handed one: the Release Dependency Graph and the App Diff selected the newest tag (or the first branch) the moment a repository was chosen, so the first thing on screen was a ref nobody had chosen - and, on the graph, a read of the dependency database nobody had asked for. The refs stay suggestions of the provider: the picker is filled, and nothing is read or compared until a tag or branch is picked, with the graph saying so in its own "pick a tag or branch to read" state. A link that names its refs still opens on them
+
+### Fixed
+- Name and size the roles of the dependency graph the way the dependency file numbers them: the chart read category 1 as a workspace package and 2 as a dependency while the file - and the dependency database - numbers 1 a dependency and 2 a package the application ships, so the legend, every node's tooltip, the role tag of the detail panel, the colours and the node sizes were each one role out: an external dependency was labelled "Workspace package" and drawn larger than the packages the application actually ships. The names, the colours and the sizes follow the file's numbering now, with tests pinning the order
+
+### Documentation
+- `docs/DEPENDENCY_API_CONTRACT.md` writes down the interface the third-party dependency database must satisfy for the Release Dependency Graph and the App Diff: the request the two pages make (the repository resolved to an application through the project registry, then one call per ref), the response shape field by field with what each field is read as, how a two-level source - the module maps keyed by module name at the top level of the same object - folds into that shape at the endpoint rather than on this side, the status code that means "no record" rather than "broken", and a checklist for verifying an implementation against the canned data before the real database is reachable
+
+---
+
+## [1.26.3] - 2026-10-07
+
+**Backend Version**: 1.26.3
+**Frontend Version**: 1.21.3
+
+### Changed
+- The task assignment summary counts pull requests rather than review rows. Two of its cards could not disagree: reviews are created when a pull request is opened and nothing in the pipeline ever moves that status on, so "Active Reviews" - a count of rows marked open - reproduced the total exactly, under a badge claiming to be live. A review is also stored one row per source file, so a pull request reviewed file by file was counted more than once. Both cards now count distinct pull requests, "Active" meaning one that still has work outstanding - a reviewer assignment not completed, or nobody assigned yet, since nothing about such a request is done - and the badge has given way to the sentence defining it. Average assignments is per pull request with a reviewer counted once however many files they appear on, and the scoring rate is the share of pull requests that carry any score. What carries this is the reviewer assignment status, being the field that does move; pull request status is not consulted at all
+- The trend charts show a window rather than all of history: the last 180 days, 26 weeks or 6 months, whichever period is selected. A window puts a period without reviews on the axis as a zero instead of leaving it out, so a quiet stretch reads as one rather than as a straight line drawn across it, and the axis has a length that still says something about time. The size lives in `frontend/src/config/analytics.ts` and can be overridden per call, so widening one is a number rather than a rewrite
+- Two faults in the weekly axis went with it. The keys paired the calendar year with the ISO week number, which put 2025-12-29 and 2025-01-01 in the same bucket - a week that straddles new year belongs to its week-year, not to the year its days fall in; and being unpadded, `2026-W9` sorted after `2026-W10` as a string, so each January drew its weeks out of order. They are now the ISO week-year and a padded week number, and the buckets are built from the calendar in order rather than sorted as text, which is what keeps the two charts sharing the period selector on one axis
+- The Link action in the Code Reviews table is an icon. It was a bordered button spelling "Link", which took a word's worth of width to say what a chain glyph says, and the column narrowed to suit. It is still a button element, so it still takes focus and answers the keyboard, and it carries an accessible name and a tooltip to replace the word it no longer shows
+- The copyright notice widens by itself. It read "© 2026 Mobile, All rights reserved", held in a module constant and so fixed at build time - a deployment that outlived its year would go on claiming the old one - and it now reads `© 2026-2027` from the first of January, computed where it is rendered. The first year it covers is a single constant, and the range cannot run backwards whatever the clock says
+
+### Fixed
+- Creating a release tag prints its verification in the order it is meant to be read. The tag summary was written straight to stdout by a child process while the script still held buffered output, so it appeared above the lines introducing it; it is captured and indented along with the rest, and a failure to read the tag back is now reported instead of passing as silence
+
+---
+
+## [1.26.2] - 2026-10-06
+
+**Backend Version**: 1.26.2
+**Frontend Version**: 1.21.2
+
+### Changed
+- Banners take turns instead of stacking. Any number can be within their window at once, and the bar grew a row per banner, pushing whatever is below it down by 28px each time; it now keeps one row and moves through them every six seconds, with a dot per banner so the rest can be read without waiting. It holds while the pointer is over the bar or focus is inside it, so nothing changes under a reader part way through, pauses in a background tab, and gives a full turn to a banner picked by hand. One banner means no dots and no rotation. Each keeps its own level colour, and the one dismissed is the one on show
+- Adding banners no longer grows the settings page. Every banner was an open form of six fields, so the page grew with each one and adding another meant opening another form in place; it is now a list of what matters about each banner, with the editing in a dialog and a switch on each row to take a banner in or out of service. Actions save as they are taken rather than collecting behind a single Save, and a write that fails leaves the switch showing what is stored instead of a state that was never saved, because the row follows the value the server accepted
+- Banner settings now hold a list, and the single banner they used to hold is folded into that list on the first read, keeping its identity, so a banner scheduled before this is neither lost nor shown twice. Values that could not be rendered are refused at the boundary rather than stored
+- The language switcher shows the writing system - `A` and `文` - rather than a flag. A flag names a country rather than a language, which is how Simplified and Traditional Chinese both ended up under the same one; the control now shows every script on offer at once in a fixed order, with the language in effect in full colour, and it is one component shared by the header and the three signed-out pages rather than a copy of the markup in each
+- The release notes list shows a whole page. It was clamped to roughly seven entries with the rest scrolling inside it, which contradicted the page size the pagination beside it offers and left two ways to move through one list
+
+### Fixed
+- Creating a release tag prints the tags it was asked to verify. The check ran `git tag -l | tail -5` through a shell with the command given as a list, so only the first element was the command and the rest became arguments to the shell, and the listing never ran - the verification reported git's usage text instead of the tag list, and the tag summary after it was mangled the same way
+
+---
+
+## [1.26.1] - 2026-10-04
+
+**Backend Version**: 1.26.1
+**Frontend Version**: 1.21.1
+
+### Added
+- A login session now describes its device instead of guessing at it from the user agent, which no longer answers the question it appears to. Chromium freezes the browser build (`Chrome/140.0.0.0`), replaces the Android device model with the letter `K`, and reports Windows 11 as Windows 10, while Safari pins macOS at 10.15.7 and reports an iPad as a Macintosh. Each browser now reports what it can about itself - User-Agent Client Hints where they exist, the user agent string where they do not - alongside its requests, and the server stores that record on the session. The session list reads the record first and falls back to the user agent field by field, and marks a row as approximate when client hints were unavailable, so a value read from a user agent is not mistaken for a measured one. Client hints recover the real platform version, the full browser build and the device model, and an iPad - indistinguishable from a Macintosh in the user agent - is recognised by its touch points. Sessions created before this are upgraded on their next request. The record is supplied by the client and is therefore display metadata only: it is bounded in length, ignored when malformed, never allowed to cost anyone a login, and never used to authorise anything
+- The accent colour of the interface is now the user's to choose, from the switcher in the header or the Appearance tab added to the profile page. Element Plus compiles its palette - the primary colour *and* the shades derived from it - into the stylesheet, so overriding that one variable would have recoloured buttons while leaving every hover, disabled, striped and selected state on the default blue; the whole ramp is therefore regenerated at runtime, using the same arithmetic Element Plus compiles from SCSS, which blends towards white on light surfaces and towards the dark surface on dark ones, with `dark-2` moving lighter in dark mode. Because the surface differs by mode, the ramp is rebuilt whenever the mode changes, and the stored choice is in place before the first paint. Eight presets and a colour picker are offered, the picker warns when a colour is too light for the white text drawn on it, and choosing the default again removes the override rather than rewriting it. The accent is stored per browser
+
+### Changed
+- Colours that were hardcoded across the interface now follow the accent: the palette's blue wherever it was a piece of the interface, the chart defaults, the reviewer avatars, the dashboard bars, the application node of the dependency graph, and the PDF and HTML exports, which bake the accent in as they are generated because a static document cannot follow a change made afterwards. Deliberately *not* migrated are the colours that encode meaning rather than brand - issue severity (`low`/`medium`/`high`/`critical`), score bands (`excellent`/`good`/`acceptable`) and the per-type colours of search results. Following the accent would let a red accent render a low-severity issue identically to a critical one, or collapse two entity types onto a single colour. Chart colours are read reactively, so a chart follows a change to the accent instead of freezing the value it was built with
+
+### Fixed
+- Leaving the Release Comparison page within the debounce window of a repository change left a timer running, which then fired a provider call for a component that no longer existed and wrote to state nothing was rendering any more. The pending ref-suggestion debounce is now cleared on unmount, beside the handoff timer that already was
+- The test covering the Refresh action's cache bypass was passing for the wrong reason: it asserted that the automatic ref load had already happened, which could only be true if a timer left pending by an earlier test happened to fire in time, and it failed deterministically when run on its own. It now waits for the request it asserts on; the debounce behind that request is a real timer, so the wait is explicit rather than assumed
+
 ---
 
 ## [1.26.0] - 2026-10-04

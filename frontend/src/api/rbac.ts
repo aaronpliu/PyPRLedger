@@ -170,20 +170,55 @@ export const rbacApi = {
 
   // ===== Banner Settings APIs =====
 
-  /** Get reviews page banner config */
-  getBanner(): Promise<BannerConfig> {
+  /** Get the announcement banners of the reviews page */
+  getBanner(): Promise<BannersConfig> {
     return request.get('/rbac/settings/banner')
   },
 
-  /** Update reviews page banner config */
-  updateBanner(data: BannerConfig): Promise<{ message: string }> {
+  /** Replace the announcement banners of the reviews page */
+  updateBanner(data: BannersConfig): Promise<{ message: string; banners: BannerItem[] }> {
     return request.put('/rbac/settings/banner', data)
   },
 }
 
-export interface BannerConfig {
+export type BannerLevel = 'info' | 'warning' | 'success'
+
+/**
+ * One announcement banner.
+ *
+ * `id` identifies the banner across saves so that a dismissal sticks; a banner
+ * saved without one is given a derived id by the server. `start_date`/`end_date`
+ * are ISO 8601 and empty means "no bound". `priority` orders the banners that are
+ * within their window at the same time, highest first.
+ */
+export interface BannerItem {
+  id: string
   enabled: boolean
   content: string
   start_date: string
   end_date: string
+  level: BannerLevel
+  link_url: string
+  link_label: string
+  priority: number
+}
+
+export interface BannersConfig {
+  banners: BannerItem[]
+}
+
+/** A banner with the fields an empty one starts from. */
+export function createBanner(patch: Partial<BannerItem> = {}): BannerItem {
+  return {
+    id: `banner-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    enabled: true,
+    content: '',
+    start_date: '',
+    end_date: '',
+    level: 'info',
+    link_url: '',
+    link_label: '',
+    priority: 0,
+    ...patch,
+  }
 }

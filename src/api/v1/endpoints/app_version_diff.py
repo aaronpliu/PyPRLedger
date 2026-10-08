@@ -11,7 +11,7 @@ from src.models.auth_user import AuthUser
 from src.schemas.app_version_diff import AppVersionDiffRequest, AppVersionDiffResponse
 from src.services.app_version_diff_service import AppVersionDiffService
 from src.services.git_provider_resolver import with_repository_provider
-from src.services.project_registry_service import ProjectRegistryService
+from src.services.project_registry_service import ProjectRegistryService, dependency_app_name
 from src.utils.log import get_logger
 
 
@@ -51,7 +51,10 @@ async def compare_app_releases(
     # The provider decides the shape of the rest of the read (only a Cloud request
     # carries a workspace), so it is filled in before the application is resolved.
     payload = await with_repository_provider(payload, db)
-    app_name = await registry.get_app_name(payload.project_key, payload.repository_slug, db)
+    # the dependency database keys applications by a lower-case enum
+    app_name = dependency_app_name(
+        await registry.get_app_name(payload.project_key, payload.repository_slug, db)
+    )
     logger.info(
         "Comparing application releases",
         extra={

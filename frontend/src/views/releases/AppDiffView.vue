@@ -413,7 +413,6 @@ import {
   codeTone,
   commitSubject,
   commitTotal,
-  defaultSelection,
   downgradeCount,
   isMarked,
   isRisk,
@@ -452,8 +451,8 @@ const selectedRefs = ref<string[]>([])
 const comparing = ref(false)
 const failed = ref(false)
 const result = ref<AppVersionDiffResponse | null>(null)
-// Refs a URL asked for, held until the ref list arrives so the default
-// selection does not overwrite them.
+// Refs a URL asked for, held until the ref list arrives so the picker does not
+// overwrite them.
 const requestedRefs = ref<string[] | null>(null)
 
 const selectedProjectKey = computed(() => (repo.value.project_key ?? '').trim())
@@ -545,8 +544,9 @@ async function loadRefs() {
     const response = await releaseDiffApi.listRefs({ ...coordinates(), limit: 200 })
     tags.value = response.tags
     branches.value = response.branches
-    selectedRefs.value =
-      requestedRefs.value?.length ? [...requestedRefs.value] : defaultSelection(tags.value, branches.value)
+    // A link that names its releases still opens on them. Otherwise nothing is
+    // picked for the reader: the comparison runs when they choose the releases.
+    selectedRefs.value = requestedRefs.value?.length ? [...requestedRefs.value] : []
     requestedRefs.value = null
   } catch {
     // Left empty: the picker stays empty and the page waits for a repository

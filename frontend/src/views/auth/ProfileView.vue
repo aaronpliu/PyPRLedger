@@ -320,14 +320,23 @@
               </el-table-column>
               <el-table-column label="Device" min-width="220">
                 <template #default="{ row }">
-                  <div class="device-cell" :title="getDeviceDetails(row.user_agent).rawUserAgent || ''">
+                  <div class="device-cell" :title="getDeviceDetails(row).rawUserAgent || ''">
                     <div class="device-label-row">
-                      <el-icon class="device-icon"><component :is="getDeviceIcon(row.user_agent)" /></el-icon>
-                      <span class="device-label">{{ getDeviceDetails(row.user_agent).label }}</span>
+                      <el-icon class="device-icon"><component :is="getDeviceIcon(row)" /></el-icon>
+                      <span class="device-label">{{ getDeviceDetails(row).label }}</span>
                       <el-tag v-if="row.is_current" size="small" type="primary">This device</el-tag>
+                      <el-tag
+                        v-if="getDeviceDetails(row).precision === 'approximate'"
+                        size="small"
+                        type="info"
+                        effect="plain"
+                        title="This browser reports no client hints, so these values are read from its user agent and may be out of date."
+                      >
+                        Approximate
+                      </el-tag>
                     </div>
                     <div class="device-meta">
-                      {{ getDeviceDetails(row.user_agent).browserLabel }} · {{ getDeviceDetails(row.user_agent).osLabel }}
+                      {{ getDeviceDetails(row).browserLabel }} · {{ getDeviceDetails(row).osLabel }}
                     </div>
                   </div>
                 </template>
@@ -370,6 +379,70 @@
             <CommentTemplateManagement />
           </div>
         </el-tab-pane>
+
+        <!-- Appearance Tab -->
+        <el-tab-pane label="Appearance" name="appearance">
+          <div class="tab-content appearance-tab">
+            <section class="appearance-section">
+              <h3>Theme</h3>
+              <p class="appearance-hint">Follows the system by default. Applies to this browser only.</p>
+              <el-radio-group v-model="themeMode">
+                <el-radio-button value="light">Light</el-radio-button>
+                <el-radio-button value="dark">Dark</el-radio-button>
+                <el-radio-button value="auto">Auto (System)</el-radio-button>
+              </el-radio-group>
+            </section>
+
+            <section class="appearance-section">
+              <h3>Accent Color</h3>
+              <p class="appearance-hint">
+                Recolours the whole interface, including the hover, disabled and selected states
+                Element Plus derives from the accent.
+              </p>
+              <div class="appearance-presets">
+                <button
+                  v-for="preset in THEME_COLOR_PRESETS"
+                  :key="preset.key"
+                  type="button"
+                  class="appearance-swatch"
+                  :class="{ 'is-active': primaryColor === preset.value }"
+                  :style="{ backgroundColor: preset.value }"
+                  :title="preset.label"
+                  :aria-label="preset.label"
+                  :aria-pressed="primaryColor === preset.value"
+                  @click="setPrimaryColor(preset.value)"
+                />
+              </div>
+
+              <div class="appearance-custom">
+                <span class="appearance-custom-label">Custom</span>
+                <el-color-picker
+                  :model-value="primaryColor"
+                  :predefine="presetValues"
+                  @change="onCustomColor"
+                />
+                <code class="appearance-color-value">{{ primaryColor }}</code>
+                <el-button
+                  v-if="isCustomPrimaryColor"
+                  link
+                  type="primary"
+                  @click="resetPrimaryColor"
+                >
+                  Reset to default
+                </el-button>
+              </div>
+
+              <el-alert
+                v-if="contrastWarning"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="appearance-warning"
+                :title="contrastWarning"
+              />
+            </section>
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
 
@@ -407,17 +480,55 @@ import AvatarUpload from '@/components/user/AvatarUpload.vue'
 import PATManagement from '@/components/auth/PATManagement.vue'
 import CommentTemplateManagement from '@/components/review/CommentTemplateManagement.vue'
 import type { AuthSession } from '@/types'
-import { getSessionDeviceDetails } from '@/utils/device'
+import { describeSession } from '@/utils/device'
+import { useTheme } from '@/composables/useTheme'
+import { MIN_READABLE_CONTRAST, THEME_COLOR_PRESETS, contrastWithWhite } from '@/utils/themeColor'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const passwordFormRef = ref<FormInstance>()
 const changingPassword = ref(false)
-const activeTab = ref('info')
+const PROFILE_TABS = ['info', 'delegations', 'sessions', 'tokens', 'comment-templates', 'appearance']
+const requestedTab =
+  typeof router.currentRoute.value.query.tab === 'string' ? router.currentRoute.value.query.tab : ''
+const activeTab = ref(PROFILE_TABS.includes(requestedTab) ? requestedTab : 'info')
 const delegationDirection = ref<'received' | 'sent'>('received')
 const loadingSessions = ref(false)
 const sessions = ref<AuthSession[]>([])
 const revokingSessionId = ref<string | null>(null)
+
+// Appearance — the accent is applied by the shared theme composable, so the
+// header switcher and this tab drive the same state.
+const {
+  currentTheme,
+  primaryColor,
+  isCustomPrimaryColor,
+  setTheme,
+  setPrimaryColor,
+  resetPrimaryColor,
+} = useTheme()
+
+const themeMode = computed({
+  get: () => currentTheme.value,
+  set: (value: 'light' | 'dark' | 'auto') => setTheme(value),
+})
+
+const presetValues = THEME_COLOR_PRESETS.map((preset) => preset.value)
+
+const onCustomColor = (value: string | null) => {
+  if (value) {
+    setPrimaryColor(value)
+  }
+}
+
+/** Warn rather than refuse: the choice is the user's, but unreadable is worth saying. */
+const contrastWarning = computed(() => {
+  const ratio = contrastWithWhite(primaryColor.value)
+  if (ratio === 0 || ratio >= MIN_READABLE_CONTRAST) {
+    return ''
+  }
+  return `This color has only ${ratio.toFixed(1)}:1 contrast against the white text buttons use, so labels may be hard to read.`
+})
 
 // Delegation data
 const loadingReceived = ref(false)
@@ -491,12 +602,12 @@ const formatDuration = (seconds: number) => {
   return `${remainingSeconds}s`
 }
 
-const getDeviceDetails = (userAgent: string | null | undefined) => {
-  return getSessionDeviceDetails(userAgent)
+const getDeviceDetails = (session: AuthSession) => {
+  return describeSession(session.device, session.user_agent)
 }
 
-const getDeviceIcon = (userAgent: string | null | undefined) => {
-  const category = getDeviceDetails(userAgent).category
+const getDeviceIcon = (session: AuthSession) => {
+  const category = getDeviceDetails(session).category
   if (category === 'mobile') return Cellphone
   if (category === 'tablet') return Cellphone
   return Monitor
@@ -1120,5 +1231,80 @@ h3 {
 /* Empty state container styling */
 :deep(.el-empty) {
   margin: 30px auto;
+}
+
+/* Appearance tab */
+.appearance-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 560px;
+}
+
+.appearance-section h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.appearance-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+}
+
+.appearance-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.appearance-swatch {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  /* A ring rather than a border, so the swatch keeps its exact colour. */
+  box-shadow: 0 0 0 3px var(--el-bg-color-overlay);
+  outline: 1px solid var(--el-border-color);
+  outline-offset: 1px;
+  transition: transform 0.15s ease;
+}
+
+.appearance-swatch:hover {
+  transform: scale(1.08);
+}
+
+.appearance-swatch.is-active {
+  outline: 2px solid var(--el-text-color-primary);
+  outline-offset: 3px;
+}
+
+.appearance-custom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.appearance-custom-label {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
+.appearance-color-value {
+  font-family: var(--el-font-family-mono, monospace);
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-regular);
+}
+
+.appearance-warning {
+  margin-top: 16px;
 }
 </style>

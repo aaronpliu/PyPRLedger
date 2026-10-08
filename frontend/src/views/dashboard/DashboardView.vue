@@ -244,6 +244,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useTheme } from '@/composables/useTheme'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { TrendCharts, Refresh, Link, FullScreen, Close } from '@element-plus/icons-vue'
@@ -258,6 +259,8 @@ const { t, locale } = useI18n()
 const router = useRouter()
 
 // Helper function to get chart axis colors based on theme
+const { primaryColor } = useTheme()
+
 const getAxisColors = () => {
   // Check current theme from DOM
   const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark'
@@ -486,7 +489,7 @@ const renderActivityChart = () => {
         type: 'bar',
         stack: 'total',
         data: assignedData,
-        itemStyle: { color: '#409eff' },
+        itemStyle: { color: primaryColor.value },
       },
       {
         name: t('dashboard.self_raised_prs'),
@@ -711,7 +714,7 @@ const renderProjectChart = () => {
         name: t('dashboard.unique_projects'),
         type: 'bar',
         data: projects,
-        itemStyle: { color: '#409eff' },
+        itemStyle: { color: primaryColor.value },
       },
       {
         name: t('dashboard.unique_repos'),
@@ -950,7 +953,9 @@ onMounted(() => {
   
   observer.observe(document.documentElement, {
     attributes: true,
-    attributeFilter: ['data-theme']
+    // The accent is applied as inline style variables on <html>, so watching
+    // `style` too is what makes these charts follow a theme-colour change.
+    attributeFilter: ['data-theme', 'style']
   })
   
   // Store observer reference for cleanup

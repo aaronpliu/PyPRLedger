@@ -4,8 +4,28 @@ import packageJson from '../../package.json'
 // UI version from package.json (build-time)
 export const UI_VERSION = packageJson.version
 
-// Copyright
-export const COPYRIGHT = '© 2026 Mobile, All rights reserved' as const
+// The first year the notice covers. The range it is printed as ends at the year
+// it is read in, so nobody has to edit this when the year turns.
+const COPYRIGHT_START_YEAR = 2026
+
+/**
+ * The copyright notice for the year it is read in.
+ *
+ * `© 2026 Mobile, All rights reserved` while the first year is still the current
+ * one, and `© 2026-2027 Mobile, All rights reserved` from the first of January
+ * after that: the range widens on its own.
+ *
+ * Read it at render instead of into a module constant. Frozen in a constant it
+ * becomes the year the build was made in, so a deployment that outlives its year
+ * keeps claiming the old one.
+ */
+export function copyrightNotice(now: Date = new Date()): string {
+  const year = now.getFullYear()
+  const years =
+    year > COPYRIGHT_START_YEAR ? `${COPYRIGHT_START_YEAR}-${year}` : `${COPYRIGHT_START_YEAR}`
+
+  return `© ${years} Mobile, All rights reserved`
+}
 
 // API version will be fetched from backend at runtime
 let apiVersion: string | null = null

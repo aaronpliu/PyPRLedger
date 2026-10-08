@@ -513,15 +513,26 @@
         </el-table-column>
         
         <!-- Actions -->
-        <el-table-column :label="t('reviews.actions')" width="175" fixed="right">
+        <el-table-column :label="t('reviews.actions')" width="140" fixed="right">
           <template #default="{ row }">
             <el-space>
               <el-button size="small" type="primary" @click.stop="viewReview(row)">
                 {{ t('reviews.view') }}
               </el-button>
-              <el-button size="small" @click.stop="showAssociateDialog(row)">
-                {{ t('reviews.associate', 'Link') }}
-              </el-button>
+              <!--
+                A link button rather than a bordered one: the box around a bare
+                icon is noise in a table row. It keeps the button element, so the
+                keyboard and the name below behave as they should.
+              -->
+              <el-tooltip :content="t('reviews.associate', 'Link')" placement="top">
+                <el-button
+                  link
+                  :aria-label="t('reviews.associate', 'Link')"
+                  @click.stop="showAssociateDialog(row)"
+                >
+                  <el-icon :size="18"><Link /></el-icon>
+                </el-button>
+              </el-tooltip>
             </el-space>
           </template>
         </el-table-column>
@@ -1678,7 +1689,7 @@ function handleSSEOpen() {
 }
 
 .help-icon:hover {
-  color: #409eff;
+  color: var(--el-color-primary);
 }
 
 [data-theme="dark"] .help-icon {
@@ -1740,12 +1751,12 @@ function handleSSEOpen() {
 }
 
 .archived-toggle-switch {
-  --el-switch-on-color: #409eff;
+  --el-switch-on-color: var(--el-color-primary);
   --el-switch-off-color: #dcdfe6;
 }
 
 [data-theme='dark'] .archived-toggle-switch {
-  --el-switch-on-color: #409eff;
+  --el-switch-on-color: var(--el-color-primary);
   --el-switch-off-color: #4c4d4f;
 }
 
@@ -1881,7 +1892,7 @@ function handleSSEOpen() {
   align-items: center;
   gap: 8px;
   font-weight: 500;
-  color: #409eff;
+  color: var(--el-color-primary);
 }
 
 .bulk-actions {
@@ -2088,14 +2099,15 @@ html.dark .el-checkbox__inner {
 }
 
 html.dark .el-checkbox__input.is-checked .el-checkbox__inner {
-  background-color: #409eff !important;
-  border-color: #409eff !important;
+  background-color: var(--el-color-primary) !important;
+  border-color: var(--el-color-primary) !important;
 }
 
 html.dark .el-tag {
-  --el-tag-bg-color: rgba(64, 158, 255, 0.1);
-  --el-tag-border-color: rgba(64, 158, 255, 0.3);
-  --el-tag-text-color: #60a5fa;
+  --el-tag-bg-color: rgba(var(--el-color-primary-rgb), 0.1);
+  --el-tag-border-color: rgba(var(--el-color-primary-rgb), 0.3);
+  /* -dark-2 is the *lighter* variant in dark mode, which is what this needs. */
+  --el-tag-text-color: var(--el-color-primary-dark-2);
 }
 
 html.dark .el-tag--warning {

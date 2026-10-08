@@ -37,6 +37,7 @@ import { GraphChart } from 'echarts/charts'
 import { TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { pinnedEdgeLabels, relatedHighlight } from '@/utils/releaseDependencyGraph'
+import { useTheme } from '@/composables/useTheme'
 import type {
   ReleaseDependencyGraphData,
   ReleaseDependencyGraphLink,
@@ -60,7 +61,9 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   selectedId: null,
   transitive: false,
-  categoryNames: () => ['Project', 'Workspace package', 'Dependency'],
+  // Indexed by category as the file numbers them: 0 project, 1 dependency,
+  // 2 the packages the application ships.
+  categoryNames: () => ['Project', 'Dependency', 'Workspace package'],
   height: '600px',
 })
 
@@ -391,9 +394,19 @@ onBeforeUnmount(() => {
 // placed node is pinned and held from then on.
 const pinnedNodeIds = ref<string[]>([])
 
-const CATEGORY_COLORS = ['#409eff', '#67c23a', '#909399']
-// Projects carry the page, workspace packages the middle, dependencies the mass.
-const CATEGORY_SYMBOL_SIZES = [52, 38, 26]
+const { primaryColor } = useTheme()
+
+// The application carries the accent. Green is what the application ships - the
+// reading the detail panel gives the same node - and grey is what it pulls in, so
+// a node's role stays readable whatever the accent is.
+const CATEGORY_COLORS: Record<number, string> = { 1: '#909399', 2: '#67c23a' }
+
+const categoryColor = (category: number): string =>
+  category === 0 ? primaryColor.value : (CATEGORY_COLORS[category] ?? '#909399')
+// Indexed by category as the file numbers them: the projects carry the page, the
+// packages the application ships sit in the middle, and the dependencies it pulls
+// in are the mass behind them.
+const CATEGORY_SYMBOL_SIZES = [52, 26, 38]
 // A dimmed node keeps a readable but retreating label: graph labels carry no
 // opacity of their own, grey is how one reads as switched off.
 const DIM_LABEL_COLOR = '#c0c4cc'
@@ -485,7 +498,7 @@ const chartOption = computed(() => ({
         fixed: pinnedNodeIds.value.includes(node.id),
         symbolSize: CATEGORY_SYMBOL_SIZES[node.category] ?? 26,
         itemStyle: {
-          color: CATEGORY_COLORS[node.category] ?? '#909399',
+          color: categoryColor(node.category),
           borderColor: '#ffffff',
           borderWidth: 1.5,
           opacity: isLitNode(node) ? 1 : DIM_OPACITY,

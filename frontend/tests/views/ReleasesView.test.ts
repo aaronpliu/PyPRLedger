@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { nextTick } from 'vue'
 import ElementPlus from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -168,6 +167,28 @@ function workspaceSelect(wrapper: AnyWrapper) {
   return wrapper
     .findAllComponents({ name: 'ElSelect' })
     .find((select: AnyWrapper) => select.props('placeholder') === WORKSPACE_PLACEHOLDER)
+}
+
+/**
+ * Wait for a condition to hold, polling rather than guessing at a duration.
+ *
+ * The ref-suggestion load sits behind a debounce that is a real timer, so a test
+ * asserting on the automatic load has to wait it out. It must genuinely wait:
+ * asserting immediately only ever passed because a timer left pending by an
+ * earlier test happened to fire in time.
+ *
+ * The budget is generous relative to the 400ms debounce because the wait is wall
+ * clock: a loaded machine can stretch it, and this has to report a missing call
+ * rather than a bare timeout.
+ */
+async function waitFor(predicate: () => boolean, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error(`waitFor timed out after ${timeoutMs}ms`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
 }
 
 // Mounting this view is heavy: unmount every wrapper so the DOM of previous
@@ -548,8 +569,8 @@ describe('ReleasesView', () => {
     await flushPromises()
     await selects[1].vm.$emit('update:modelValue', 'alpha-api')
     await flushPromises()
-    // the coordinate watcher loads the ref suggestions on the next tick
-    await nextTick()
+    // the coordinate watcher loads the ref suggestions behind a debounce
+    await waitFor(() => vi.mocked(releaseDiffApi.listRefs).mock.calls.length > 0)
 
     // the automatic load may use the backend cache
     expect(releaseDiffApi.listRefs).toHaveBeenLastCalledWith(
@@ -570,7 +591,8 @@ describe('ReleasesView', () => {
     expect(wrapper.text()).toContain(
       enMessages.releaseDiff.refs_fetched_at.replace('{time}', ''),
     )
-  })
+    // Waits out a real debounce, so it needs more than the default budget.
+  }, 15_000)
 
   it('suggests the loaded refs and still accepts a manually typed ref', async () => {
     vi.mocked(releaseDiffApi.compare).mockResolvedValue({

@@ -75,10 +75,11 @@ html, body, #app {
   --el-fill-color: #334155;
   --el-fill-color-light: #1e293b;
   --el-menu-text-color: #cbd5e1;
-  --el-menu-active-color: #409eff;
+  /* The accent palette is applied at runtime by `utils/themeColor.ts`, which
+     also regenerates every shade derived from it — do not pin a value here. */
+  --el-menu-active-color: var(--el-color-primary);
   
   /* Element Plus color variables for dark mode */
-  --el-color-primary: #409eff;
   --el-color-success: #67c23a;
   --el-color-warning: #e6a23c;
   --el-color-danger: #f56c6c;
@@ -193,7 +194,7 @@ html, body, #app {
 }
 
 [data-theme='dark'] .el-menu--popup .el-menu-item.is-active {
-  color: #409eff !important;
-  background-color: rgba(64, 158, 255, 0.1) !important;
+  color: var(--el-color-primary) !important;
+  background-color: rgba(var(--el-color-primary-rgb), 0.1) !important;
 }
 </style>

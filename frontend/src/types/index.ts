@@ -43,12 +43,36 @@ export interface AdminPasswordResetRequest {
   force_change?: boolean
 }
 
+/** Where a session's device description came from. */
+export type DeviceInfoSource = 'client-hints' | 'user-agent'
+
+export type DeviceCategory = 'desktop' | 'mobile' | 'tablet'
+
+/**
+ * Device metadata reported by the client that owns the session.
+ *
+ * `source` is `client-hints` when the values came from User-Agent Client Hints,
+ * which report the real platform version and device model, and `user-agent`
+ * when they could only be recovered from the user agent string — which modern
+ * browsers keep deliberately vague, and which the UI therefore labels as
+ * approximate. Absent entirely on sessions created before this is reported.
+ */
+export interface SessionDeviceInfo {
+  source: DeviceInfoSource
+  category?: DeviceCategory
+  platform?: string
+  platform_version?: string
+  model?: string
+  browser_full_version?: string
+}
+
 export interface AuthSession {
   session_id: string
   auth_user_id: number
   username: string
   ip_address: string | null
   user_agent: string | null
+  device: SessionDeviceInfo | null
   created_at: string
   last_activity_at: string
   expires_in_seconds: number

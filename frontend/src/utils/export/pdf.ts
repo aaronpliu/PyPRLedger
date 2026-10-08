@@ -3,6 +3,19 @@ import autoTable, { UserOptions } from 'jspdf-autotable'
 import type { Review } from '@/api/reviews'
 import dayjs from 'dayjs'
 import { buildReviewExportRow, REVIEW_EXPORT_COLUMNS, tExport } from './shared'
+import { parseHex, resolvedPrimaryColor } from '@/utils/themeColor'
+
+
+/**
+ * The accent colour in effect, as the `[r, g, b]` tuple jsPDF takes.
+ *
+ * A PDF is a static document, so it cannot follow the theme the way the
+ * interface does — it captures the accent as it stands when the export runs.
+ */
+function accentAsRgb(): [number, number, number] {
+  const rgb = parseHex(resolvedPrimaryColor())
+  return rgb ? [rgb.r, rgb.g, rgb.b] : [64, 158, 255]
+}
 
 // ---------------------------------------------------------------------------
 // CJK font support
@@ -102,7 +115,7 @@ export async function exportReviewsToPDF(
   // Add header
   useCJKFont(doc, hasCJKFont)
   doc.setFontSize(20)
-  doc.setTextColor(64, 158, 255) // #409eff
+  doc.setTextColor(...accentAsRgb())
   doc.text(title, pageWidth / 2, yPos, { align: 'center' })
   
   yPos += 10
@@ -145,7 +158,7 @@ export async function exportReviewsToPDF(
       cellWidth: 'wrap',
     },
     headStyles: {
-      fillColor: [64, 158, 255], // #409eff
+      fillColor: accentAsRgb(),
       textColor: 255,
       fontStyle: 'normal',
       halign: 'center',

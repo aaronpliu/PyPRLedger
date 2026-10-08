@@ -120,16 +120,6 @@ export function moveSymbol(tone: MoveTone): string {
   return MOVE_SYMBOLS[tone]
 }
 
-/**
- * A default selection: the most recent releases, so the page answers something
- * before the reader touches anything. The server returns tags newest first, so
- * the first two are the natural pair.
- */
-export function defaultSelection(tags: string[], branches: string[]): string[] {
-  const picked = [...tags, ...branches]
-  return picked.slice(0, 2)
-}
-
 /** How a pair's code axis reads. `unavailable` and `none` are deliberately different. */
 export type CodeTone = 'unavailable' | 'none' | 'commits'
 

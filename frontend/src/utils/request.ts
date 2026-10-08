@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
 import { beginProgress, endProgress } from '@/composables/useProgress'
+import { CLIENT_DEVICE_HEADER, getClientDeviceHeader } from '@/utils/deviceInfo'
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean
@@ -121,6 +122,15 @@ request.interceptors.request.use(
     // the config so that whichever interceptor sees the request settle closes it.
     if (!tracked._silent && !isSilentRequest(config.url)) {
       tracked._progressId = beginProgress()
+    }
+
+    // The device record travels with every request — including the login that
+    // creates the session — so the server can describe a session's device
+    // accurately instead of guessing from the user agent string.
+    try {
+      config.headers[CLIENT_DEVICE_HEADER] = await getClientDeviceHeader()
+    } catch {
+      // Display metadata only: the request still carries its user agent.
     }
 
     if (isAuthExcluded(config.url)) {

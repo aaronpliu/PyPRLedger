@@ -7,6 +7,7 @@ import type {
 import i18n from '@/i18n'
 import { jiraTicketSegments, type JiraSettings } from '@/utils/jira'
 import { tExport as t } from './shared'
+import { resolvedPrimaryColor } from '@/utils/themeColor'
 
 /**
  * Standalone HTML report for the Releases page.
@@ -402,7 +403,12 @@ export function buildCheckSectionHtml(
 </section>`
 }
 
-const REPORT_STYLE = `
+/**
+ * Built per export rather than declared once: the report is a standalone
+ * document with no access to the app's variables, so the accent is baked in at
+ * the moment it is generated.
+ */
+const buildReportStyle = (): string => `
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 32px; background: #f5f7fa; color: #1f2937;
@@ -425,7 +431,7 @@ const REPORT_STYLE = `
                   border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
   table.data td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
   table.data tr:nth-child(even) td { background: #fafafa; }
-  a { color: #2563eb; text-decoration: none; }
+  a { color: ${resolvedPrimaryColor()}; text-decoration: none; }
   a:hover { text-decoration: underline; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   .nowrap { white-space: nowrap; }
@@ -483,7 +489,7 @@ export function buildReleaseReportHtml(input: ReleaseReportInput): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(t('releaseDiff.title'))} - ${escapeHtml(context.project_key)}/${escapeHtml(context.repository_slug)}</title>
-<style>${REPORT_STYLE}</style>
+<style>${buildReportStyle()}</style>
 </head>
 <body>
 <div class="report">

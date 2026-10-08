@@ -16,6 +16,7 @@ import {
   GridComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
+import { useTheme } from '@/composables/useTheme'
 
 use([
   LineChart,
@@ -38,12 +39,18 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   title: 'Trend',
-  color: '#409eff',
+  // No colour default: with none given the line takes the accent in effect, and
+  // follows a change rather than freezing a blue at build time.
   height: '350px',
   axisLabelColor: '#64748b',
   axisLineColor: '#e2e8f0',
   splitLineColor: '#f1f5f9',
 })
+
+const { primaryColor } = useTheme()
+
+/** ECharts takes literals rather than CSS variables, so the accent is resolved here. */
+const accentColor = computed(() => props.color || primaryColor.value)
 
 // Chart instance ref for manual resize (used by parent in fullscreen)
 const chartRef = ref()
@@ -137,7 +144,7 @@ const chartOption = computed(() => {
         smooth: true,
         data: props.data.map(d => d.value),
         itemStyle: {
-          color: props.color,
+          color: accentColor.value,
         },
         areaStyle: {
           color: {
@@ -147,8 +154,8 @@ const chartOption = computed(() => {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: props.color + '40' },
-              { offset: 1, color: props.color + '05' },
+              { offset: 0, color: accentColor.value + '40' },
+              { offset: 1, color: accentColor.value + '05' },
             ],
           },
         },

@@ -94,13 +94,13 @@
             <div class="stat-card__icon primary-icon">
               <el-icon :size="32"><Document /></el-icon>
             </div>
-            <div class="stat-card__value animated-counter">{{ animatedTotalReviews.toLocaleString() }}</div>
-            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.total_reviews') }}</div>
+            <div class="stat-card__value animated-counter">{{ animatedTotalPRs.toLocaleString() }}</div>
+            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.total_prs') }}</div>
           </div>
         </div>
       </el-col>
 
-      <!-- Card 2: Active Reviews -->
+      <!-- Card 2: Active PRs -->
       <el-col :xs="24" :sm="12" :md="6">
         <div class="stat-card stat-card--success">
           <div class="stat-card__content">
@@ -108,13 +108,15 @@
               <div class="stat-card__icon success-icon">
                 <el-icon :size="32"><TrendCharts /></el-icon>
               </div>
-              <div class="live-indicator">
-                <span class="pulse-dot"></span>
-                <span>Live</span>
-              </div>
+              <el-tooltip
+                :content="t('task_assignment.analytics.summary.active_prs_hint')"
+                placement="top"
+              >
+                <el-icon class="stat-card__hint" :size="16"><QuestionFilled /></el-icon>
+              </el-tooltip>
             </div>
-            <div class="stat-card__value">{{ animatedActiveReviews.toLocaleString() }}</div>
-            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.active_reviews') }}</div>
+            <div class="stat-card__value">{{ animatedActivePRs.toLocaleString() }}</div>
+            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.active_prs') }}</div>
           </div>
         </div>
       </el-col>
@@ -196,7 +198,6 @@
             v-if="timePeriodData.length > 0"
             :title="''"
             :data="timePeriodData.map(d => ({ date: d.date, value: d.count }))"
-            color="#409eff"
             height="350px"
             :axis-label-color="chartColors.axisLabelColor"
             :axis-line-color="chartColors.axisLineColor"
@@ -584,21 +585,21 @@ const avgAssignmentsSparkline = computed(() => {
 })
 
 // Animated counter state
-const animatedTotalReviews = ref(0)
-const animatedActiveReviews = ref(0)
+const animatedTotalPRs = ref(0)
+const animatedActivePRs = ref(0)
 
 // Animate counters on data load
 watch(
-  () => summaryStats.value.totalReviews,
+  () => summaryStats.value.totalPRs,
   (newValue) => {
-    animateCounter(animatedTotalReviews, newValue, 1000)
+    animateCounter(animatedTotalPRs, newValue, 1000)
   }
 )
 
 watch(
-  () => summaryStats.value.activeReviews,
+  () => summaryStats.value.activePRs,
   (newValue) => {
-    animateCounter(animatedActiveReviews, newValue, 1000)
+    animateCounter(animatedActivePRs, newValue, 1000)
   }
 )
 
@@ -1011,21 +1012,21 @@ onMounted(() => {
 /* ===== Card 1: Primary Style (Total Reviews) ===== */
 .stat-card--primary {
   background: var(--el-bg-color);
-  border: 2px solid #3b82f6;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  border: 2px solid var(--el-color-primary);
+  box-shadow: 0 4px 12px rgba(var(--el-color-primary-rgb), 0.15);
 }
 
 [data-theme='dark'] .stat-card--primary {
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 4px 12px rgba(var(--el-color-primary-rgb), 0.25);
 }
 
 .stat-card--primary:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 8px 20px rgba(var(--el-color-primary-rgb), 0.25);
 }
 
 .stat-card--primary .primary-icon {
-  color: #3b82f6;
+  color: var(--el-color-primary);
 }
 
 /* ===== Card 2: Success Style (Active Reviews) ===== */
@@ -1052,43 +1053,10 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
 }
 
-.live-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #67c23a;
-  font-weight: 600;
-  padding: 4px 10px;
-  background: rgba(103, 194, 58, 0.1);
-  border-radius: 12px;
-  border: 1px solid rgba(103, 194, 58, 0.3);
-  transition: all 0.3s ease;
-}
-
-.stat-card--success:hover .live-indicator {
-  background: rgba(103, 194, 58, 0.15);
-  border-color: rgba(103, 194, 58, 0.4);
-}
-
-.pulse-dot {
-  width: 8px;
-  height: 8px;
-  background: #67c23a;
-  border-radius: 50%;
-  animation: pulse 2s ease-in-out infinite;
-  box-shadow: 0 0 8px rgba(103, 194, 58, 0.6);
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(1.2);
-  }
+/* Says what the number counts, rather than claiming to be live. */
+.stat-card__hint {
+  color: var(--el-text-color-secondary);
+  cursor: help;
 }
 
 /* ===== Card 3: Minimalist + Sparkline ===== */

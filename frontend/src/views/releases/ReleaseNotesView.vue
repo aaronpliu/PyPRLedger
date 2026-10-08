@@ -2146,14 +2146,18 @@ onBeforeUnmount(() => {
   margin-bottom: 8px;
 }
 
+/*
+ * The list is paginated, so a page has to be visible in full: no height clamp and
+ * no scrolling of its own. The clamp used to cut the list off after about seven
+ * releases and scroll the rest, which contradicted the page size the pagination
+ * offers and left two ways to move through the same list.
+ */
 .nav-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 520px;
   margin: 0;
-  padding: 0 4px 0 0;
-  overflow-y: auto;
+  padding: 0;
   list-style: none;
 }
 

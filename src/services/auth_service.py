@@ -8,9 +8,11 @@ import json
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from jose import ExpiredSignatureError, JWTError
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +32,7 @@ from src.schemas.auth import (
     AuthSessionResponse,
     LoginRequest,
     RegisterRequest,
+    SessionDeviceInfo,
     TokenResponse,
     UserinfoResponse,
 )
@@ -79,6 +82,20 @@ class AuthService:
     def _get_refresh_expires_in_seconds() -> int:
         return settings.REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES * 60
 
+    @staticmethod
+    def _serialize_device(device: SessionDeviceInfo | None) -> dict[str, Any] | None:
+        return None if device is None else device.model_dump(mode="json", exclude_none=True)
+
+    @staticmethod
+    def _deserialize_device(raw: Any) -> SessionDeviceInfo | None:
+        """Read back a stored device record, tolerating anything written by hand."""
+        if not isinstance(raw, dict):
+            return None
+        try:
+            return SessionDeviceInfo.model_validate(raw)
+        except ValidationError:
+            return None
+
     async def _store_refresh_session(
         self,
         auth_user: AuthUser,
@@ -87,6 +104,7 @@ class AuthService:
         created_at: str | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        device: SessionDeviceInfo | None = None,
     ) -> None:
         now = get_current_time().isoformat()
         session_data = {
@@ -97,6 +115,7 @@ class AuthService:
             "last_activity_at": now,
             "ip_address": ip_address,
             "user_agent": user_agent,
+            "device": self._serialize_device(device),
         }
         await self.redis_client.setex(
             self._get_refresh_session_key(session_id),
@@ -104,7 +123,7 @@ class AuthService:
             json.dumps(session_data),
         )
 
-    async def _get_refresh_session(self, session_id: str) -> dict[str, str | None] | None:
+    async def _get_refresh_session(self, session_id: str) -> dict[str, Any] | None:
         session_data = await self.redis_client.get(self._get_refresh_session_key(session_id))
         if not session_data:
             return None
@@ -121,7 +140,7 @@ class AuthService:
     async def _write_refresh_session_data(
         self,
         session_id: str,
-        session_data: dict[str, str | None],
+        session_data: dict[str, Any],
         expires_in_seconds: int,
     ) -> None:
         await self.redis_client.setex(
@@ -144,6 +163,7 @@ class AuthService:
         created_at: str | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        device: SessionDeviceInfo | None = None,
     ) -> TokenResponse:
         refresh_token = self._build_refresh_token(session_id)
         await self._store_refresh_session(
@@ -153,6 +173,7 @@ class AuthService:
             created_at=created_at,
             ip_address=ip_address,
             user_agent=user_agent,
+            device=device,
         )
         access_token = create_access_token(
             subject=auth_user.id,
@@ -186,6 +207,7 @@ class AuthService:
         login_data: LoginRequest,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        device: SessionDeviceInfo | None = None,
     ) -> TokenResponse:
         """Authenticate user with username and password
 
@@ -231,6 +253,7 @@ class AuthService:
             self._generate_session_id(),
             ip_address=ip_address,
             user_agent=user_agent,
+            device=device,
         )
 
     async def admin_reset_password(
@@ -338,6 +361,7 @@ class AuthService:
         register_data: RegisterRequest,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        device: SessionDeviceInfo | None = None,
     ) -> TokenResponse:
         """Register a new user
 
@@ -425,6 +449,7 @@ class AuthService:
             self._generate_session_id(),
             ip_address=ip_address,
             user_agent=user_agent,
+            device=device,
         )
 
     async def refresh_tokens(
@@ -432,6 +457,7 @@ class AuthService:
         refresh_token: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        device: SessionDeviceInfo | None = None,
     ) -> TokenResponse:
         """Refresh access and refresh tokens using a valid refresh session.
 
@@ -463,6 +489,9 @@ class AuthService:
             created_at=session_data.get("created_at"),
             ip_address=session_data.get("ip_address") or ip_address,
             user_agent=session_data.get("user_agent") or user_agent,
+            # Storing the session rebuilds it, so the device record has to be
+            # carried across explicitly or the first token refresh would drop it.
+            device=self._deserialize_device(session_data.get("device")) or device,
         )
 
         # Restore the original remaining TTL — refresh must NOT extend idle timeout.
@@ -512,6 +541,7 @@ class AuthService:
         token: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        device: SessionDeviceInfo | None = None,
     ) -> None:
         """Backfill client metadata for the active session without extending TTL."""
         session_id = await self.get_session_id_from_token(token)
@@ -530,6 +560,16 @@ class AuthService:
         if user_agent and session_data.get("user_agent") != user_agent:
             session_data["user_agent"] = user_agent
             updated = True
+        if device is not None:
+            incoming = self._serialize_device(device)
+            stored = session_data.get("device")
+            # Client hints are the accurate source, so an approximate record must
+            # never replace one; the upgrade in the other direction is welcome,
+            # as is refreshing a record that is already precise.
+            stored_is_precise = isinstance(stored, dict) and stored.get("source") == "client-hints"
+            if stored != incoming and (device.source == "client-hints" or not stored_is_precise):
+                session_data["device"] = incoming
+                updated = True
 
         if updated:
             await self._write_refresh_session_data(session_id, session_data, expires_in_seconds)
@@ -604,6 +644,7 @@ class AuthService:
                     username=session_username,
                     ip_address=session_data.get("ip_address"),
                     user_agent=session_data.get("user_agent"),
+                    device=self._deserialize_device(session_data.get("device")),
                     created_at=self._parse_datetime(session_data["created_at"]),
                     last_activity_at=self._parse_datetime(session_data["last_activity_at"]),
                     expires_in_seconds=expires_in_seconds,
