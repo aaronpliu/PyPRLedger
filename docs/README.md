@@ -35,6 +35,12 @@ Welcome to the PRLedger documentation directory. This folder contains comprehens
   - API design patterns
   - Virtual app_name architecture (NEW in v1.3.0)
 
+- **[DEPENDENCY_API_CONTRACT.md](DEPENDENCY_API_CONTRACT.md)** - Interface for the third-party dependency database
+  - The request the Release Dependency Graph and the App Diff pages make
+  - The response shape, field by field, and how each field is read
+  - Folding a two-level source (module maps keyed by module name) into that shape
+  - Status codes, configuration, and how to verify an implementation
+
 ### Version Management
 
 - **[VERSIONING.md](VERSIONING.md)** - Complete version management guide
@@ -80,6 +86,7 @@ See [CHANGELOG.md](../CHANGELOG.md#160---2026-04-13) for complete details.
 | [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) | Understand the codebase layout |
 | [VERSIONING.md](VERSIONING.md) | Learn how to manage releases |
 | [FastAPI_code_review_system_design.md](FastAPI_code_review_system_design.md) | Deep dive into system architecture |
+| [DEPENDENCY_API_CONTRACT.md](DEPENDENCY_API_CONTRACT.md) | Implement the third-party dependency database interface |
 | [CHANGELOG.md](../CHANGELOG.md) | Latest features and bug fixes (v1.6.0 / UI 1.1.0 released) |
 
 ## 🔗 External Resources

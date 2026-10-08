@@ -11,6 +11,7 @@ This directory contains all PRLedger documentation except for the main README an
 
 ### Technical Documentation
 - **FastAPI_code_review_system_design.md** - System architecture and design decisions
+- **DEPENDENCY_API_CONTRACT.md** - Interface the third-party dependency database must satisfy (Release Dependency Graph / App Diff)
 
 ### Version Management
 - **VERSIONING.md** - Complete version management guide

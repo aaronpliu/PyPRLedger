@@ -665,4 +665,5 @@ Additional documentation is available in the [`docs/`](docs/) directory:
 - **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Production deployment instructions
 - **[Project Structure](docs/PROJECT_STRUCTURE.md)** - Detailed codebase overview
 - **[System Design](docs/FastAPI_code_review_system_design.md)** - Architecture documentation
+- **[Dependency API Contract](docs/DEPENDENCY_API_CONTRACT.md)** - Interface for the third-party dependency database
 - **[Versioning Guide](docs/VERSIONING.md)** - Version management instructions

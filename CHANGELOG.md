@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+- `docs/DEPENDENCY_API_CONTRACT.md` writes down the interface the third-party dependency database must satisfy for the Release Dependency Graph and the App Diff: the request the two pages make (the repository resolved to an application through the project registry, then one call per ref), the response shape field by field with what each field is read as, how a two-level source - the module maps keyed by module name at the top level of the same object - folds into that shape at the endpoint rather than on this side, the status code that means "no record" rather than "broken", and a checklist for verifying an implementation against the canned data before the real database is reachable
+
 ---
 
 ## [1.26.3] - 2026-10-07
