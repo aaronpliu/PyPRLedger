@@ -754,7 +754,6 @@ import {
 
 const { t } = useI18n()
 
-const REFS_FETCH_LIMIT = 200
 const REF_SUGGESTION_LIMIT = 50
 const REFS_DEBOUNCE_MS = 400
 
@@ -926,6 +925,23 @@ function queryRefs(query: string, cb: (suggestions: RefSuggestion[]) => void) {
   cb(matched.slice(0, REF_SUGGESTION_LIMIT))
 }
 
+/**
+ * Whether a typed ref is one the repository reports.
+ *
+ * The field suggests from the repository's whole listing, so a tag or branch it
+ * never names is a typo rather than a release. A commit sha stays accepted: it
+ * addresses a revision the listing has no name for, and the provider answers for
+ * it either way. With no listing in hand there is nothing to check against, and
+ * refusing a ref then would refuse a comparison the provider could answer.
+ */
+function isKnownRef(ref: string): boolean {
+  const name = (ref ?? '').trim()
+  if (!name) return false
+  if (/^[0-9a-f]{7,40}$/i.test(name)) return true
+  if (!refOptions.value.length) return true
+  return refOptions.value.some((option) => option.value === name)
+}
+
 async function loadProjects() {
   projectsLoading.value = true
   try {
@@ -994,9 +1010,10 @@ async function loadRefs(force = false) {
 
   refsLoading.value = true
   try {
+    // No `limit`: the API answers with the repository's whole listing (up to its
+    // safety ceiling), so a ref the reader came for is one a suggestion can name.
     const response = await releaseDiffApi.listRefs({
       ...basePayload(),
-      limit: REFS_FETCH_LIMIT,
       refresh: force,
     })
     refs.value = {
@@ -1286,6 +1303,18 @@ async function runCompare() {
     return
   }
 
+  const unknown = [
+    compareForm.value.source_ref,
+    compareForm.value.target_ref,
+    compareForm.value.baseline_ref,
+  ]
+    .map((ref) => (ref ?? '').trim())
+    .find((ref) => ref && !isKnownRef(ref))
+  if (unknown) {
+    ElMessage.warning(t('releaseDiff.validation_unknown_ref', { ref: unknown }))
+    return
+  }
+
   compareLoading.value = true
   try {
     const baseline = compareForm.value.baseline_ref.trim()
@@ -1318,6 +1347,13 @@ async function runCheck() {
     commits.length === 0
   ) {
     ElMessage.warning(t('releaseDiff.validation_commits_required'))
+    return
+  }
+
+  if (!isKnownRef(checkForm.value.target_release_ref)) {
+    ElMessage.warning(
+      t('releaseDiff.validation_unknown_ref', { ref: checkForm.value.target_release_ref.trim() }),
+    )
     return
   }
 

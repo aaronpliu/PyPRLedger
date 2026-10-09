@@ -148,9 +148,53 @@ async def test_list_refs_reads_tags_and_branches(monkeypatch) -> None:
 
     refs = await provider().list_refs(WORKSPACE, REPO, limit=50)
 
-    assert refs == {"tags": ["v1.0.0", "v1.1.0"], "branches": ["main", "release/1.0"]}
+    assert refs == {
+        "tags": ["v1.0.0", "v1.1.0"],
+        "branches": ["main", "release/1.0"],
+        # what the repository holds, straight from the payload's own size
+        "tags_total": 2,
+        "branches_total": 2,
+    }
     assert any(path.endswith("/refs/tags") for path in paths)
     assert any(path.endswith("/refs/branches") for path in paths)
+
+
+async def test_list_refs_orders_by_the_commit_each_ref_points_at(monkeypatch) -> None:
+    """A picker needs the recent releases first; Cloud returns them in SCM order."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/tags"):
+            return page(
+                [
+                    {
+                        "name": "v1.10.0",
+                        "target": {"type": "commit", "date": "2024-03-01T00:00:00+00:00"},
+                    },
+                    {
+                        "name": "v1.2.0",
+                        "target": {"type": "commit", "date": "2025-01-01T00:00:00+00:00"},
+                    },
+                    {
+                        # an annotated tag: the commit it wraps is one level deeper
+                        "name": "v1.9.0",
+                        "target": {
+                            "type": "tag",
+                            "target": {"type": "commit", "date": "2025-06-01T00:00:00+00:00"},
+                        },
+                    },
+                ]
+            )
+        return page(
+            [{"name": "main", "target": {"type": "commit", "date": "2025-07-01T00:00:00+00:00"}}]
+        )
+
+    install_transport(monkeypatch, handler)
+
+    refs = await provider().list_refs(WORKSPACE, REPO, limit=10)
+
+    # newest commit first, and the annotated tag is dated by the commit it wraps
+    assert refs["tags"] == ["v1.9.0", "v1.2.0", "v1.10.0"]
+    assert refs["branches"] == ["main"]
 
 
 async def test_list_commits_follows_pages(monkeypatch) -> None:

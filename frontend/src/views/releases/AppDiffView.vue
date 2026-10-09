@@ -131,30 +131,53 @@
               v-model="selectedRefs"
               multiple
               filterable
-              allow-create
+              remote
               default-first-option
+              :remote-method="onRefSearch"
               :disabled="!hasCoordinates"
               :loading="refsLoading"
               :placeholder="t('appDiff.select_releases')"
               style="width: 100%"
               data-test="releases-select"
+              @visible-change="onRefVisibility"
             >
-              <el-option-group v-if="tags.length" :label="t('appDiff.tags_group')">
-                <el-option v-for="tag in tags" :key="`tag:${tag}`" :label="tag" :value="tag" />
-              </el-option-group>
-              <el-option-group v-if="branches.length" :label="t('appDiff.branches_group')">
+              <el-option-group v-if="visibleTags.length" :label="t('appDiff.tags_group')">
                 <el-option
-                  v-for="branch in branches"
+                  v-for="tag in visibleTags"
+                  :key="`tag:${tag}`"
+                  :label="tag"
+                  :value="tag"
+                />
+              </el-option-group>
+              <el-option-group v-if="visibleBranches.length" :label="t('appDiff.branches_group')">
+                <el-option
+                  v-for="branch in visibleBranches"
                   :key="`branch:${branch}`"
                   :label="branch"
                   :value="branch"
                 />
               </el-option-group>
+              <!-- A release the repository does not report is not offered, and only
+                   an offered release can be picked: a comparison needs releases that
+                   exist. -->
+              <template #empty>
+                <p class="ref-empty">{{ t('appDiff.ref_no_match') }}</p>
+              </template>
             </el-select>
           </el-form-item>
         </el-col>
       </el-row>
     </el-form>
+
+    <!-- The picker offers the recent releases and searches the rest, so it says
+         which of the two it is doing rather than leaving a short list to look like
+         a short repository. -->
+    <p v-if="refsCapped" class="refs-note" data-test="refs-capped">
+      {{ t('appDiff.refs_capped', { loaded: loadedRefCount, total: totalRefCount }) }}
+    </p>
+    <p v-else-if="refsSearchable" class="refs-note" data-test="refs-searchable">
+      {{ t('appDiff.refs_searchable', { total: totalRefCount }) }}
+    </p>
 
     <el-empty v-if="!hasCoordinates" :description="t('appDiff.pick_repository')" />
 
@@ -408,6 +431,7 @@ import type {
 import { releaseDiffApi } from '@/api/releaseDiff'
 import { appVersionDiffApi } from '@/api/appVersionDiff'
 import type { AppVersionDiffResponse } from '@/api/appVersionDiff'
+import { useRefCandidates } from '@/composables/useRefCandidates'
 import {
   buildRows,
   codeTone,
@@ -444,8 +468,30 @@ const repositoriesLoading = ref(false)
 const workspacesLoading = ref(false)
 const workspacesLoaded = ref(false)
 const refsLoading = ref(false)
-const tags = ref<string[]>([])
-const branches = ref<string[]>([])
+// The provider's whole listing, searched, with the recent releases offered up front
+const {
+  search: refSearch,
+  visibleTags,
+  visibleBranches,
+  loadedCount: loadedRefCount,
+  totalCount: totalRefCount,
+  capped: refsCapped,
+  searchable: refsSearchable,
+  setCandidates: setRefCandidates,
+  clearCandidates: clearRefCandidates,
+} = useRefCandidates()
+
+/** What the reader typed: it searches the whole listing, not the offered page. */
+function onRefSearch(query: string) {
+  refSearch.value = query ?? ''
+}
+
+/** A picker that has just closed goes back to offering the recent releases. */
+function onRefVisibility(visible: boolean) {
+  if (!visible) {
+    refSearch.value = ''
+  }
+}
 
 const selectedRefs = ref<string[]>([])
 const comparing = ref(false)
@@ -533,17 +579,21 @@ async function ensureWorkspaceSuggestions() {
   }
 }
 
-/** Tags and branches are suggestions of the provider; any ref stays typeable. */
+/**
+ * Read the repository's refs as the picker's candidate set.
+ *
+ * No `limit` is sent: the API answers with the repository's whole listing (up to
+ * its safety ceiling) because a release the picker never received is one the
+ * reader cannot choose.
+ */
 async function loadRefs() {
-  tags.value = []
-  branches.value = []
+  clearRefCandidates()
   if (!hasCoordinates.value) return
 
   refsLoading.value = true
   try {
-    const response = await releaseDiffApi.listRefs({ ...coordinates(), limit: 200 })
-    tags.value = response.tags
-    branches.value = response.branches
+    const response = await releaseDiffApi.listRefs(coordinates())
+    setRefCandidates(response)
     // A link that names its releases still opens on them. Otherwise nothing is
     // picked for the reader: the comparison runs when they choose the releases.
     selectedRefs.value = requestedRefs.value?.length ? [...requestedRefs.value] : []
@@ -673,8 +723,7 @@ watch(selectedProjectKey, async (projectKey) => {
   if (!repo.value.git_provider) {
     repo.value.git_provider = project?.git_provider || null
   }
-  tags.value = []
-  branches.value = []
+  clearRefCandidates()
   result.value = null
 
   // Unknown project keys (typed manually) have no local repository catalog
@@ -692,8 +741,7 @@ watch(selectedRepositorySlug, (repositorySlug) => {
   result.value = null
   selectedRefs.value = []
   requestedRefs.value = null
-  tags.value = []
-  branches.value = []
+  clearRefCandidates()
   if (repositorySlug && hasCoordinates.value) void loadRefs()
 })
 
@@ -735,6 +783,20 @@ watch(selectedRefs, (refs) => {
 
 .coordinates {
   margin-bottom: 8px;
+}
+
+.refs-note {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.ref-empty {
+  margin: 0;
+  padding: 8px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 }
 
 .option-key {

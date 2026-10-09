@@ -5,6 +5,17 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- A ref picker searches the repository's whole listing. The Release Dependency Graph, the App Diff, the Release Notes and the Release Diff each asked for the first 200 tags and branches and offered exactly those - and 200 was the wrong 200: both providers answer in alphabetical order (or, on Cloud, in the SCM's own order) by default, which sorts `v1.10.0` before `v1.2.0` and buries the releases a reader is after, so the tag cut minutes ago was missing from a list that looked complete. The listing is now read to the provider's own last page, up to a `RELEASE_REFS_MAX_LIMIT` ceiling of 2000 per kind, ordered most recently modified first - `orderBy=MODIFICATION` on Bitbucket Server (with a fallback that reads the refs unordered rather than failing on an instance that refuses the parameter) and the date of the commit each ref points at on Cloud, whose refs endpoints offer no date order. A listing the ceiling cuts short now says so: the response carries the repository's own counts and the pages report how many of them they hold
+- The pickers offer the most recent 100 refs and search the rest. A dropdown holding every tag of a repository is slow to open and impossible to read, so what is offered is a page of it - and only a page: typing searches the whole listing, with exact and prefix matches ranked before refs that merely contain the query, so a common substring such as `v1.0.5` inside `v1.0.599` cannot bury the ref being spelled out. The Release Notes keeps its own version order for its two pickers; every other picker keeps the order the provider answers in
+
+### Fixed
+- A ref has to be one the repository reports. The App Diff's release picker, the Release Notes' tag and previous-tag pickers and the Release Diff's ref fields accepted a name that was typed rather than picked, which made a comparison or a note about a release that does not exist something the UI would happily set up. They now offer only refs the repository names, say so when nothing matches, and the Release Diff refuses an unknown ref when the comparison is submitted - a commit sha stays accepted there, being a revision the listing has no name for
+
+---
+
 ## [1.27.0] - 2026-10-08
 
 **Backend Version**: 1.27.0

@@ -84,6 +84,16 @@ class Settings(BaseSettings):
             "(refresh=true) always bypasses the cache."
         ),
     )
+    RELEASE_REFS_MAX_LIMIT: int = Field(
+        default=2000,
+        description=(
+            "Most refs one listing may carry, per kind (tags, branches). A ref picker has to "
+            "search a complete list to be able to offer every release, so the provider is "
+            "paged to its own last page rather than to a small page: this is the safety "
+            "ceiling for a repository holding thousands of tags, and a response that reaches "
+            "it reports the repository's own count so the UI can say the list was cut."
+        ),
+    )
 
     CACHE_TTL_DEPENDENCY_GRAPH: int = Field(
         default=3600,

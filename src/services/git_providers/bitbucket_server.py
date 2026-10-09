@@ -5,6 +5,7 @@ Implements BaseGitProvider for Bitbucket Server (and Data Center) REST API.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 from typing import Any
@@ -19,6 +20,10 @@ from src.services.git_providers.base import BaseGitProvider
 
 
 logger = logging.getLogger(__name__)
+
+# Bitbucket Server caps one page of a collection at 1000 values and rejects a
+# larger ``limit``, so a listing larger than that is read page by page.
+MAX_PAGE_LIMIT = 1000
 
 
 class BitbucketServerProvider(BaseGitProvider):
@@ -247,15 +252,37 @@ class BitbucketServerProvider(BaseGitProvider):
 
         return commits, truncated
 
-    async def _fetch_paged_values(self, url: str, limit: int) -> list[dict[str, Any]]:
-        """Follow ``nextPageStart`` until ``limit`` values are collected."""
+    async def _fetch_paged_values(
+        self,
+        url: str,
+        limit: int,
+        params: dict[str, Any] | None = None,
+    ) -> tuple[list[dict[str, Any]], int | None]:
+        """Follow ``nextPageStart`` until ``limit`` values are collected.
+
+        Returns:
+            Tuple of (values, total), ``total`` being how many the collection holds
+            as the provider reports it (``size``), or None when it reports none.
+        """
         values: list[dict[str, Any]] = []
+        total: int | None = None
         start = 0
 
         while len(values) < limit:
             remaining = limit - len(values)
-            payload = await self._request_page(url, {"limit": remaining, "start": start})
+            payload = await self._request_page(
+                url,
+                {
+                    **(params or {}),
+                    "limit": min(remaining, MAX_PAGE_LIMIT),
+                    "start": start,
+                },
+            )
             page_values = payload.get("values") or []
+
+            if total is None:
+                size = payload.get("size")
+                total = size if isinstance(size, int) else None
 
             values.extend(page_values)
             if payload.get("isLastPage", True) or not page_values:
@@ -266,28 +293,57 @@ class BitbucketServerProvider(BaseGitProvider):
                 break
             start = next_start
 
-        return values[:limit]
+        return values[:limit], total
 
     async def list_refs(
         self,
         project_key: str,
         repository_slug: str,
         limit: int = 100,
-    ) -> dict[str, list[str]]:
-        """Fetch tags and branches of a repository.
+    ) -> dict[str, Any]:
+        """Fetch tags and branches of a repository, most recently modified first.
 
         Maps to GET /rest/api/latest/projects/{key}/repos/{slug}/tags and /branches
+
+        The order is what makes the listing usable as a picker's candidate set: a
+        reader looks for recent releases, and the alphabetical default buries them
+        (``v1.9.0`` sorts after ``v1.27.0``). ``tags_total`` / ``branches_total``
+        carry the repository's own counts, so a caller can tell a complete listing
+        from one the ``limit`` cut short.
         """
         base = f"{self._base_url}/projects/{project_key}/repos/{repository_slug}"
         logger.info(f"Listing refs on Bitbucket Server: {project_key}/{repository_slug}")
 
-        tags = await self._fetch_paged_values(f"{base}/tags", limit)
-        branches = await self._fetch_paged_values(f"{base}/branches", limit)
+        tags, branches = await asyncio.gather(
+            self._fetch_refs(f"{base}/tags", limit),
+            self._fetch_refs(f"{base}/branches", limit),
+        )
+        tag_values, tags_total = tags
+        branch_values, branches_total = branches
 
         return {
-            "tags": self._ref_names(tags),
-            "branches": self._ref_names(branches),
+            "tags": self._ref_names(tag_values),
+            "branches": self._ref_names(branch_values),
+            "tags_total": tags_total,
+            "branches_total": branches_total,
         }
+
+    async def _fetch_refs(self, url: str, limit: int) -> tuple[list[dict[str, Any]], int | None]:
+        """Read one ref collection, newest modification first.
+
+        ``orderBy=MODIFICATION`` is asked for explicitly rather than relied on: the
+        documented default is alphabetical. An older instance whose REST layer does
+        not take the parameter answers 400, and what is lost then is the order, not
+        the listing - so it is read again unordered instead of failing the page.
+        """
+        try:
+            return await self._fetch_paged_values(url, limit, {"orderBy": "MODIFICATION"})
+        except GitServiceException as e:
+            logger.warning(
+                f"Bitbucket Server refused orderBy=MODIFICATION for {url}; "
+                f"reading the refs unordered instead: {e}"
+            )
+            return await self._fetch_paged_values(url, limit)
 
     @staticmethod
     def _ref_names(values: list[dict[str, Any]]) -> list[str]:
@@ -321,7 +377,7 @@ class BitbucketServerProvider(BaseGitProvider):
             f"Listing tags with commits on Bitbucket Server: {project_key}/{repository_slug}"
         )
 
-        values = await self._fetch_paged_values(url, limit)
+        values, _ = await self._fetch_paged_values(url, limit)
         entries: list[dict[str, Any]] = []
         for value in values:
             tag_type = str(value.get("type") or "").strip().upper()

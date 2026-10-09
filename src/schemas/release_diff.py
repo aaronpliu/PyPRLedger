@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator
 
+from src.core.config import settings
+
 
 # Verdict of a containment check.
 #
@@ -82,10 +84,23 @@ class ReleaseDiffRepository(BaseModel):
 
 
 class ReleaseRefsRequest(ReleaseDiffRepository):
-    """Request payload for POST /release/diff/refs."""
+    """Request payload for POST /release/diff/refs.
+
+    This listing is a picker's candidate set, so it is read whole rather than a
+    page at a time: a release the picker never received is a release the reader
+    cannot choose. The default is therefore the ceiling, not a page size.
+    """
 
     limit: int = Field(
-        default=100, ge=1, le=500, description="Maximum number of tags / branches returned"
+        default=settings.RELEASE_REFS_MAX_LIMIT,
+        ge=1,
+        le=settings.RELEASE_REFS_MAX_LIMIT,
+        description=(
+            "Most tags / branches returned, per kind. Defaults to the ceiling "
+            "(RELEASE_REFS_MAX_LIMIT) because a picker searches this list to find a "
+            "release; a repository holding more reports its own count so the caller can "
+            "say the list was cut short."
+        ),
     )
 
 
@@ -96,9 +111,29 @@ class ReleaseRefsResponse(BaseModel):
     repository_slug: str
     git_provider: str
     tags: list[str] = Field(
-        default_factory=list, description="Tag names of the repository (newest first)"
+        default_factory=list,
+        description="Tag names, most recently modified first",
     )
-    branches: list[str] = Field(default_factory=list, description="Branch names of the repository")
+    branches: list[str] = Field(
+        default_factory=list,
+        description="Branch names, most recently modified first",
+    )
+    tags_total: int | None = Field(
+        default=None,
+        description=(
+            "How many tags the repository holds, as the provider reports it. Larger than "
+            "``len(tags)`` means the ceiling cut the listing short; absent when the provider "
+            "reports no count of its own."
+        ),
+    )
+    branches_total: int | None = Field(
+        default=None,
+        description=(
+            "How many branches the repository holds, as the provider reports it. Larger than "
+            "``len(branches)`` means the ceiling cut the listing short; absent when the "
+            "provider reports no count of its own."
+        ),
+    )
 
 
 class ReleaseCompareRequest(ReleaseDiffRepository):

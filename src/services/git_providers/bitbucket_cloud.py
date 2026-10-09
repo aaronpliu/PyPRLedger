@@ -12,6 +12,7 @@ Implements BaseGitProvider against the Bitbucket Cloud REST API 2.0:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import logging
@@ -180,7 +181,21 @@ class BitbucketCloudProvider(BaseGitProvider):
         self, url: str, params: dict[str, Any], limit: int
     ) -> list[dict[str, Any]]:
         """Page through a Cloud list endpoint until ``limit`` values are collected."""
+        values, _ = await self._fetch_paged_values_with_total(url, params, limit)
+        return values
+
+    async def _fetch_paged_values_with_total(
+        self, url: str, params: dict[str, Any], limit: int
+    ) -> tuple[list[dict[str, Any]], int | None]:
+        """Page through a Cloud list endpoint, also reporting how many exist.
+
+        Cloud answers a collection with ``size``, the number of values the whole
+        collection holds - not the number this page carries. That count is the only
+        way to tell a repository holding 200 refs from one whose first 200 were read
+        out of 800, so it is kept rather than discarded.
+        """
         values: list[dict[str, Any]] = []
+        total: int | None = None
         page = 1
 
         while len(values) < limit:
@@ -188,12 +203,16 @@ class BitbucketCloudProvider(BaseGitProvider):
             payload = await self._request(url, {**params, "pagelen": page_len, "page": page})
             page_values = payload.get("values") or []
 
+            if total is None:
+                size = payload.get("size")
+                total = size if isinstance(size, int) else None
+
             values.extend(page_values)
             if not page_values or not payload.get("next"):
                 break
             page += 1
 
-        return values[:limit]
+        return values[:limit], total
 
     def web_compare_url(
         self,
@@ -377,21 +396,54 @@ class BitbucketCloudProvider(BaseGitProvider):
         project_key: str,
         repository_slug: str,
         limit: int = 100,
-    ) -> dict[str, list[str]]:
-        """Fetch tags and branches of a repository.
+    ) -> dict[str, Any]:
+        """Fetch tags and branches of a repository, most recently modified first.
 
         Maps to GET /2.0/repositories/{workspace}/{repo}/refs/tags and /refs/branches
+
+        The order is what makes the listing usable as a picker's candidate set: a
+        reader looks for recent releases, and the SCM order these endpoints return
+        buries them (``v1.10.0`` sorts before ``v1.2.0``). ``tags_total`` /
+        ``branches_total`` carry the repository's own counts, so a caller can tell a
+        complete listing from one the ``limit`` cut short.
         """
         base = f"{self._base_url}/repositories/{project_key}/{repository_slug}/refs"
         logger.info(f"Listing refs on Bitbucket Cloud: {project_key}/{repository_slug}")
 
-        tags = await self._fetch_paged_values(f"{base}/tags", {}, limit)
-        branches = await self._fetch_paged_values(f"{base}/branches", {}, limit)
+        # Whole listings cost a page each per hundred refs, so the two collections
+        # are read at the same time rather than one after the other.
+        (tags, tags_total), (branches, branches_total) = await asyncio.gather(
+            self._fetch_paged_values_with_total(f"{base}/tags", {}, limit),
+            self._fetch_paged_values_with_total(f"{base}/branches", {}, limit),
+        )
 
         return {
-            "tags": self._ref_names(tags),
-            "branches": self._ref_names(branches),
+            "tags": self._ref_names(self._refs_newest_first(tags)),
+            "branches": self._ref_names(self._refs_newest_first(branches)),
+            "tags_total": tags_total,
+            "branches_total": branches_total,
         }
+
+    @staticmethod
+    def _ref_modified_at(value: dict[str, Any]) -> int | None:
+        """When a ref last moved: the date of the commit it points at."""
+        target = value.get("target") or {}
+        nested = target.get("target")
+        if str(target.get("type") or "").strip().lower() == "tag" and isinstance(nested, dict):
+            # an annotated tag puts the tag object under ``target``, the commit below it
+            target = nested
+        return to_epoch_ms(target.get("date"))
+
+    @classmethod
+    def _refs_newest_first(cls, values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Refs most recently modified first.
+
+        Cloud offers no date ordering for refs - ``sort=name`` is the only one it
+        takes - so the order a picker needs is applied here. A ref whose date the
+        provider does not report keeps its place at the end rather than at the top,
+        and equal dates keep the order the provider returned.
+        """
+        return sorted(values, key=lambda value: cls._ref_modified_at(value) or 0, reverse=True)
 
     @staticmethod
     def _ref_names(values: list[dict[str, Any]]) -> list[str]:

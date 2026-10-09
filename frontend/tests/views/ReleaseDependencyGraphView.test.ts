@@ -406,4 +406,18 @@ describe('ReleaseDependencyGraphView', () => {
     expect(wrapper.text()).toContain('No dependency data for this ref')
     expect(wrapper.find('[data-test="release-dependency-graph-chart"]').exists()).toBe(false)
   })
+
+  it('picks only a ref the repository reports', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openRepository(wrapper)
+
+    // The picker searches the repository's listing rather than accepting a typed
+    // name: a tag that does not exist cannot be read, so it cannot be picked.
+    const refSelect = wrapper.findAllComponents(ElSelect)[3]
+    expect(refSelect.props('allowCreate')).toBe(false)
+    expect(refSelect.props('remote')).toBe(true)
+    expect(refSelect.findAllComponents({ name: 'ElOption' }).map((option) => option.props('value')))
+      .toContain('v2.0.0')
+  })
 })

@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from src.api.v1.endpoints.release_diff import get_release_diff_service
+from src.core.config import settings
 from src.core.database import get_db_session
 from src.core.exceptions import GitServiceException
 from src.core.permissions import get_current_user_with_token
@@ -525,6 +526,56 @@ async def test_list_refs_trims_and_deduplicates_names() -> None:
     assert result.branches == []
 
 
+async def test_list_refs_reads_the_whole_repository_by_default() -> None:
+    """A picker searches this list, so the default is the ceiling, not a page."""
+    asked: list[int] = []
+
+    class RecordingProvider(FakeGitProvider):
+        async def list_refs(
+            self,
+            project_key: str,
+            repository_slug: str,
+            limit: int = 100,
+        ) -> dict[str, Any]:
+            asked.append(limit)
+            return {"tags": [], "branches": []}
+
+    await build_service(RecordingProvider()).list_refs(refs_payload())
+
+    assert asked == [settings.RELEASE_REFS_MAX_LIMIT]
+
+
+async def test_list_refs_reports_the_counts_the_repository_holds() -> None:
+    """A listing the ceiling cut short has to be able to say that it was."""
+
+    class CappedProvider(FakeGitProvider):
+        async def list_refs(
+            self,
+            project_key: str,
+            repository_slug: str,
+            limit: int = 100,
+        ) -> dict[str, Any]:
+            return {
+                "tags": REF_NAMES["tags"],
+                "branches": REF_NAMES["branches"],
+                "tags_total": 842,
+                "branches_total": 17,
+            }
+
+    result = await build_service(CappedProvider()).list_refs(refs_payload())
+
+    assert result.tags_total == 842
+    assert result.branches_total == 17
+
+
+async def test_list_refs_leaves_the_counts_unset_when_the_provider_has_none() -> None:
+    """A provider that reports no count must not have one invented for it."""
+    result = await build_service(FakeGitProvider()).list_refs(refs_payload())
+
+    assert result.tags_total is None
+    assert result.branches_total is None
+
+
 async def test_list_refs_rejects_unknown_provider() -> None:
     service = build_service(FakeGitProvider())
 
@@ -638,9 +689,81 @@ async def test_bitbucket_provider_lists_tags_and_branches(monkeypatch) -> None:
     provider = bitbucket_server.BitbucketServerProvider()
     refs = await provider.list_refs("PROJ", "my-repo", limit=50)
 
-    assert refs == {"tags": ["v1.0.0"], "branches": ["main"]}
+    assert refs == {
+        "tags": ["v1.0.0"],
+        "branches": ["main"],
+        # what the repository holds, straight from the payload's own size
+        "tags_total": 1,
+        "branches_total": 1,
+    }
     assert any("/tags" in url for url in requested_urls)
     assert any("/branches" in url for url in requested_urls)
+
+
+async def test_bitbucket_provider_asks_refs_by_modification(monkeypatch) -> None:
+    """A picker needs the recent releases first, not the alphabetically early ones."""
+    from urllib.parse import parse_qs, urlparse
+
+    from src.services.git_providers import bitbucket_server
+
+    requests: list[dict[str, list[str]]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(parse_qs(urlparse(str(request.url)).query))
+        if request.url.path.endswith("/tags"):
+            return httpx.Response(200, json={"values": [], "size": 0, "isLastPage": True})
+        return httpx.Response(200, json={"values": [], "size": 0, "isLastPage": True})
+
+    real_client = httpx.AsyncClient
+
+    def client_factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        kwargs.pop("verify", None)
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(bitbucket_server.httpx, "AsyncClient", client_factory)
+
+    await bitbucket_server.BitbucketServerProvider().list_refs("PROJ", "my-repo", limit=10)
+
+    assert [request["orderBy"] for request in requests] == [["MODIFICATION"], ["MODIFICATION"]]
+
+
+async def test_bitbucket_provider_still_lists_refs_an_instance_will_not_ordered(
+    monkeypatch,
+) -> None:
+    """An instance that refuses ``orderBy`` costs the order, not the listing."""
+    from urllib.parse import parse_qs, urlparse
+
+    from src.services.git_providers import bitbucket_server
+
+    requests: list[dict[str, list[str]]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        query = parse_qs(urlparse(str(request.url)).query)
+        requests.append(query)
+        if "orderBy" in query:
+            return httpx.Response(400, json={"errors": [{"message": "Bad request"}]})
+        if request.url.path.endswith("/tags"):
+            return httpx.Response(
+                200, json={"values": [{"displayId": "v1.0.0"}], "size": 1, "isLastPage": True}
+            )
+        return httpx.Response(
+            200, json={"values": [{"displayId": "main"}], "size": 1, "isLastPage": True}
+        )
+
+    real_client = httpx.AsyncClient
+
+    def client_factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        kwargs.pop("verify", None)
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(bitbucket_server.httpx, "AsyncClient", client_factory)
+
+    refs = await bitbucket_server.BitbucketServerProvider().list_refs("PROJ", "my-repo", limit=10)
+
+    assert refs["tags"] == ["v1.0.0"]
+    assert refs["branches"] == ["main"]
+    # each collection was asked twice: once ordered, once without the parameter
+    assert sum("orderBy" in request for request in requests) == 2
 
 
 async def test_bitbucket_provider_raises_on_http_error(monkeypatch) -> None:
