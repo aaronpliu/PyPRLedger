@@ -264,6 +264,46 @@
             </span>
           </div>
 
+          <!-- The counts say how many moved; this says which one moved where, which
+               is what one app release is read for. The application's own version is
+               one entry among them, marked so it does not read as a dependency. -->
+          <h4
+            v-if="interval.complete && interval.changes.length"
+            class="changes-heading"
+            data-test="changes-heading"
+          >
+            {{ t('appDiff.changes_heading') }}
+          </h4>
+          <ul
+            v-if="interval.complete && interval.changes.length"
+            class="changes"
+            data-test="changes"
+          >
+            <li
+              v-for="change in interval.changes"
+              :key="`${change.kind}:${change.name}`"
+              class="change"
+              :class="`change-${moveTone(change)}`"
+              :data-test="`change-${change.name}`"
+            >
+              <span class="move" :class="`move-${moveTone(change)}`" aria-hidden="true">
+                {{ moveSymbol(moveTone(change)) }}
+              </span>
+              <span class="change-name">{{ change.name }}</span>
+              <el-tag
+                v-if="change.kind === 'application'"
+                class="kind"
+                size="small"
+                type="primary"
+                data-test="change-application"
+              >
+                {{ t('appDiff.application') }}
+              </el-tag>
+              <span class="change-versions">{{ moveVersions(change) }}</span>
+              <span class="change-state">{{ t(moveLabelKey(moveTone(change))) }}</span>
+            </li>
+          </ul>
+
           <!-- The commits between the two releases. A pair whose commits could
                not be read says so: an empty list would read as "none". -->
           <div v-if="interval.code" class="code" data-test="code-axis">
@@ -443,6 +483,7 @@ import {
   moveLabelKey,
   moveSymbol,
   moveTone,
+  moveVersions,
   rebuiltWithUnchangedDependencies,
   shortCommitId,
   summaryEntries,
@@ -885,6 +926,58 @@ watch(selectedRefs, (refs) => {
 .chip-downgrade {
   color: #fff;
   background: var(--el-color-danger);
+}
+
+/* What moved in one pair, one line per package */
+.changes-heading {
+  margin: 12px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-regular);
+}
+
+.changes {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.change {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 13px;
+}
+
+.change-name {
+  overflow-wrap: anywhere;
+}
+
+.change-versions {
+  font-family: var(--el-font-family-mono, monospace);
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+}
+
+.change-state {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.change-change .change-state,
+.change-upgrade .change-state,
+.change-added .change-state {
+  color: var(--el-color-success);
+}
+
+.change-downgrade .change-state {
+  color: var(--el-color-danger);
+}
+
+.change-removed .change-state {
+  color: var(--el-color-info);
 }
 
 .matrix-wrap {

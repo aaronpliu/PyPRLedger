@@ -6,7 +6,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import AppDiffView from '@/views/releases/AppDiffView.vue'
 import enMessages from '@/locales/en.json'
 import { appVersionDiffApi } from '@/api/appVersionDiff'
-import { RELEASE_EARLIER, RELEASE_LATER, RELEASE_MISSING } from '../fixtures/appDiff'
+import { APP_NAME, RELEASE_EARLIER, RELEASE_LATER, RELEASE_MISSING } from '../fixtures/appDiff'
 
 // The repository and its refs come from the provider in the running app; the
 // stand-ins hand over the one project, the one repository and the refs the
@@ -234,6 +234,38 @@ describe('AppDiffView', () => {
     const unknown = wrapper.find('[data-test="cell-packageA-2"]')
     expect(unknown.classes()).toContain('cell-unknown')
     expect(unknown.text()).toContain('?')
+  })
+
+  it('lists which package moved where between two releases', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    expect(wrapper.find('[data-test="changes-heading"]').text()).toBe('What moved')
+    const changes = wrapper.find('[data-test="changes"]')
+    expect(changes.exists()).toBe(true)
+
+    // the two versions the move is about, and what kind of move it was
+    const dependency = changes.find('[data-test="change-packageA"]')
+    expect(dependency.text()).toContain('1.0.0 → 1.0.1')
+    expect(dependency.text()).toContain('Upgrade')
+
+    // the application's own version is one entry among them, marked as not a dependency
+    const application = changes.find(`[data-test="change-${APP_NAME}"]`)
+    expect(application.find('[data-test="change-application"]').exists()).toBe(true)
+    expect(application.text()).toContain('1.0.0_10000 → 1.1.0_10000')
+
+    // an added package has no earlier version, which reads as a dash, not a gap
+    expect(changes.find('[data-test="change-packageD"]').text()).toContain('— → 0.9.0')
+  })
+
+  it('lists nothing for a pair whose releases could not be compared', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    await pick(wrapper, 3, ['v2.0.0', 'v1.1.0', 'v9.9.9'])
+
+    // the pair that can be compared carries its list; the one that cannot carries none
+    expect(wrapper.findAll('[data-test="changes"]')).toHaveLength(1)
   })
 
   it('refreshes past the cache on demand', async () => {

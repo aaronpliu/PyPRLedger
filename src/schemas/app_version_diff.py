@@ -142,6 +142,14 @@ class AppVersionDiffMove(BaseModel):
     """What one package did between two adjacent releases."""
 
     name: str = Field(..., description="Package name as the application declares it")
+    kind: str = Field(
+        ...,
+        description=(
+            f"What the name is: `{KIND_APPLICATION}` for the application's own version, "
+            f"`{KIND_DEPENDENCY}` for one of the packages it declares. A comparison "
+            "reports both, and a reader has to be able to tell them apart"
+        ),
+    )
     source_version: str | None = Field(
         default=None, description="Version in the earlier release; null when not declared"
     )

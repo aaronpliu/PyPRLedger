@@ -26,6 +26,11 @@ export interface AppVersionDiffRelease {
 /** What one package did between two adjacent releases. */
 export interface AppVersionDiffMove {
   name: string
+  /**
+   * What the name is: the application's own version, or one of the packages it
+   * declares. A comparison reports both, and a reader has to tell them apart.
+   */
+  kind: 'application' | 'dependency'
   source_version: string | null
   target_version: string | null
   state: 'unchanged' | 'changed' | 'added' | 'removed'

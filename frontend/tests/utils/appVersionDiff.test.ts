@@ -13,6 +13,7 @@ import {
   rebuiltWithUnchangedDependencies,
   shortCommitId,
   summaryEntries,
+  moveVersions,
 } from '@/utils/appVersionDiff'
 import type { AppVersionDiffMove } from '@/api/appVersionDiff'
 import { APP_NAME, diffOf } from '../fixtures/appDiff'
@@ -29,6 +30,7 @@ function codeOf(refs: string[] = TWO) {
 function move(overrides: Partial<AppVersionDiffMove> = {}): AppVersionDiffMove {
   return {
     name: 'packageA',
+    kind: 'dependency',
     source_version: '1.0.0',
     target_version: '1.0.1',
     state: 'changed',
@@ -169,6 +171,18 @@ describe('move symbols and labels', () => {
   it('names the tone by its translation key', () => {
     expect(moveLabelKey('downgrade')).toBe('appDiff.move_downgrade')
     expect(moveLabelKey('unknown')).toBe('appDiff.move_unknown')
+  })
+})
+
+describe('moveVersions', () => {
+  it('reads the version it was and the one it became', () => {
+    expect(moveVersions(move())).toBe('1.0.0 → 1.0.1')
+  })
+
+  it('draws a missing side as a dash rather than leaving it out', () => {
+    // an added or removed package is a change of state, not a value that went blank
+    expect(moveVersions(move({ source_version: null, target_version: '0.9.0' }))).toBe('— → 0.9.0')
+    expect(moveVersions(move({ source_version: '1.0.0', target_version: null }))).toBe('1.0.0 → —')
   })
 })
 

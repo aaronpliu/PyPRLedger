@@ -1201,6 +1201,7 @@
     "move_removed": "移除",
     "package": "包",
     "application": "应用",
+    "changes_heading": "变更明细",
     "no_date": "无日期",
     "no_record": "无记录",
     "code_added": "{count} 个提交",

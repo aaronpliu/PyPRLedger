@@ -48,6 +48,7 @@ function code(added: number, missing = 0) {
 function unchanged(name: string, version: string): AppVersionDiffMove {
   return {
     name,
+    kind: 'dependency',
     source_version: version,
     target_version: version,
     state: 'unchanged',
@@ -61,6 +62,7 @@ function compared(): AppVersionDiffResponse {
   const moves: AppVersionDiffMove[] = [
     {
       name: 'packageA',
+      kind: 'dependency',
       source_version: '1.0.0',
       target_version: '1.0.1',
       state: 'changed',
@@ -70,6 +72,7 @@ function compared(): AppVersionDiffResponse {
     unchanged('packageB', '1.1.0'),
     {
       name: 'packageC',
+      kind: 'dependency',
       source_version: '1.0.0',
       target_version: null,
       state: 'removed',
@@ -78,6 +81,7 @@ function compared(): AppVersionDiffResponse {
     },
     {
       name: 'packageD',
+      kind: 'dependency',
       source_version: null,
       target_version: '0.9.0',
       state: 'added',
@@ -86,6 +90,7 @@ function compared(): AppVersionDiffResponse {
     },
     {
       name: 'packageE',
+      kind: 'dependency',
       source_version: '2.1.0',
       target_version: '2.0.0',
       state: 'changed',
@@ -95,6 +100,7 @@ function compared(): AppVersionDiffResponse {
     {
       // a declared range the version reader cannot order: a change with no direction
       name: 'packageF',
+      kind: 'dependency',
       source_version: '1.0.0',
       target_version: '^2.0.0',
       state: 'changed',
@@ -106,6 +112,7 @@ function compared(): AppVersionDiffResponse {
   // the application's own version is a row like the others, and it moved too
   const appMove: AppVersionDiffMove = {
     name: APP_NAME,
+    kind: 'application',
     source_version: '1.0.0_10000',
     target_version: '1.1.0_10000',
     state: 'changed',

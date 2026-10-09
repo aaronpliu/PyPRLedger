@@ -256,6 +256,36 @@ async def test_the_application_is_the_first_row_and_carries_its_own_version():
     assert result.verdict == "changed"
 
 
+async def test_every_change_says_which_kind_of_row_it_was():
+    """The page lists what moved in a pair, so the application has to be told apart."""
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0_10000"): record(
+                "1.0.0_10000", "2026-09-01", {"packageA": "1.0.0", "packageB": "2.0.0"}
+            ),
+            (APP, "1.1.0_10000"): record(
+                "1.1.0_10000", "2026-10-01", {"packageA": "1.2.0", "packageB": "2.0.0"}
+            ),
+        }
+    )
+
+    result = await service.compare(request("1.0.0_10000", "1.1.0_10000"), app_name=APP)
+
+    # in matrix row order: the application first, then its dependencies
+    assert [(change.kind, change.name) for change in result.intervals[0].changes] == [
+        ("application", APP),
+        ("dependency", "packageA"),
+    ]
+    # and each change carries the two versions it is about, which is what is read
+    application, dependency = result.intervals[0].changes
+    assert (application.source_version, application.target_version) == (
+        "1.0.0_10000",
+        "1.1.0_10000",
+    )
+    assert (dependency.source_version, dependency.target_version) == ("1.0.0", "1.2.0")
+    assert dependency.direction == "upgrade"
+
+
 async def test_a_build_number_moves_the_row_without_a_direction():
     service, _, _ = build_service(
         {

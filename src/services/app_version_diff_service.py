@@ -484,6 +484,7 @@ class AppVersionDiffService:
 
                 move = AppVersionDiffMove(
                     name=row.name,
+                    kind=row.kind,
                     source_version=source_version,
                     target_version=target_version,
                     state=state,

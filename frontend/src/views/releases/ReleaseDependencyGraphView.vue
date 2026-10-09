@@ -281,44 +281,53 @@
                 :title="t('releaseDependencyGraph.circular_warning')"
               />
 
-              <div class="detail-section">
-                <h4>{{ t('releaseDependencyGraph.dependencies') }} ({{ directDependencies.length }})</h4>
-                <ul v-if="directDependencies.length" class="detail-list">
-                  <li v-for="entry in directDependencies" :key="entry.node.id">
-                    <button class="detail-link" type="button" @click="selectNode(entry.node.id)">
-                      {{ entry.node.name ?? entry.node.id }}
-                    </button>
-                    <span
-                      v-if="entry.constraint"
-                      class="detail-constraint"
-                      :class="{ 'is-range': !entry.pinned }"
-                      :title="entry.constraint"
-                    >
-                      {{ entry.constraint }}
-                    </span>
-                  </li>
-                </ul>
-                <p v-else class="detail-empty">{{ t('releaseDependencyGraph.no_dependencies') }}</p>
-              </div>
+              <!-- Two columns: stacked, a list that outgrows its half of the panel
+                   scrolls while the space beside it stands empty, and a package
+                   worth reading is one of many -->
+              <div class="detail-sections">
+                <div class="detail-section">
+                  <h4>
+                    {{ t('releaseDependencyGraph.dependencies') }} ({{ directDependencies.length }})
+                  </h4>
+                  <ul v-if="directDependencies.length" class="detail-list">
+                    <li v-for="entry in directDependencies" :key="entry.node.id">
+                      <button class="detail-link" type="button" @click="selectNode(entry.node.id)">
+                        {{ entry.node.name ?? entry.node.id }}
+                      </button>
+                      <span
+                        v-if="entry.constraint"
+                        class="detail-constraint"
+                        :class="{ 'is-range': !entry.pinned }"
+                        :title="entry.constraint"
+                      >
+                        {{ entry.constraint }}
+                      </span>
+                    </li>
+                  </ul>
+                  <p v-else class="detail-empty">{{ t('releaseDependencyGraph.no_dependencies') }}</p>
+                </div>
 
-              <div class="detail-section">
-                <h4>{{ t('releaseDependencyGraph.dependents') }} ({{ directDependents.length }})</h4>
-                <ul v-if="directDependents.length" class="detail-list">
-                  <li v-for="entry in directDependents" :key="entry.node.id">
-                    <button class="detail-link" type="button" @click="selectNode(entry.node.id)">
-                      {{ entry.node.name ?? entry.node.id }}
-                    </button>
-                    <span
-                      v-if="entry.constraint"
-                      class="detail-constraint"
-                      :class="{ 'is-range': !entry.pinned }"
-                      :title="entry.constraint"
-                    >
-                      {{ entry.constraint }}
-                    </span>
-                  </li>
-                </ul>
-                <p v-else class="detail-empty">{{ t('releaseDependencyGraph.no_dependents') }}</p>
+                <div class="detail-section">
+                  <h4>
+                    {{ t('releaseDependencyGraph.dependents') }} ({{ directDependents.length }})
+                  </h4>
+                  <ul v-if="directDependents.length" class="detail-list">
+                    <li v-for="entry in directDependents" :key="entry.node.id">
+                      <button class="detail-link" type="button" @click="selectNode(entry.node.id)">
+                        {{ entry.node.name ?? entry.node.id }}
+                      </button>
+                      <span
+                        v-if="entry.constraint"
+                        class="detail-constraint"
+                        :class="{ 'is-range': !entry.pinned }"
+                        :title="entry.constraint"
+                      >
+                        {{ entry.constraint }}
+                      </span>
+                    </li>
+                  </ul>
+                  <p v-else class="detail-empty">{{ t('releaseDependencyGraph.no_dependents') }}</p>
+                </div>
               </div>
             </template>
 
@@ -764,8 +773,16 @@ function secondaryName(value: string, name?: string | null): string | undefined 
   margin-bottom: 12px;
 }
 
+/* The two lists share the panel's height instead of splitting it in half */
+.detail-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .detail-section {
   margin-top: 16px;
+  min-width: 0;
 }
 
 .detail-section h4 {
@@ -779,16 +796,21 @@ function secondaryName(value: string, name?: string | null): string | undefined 
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 220px;
+  /* The chart sets the page's height; a list reads down it rather than stopping
+     at a fixed one and scrolling while the space beside it stands empty. The cap
+     stays as a backstop for a package nothing should have that many of. */
+  max-height: max(240px, calc(100vh - 460px));
   overflow-y: auto;
 }
 
 .detail-list li {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 3px 0;
   font-size: 13px;
+  min-width: 0;
 }
 
 .detail-link {
@@ -799,6 +821,9 @@ function secondaryName(value: string, name?: string | null): string | undefined 
   cursor: pointer;
   font-size: 13px;
   text-align: left;
+  /* half the panel's width, so a long package name wraps rather than spills */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .detail-link:hover {
