@@ -104,6 +104,15 @@ class Settings(BaseSettings):
     )
 
     # Dependency database - the system of record for what an application shipped
+    APP_DIFF_MAX_PACKAGE_COMPARISONS: int = Field(
+        default=12,
+        description=(
+            "Most dependency comparisons one App Diff request runs. Each one asks the git "
+            "provider for the commits between two versions of a package, so a release that "
+            "moved dozens of them is read on demand: whatever is past this ceiling is "
+            "reported as not compared rather than silently left out."
+        ),
+    )
     DEPENDENCY_API_BASE_URL: str = Field(
         default="", description="Base URL of the dependency database API"
     )
@@ -118,7 +127,7 @@ class Settings(BaseSettings):
         ),
     )
     DEPENDENCY_API_RELEASE_PATH: str = Field(
-        default="/api/v1/appReleaseInfo",
+        default="/appBuildDependencies",
         description=(
             "Path returning one application ref: the modules it declared with their "
             "exact versions, and what every package the database knows declared for its own"

@@ -238,6 +238,52 @@ class AppVersionDiffCode(BaseModel):
     )
 
 
+class AppVersionDiffPackageComparison(BaseModel):
+    """One dependency's own comparison, between the two releases of a pair.
+
+    The dependency axis says which version a package moved to; this says what came
+    with it - the commits between the two versions of that package, read the way a
+    repository comparison reads two release refs. Which repository a package lives
+    in is not in the dependency record, so it is resolved through the project
+    registry by the name the record uses; a package that resolves to no repository
+    (an external library), to several, or whose versions the provider cannot
+    compare is reported as inconclusive with the reason, never left out and never
+    counted as contained.
+    """
+
+    name: str = Field(..., description="Package name as the application declares it")
+    state: str = Field(
+        ...,
+        description=(
+            "The move this package made: 'changed' has two versions and is compared, "
+            "'added' and 'removed' have one and are reported as such"
+        ),
+    )
+    source_version: str | None = Field(
+        default=None, description="Version in the earlier release; its tag in that repository"
+    )
+    target_version: str | None = Field(
+        default=None, description="Version in the later release; its tag in that repository"
+    )
+    project_key: str | None = Field(
+        default=None, description="Project the package was resolved to, when it was"
+    )
+    repository_slug: str | None = Field(
+        default=None, description="Repository the package was resolved to, when it was"
+    )
+    git_provider: str | None = Field(
+        default=None, description="Provider that repository lives on, when it was resolved"
+    )
+    code: AppVersionDiffCode = Field(
+        ...,
+        description=(
+            "The comparison itself, in the same shape the application's own code axis uses. "
+            "`unavailable` carries why there is none: no registered repository, an ambiguous "
+            "name, a version the provider does not know, or a package past the ceiling"
+        ),
+    )
+
+
 class AppVersionDiffInterval(BaseModel):
     """One adjacent pair of releases, compared."""
 
@@ -268,6 +314,14 @@ class AppVersionDiffInterval(BaseModel):
     changes: list[AppVersionDiffMove] = Field(
         default_factory=list,
         description="Every row that moved in this interval, in matrix row order",
+    )
+    packages: list[AppVersionDiffPackageComparison] = Field(
+        default_factory=list,
+        description=(
+            "Every dependency that moved in this interval, with the commits between the two "
+            "versions it moved between. The application's own version is not among them: it "
+            "is the pair's code axis, which this page reads above"
+        ),
     )
     code: AppVersionDiffCode | None = Field(
         default=None,

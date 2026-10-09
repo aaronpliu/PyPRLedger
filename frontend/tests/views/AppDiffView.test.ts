@@ -258,6 +258,42 @@ describe('AppDiffView', () => {
     expect(changes.find('[data-test="change-packageD"]').text()).toContain('— → 0.9.0')
   })
 
+  it('compares each moved package in the repository the registry names', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    // compared in its own repository, and the verdict says what the counts suggest
+    const packageA = wrapper.find('[data-test="change-packageA"]')
+    expect(packageA.text()).toContain('CORE/pkg-a')
+    expect(packageA.find('[data-test="package-packageA-verdict"]').text()).toBe('Contained')
+    expect(packageA.find('[data-test="package-packageA-counts"]').text()).toContain(
+      '4 commits added',
+    )
+
+    // a package the registry does not know says so, instead of reading as compared
+    const packageE = wrapper.find('[data-test="change-packageE"]')
+    expect(packageE.find('[data-test="package-packageE-unavailable"]').text()).toContain(
+      "no repository is registered as 'packageE'",
+    )
+
+    // a package with one version has no pair of refs to compare
+    const packageC = wrapper.find('[data-test="change-packageC"]')
+    expect(packageC.find('[data-test="package-packageC-unavailable"]').text()).toContain(
+      'only one version is recorded',
+    )
+  })
+
+  it("opens a package's own commits on demand", async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    expect(wrapper.find('[data-test="package-packageA-commits"]').exists()).toBe(false)
+
+    await wrapper.find('[data-test="package-packageA-toggle"]').trigger('click')
+
+    expect(wrapper.find('[data-test="package-packageA-commits"]').text()).toContain('a1b2c3d')
+  })
+
   it('lists nothing for a pair whose releases could not be compared', async () => {
     const wrapper = await mountView()
     await openOn(wrapper)
@@ -301,11 +337,11 @@ describe('AppDiffView', () => {
     const wrapper = await mountView()
     await openOn(wrapper)
 
-    expect(wrapper.find('[data-test="commits"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="code-commits"]').exists()).toBe(false)
 
     await wrapper.find('[data-test="code-toggle"]').trigger('click')
 
-    const commits = wrapper.find('[data-test="commits"]')
+    const commits = wrapper.find('[data-test="code-commits"]')
     expect(commits.text()).toContain('a1b2c3d')
     expect(commits.text()).toContain('Add the new module')
   })

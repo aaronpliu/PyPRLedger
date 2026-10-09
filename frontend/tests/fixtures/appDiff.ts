@@ -1,6 +1,8 @@
 import type {
+  AppVersionDiffCode,
   AppVersionDiffCommit,
   AppVersionDiffMove,
+  AppVersionDiffPackageComparison,
   AppVersionDiffResponse,
 } from '@/api/appVersionDiff'
 
@@ -54,6 +56,46 @@ function unchanged(name: string, version: string): AppVersionDiffMove {
     state: 'unchanged',
     direction: null,
     orderable: true,
+  }
+}
+
+/** The same comparison, with the later version missing something of the earlier one. */
+function codeMissing(missing: number): AppVersionDiffCode {
+  return { ...code(0, missing), verdict: 'missing' }
+}
+
+/** A comparison that could not be run, and why. */
+function notCompared(reason: string): AppVersionDiffCode {
+  return {
+    verdict: 'inconclusive',
+    scan_complete: false,
+    added_count: 0,
+    missing_count: 0,
+    added_commits: [],
+    missing_commits: [],
+    truncated: false,
+    unavailable: reason,
+  }
+}
+
+/** One moved package, and how its two versions were compared. */
+function packageComparison(
+  name: string,
+  state: 'changed' | 'added' | 'removed',
+  versions: [string | null, string | null],
+  comparison: AppVersionDiffCode,
+  repository: string | null = null,
+): AppVersionDiffPackageComparison {
+  const [project, slug] = repository ? repository.split('/') : [null, null]
+  return {
+    name,
+    state,
+    source_version: versions[0],
+    target_version: versions[1],
+    project_key: project,
+    repository_slug: slug,
+    git_provider: repository ? 'bitbucket_server' : null,
+    code: comparison,
   }
 }
 
@@ -162,6 +204,27 @@ function compared(): AppVersionDiffResponse {
         dependencies_moved: true,
         changes: [appMove, ...moves.filter((move) => move.state !== 'unchanged')],
         code: code(5),
+        packages: [
+          // compared in its own repository, at its two versions used as the refs
+          packageComparison('packageA', 'changed', ['1.0.0', '1.0.1'], code(4), 'CORE/pkg-a'),
+          // the later version does not hold everything of the earlier one
+          packageComparison('packageF', 'changed', ['1.0.0', '^2.0.0'], codeMissing(1), 'CORE/pkg-f'),
+          // a package no repository is registered as: reported, not dropped
+          packageComparison(
+            'packageE',
+            'changed',
+            ['2.1.0', '2.0.0'],
+            notCompared("no repository is registered as 'packageE'"),
+          ),
+          // one version only, so there is no pair of refs to compare
+          packageComparison(
+            'packageC',
+            'removed',
+            ['1.0.0', null],
+            notCompared('only one version is recorded, so there is no pair to compare'),
+            'CORE/pkg-c',
+          ),
+        ],
       },
     ],
   }
@@ -192,6 +255,7 @@ function withMissing(): AppVersionDiffResponse {
         summary: { unchanged: 0, changed: 0, upgrade: 0, downgrade: 0, added: 0, removed: 0 },
         dependencies_moved: false,
         changes: [],
+        packages: [],
         // a pair that could not be compared has no code axis, which is not the
         // same as a pair with no commits
         code: null,
@@ -228,6 +292,7 @@ function rebuilt(): AppVersionDiffResponse {
         summary: { unchanged: 7, changed: 0, upgrade: 0, downgrade: 0, added: 0, removed: 0 },
         dependencies_moved: false,
         changes: [],
+        packages: [],
         code: code(3),
       },
     ],

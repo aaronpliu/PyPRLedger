@@ -83,6 +83,26 @@ export interface AppVersionDiffCode {
   unavailable: string | null
 }
 
+/**
+ * One dependency's own comparison between the two releases of a pair.
+ *
+ * Which repository a package lives in is not in the dependency record, so it is
+ * resolved through the project registry by the name the record uses; a package
+ * that resolves to no repository, to several, or whose versions cannot be compared
+ * says so in `code.unavailable` rather than being left out.
+ */
+export interface AppVersionDiffPackageComparison {
+  name: string
+  /** The move this package made: `changed` has two versions, `added`/`removed` one. */
+  state: 'changed' | 'added' | 'removed'
+  source_version: string | null
+  target_version: string | null
+  project_key: string | null
+  repository_slug: string | null
+  git_provider: string | null
+  code: AppVersionDiffCode
+}
+
 /** One adjacent pair of releases, compared. */
 export interface AppVersionDiffInterval {
   source_ref: string
@@ -97,6 +117,12 @@ export interface AppVersionDiffInterval {
    */
   dependencies_moved: boolean
   changes: AppVersionDiffMove[]
+  /**
+   * Every dependency that moved in this pair, with the commits between the two
+   * versions it moved between. The application's own version is not among them -
+   * it is the pair's code axis, read above.
+   */
+  packages: AppVersionDiffPackageComparison[]
   /** Null when the pair is incomplete or the request did not ask for the code axis. */
   code: AppVersionDiffCode | null
 }

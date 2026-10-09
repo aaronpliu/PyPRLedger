@@ -14,6 +14,14 @@ release comparison: a release that moved its version while every dependency
 stayed put is a change, and it would otherwise read as a comparison in which
 nothing happened.
 
+A dependency that moved is then compared the same way, in the repository it lives
+in: a package's versions are the tags it was released under, so they are the two
+refs to compare. The dependency record names no repository for its packages - only
+names and versions - so where one lives is resolved through the project registry,
+and a package that resolves to none, or to several, is reported as such instead of
+being left out. Which is the rule of this module applied to a second axis: what
+could not be checked has to be as visible as what was.
+
 Two rules decide most of the behaviour: a release the source holds no record for
 makes its comparisons unknown rather than empty, and a pair of versions that
 cannot be ordered is a change with no direction rather than a guessed upgrade.
@@ -21,9 +29,11 @@ cannot be ordered is a change with no direction rather than a guessed upgrade.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -45,6 +55,7 @@ from src.schemas.app_version_diff import (
     AppVersionDiffCode,
     AppVersionDiffInterval,
     AppVersionDiffMove,
+    AppVersionDiffPackageComparison,
     AppVersionDiffRelease,
     AppVersionDiffRequest,
     AppVersionDiffResponse,
@@ -76,6 +87,32 @@ PROJECT_CATEGORY = 0
 # How many commits of each direction are carried per pair. The counts are exact
 # either way; only the rendered lists are capped, and the payload says so.
 CODE_RENDER_LIMIT = 30
+
+# How many dependency comparisons run at once. Each one asks the git provider for
+# the commits between two versions, and a release that moved several packages
+# should not be waited for one at a time.
+PACKAGE_COMPARISON_CONCURRENCY = 4
+
+
+@dataclass(frozen=True)
+class DependencyRepository:
+    """Where a package named by the dependency database lives.
+
+    A dependency record names its packages and their versions, never their
+    repositories, so where one lives is resolved outside this service - through
+    the project registry. Either the coordinates are known, or the reason they are
+    not is: a package that resolves to nothing, or to several repositories, has to
+    be reportable rather than guessed at.
+    """
+
+    project_key: str | None = None
+    repository_slug: str | None = None
+    git_provider: str | None = None
+    reason: str | None = None
+
+
+# Given a package name out of a dependency record, where it lives.
+DependencyRepositoryResolver = Callable[[str], Awaitable[DependencyRepository]]
 
 # A version as an application declares it: an optional `v`, up to three numeric
 # components, an optional pre-release, an optional build metadata suffix - and,
@@ -170,6 +207,45 @@ def empty_summary() -> dict[str, int]:
     return dict.fromkeys(SUMMARY_KEYS, 0)
 
 
+def package_comparison(
+    move: AppVersionDiffMove,
+    repository: DependencyRepository,
+    code: AppVersionDiffCode,
+) -> AppVersionDiffPackageComparison:
+    """One dependency's comparison, in the shape the response carries it."""
+    return AppVersionDiffPackageComparison(
+        name=move.name,
+        state=move.state,
+        source_version=move.source_version,
+        target_version=move.target_version,
+        project_key=repository.project_key,
+        repository_slug=repository.repository_slug,
+        git_provider=repository.git_provider,
+        code=code,
+    )
+
+
+def package_not_compared(
+    move: AppVersionDiffMove, reason: str
+) -> AppVersionDiffPackageComparison:
+    """A package there was nothing to compare for, and why.
+
+    It says so in the same place a comparison says how it went, so that what could
+    not be checked is as visible as what was - a check that silently skipped a
+    package reads as a pass it never earned.
+    """
+    return package_comparison(
+        move,
+        DependencyRepository(),
+        AppVersionDiffCode(verdict=VERDICT_INCONCLUSIVE, unavailable=reason),
+    )
+
+
+async def _no_dependency_repository(name: str) -> DependencyRepository:
+    """The resolver of a caller that has none: no package can be compared."""
+    return DependencyRepository(reason="the dependency's repository cannot be resolved here")
+
+
 # ---------------------------------------------------------------------- #
 # Service
 # ---------------------------------------------------------------------- #
@@ -194,17 +270,26 @@ class AppVersionDiffService:
         self._provider_factory = provider_factory
 
     async def compare(
-        self, request: AppVersionDiffRequest, app_name: str
+        self,
+        request: AppVersionDiffRequest,
+        app_name: str,
+        resolve_dependency_repository: DependencyRepositoryResolver | None = None,
     ) -> AppVersionDiffResponse:
         """Compare the requested releases of one application.
 
         Args:
             request: The repository coordinates, the releases and the refresh flag
             app_name: The application the repository resolved to
+            resolve_dependency_repository: Where a package a release moved lives.
+                The dependency record names packages and versions, never their
+                repositories, so this is what lets a moved package be compared in
+                the repository it lives in; without it, packages are reported as
+                not compared rather than quietly dropped
 
         Returns:
             The releases in datetime order, the version matrix, and one comparison
-            per adjacent pair.
+            per adjacent pair - the application's own refs, and then each
+            dependency that moved.
         """
         provider_name = resolve_provider_name(request.git_provider)
         cache_key = self._cache_key(request, app_name, provider_name)
@@ -222,7 +307,13 @@ class AppVersionDiffService:
         rows = self._build_matrix(release_entries, app_name)
         intervals = self._compare_intervals(release_entries, rows)
         if request.include_code:
-            await self._attach_code(request, intervals, provider_name)
+            await self._attach_code(request, release_entries, intervals, provider_name)
+            await self._attach_dependency_code(
+                request,
+                intervals,
+                provider_name,
+                resolve_dependency_repository or _no_dependency_repository,
+            )
         response = self._build_response(
             request=request,
             app_name=app_name,
@@ -513,20 +604,27 @@ class AppVersionDiffService:
     async def _attach_code(
         self,
         request: AppVersionDiffRequest,
+        releases: list[dict[str, Any]],
         intervals: list[AppVersionDiffInterval],
         provider_name: str,
     ) -> None:
         """Read the commits between every pair that can be compared.
 
+        The refs compared are the ones each release's record names - the
+        ``tagOrBranch`` the build was made from, which the graph carries as the
+        application's version - rather than the ref the reader picked, which names
+        a release the way this page lists it.
+
         One pair at a time, and a pair that cannot be read is recorded as such
         with the reason. A provider that is down, or that does not know a release
-        ref - the dependency source keys a release by a value that need not be a
-        ref the git provider knows - must not cost the comparison its dependency
-        axis, and must never read as a pair that had no commits.
+        ref, must not cost the comparison its dependency axis, and must never read
+        as a pair that had no commits.
         """
-        for interval in intervals:
+        for boundary, interval in enumerate(intervals):
             if not interval.complete:
                 continue
+            source_ref = str(releases[boundary]["app_version"])
+            target_ref = str(releases[boundary + 1]["app_version"])
             try:
                 comparison = await self.diff_service.compare_releases(
                     ReleaseCompareRequest(
@@ -535,8 +633,8 @@ class AppVersionDiffService:
                         git_provider=provider_name,
                         workspace_slug=request.workspace_slug,
                         refresh=request.refresh,
-                        source_ref=interval.source_ref,
-                        target_ref=interval.target_ref,
+                        source_ref=source_ref,
+                        target_ref=target_ref,
                         render_limit=CODE_RENDER_LIMIT,
                     )
                 )
@@ -546,8 +644,8 @@ class AppVersionDiffService:
                     extra={
                         "project_key": request.project_key,
                         "repository_slug": request.repository_slug,
-                        "source_ref": interval.source_ref,
-                        "target_ref": interval.target_ref,
+                        "source_ref": source_ref,
+                        "target_ref": target_ref,
                         "error": str(e),
                     },
                 )
@@ -563,6 +661,127 @@ class AppVersionDiffService:
                 missing_commits=comparison.missing_commits,
                 truncated=comparison.rendered_truncated,
             )
+
+    async def _attach_dependency_code(
+        self,
+        request: AppVersionDiffRequest,
+        intervals: list[AppVersionDiffInterval],
+        provider_name: str,
+        resolve_repository: DependencyRepositoryResolver,
+    ) -> None:
+        """Compare every dependency that moved, in the repository it lives in.
+
+        A package's version is the tag it was released under, so the two versions a
+        release moved between are the two refs to compare: the same question a
+        repository comparison asks, asked about a package.
+
+        Each of those is a provider request, so they run a few at a time and only
+        up to a ceiling. What the ceiling leaves out is reported as not compared,
+        which is a different thing from a package that was compared and matched.
+        """
+        budget = max(settings.APP_DIFF_MAX_PACKAGE_COMPARISONS, 0)
+        semaphore = asyncio.Semaphore(PACKAGE_COMPARISON_CONCURRENCY)
+
+        for interval in intervals:
+            if not interval.complete:
+                continue
+            moves = [move for move in interval.changes if move.kind == KIND_DEPENDENCY]
+            if not moves:
+                continue
+
+            comparable = [move for move in moves if move.state == STATE_CHANGED]
+            within_budget = comparable[:budget]
+            budget -= len(within_budget)
+
+            async def compare(move: AppVersionDiffMove) -> AppVersionDiffPackageComparison:
+                async with semaphore:
+                    return await self._compare_package(
+                        request, move, provider_name, resolve_repository
+                    )
+
+            compared = await asyncio.gather(*(compare(move) for move in within_budget))
+            by_name = {entry.name: entry for entry in compared}
+
+            for move in moves:
+                if move.name in by_name:
+                    interval.packages.append(by_name[move.name])
+                    continue
+                interval.packages.append(
+                    package_not_compared(
+                        move,
+                        (
+                            f"not compared: {len(comparable)} packages moved and the ceiling "
+                            f"is {settings.APP_DIFF_MAX_PACKAGE_COMPARISONS}"
+                            if move.state == STATE_CHANGED
+                            else "only one version is recorded, so there is no pair to compare"
+                        ),
+                    )
+                )
+
+    async def _compare_package(
+        self,
+        request: AppVersionDiffRequest,
+        move: AppVersionDiffMove,
+        provider_name: str,
+        resolve_repository: DependencyRepositoryResolver,
+    ) -> AppVersionDiffPackageComparison:
+        """One moved package, compared between the two versions it moved between."""
+        repository = await resolve_repository(move.name)
+        if repository.reason or not repository.repository_slug:
+            return package_not_compared(
+                move, repository.reason or f"no repository is known for '{move.name}'"
+            )
+
+        # A repository on Cloud is addressed by its workspace, which a dependency
+        # record does not name: the comparison is asked for in the workspace the
+        # application itself is read in. A package that lives elsewhere answers with
+        # an error, and an error is reported as one - never as a package that
+        # contains nothing.
+        dependency_provider = repository.git_provider or provider_name
+        try:
+            comparison = await self.diff_service.compare_releases(
+                ReleaseCompareRequest(
+                    project_key=repository.project_key or "",
+                    repository_slug=repository.repository_slug,
+                    git_provider=dependency_provider,
+                    workspace_slug=request.workspace_slug,
+                    refresh=request.refresh,
+                    source_ref=str(move.source_version),
+                    target_ref=str(move.target_version),
+                    render_limit=CODE_RENDER_LIMIT,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Could not compare two versions of a dependency",
+                extra={
+                    "package": move.name,
+                    "project_key": repository.project_key,
+                    "repository_slug": repository.repository_slug,
+                    "source_version": move.source_version,
+                    "target_version": move.target_version,
+                    "error": str(e),
+                },
+            )
+            return package_comparison(
+                move,
+                repository,
+                AppVersionDiffCode(verdict=VERDICT_INCONCLUSIVE, unavailable=str(e)),
+            )
+
+        return package_comparison(
+            move,
+            repository,
+            AppVersionDiffCode(
+                verdict=comparison.verdict,
+                scan_complete=comparison.scan_complete,
+                added_count=comparison.added_count,
+                missing_count=comparison.missing_count,
+                added_commits=comparison.added_commits,
+                missing_commits=comparison.missing_commits,
+                truncated=comparison.rendered_truncated,
+            ),
+        )
 
     def _build_response(
         self,

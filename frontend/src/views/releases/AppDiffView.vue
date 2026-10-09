@@ -282,49 +282,53 @@
             <li
               v-for="change in interval.changes"
               :key="`${change.kind}:${change.name}`"
-              class="change"
+              class="change-item"
               :class="`change-${moveTone(change)}`"
               :data-test="`change-${change.name}`"
             >
-              <span class="move" :class="`move-${moveTone(change)}`" aria-hidden="true">
-                {{ moveSymbol(moveTone(change)) }}
-              </span>
-              <span class="change-name">{{ change.name }}</span>
-              <el-tag
-                v-if="change.kind === 'application'"
-                class="kind"
-                size="small"
-                type="primary"
-                data-test="change-application"
-              >
-                {{ t('appDiff.application') }}
-              </el-tag>
-              <span class="change-versions">{{ moveVersions(change) }}</span>
-              <span class="change-state">{{ t(moveLabelKey(moveTone(change))) }}</span>
+              <div class="change">
+                <span class="move" :class="`move-${moveTone(change)}`" aria-hidden="true">
+                  {{ moveSymbol(moveTone(change)) }}
+                </span>
+                <span class="change-name">{{ change.name }}</span>
+                <el-tag
+                  v-if="change.kind === 'application'"
+                  class="kind"
+                  size="small"
+                  type="primary"
+                  data-test="change-application"
+                >
+                  {{ t('appDiff.application') }}
+                </el-tag>
+                <span class="change-versions">{{ moveVersions(change) }}</span>
+                <span class="change-state">{{ t(moveLabelKey(moveTone(change))) }}</span>
+                <!-- the repository a package was compared in, when the registry named one -->
+                <span v-if="packageRepository(packageOf(interval, change))" class="change-repository">
+                  {{ packageRepository(packageOf(interval, change)) }}
+                </span>
+              </div>
+
+              <!-- What came with that version: the commits between the package's own
+                   two versions, read the way the application's pair is read -->
+              <CommitComparison
+                v-if="packageOf(interval, change)"
+                :code="packageOf(interval, change)!.code"
+                :scope="`package-${change.name}`"
+                :expanded="isExpanded(packageKey(interval, change.name))"
+                @toggle="toggleCommits(packageKey(interval, change.name))"
+              />
             </li>
           </ul>
 
           <!-- The commits between the two releases. A pair whose commits could
                not be read says so: an empty list would read as "none". -->
-          <div v-if="interval.code" class="code" data-test="code-axis">
-            <p
-              v-if="interval.code.unavailable"
-              class="code-unavailable"
-              data-test="code-unavailable"
-            >
-              {{ t('appDiff.code_unavailable', { reason: interval.code.unavailable }) }}
-            </p>
-
-            <template v-else>
-              <p class="code-counts" data-test="code-counts">
-                <span :class="`code-${codeTone(interval.code)}`">
-                  {{ t('appDiff.code_added', { count: interval.code.added_count }) }}
-                </span>
-                <span v-if="interval.code.missing_count" data-test="code-missing">
-                  · {{ t('appDiff.code_missing', { count: interval.code.missing_count }) }}
-                </span>
-              </p>
-
+          <CommitComparison
+            v-if="interval.code"
+            :code="interval.code"
+            :expanded="isExpanded(intervalKey(interval))"
+            @toggle="toggleCommits(intervalKey(interval))"
+          >
+            <template #note>
               <p
                 v-if="rebuiltWithUnchangedDependencies(interval, interval.code)"
                 class="rebuilt"
@@ -332,48 +336,8 @@
               >
                 {{ t('appDiff.rebuilt') }}
               </p>
-
-              <el-button
-                v-if="commitTotal(interval.code)"
-                link
-                type="primary"
-                data-test="code-toggle"
-                @click="toggleCommits(intervalKey(interval))"
-              >
-                {{
-                  isExpanded(intervalKey(interval))
-                    ? t('appDiff.code_hide')
-                    : t('appDiff.code_show')
-                }}
-              </el-button>
-
-              <div v-if="isExpanded(intervalKey(interval))" class="commits" data-test="commits">
-                <template v-if="interval.code.added_commits.length">
-                  <h4>{{ t('appDiff.code_added_heading') }}</h4>
-                  <ul>
-                    <li v-for="commit in interval.code.added_commits" :key="commit.id">
-                      <code>{{ shortCommitId(commit) }}</code>
-                      <span class="subject">{{ commitSubject(commit) }}</span>
-                    </li>
-                  </ul>
-                </template>
-
-                <template v-if="interval.code.missing_commits.length">
-                  <h4>{{ t('appDiff.code_missing_heading') }}</h4>
-                  <ul>
-                    <li v-for="commit in interval.code.missing_commits" :key="commit.id">
-                      <code>{{ shortCommitId(commit) }}</code>
-                      <span class="subject">{{ commitSubject(commit) }}</span>
-                    </li>
-                  </ul>
-                </template>
-
-                <p v-if="interval.code.truncated" class="truncated" data-test="code-truncated">
-                  {{ t('appDiff.code_truncated') }}
-                </p>
-              </div>
             </template>
-          </div>
+          </CommitComparison>
         </article>
       </section>
 
@@ -461,6 +425,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import ContentLoader from '@/components/common/ContentLoader.vue'
+import CommitComparison from '@/components/release/CommitComparison.vue'
 import { GIT_PROVIDER_OPTIONS } from '@/constants/gitProvider'
 import { projectsApi } from '@/api/projects'
 import type {
@@ -470,7 +435,12 @@ import type {
 } from '@/api/projects'
 import { releaseDiffApi } from '@/api/releaseDiff'
 import { appVersionDiffApi } from '@/api/appVersionDiff'
-import type { AppVersionDiffResponse } from '@/api/appVersionDiff'
+import type {
+  AppVersionDiffInterval,
+  AppVersionDiffMove,
+  AppVersionDiffPackageComparison,
+  AppVersionDiffResponse,
+} from '@/api/appVersionDiff'
 import { useRefCandidates } from '@/composables/useRefCandidates'
 import {
   buildRows,
@@ -692,6 +662,30 @@ function versionClass(cell: AppDiffCell) {
 /** A pair's identity, for the commit lists a reader opens by hand. */
 function intervalKey(interval: { source_ref: string; target_ref: string }): string {
   return `${interval.source_ref}->${interval.target_ref}`
+}
+
+/** The key one package's commit list is expanded under. */
+function packageKey(interval: AppVersionDiffInterval, name: string): string {
+  return `${intervalKey(interval)}:${name}`
+}
+
+/**
+ * The comparison of one changed package, when the pair carries one.
+ *
+ * The list holds every package that moved, including the ones there was nothing
+ * to compare for - they say so in their own comparison entry, which is what keeps
+ * an unchecked package visible next to a checked one.
+ */
+function packageOf(
+  interval: AppVersionDiffInterval,
+  change: AppVersionDiffMove,
+): AppVersionDiffPackageComparison | undefined {
+  return interval.packages.find((entry) => entry.name === change.name)
+}
+
+/** The repository a package was compared in, or nothing when none was resolved. */
+function packageRepository(entry: AppVersionDiffPackageComparison | undefined): string {
+  return entry?.repository_slug ? `${entry.project_key}/${entry.repository_slug}` : ''
 }
 
 const expandedCommits = ref<string[]>([])
@@ -1087,75 +1081,23 @@ watch(selectedRefs, (refs) => {
   color: var(--el-text-color-placeholder);
 }
 
-.code {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--el-border-color-lighter);
-  font-size: 12px;
+/* One moved package, with the two versions it moved between below it */
+.change-item {
+  padding: 2px 0;
 }
 
-.code-counts {
-  margin: 0;
-  color: var(--el-text-color-regular);
-}
-
-.code-counts .code-commits {
-  font-weight: 600;
-}
-
-.code-counts .code-none {
+/* The repository a package was compared in, when the registry named one */
+.change-repository {
+  font-family: var(--el-font-family-mono, monospace);
+  font-size: 11px;
   color: var(--el-text-color-secondary);
 }
 
-.code-unavailable {
-  margin: 0;
-  color: var(--el-color-warning-dark-2);
-}
-
+/* A pair that was rebuilt under the same versions: the view's own reading, since
+   only it knows whether the dependencies moved */
 .rebuilt {
   margin: 6px 0 0;
   color: var(--el-color-warning-dark-2);
   font-weight: 600;
-}
-
-.commits {
-  margin-top: 6px;
-}
-
-.commits h4 {
-  margin: 6px 0 2px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--el-text-color-secondary);
-}
-
-.commits ul {
-  margin: 0;
-  padding-left: 0;
-  list-style: none;
-}
-
-.commits li {
-  display: flex;
-  gap: 6px;
-  padding: 1px 0;
-}
-
-.commits code {
-  color: var(--el-text-color-secondary);
-  font-size: 11px;
-}
-
-.commits .subject {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.truncated {
-  margin: 4px 0 0;
-  color: var(--el-text-color-secondary);
-  font-style: italic;
 }
 </style>

@@ -188,3 +188,87 @@ async def test_endpoint_lists_the_alias_with_every_registration(async_client, db
         app.dependency_overrides.pop(get_current_user_with_token, None)
         app.dependency_overrides.pop(get_db_session, None)
         app.dependency_overrides.pop(get_rbac_service, None)
+
+
+# --------------------------------------------------------------------------- #
+# The reverse lookup: a name out of a dependency record to its repository
+# --------------------------------------------------------------------------- #
+
+
+async def test_a_package_name_resolves_through_the_alias(db_session) -> None:
+    """The alias is what the database knows the application by, read from this side."""
+    service = ProjectRegistryService()
+    await service.register_project("trmyapp", "CORE", "app", db=db_session, app_alias="myapptr")
+
+    entry, reason = await service.find_dependency_repository("myapptr", "CORE", db_session)
+
+    assert reason is None
+    assert entry is not None
+    assert (entry.project_key, entry.repository_slug) == ("CORE", "app")
+
+
+async def test_a_package_name_is_matched_whatever_its_casing(db_session) -> None:
+    service = ProjectRegistryService()
+    await service.register_project("trmyapp", "CORE", "app", db=db_session, app_alias="MyAppTR")
+
+    entry, _ = await service.find_dependency_repository("myapptr", "CORE", db_session)
+
+    assert entry is not None
+
+
+async def test_a_registration_without_an_alias_matches_its_application_name(db_session) -> None:
+    """Without an alias the database is asked for the lower-case application name."""
+    service = ProjectRegistryService()
+    await service.register_project("TrMyApp", "CORE", "app", db=db_session)
+
+    entry, _ = await service.find_dependency_repository("trmyapp", "CORE", db_session)
+
+    assert entry is not None
+
+
+async def test_a_name_no_repository_is_registered_as_is_reported(db_session) -> None:
+    """An external package has nothing to compare in, which has to be sayable."""
+    service = ProjectRegistryService()
+
+    entry, reason = await service.find_dependency_repository("packageE", "CORE", db_session)
+
+    assert entry is None
+    assert reason == "no repository is registered as 'packageE'"
+
+
+async def test_a_name_several_repositories_are_registered_as_is_reported(db_session) -> None:
+    """A comparison is about one repository, so an ambiguous name is not guessed at."""
+    service = ProjectRegistryService()
+    await service.register_project("shared", "CORE", "app", db=db_session, app_alias="pkg")
+    await service.register_project("shared", "OTHER", "lib", db=db_session, app_alias="pkg")
+
+    entry, reason = await service.find_dependency_repository("pkg", "THIRD", db_session)
+
+    assert entry is None
+    assert "2 repositories are registered as 'pkg'" in reason
+    assert "CORE/app" in reason
+    assert "OTHER/lib" in reason
+
+
+async def test_an_ambiguous_name_is_settled_by_the_project_it_is_read_in(db_session) -> None:
+    service = ProjectRegistryService()
+    await service.register_project("shared", "CORE", "app", db=db_session, app_alias="pkg")
+    await service.register_project("shared", "OTHER", "lib", db=db_session, app_alias="pkg")
+
+    entry, reason = await service.find_dependency_repository("pkg", "OTHER", db_session)
+
+    assert reason is None
+    assert entry is not None
+    assert (entry.project_key, entry.repository_slug) == ("OTHER", "lib")
+
+
+async def test_the_alias_is_matched_before_the_application_name(db_session) -> None:
+    """The alias is the database's own vocabulary, so it is the better match."""
+    service = ProjectRegistryService()
+    await service.register_project("pkg", "CORE", "by-name", db=db_session)
+    await service.register_project("other", "CORE", "by-alias", db=db_session, app_alias="pkg")
+
+    entry, _ = await service.find_dependency_repository("pkg", "CORE", db_session)
+
+    assert entry is not None
+    assert entry.repository_slug == "by-alias"

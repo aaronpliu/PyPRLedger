@@ -9,7 +9,7 @@ from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
 from src.schemas.app_version_diff import AppVersionDiffRequest, AppVersionDiffResponse
-from src.services.app_version_diff_service import AppVersionDiffService
+from src.services.app_version_diff_service import AppVersionDiffService, DependencyRepository
 from src.services.git_provider_resolver import with_repository_provider
 from src.services.project_registry_service import ProjectRegistryService
 from src.utils.log import get_logger
@@ -67,4 +67,28 @@ async def compare_app_releases(
         },
     )
 
-    return await service.compare(payload, app_name=app_name)
+    async def resolve_dependency_repository(name: str) -> DependencyRepository:
+        """Where a package a release moved lives, read out of the project registry.
+
+        A dependency record names its packages and their versions, never their
+        repositories. The name it uses is the one the database knows an application
+        by - the same name this side sends the other way - so the registry is asked
+        for it from this side, and the answer carries both the repository and the
+        provider it lives on.
+        """
+        entry, reason = await registry.find_dependency_repository(
+            name, payload.project_key, db
+        )
+        if entry is None:
+            return DependencyRepository(reason=reason)
+        return DependencyRepository(
+            project_key=entry.project_key,
+            repository_slug=entry.repository_slug,
+            git_provider=entry.git_provider,
+        )
+
+    return await service.compare(
+        payload,
+        app_name=app_name,
+        resolve_dependency_repository=resolve_dependency_repository,
+    )

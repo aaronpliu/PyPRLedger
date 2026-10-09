@@ -153,6 +153,66 @@ class ProjectRegistryService:
         )
         return existing
 
+    async def find_dependency_repository(
+        self, name: str, preferred_project_key: str | None, db: AsyncSession
+    ) -> tuple[ProjectRegistry | None, str | None]:
+        """The registration a name out of a dependency record belongs to.
+
+        The alias is what the database knows an application by, so that is what a
+        package named in one of its records matches - the name we send the other
+        way, looked up from this side. A registration without an alias is known by
+        its application name in the lower-case form the database keys by, so that
+        is matched too.
+
+        More than one repository can be registered under one name, and a
+        comparison is about one repository: a name that settles on none, or on
+        several, is reported rather than guessed at - "cannot say" must never be
+        read as a package that contains what it should.
+
+        Args:
+            name: The package name out of a dependency record
+            preferred_project_key: The project the comparison is about, which
+                settles a name several repositories are registered under
+            db: Database session
+
+        Returns:
+            Tuple of (the registration, the reason there is none). Exactly one of
+            the two is set.
+        """
+        candidate = (name or "").strip()
+        if not candidate:
+            return None, "the package is not named"
+
+        lowered = candidate.lower()
+        matches = await self._find_registrations(
+            func.lower(ProjectRegistry.app_alias) == lowered, db
+        )
+        if not matches:
+            matches = await self._find_registrations(
+                func.lower(ProjectRegistry.app_name) == lowered, db
+            )
+
+        if not matches:
+            return None, f"no repository is registered as '{candidate}'"
+        if len(matches) == 1:
+            return matches[0], None
+
+        in_project = [entry for entry in matches if entry.project_key == preferred_project_key]
+        if len(in_project) == 1:
+            return in_project[0], None
+
+        registered = ", ".join(f"{entry.project_key}/{entry.repository_slug}" for entry in matches)
+        return None, (
+            f"{len(matches)} repositories are registered as '{candidate}' ({registered})"
+        )
+
+    async def _find_registrations(
+        self, condition: Any, db: AsyncSession
+    ) -> list[ProjectRegistry]:
+        """Every registration matching one lookup condition."""
+        result = await db.execute(select(ProjectRegistry).where(condition))
+        return list(result.scalars().all())
+
     async def get_git_provider(
         self, project_key: str, repository_slug: str, db: AsyncSession
     ) -> str | None:

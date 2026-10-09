@@ -60,9 +60,12 @@ class FakeDiff:
     def __init__(self, added: int = 4) -> None:
         self.added = added
         self.calls: list[tuple[str, str]] = []
+        # the whole request, so a test can read which repository and which refs were asked
+        self.requests: list[ReleaseCompareRequest] = []
 
     async def compare_releases(self, request: ReleaseCompareRequest) -> ReleaseCompareResponse:
         self.calls.append((request.source_ref, request.target_ref))
+        self.requests.append(request)
         return ReleaseCompareResponse(
             project_key=request.project_key,
             repository_slug=request.repository_slug,
@@ -260,3 +263,77 @@ async def test_endpoint_rejects_an_empty_release_name(async_client, authenticate
     response = await async_client.post("/api/v1/release/apps/diff", json=payload(MOCK_TAG, "   "))
 
     assert response.status_code == 422
+
+
+class FakeDependencyClient:
+    """A dependency source holding exactly the records it was handed."""
+
+    def __init__(self, records: dict[tuple[str, str], dict[str, Any]]) -> None:
+        self.records = records
+
+    async def get_app_release_info(
+        self, app_name: str, tag_or_branch: str
+    ) -> dict[str, Any] | None:
+        return self.records.get((app_name, tag_or_branch))
+
+
+def record_with(ref: str, created_at: str, dependencies: dict[str, str]) -> dict[str, Any]:
+    """One release record in the shape the dependency source answers with."""
+    return {
+        "app_name": MOCK_APP_NAME,
+        "tagOrBranch": ref,
+        "created_at": created_at,
+        "dependencies": dependencies,
+        "packages": [],
+    }
+
+
+async def test_a_moved_package_is_compared_in_the_repository_the_registry_names(
+    async_client, authenticated_client, db_session
+) -> None:
+    """The dependency record names no repository: the registry is what resolves one."""
+    registry = ProjectRegistryService()
+    await registry.register_project(MOCK_APP_NAME, "CORE", "app", db=db_session)
+    # the package is known to the database by a name of its own, which the registry holds
+    await registry.register_project(
+        "pkg-a-app", "CORE", "pkg-a", db=db_session, app_alias="packageA"
+    )
+
+    diff = FakeDiff(added=3)
+    client = FakeDependencyClient(
+        {
+            (MOCK_APP_NAME, MOCK_TAG): record_with(
+                MOCK_TAG, "2026-09-30", {"packageA": "1.0.0"}
+            ),
+            (MOCK_APP_NAME, MOCK_BRANCH): record_with(
+                MOCK_BRANCH, "2026-10-01", {"packageA": "1.1.0"}
+            ),
+        }
+    )
+    app.dependency_overrides[get_registry_service] = lambda: registry
+    app.dependency_overrides[get_app_version_diff_service] = lambda: AppVersionDiffService(
+        cache=FakeCache(),
+        graph_service=DependencyGraphService(cache=FakeCache(), client=client),
+        diff_service=diff,
+    )
+
+    response = await async_client.post(
+        "/api/v1/release/apps/diff", json=payload(MOCK_TAG, MOCK_BRANCH)
+    )
+
+    assert response.status_code == 200, response.text
+    packages = response.json()["intervals"][0]["packages"]
+    assert [entry["name"] for entry in packages] == ["packageA"]
+    entry = packages[0]
+    assert (entry["project_key"], entry["repository_slug"]) == ("CORE", "pkg-a")
+    assert (entry["source_version"], entry["target_version"]) == ("1.0.0", "1.1.0")
+    assert entry["code"]["verdict"] == "contained"
+    assert entry["code"]["added_count"] == 3
+
+    # compared in its own repository, at its two versions used as the refs
+    package_request = next(
+        request for request in diff.requests if request.repository_slug == "pkg-a"
+    )
+    assert (package_request.source_ref, package_request.target_ref) == ("1.0.0", "1.1.0")
+    # and the application itself stays in its own repository
+    assert any(request.repository_slug == "app" for request in diff.requests)

@@ -10,11 +10,13 @@ from typing import Any
 
 import pytest
 
+from src.core.config import settings
 from src.core.exceptions import DependencyApiException
 from src.schemas.app_version_diff import AppVersionDiffRequest
 from src.schemas.release_diff import ReleaseCompareRequest, ReleaseCompareResponse
 from src.services.app_version_diff_service import (
     AppVersionDiffService,
+    DependencyRepository,
     compare_versions,
     parse_version,
 )
@@ -764,3 +766,161 @@ async def test_refresh_reaches_the_provider_comparison_too():
     await service.compare(request("1.0.0", "1.1.0", refresh=True), app_name=APP)
 
     assert diff.requests[0].refresh is True
+
+
+# ---------------------------------------------------------------------- #
+# The dependency axis: each package's own two versions, compared
+# ---------------------------------------------------------------------- #
+
+
+def package_resolver(**repositories: DependencyRepository) -> Any:
+    """A resolver answering with the repository each package name was handed.
+
+    A package it was not handed is one the project registry does not know, which
+    is what an external library looks like.
+    """
+
+    async def resolve(name: str) -> DependencyRepository:
+        return repositories.get(
+            name, DependencyRepository(reason=f"no repository is registered as '{name}'")
+        )
+
+    return resolve
+
+
+async def test_the_application_is_compared_at_the_tag_its_record_names():
+    """The reader picks a release; the record names the tag the build was cut from."""
+    diff = FakeDiff(added=1)
+    service, _, _ = build_service(
+        {
+            (APP, "v1.0.0"): record(
+                "v1.0.0", "2026-09-01", {"packageA": "1.0.0"}, app_version="1.0.0_10000"
+            ),
+            (APP, "v1.1.0"): record(
+                "v1.1.0", "2026-10-01", {"packageA": "1.0.0"}, app_version="1.1.0_10000"
+            ),
+        },
+        diff=diff,
+    )
+
+    await service.compare(request("v1.0.0", "v1.1.0"), app_name=APP)
+
+    assert (diff.requests[0].source_ref, diff.requests[0].target_ref) == (
+        "1.0.0_10000",
+        "1.1.0_10000",
+    )
+
+
+async def test_a_moved_dependency_is_compared_in_its_own_repository():
+    """A package's version is the tag it was released under, so it is the ref to compare."""
+    diff = FakeDiff(added=2)
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0_10000"): record("1.0.0_10000", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0_10000"): record("1.1.0_10000", "2026-10-01", {"packageA": "1.1.0"}),
+        },
+        diff=diff,
+    )
+
+    result = await service.compare(
+        request("1.0.0_10000", "1.1.0_10000"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            packageA=DependencyRepository(
+                project_key="CORE", repository_slug="pkg-a", git_provider="bitbucket_server"
+            )
+        ),
+    )
+
+    packages = result.intervals[0].packages
+    assert [(entry.name, entry.state) for entry in packages] == [("packageA", "changed")]
+    entry = packages[0]
+    assert (entry.project_key, entry.repository_slug, entry.git_provider) == (
+        "CORE",
+        "pkg-a",
+        "bitbucket_server",
+    )
+    assert (entry.source_version, entry.target_version) == ("1.0.0", "1.1.0")
+    assert entry.code.verdict == "contained"
+    assert entry.code.added_count == 2
+
+    # the package was asked of its own repository, at its two versions as refs
+    package_request = next(item for item in diff.requests if item.repository_slug == "pkg-a")
+    assert (package_request.source_ref, package_request.target_ref) == ("1.0.0", "1.1.0")
+    # while the application's own axis stays the application's repository
+    application_request = next(
+        item for item in diff.requests if item.repository_slug == REPOSITORY
+    )
+    assert application_request.project_key == PROJECT
+
+
+async def test_a_dependency_with_no_registered_repository_is_reported_not_compared():
+    """An external package has no repository here, which is not a package that matched."""
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.1.0"}),
+        }
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(),
+    )
+
+    entry = result.intervals[0].packages[0]
+    assert entry.project_key is None
+    assert entry.code.verdict == "inconclusive"
+    assert entry.code.unavailable == "no repository is registered as 'packageA'"
+    assert (entry.code.added_count, entry.code.missing_count) == (0, 0)
+
+
+async def test_an_added_dependency_has_no_pair_of_versions_to_compare():
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageD": "0.9.0"}),
+        }
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            packageD=DependencyRepository(project_key="CORE", repository_slug="pkg-d")
+        ),
+    )
+
+    entry = result.intervals[0].packages[0]
+    assert entry.state == "added"
+    assert "only one version is recorded" in (entry.code.unavailable or "")
+    assert entry.code.verdict == "inconclusive"
+
+
+async def test_the_packages_past_the_ceiling_are_reported_as_not_compared(monkeypatch):
+    """A release that moved a dozen packages is read at a pace, not all at once."""
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record(
+                "1.0.0", "2026-09-01", {"packageA": "1.0.0", "packageB": "1.0.0"}
+            ),
+            (APP, "1.1.0"): record(
+                "1.1.0", "2026-10-01", {"packageA": "1.1.0", "packageB": "1.1.0"}
+            ),
+        }
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            packageA=DependencyRepository(project_key="CORE", repository_slug="pkg-a"),
+            packageB=DependencyRepository(project_key="CORE", repository_slug="pkg-b"),
+        ),
+    )
+
+    entries = {entry.name: entry for entry in result.intervals[0].packages}
+    assert entries["packageA"].code.unavailable is None
+    assert "ceiling is 1" in (entries["packageB"].code.unavailable or "")
