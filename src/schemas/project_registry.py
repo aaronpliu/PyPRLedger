@@ -6,6 +6,13 @@ from pydantic import BaseModel, Field
 class ProjectRegistryResponse(BaseModel):
     id: int
     app_name: str
+    app_alias: str | None = Field(
+        default=None,
+        description=(
+            "The name the dependency database knows this application as, when that differs "
+            "from app_name. Empty means the application name is used"
+        ),
+    )
     project_key: str
     repository_slug: str
     git_provider: str

@@ -9,7 +9,7 @@ from src.core.git_provider import GitProvider
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
 from src.schemas.project_registry import ProjectRegistryListResponse, ProjectRegistryResponse
-from src.services.project_registry_service import ProjectRegistryService
+from src.services.project_registry_service import ProjectRegistryService, dependency_app_name
 from src.services.rbac_service import RBACService
 
 
@@ -71,6 +71,7 @@ async def list_projects_by_app(
             {
                 "id": p.id,
                 "app_name": p.app_name,
+                "app_alias": p.app_alias,
                 "project_key": p.project_key,
                 "repository_slug": p.repository_slug,
                 "git_provider": p.git_provider,
@@ -144,6 +145,7 @@ async def list_registry_projects_paginated(
                 ProjectRegistryResponse(
                     id=p.id,
                     app_name=p.app_name,
+                    app_alias=p.app_alias,
                     project_key=p.project_key,
                     repository_slug=p.repository_slug,
                     git_provider=p.git_provider,
@@ -188,6 +190,7 @@ async def list_all_registered_projects(
             {
                 "id": p.id,
                 "app_name": p.app_name,
+                "app_alias": p.app_alias,
                 "project_key": p.project_key,
                 "repository_slug": p.repository_slug,
                 "git_provider": p.git_provider,
@@ -260,6 +263,16 @@ async def register_project_to_app(
     description: Annotated[
         str | None, Query(max_length=255, description="Optional description")
     ] = None,
+    app_alias: Annotated[
+        str | None,
+        Query(
+            max_length=64,
+            description=(
+                "Optional name the dependency database knows the application as, when it "
+                "differs from app_name. Leave it out to ask for the application name"
+            ),
+        ),
+    ] = None,
     db: Annotated[AsyncSession, Depends(get_db_session)] = None,
     registry_service: Annotated[ProjectRegistryService, Depends(get_registry_service)] = None,
 ):
@@ -315,10 +328,12 @@ async def register_project_to_app(
             description,
             db,
             git_provider=git_provider,
+            app_alias=app_alias,
         )
         return {
             "message": "Successfully registered",
             "app_name": registry.app_name,
+            "app_alias": registry.app_alias,
             "project_key": registry.project_key,
             "repository_slug": registry.repository_slug,
             "git_provider": registry.git_provider,
@@ -399,6 +414,89 @@ async def update_project_app(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to update assignment"},
+        )
+
+
+@router.put("/admin/registry/app-alias", response_model=dict)
+async def update_project_app_alias(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+    project_key: Annotated[str, Query(min_length=1, max_length=32, description="Project key")],
+    repository_slug: Annotated[
+        str, Query(min_length=1, max_length=128, description="Repository slug")
+    ],
+    app_alias: Annotated[
+        str | None,
+        Query(
+            max_length=64,
+            description=(
+                "The name the dependency database knows the application as. Send it empty "
+                "to clear it, so the application name is asked for again"
+            ),
+        ),
+    ] = None,
+    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
+    registry_service: Annotated[ProjectRegistryService, Depends(get_registry_service)] = None,
+):
+    """
+    Set or clear the dependency-database name of one repository (Admin only)
+
+    Only the Releases pages ask the dependency database, and they ask it for this
+    name: it exists for the applications the database knows under a name of its
+    own, and clearing it puts the application name back in use.
+
+    Requires system_admin role with project_registry:manage permission.
+
+    Args:
+        project_key: Project key
+        repository_slug: Repository slug
+        app_alias: The name to ask for, or empty to follow the application name
+
+    Returns:
+        Dict with the stored alias and the name the database will be asked for
+
+    Raises:
+        HTTPException: If insufficient permissions or the repository is not registered
+    """
+    has_permission = await rbac_service.check_permission(
+        auth_user_id=current_user.id,
+        action="manage",
+        resource_type="project_registry",
+    )
+
+    if not has_permission:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "FORBIDDEN",
+                "message": "Insufficient permissions. System administrator role required.",
+            },
+        )
+
+    try:
+        registry = await registry_service.update_app_alias(
+            project_key, repository_slug, app_alias, db
+        )
+        return {
+            "message": "Successfully updated",
+            "project_key": registry.project_key,
+            "repository_slug": registry.repository_slug,
+            "app_name": registry.app_name,
+            "app_alias": registry.app_alias,
+            # what the dependency database will be asked for, so the effective name
+            # of an empty alias is as visible as an explicit one
+            "dependency_app_name": dependency_app_name(registry.app_name, registry.app_alias),
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "NOT_FOUND", "message": str(e)},
+        )
+    except Exception as e:
+        logger.error(f"Failed to update the app alias: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "INTERNAL_SERVER_ERROR", "message": "Failed to update the app alias"},
         )
 
 

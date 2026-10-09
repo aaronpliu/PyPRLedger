@@ -22,7 +22,7 @@ from src.schemas.release_diff import ReleaseCompareRequest, ReleaseCompareRespon
 from src.services.app_version_diff_service import AppVersionDiffService
 from src.services.dependency_graph_service import DependencyGraphService
 from src.services.dependency_mock_data import MOCK_APP_NAME, MOCK_BRANCH, MOCK_TAG
-from src.services.project_registry_service import ProjectRegistryService
+from src.services.project_registry_service import ProjectRegistryService, dependency_app_name
 
 
 class FakeCache:
@@ -37,13 +37,21 @@ class FakeCache:
 
 
 class FakeRegistry(ProjectRegistryService):
-    """A registry mapping the repository onto an application name."""
+    """A registry mapping the repository onto an application name and its alias."""
 
-    def __init__(self, app_name: str = MOCK_APP_NAME) -> None:
+    def __init__(self, app_name: str = MOCK_APP_NAME, app_alias: str | None = None) -> None:
         self.app_name = app_name
+        self.app_alias = app_alias
 
     async def get_app_name(self, project_key: str, repository_slug: str, db: Any) -> str:
         return self.app_name
+
+    async def get_dependency_app_name(
+        self, project_key: str, repository_slug: str, db: Any
+    ) -> str:
+        # the endpoint's own resolution, so a test states a registration and reads
+        # the name the page asks the database for
+        return dependency_app_name(self.app_name, self.app_alias)
 
 
 class FakeDiff:

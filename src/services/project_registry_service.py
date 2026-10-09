@@ -11,14 +11,23 @@ from src.models.project_registry import ProjectRegistry
 logger = logging.getLogger(__name__)
 
 
-def dependency_app_name(app_name: str) -> str:
-    """The application name the dependency database knows.
+def dependency_app_name(app_name: str, app_alias: str | None = None) -> str:
+    """The application name the dependency database is asked for.
 
-    The registry holds the name an administrator typed, while the dependency
-    database keys its applications by a lower-case enum. The two are matched here
-    rather than by every caller, so a name that reads differently in the registry
-    still finds the record it names.
+    The registry holds the name an administrator registered the repository under,
+    while the dependency database keys its applications by a vocabulary of its own
+    - a lower-case enum that does not always follow from that name: a repository
+    registered as ``trmyapp`` may have to be asked for as ``myapptr``. That
+    difference is recorded as the repository's alias, and an alias is what is asked
+    for, **exactly as it was entered**: a name an administrator set explicitly is
+    sent as it stands rather than folded into a shape the database may not use.
+
+    Without an alias the application name is asked for in the form the database
+    keys by, so a registration that needs no alias still finds its record.
     """
+    alias = (app_alias or "").strip()
+    if alias:
+        return alias
     return app_name.strip().lower()
 
 
@@ -72,6 +81,77 @@ class ProjectRegistryService:
                 f"Failed to resolve app_name for {project_key}/{repository_slug}: {str(e)}"
             )
             return self.DEFAULT_APP_NAME
+
+    async def get_dependency_app_name(
+        self, project_key: str, repository_slug: str, db: AsyncSession
+    ) -> str:
+        """What the dependency database is asked for, for one repository.
+
+        The alias belongs to the registration it overrides, so the two are read
+        together: a repository that is not registered is auto-registered under the
+        default name, exactly as :meth:`get_app_name` does, and no alias can exist
+        for it yet.
+
+        Args:
+            project_key: The project key
+            repository_slug: The repository slug
+            db: Database session
+
+        Returns:
+            The name to ask the dependency database for
+        """
+        try:
+            entry = await self._get_registry_entry(project_key, repository_slug, db)
+            if entry is None:
+                app_name = await self.get_app_name(project_key, repository_slug, db)
+                return dependency_app_name(app_name)
+            return dependency_app_name(entry.app_name, entry.app_alias)
+
+        except Exception as e:
+            logger.error(
+                f"Failed to resolve the dependency app name for "
+                f"{project_key}/{repository_slug}: {str(e)}"
+            )
+            return dependency_app_name(self.DEFAULT_APP_NAME)
+
+    async def update_app_alias(
+        self,
+        project_key: str,
+        repository_slug: str,
+        app_alias: str | None,
+        db: AsyncSession,
+    ) -> ProjectRegistry:
+        """Set or clear the dependency-database name of one repository.
+
+        An empty value clears it, and from then on the application name is asked
+        for: that is what the alias following the application name means.
+
+        Args:
+            project_key: The project key
+            repository_slug: The repository slug
+            app_alias: The name the dependency database knows, or None to clear it
+            db: Database session
+
+        Returns:
+            The updated registry entry
+
+        Raises:
+            ValueError: If the repository is not registered
+        """
+        existing = await self._get_registry_entry(project_key, repository_slug, db)
+
+        if not existing:
+            raise ValueError(f"Project {project_key}/{repository_slug} is not registered")
+
+        existing.app_alias = (app_alias or "").strip() or None
+        await db.commit()
+        await db.refresh(existing)
+
+        logger.info(
+            f"Set the dependency app alias of {project_key}/{repository_slug} to "
+            f"'{existing.app_alias or existing.app_name}'"
+        )
+        return existing
 
     async def get_git_provider(
         self, project_key: str, repository_slug: str, db: AsyncSession
@@ -234,6 +314,7 @@ class ProjectRegistryService:
         description: str | None = None,
         db: AsyncSession = None,
         git_provider: str = ProjectRegistry.DEFAULT_PROVIDER,
+        app_alias: str | None = None,
     ) -> ProjectRegistry:
         """
         Register a new project-repo pair to an app
@@ -245,6 +326,7 @@ class ProjectRegistryService:
             description: Optional description
             db: Database session
             git_provider: Git provider (bitbucket_server, github_enterprise)
+            app_alias: Optional name the dependency database knows the app as
 
         Returns:
             Created ProjectRegistry entry
@@ -268,7 +350,8 @@ class ProjectRegistryService:
                     f"Project {project_key}/{repository_slug} already registered to '{existing.app_name}'. "
                     f"Cannot reassign to '{app_name}'."
                 )
-            # Already registered to same app, update description and/or provider if provided
+            # Already registered to same app, update description, provider and/or
+            # dependency database name if provided
             updated = False
             if description:
                 existing.description = description
@@ -278,6 +361,10 @@ class ProjectRegistryService:
                 and existing.git_provider != git_provider
             ):
                 existing.git_provider = git_provider
+                updated = True
+            alias = (app_alias or "").strip() or None
+            if alias is not None and existing.app_alias != alias:
+                existing.app_alias = alias
                 updated = True
             if updated:
                 await db.commit()
@@ -290,6 +377,7 @@ class ProjectRegistryService:
             project_key=project_key,
             repository_slug=repository_slug,
             git_provider=git_provider,
+            app_alias=(app_alias or "").strip() or None,
             description=description or f"Registered to {app_name}",
         )
 

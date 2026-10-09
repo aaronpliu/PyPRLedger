@@ -45,6 +45,17 @@
       <el-table :data="projects" v-loading="loading" stripe style="width: 100%">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="app_name" label="Application" width="180" />
+        <el-table-column label="App alias" width="200">
+          <template #default="{ row }">
+            <!-- An empty alias is not a gap: it means the application name is asked for -->
+            <span v-if="row.app_alias" class="alias-value" data-test="app-alias">
+              {{ row.app_alias }}
+            </span>
+            <span v-else class="alias-follows">
+              Follows {{ row.app_name }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column prop="project_key" label="Project Key" width="150" />
         <el-table-column prop="repository_slug" label="Repository Slug" min-width="200" />
         <el-table-column prop="git_provider" label="Git Provider" width="180">
@@ -60,8 +71,11 @@
             {{ formatDate(row.created_date) }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="200" fixed="right">
+        <el-table-column label="Actions" width="300" fixed="right">
           <template #default="{ row }">
+            <el-button size="small" @click="handleEditAlias(row)">
+              Edit Alias
+            </el-button>
             <el-button size="small" type="primary" @click="handleUpdate(row)">
               Move App
             </el-button>
@@ -138,6 +152,18 @@
           </el-select>
         </el-form-item>
 
+        <el-form-item label="App alias" prop="appAlias">
+          <el-input
+            v-model="registerForm.appAlias"
+            maxlength="64"
+            placeholder="Optional - follows the application name when empty"
+          />
+          <div class="field-hint">
+            The name the dependency database knows this application as, when it differs from
+            the application name. Only the Releases pages ask it for this name.
+          </div>
+        </el-form-item>
+
         <el-form-item label="Description" prop="description">
           <el-input 
             v-model="registerForm.description" 
@@ -190,11 +216,52 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- App Alias Dialog -->
+    <el-dialog v-model="showAliasDialog" title="Dependency Database Name" width="600px">
+      <el-form :model="aliasForm" label-width="140px">
+        <el-form-item label="Project Key">
+          <el-input :value="selectedProject?.project_key" disabled />
+        </el-form-item>
+
+        <el-form-item label="Repository Slug">
+          <el-input :value="selectedProject?.repository_slug" disabled />
+        </el-form-item>
+
+        <el-form-item label="Application">
+          <el-input :value="selectedProject?.app_name" disabled />
+        </el-form-item>
+
+        <el-form-item label="App alias">
+          <el-input
+            v-model="aliasForm.appAlias"
+            maxlength="64"
+            show-word-limit
+            clearable
+            :placeholder="aliasPlaceholder"
+          />
+          <div class="field-hint">
+            The name the dependency database knows this application as, when it differs from
+            the application name. Leave it empty to ask for the application name, and only
+            the Releases pages are affected either way.
+          </div>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showAliasDialog = false">Cancel</el-button>
+          <el-button type="primary" :loading="updatingAlias" @click="handleAliasSubmit">
+            Save
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
+import { computed, ref, reactive, onMounted, watch } from 'vue'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { projectRegistryApi } from '@/api/projectRegistry'
 import { projectsApi } from '@/api/projects'
@@ -235,6 +302,7 @@ const loadingRepositories = ref(false)
 // Dialogs
 const showRegisterDialog = ref(false)
 const showUpdateDialog = ref(false)
+const showAliasDialog = ref(false)
 
 // Forms
 const registerFormRef = ref<FormInstance>()
@@ -245,6 +313,7 @@ const registerForm = reactive({
   projectKey: '',
   repositorySlug: '',
   gitProvider: DEFAULT_GIT_PROVIDER,
+  appAlias: '',
   description: '',
 })
 
@@ -256,6 +325,16 @@ const getProviderTagType = (provider: string): '' | 'success' | 'warning' | 'inf
 const updateForm = reactive({
   newAppName: '',
 })
+
+const updatingAlias = ref(false)
+const aliasForm = reactive({
+  appAlias: '',
+})
+
+/** An empty alias is the application name, so the field says which one it would be. */
+const aliasPlaceholder = computed(
+  () => `Follows the application name (${selectedProject.value?.app_name ?? ''})`
+)
 
 // Watch for project key changes to load repositories
 watch(
@@ -386,7 +465,8 @@ const handleRegister = async () => {
           registerForm.projectKey,
           registerForm.repositorySlug,
           registerForm.description || undefined,
-          registerForm.gitProvider
+          registerForm.gitProvider,
+          registerForm.appAlias || undefined
         )
         ElMessage.success('Project registered successfully')
         showRegisterDialog.value = false
@@ -395,6 +475,7 @@ const handleRegister = async () => {
         registerForm.projectKey = ''
         registerForm.repositorySlug = ''
         registerForm.gitProvider = DEFAULT_GIT_PROVIDER
+        registerForm.appAlias = ''
         registerForm.description = ''
         // Reload data
         await loadApps()
@@ -440,6 +521,36 @@ const handleUpdateSubmit = async () => {
       }
     }
   })
+}
+
+const handleEditAlias = (project: ProjectRegistry) => {
+  selectedProject.value = project
+  // the stored alias, not the effective name: an empty field keeps following
+  aliasForm.appAlias = project.app_alias ?? ''
+  showAliasDialog.value = true
+}
+
+const handleAliasSubmit = async () => {
+  if (!selectedProject.value) return
+
+  updatingAlias.value = true
+  try {
+    const result = await projectRegistryApi.updateAppAlias(
+      selectedProject.value.project_key,
+      selectedProject.value.repository_slug,
+      aliasForm.appAlias.trim()
+    )
+    ElMessage.success(
+      `The dependency database will be asked for '${result.dependency_app_name}'`
+    )
+    showAliasDialog.value = false
+    await loadProjects()
+  } catch (error: any) {
+    const message = error.response?.data?.detail?.message || 'Failed to update the app alias'
+    ElMessage.error(message)
+  } finally {
+    updatingAlias.value = false
+  }
 }
 
 const handleUnregister = async (project: ProjectRegistry) => {
@@ -503,5 +614,23 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+/* the name the dependency database is asked for, when it differs from the app */
+.alias-value {
+  font-family: var(--el-font-family-mono, monospace);
+}
+
+/* an empty alias is the application name, said rather than left blank */
+.alias-follows {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.field-hint {
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 </style>

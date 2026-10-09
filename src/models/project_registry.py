@@ -42,6 +42,11 @@ class ProjectRegistry(Base):
     # Application name - logical grouping
     app_name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
+    # What the dependency database knows this application as, when that differs
+    # from the name above. Empty means the application name is used, so a
+    # registration that needs no alias keeps following a rename of it.
+    app_alias: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     # Business keys for project identification
     project_key: Mapped[str] = mapped_column(
         String(32),
