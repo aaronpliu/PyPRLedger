@@ -438,23 +438,76 @@
             </span>
           </div>
 
+          <!-- The application's own change, and the commits it brought, read the way
+               a package's are and shown in the same place: under its name. They used
+               to sit below the packages, where the one comparison the page is mostly
+               about read as an appendix to the ones it carried. -->
+          <div
+            v-if="interval.complete && interval.code"
+            class="change-item application-change"
+            :class="applicationTone(interval)"
+            :data-test="`change-${appName}`"
+          >
+            <div class="change">
+              <span
+                v-if="applicationChange(interval)"
+                class="move"
+                :class="`move-${moveTone(applicationChange(interval)!)}`"
+                aria-hidden="true"
+              >
+                {{ moveSymbol(moveTone(applicationChange(interval)!)) }}
+              </span>
+              <span class="change-name">{{ appName }}</span>
+              <el-tag class="kind" size="small" type="primary" data-test="change-application">
+                {{ t('appDiff.application') }}
+              </el-tag>
+              <!-- a release whose version did not move still carries commits, and
+                   those are all it has to say about itself -->
+              <template v-if="applicationChange(interval)">
+                <span class="change-versions">
+                  {{ moveVersions(applicationChange(interval)!) }}
+                </span>
+                <span class="change-state">
+                  {{ t(moveLabelKey(moveTone(applicationChange(interval)!))) }}
+                </span>
+              </template>
+            </div>
+
+            <!-- The commits between the two releases. A pair whose commits could
+                 not be read says so: an empty list would read as "none". -->
+            <CommitComparison
+              :code="interval.code"
+              :expanded="isExpanded(intervalKey(interval))"
+              @toggle="toggleCommits(intervalKey(interval))"
+            >
+              <template #note>
+                <p
+                  v-if="rebuiltWithUnchangedDependencies(interval, interval.code)"
+                  class="rebuilt"
+                  data-test="rebuilt"
+                >
+                  {{ t('appDiff.rebuilt') }}
+                </p>
+              </template>
+            </CommitComparison>
+          </div>
+
           <!-- The counts say how many moved; this says which one moved where, which
-               is what one app release is read for. The application's own version is
-               one entry among them, marked so it does not read as a dependency. -->
+               is what one app release is read for. -->
           <h4
-            v-if="interval.complete && interval.changes.length"
+            v-if="interval.complete && dependencyChanges(interval).length"
             class="changes-heading"
             data-test="changes-heading"
           >
             {{ t('appDiff.changes_heading') }}
           </h4>
           <ul
-            v-if="interval.complete && interval.changes.length"
+            v-if="interval.complete && dependencyChanges(interval).length"
             class="changes"
             data-test="changes"
           >
             <li
-              v-for="change in interval.changes"
+              v-for="change in dependencyChanges(interval)"
               :key="`${change.kind}:${change.name}`"
               class="change-item"
               :class="`change-${moveTone(change)}`"
@@ -465,15 +518,6 @@
                   {{ moveSymbol(moveTone(change)) }}
                 </span>
                 <span class="change-name">{{ change.name }}</span>
-                <el-tag
-                  v-if="change.kind === 'application'"
-                  class="kind"
-                  size="small"
-                  type="primary"
-                  data-test="change-application"
-                >
-                  {{ t('appDiff.application') }}
-                </el-tag>
                 <span class="change-versions">{{ moveVersions(change) }}</span>
                 <span class="change-state">{{ t(moveLabelKey(moveTone(change))) }}</span>
                 <!-- the repository a package was compared in, when the registry named one -->
@@ -493,25 +537,6 @@
               />
             </li>
           </ul>
-
-          <!-- The commits between the two releases. A pair whose commits could
-               not be read says so: an empty list would read as "none". -->
-          <CommitComparison
-            v-if="interval.code"
-            :code="interval.code"
-            :expanded="isExpanded(intervalKey(interval))"
-            @toggle="toggleCommits(intervalKey(interval))"
-          >
-            <template #note>
-              <p
-                v-if="rebuiltWithUnchangedDependencies(interval, interval.code)"
-                class="rebuilt"
-                data-test="rebuilt"
-              >
-                {{ t('appDiff.rebuilt') }}
-              </p>
-            </template>
-          </CommitComparison>
         </article>
       </section>
     </template>
@@ -927,6 +952,27 @@ function packageKey(interval: AppVersionDiffInterval, name: string): string {
  * to compare for - they say so in their own comparison entry, which is what keeps
  * an unchecked package visible next to a checked one.
  */
+/** The application's own move in a pair, when its version moved between the two. */
+function applicationChange(interval: AppVersionDiffInterval): AppVersionDiffMove | undefined {
+  return interval.changes.find((change) => change.kind === 'application')
+}
+
+/** The tone the application's own block is shown in: empty when it did not move. */
+function applicationTone(interval: AppVersionDiffInterval): string {
+  const change = applicationChange(interval)
+  return change ? `change-${moveTone(change)}` : ''
+}
+
+/**
+ * The pair's moves among its dependencies.
+ *
+ * The application's own move is not among them: it is read as the release's own
+ * change, shown above them with the commits it brought.
+ */
+function dependencyChanges(interval: AppVersionDiffInterval): AppVersionDiffMove[] {
+  return interval.changes.filter((change) => change.kind !== 'application')
+}
+
 function packageOf(
   interval: AppVersionDiffInterval,
   change: AppVersionDiffMove,
@@ -1392,6 +1438,11 @@ watch(depth, () => {
 /* One moved package, with the two versions it moved between below it */
 .change-item {
   padding: 2px 0;
+}
+
+/* The release's own move and commits, above the dependencies it carried */
+.application-change {
+  margin-top: 12px;
 }
 
 /* The repository a package was compared in, when the registry named one */

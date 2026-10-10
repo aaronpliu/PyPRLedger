@@ -326,13 +326,40 @@ describe('AppDiffView', () => {
     expect(dependency.text()).toContain('Upgrade')
   })
 
-  it("marks the application's own version among the moves", async () => {
+  it("shows the application's own version above the dependencies it carried", async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
-    // it is one entry among them, marked as not a dependency
-    const application = wrapper.find(`[data-test="changes"] [data-test="change-${APP_NAME}"]`)
+    const application = wrapper.find(`[data-test="change-${APP_NAME}"]`)
     expect(application.find('[data-test="change-application"]').exists()).toBe(true)
     expect(application.text()).toContain('1.0.0_10000 → 1.1.0_10000')
+
+    // the release's own move is read before the moves it carried
+    const dependencies = wrapper.find('[data-test="changes"]').element
+    expect(
+      application.element.compareDocumentPosition(dependencies) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it("shows the application's own commits under its name", async () => {
+    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
+
+    // the one comparison the page is most about is not an appendix to the packages:
+    // it sits with the application, where a package's sits with it
+    const application = wrapper.find(`[data-test="change-${APP_NAME}"]`)
+    expect(application.find('[data-test="code-counts"]').text()).toContain('5 commits added')
+    expect(application.find('[data-test="code-axis"]').exists()).toBe(true)
+  })
+
+  it('leaves no commit list at the bottom of the pair', async () => {
+    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
+
+    // every comparison on the page belongs to something: the application's to the
+    // application, each package's to its own entry
+    const axes = wrapper.findAll('[data-test="code-axis"]')
+    expect(axes).toHaveLength(1)
+    expect(wrapper.find(`[data-test="change-${APP_NAME}"]`).element.contains(axes[0].element)).toBe(
+      true,
+    )
   })
 
   it('reads a version a package did not have as a dash', async () => {
@@ -443,6 +470,17 @@ describe('AppDiffView', () => {
     expect(wrapper.find('[data-test="interval-unchanged"]').exists()).toBe(true)
     // ... and the page does not leave it at that
     expect(wrapper.find('[data-test="rebuilt"]').exists()).toBe(true)
+  })
+
+  it('reads the commits of a release whose own version did not move', async () => {
+    const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_REBUILT)
+
+    // nothing moved, so nothing is marked as having moved - but the release still has
+    // commits, and they are still read under its name
+    const application = wrapper.find(`[data-test="change-${APP_NAME}"]`)
+    expect(application.find('[data-test="code-counts"]').text()).toContain('3 commits added')
+    expect(application.find('[data-test="rebuilt"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="changes"]').exists()).toBe(false)
   })
 
   it('says the commits could not be read instead of showing none', async () => {
