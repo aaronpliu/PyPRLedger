@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import type { DOMWrapper } from '@vue/test-utils'
 import ElementPlus, { ElSelect } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ProjectRegistryManagementView from '@/views/admin/ProjectRegistryManagementView.vue'
@@ -62,6 +63,11 @@ async function mountView(entries = [registration()]) {
   return wrapper
 }
 
+/** The kind control a row carries: a row's only select, where it is classified. */
+function kindSelect(row: DOMWrapper<Element>) {
+  return row.findAllComponents(ElSelect)[0]
+}
+
 beforeEach(() => {
   registry.entries = []
 })
@@ -72,8 +78,8 @@ describe('ProjectRegistryManagementView', () => {
 
     const row = wrapper.findAll('.el-table__row')[0]
     expect(row.find('[data-test="app-alias"]').text()).toBe('myapptr')
-    // and the name is editable, which is what an alias that does not follow needs
-    expect(row.findAll('button').map((button) => button.text())).toContain('Edit Alias')
+    // and the name is edited where it is read, not from a column of row-wide actions
+    expect(row.find('[data-test="edit-alias"]').text()).toBe('Edit')
   })
 
   it('says an empty alias follows the application name', async () => {
@@ -85,21 +91,15 @@ describe('ProjectRegistryManagementView', () => {
     expect(row.text()).toContain('Follows trmyapp')
   })
 
-  it('says what a registration is, and lets the kind be set from the row', async () => {
+  it('says what a registration is, and lets the kind be set where it is read', async () => {
     const wrapper = await mountView([registration({ registry_kind: 'application' })])
 
-    const row = wrapper.findAll('.el-table__row')[0]
-    expect(row.find('[data-test="registry-kind"]').text()).toBe('Application')
+    const control = kindSelect(wrapper.findAll('.el-table__row')[0])
+    expect(control.props('modelValue')).toBe('application')
 
     // the pages that read an application's releases leave out what is marked as a
     // package, so this is the switch that takes a repository out of their pickers
-    const control = row.find('[data-test="kind-select"]')
-    expect(control.exists()).toBe(true)
-
-    wrapper
-      .findAllComponents(ElSelect)
-      .find((select) => select.attributes('data-test') === 'kind-select')!
-      .vm.$emit('change', 'package')
+    control.vm.$emit('change', 'package')
     await flushPromises()
 
     expect(vi.mocked(projectRegistryApi.updateRegistryKind)).toHaveBeenCalledWith(
@@ -112,10 +112,8 @@ describe('ProjectRegistryManagementView', () => {
   it('says a registration nobody has classified is not set', async () => {
     const wrapper = await mountView([registration({ registry_kind: null })])
 
-    // an empty kind is not a gap in the table: it is what every registration starts
-    // as, and it keeps behaving as it always did
-    expect(wrapper.findAll('.el-table__row')[0].find('[data-test="registry-kind"]').text()).toBe(
-      'Not set',
-    )
+    // empty is not a gap: it is what every registration starts as, and it keeps
+    // behaving as it always did
+    expect(kindSelect(wrapper.findAll('.el-table__row')[0]).props('modelValue')).toBe('')
   })
 })

@@ -45,25 +45,45 @@
       <el-table :data="projects" v-loading="loading" stripe style="width: 100%">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="app_name" label="Application" width="180" />
-        <el-table-column label="App alias" width="200">
+        <el-table-column label="App alias" width="220">
           <template #default="{ row }">
-            <!-- An empty alias is not a gap: it means the application name is asked for -->
-            <span v-if="row.app_alias" class="alias-value" data-test="app-alias">
-              {{ row.app_alias }}
-            </span>
-            <span v-else class="alias-follows">
-              Follows {{ row.app_name }}
-            </span>
+            <div class="alias-cell">
+              <!-- An empty alias is not a gap: it means the application name is asked for -->
+              <span v-if="row.app_alias" class="alias-value" data-test="app-alias">
+                {{ row.app_alias }}
+              </span>
+              <span v-else class="alias-follows">Follows {{ row.app_name }}</span>
+              <!-- The alias is edited where it is read, not from a column of actions
+                   that belongs to the row as a whole -->
+              <el-button
+                link
+                type="primary"
+                size="small"
+                data-test="edit-alias"
+                @click="handleEditAlias(row)"
+              >
+                Edit
+              </el-button>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="Kind" width="130">
+        <el-table-column label="Kind" width="170">
           <template #default="{ row }">
-            <!-- What a registration is decides which pickers offer it: the pages that
-                 read an application's releases leave out what is marked as a package,
-                 and offer everything nobody has classified -->
-            <el-tag :type="kindTagType(row.registry_kind)" size="small" data-test="registry-kind">
-              {{ kindLabel(row.registry_kind) }}
-            </el-tag>
+            <!-- What a registration is, set where it is read. Empty is a choice of its
+                 own: it is where every registration starts, and what keeps behaving as
+                 it always did - the pages that read an application's releases leave out
+                 what is marked as a package and offer everything else. -->
+            <el-select
+              :model-value="row.registry_kind ?? ''"
+              size="small"
+              style="width: 100%"
+              data-test="kind-select"
+              @change="(value: string) => handleKindChange(row, value)"
+            >
+              <el-option label="Not set" value="" />
+              <el-option label="Application" value="application" />
+              <el-option label="Package" value="package" />
+            </el-select>
           </template>
         </el-table-column>
         <el-table-column prop="project_key" label="Project Key" width="150" />
@@ -81,24 +101,10 @@
             {{ formatDate(row.created_date) }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="520" fixed="right">
+        <el-table-column label="Actions" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="handleEditAlias(row)">
-              Edit Alias
-            </el-button>
-            <!-- What this registration is. Empty is a choice of its own - where every
-                 registration starts, and what keeps behaving as it always did. -->
-            <el-select
-              :model-value="row.registry_kind ?? ''"
-              class="kind-select"
-              size="small"
-              data-test="kind-select"
-              @change="(value: string) => handleKindChange(row, value)"
-            >
-              <el-option label="Not set" value="" />
-              <el-option label="Application" value="application" />
-              <el-option label="Package" value="package" />
-            </el-select>
+            <!-- What is about the row as a whole: what it is and what it is called are
+                 set in their own columns -->
             <el-button size="small" type="primary" @click="handleUpdate(row)">
               Move App
             </el-button>
@@ -351,18 +357,12 @@ const registerForm = reactive({
   repositorySlug: '',
   gitProvider: DEFAULT_GIT_PROVIDER,
   appAlias: '',
-  // a registration that says nothing is an application: that is what this table was for
+  // the dialog opens on the choice this page exists for - an application - with
+  // "Not set" beside it, which is what keeps a registration that says nothing
+  // behaving as it always did
   registryKind: 'application',
   description: '',
 })
-
-/** What a registration is, as the page reads it. Empty is not a kind: nobody has said. */
-const kindLabel = (kind: string | null | undefined) =>
-  kind === 'package' ? 'Package' : kind === 'application' ? 'Application' : 'Not set'
-
-/** How the tag reads: a package is set aside, an unclassified row claims nothing. */
-const kindTagType = (kind: string | null | undefined): '' | 'success' | 'info' =>
-  kind === 'package' ? 'info' : kind === 'application' ? 'success' : ''
 
 const getProviderLabel = (provider: string) => getGitProviderLabel(provider)
 
@@ -691,6 +691,14 @@ onMounted(async () => {
   gap: 12px;
 }
 
+/* the alias, with the action that edits it beside what it says */
+.alias-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 /* the name the dependency database is asked for, when it differs from the app */
 .alias-value {
   font-family: var(--el-font-family-mono, monospace);
@@ -700,12 +708,6 @@ onMounted(async () => {
 .alias-follows {
   color: var(--el-text-color-secondary);
   font-size: 12px;
-}
-
-/* the kind, set from the row it belongs to */
-.kind-select {
-  width: 128px;
-  margin: 0 8px;
 }
 
 .field-hint {

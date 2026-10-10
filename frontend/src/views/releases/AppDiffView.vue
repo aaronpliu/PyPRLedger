@@ -24,7 +24,7 @@
          picks a repository and the rest follows. -->
     <el-form class="coordinates" :model="repo" label-width="130px">
       <el-row :gutter="16">
-        <el-col :xs="24" :sm="12" :md="5">
+        <el-col :xs="24" :sm="12" :md="4">
           <el-form-item :label="t('releaseDiff.project_key')" required>
             <el-select
               v-model="repo.project_key"
@@ -54,7 +54,7 @@
           </el-form-item>
         </el-col>
 
-        <el-col :xs="24" :sm="12" :md="5">
+        <el-col :xs="24" :sm="12" :md="4">
           <el-form-item :label="t('releaseDiff.repository_slug')" required>
             <el-select
               v-model="repo.repository_slug"
@@ -85,7 +85,7 @@
           </el-form-item>
         </el-col>
 
-        <el-col :xs="24" :sm="12" :md="4">
+        <el-col :xs="24" :sm="12" :md="3">
           <el-form-item :label="t('releaseDiff.git_provider')">
             <el-select
               v-model="repo.git_provider"
@@ -103,7 +103,7 @@
           </el-form-item>
         </el-col>
 
-        <el-col v-if="isCloudProvider" :xs="24" :sm="12" :md="4">
+        <el-col v-if="isCloudProvider" :xs="24" :sm="12" :md="3">
           <el-form-item :label="t('releaseDiff.workspace_slug')">
             <el-select
               v-model="repo.workspace_slug"
@@ -125,7 +125,7 @@
           </el-form-item>
         </el-col>
 
-        <el-col :xs="24" :sm="12" :md="6">
+        <el-col :xs="24" :sm="12" :md="5">
           <el-form-item :label="t('appDiff.releases_label')" required>
             <el-select
               v-model="selectedRefs"
@@ -166,21 +166,27 @@
             </el-select>
           </el-form-item>
         </el-col>
-      </el-row>
 
-      <!-- How deep this comparison reads, as a field of the same form rather than a
-           row of its own: the numbers behind each depth belong to the server, which
-           clamps them to its own ceilings and reports what it actually read, so this
-           is a preference rather than a promise - and one a reader can keep, since the
-           same releases are usually compared over and over. -->
-      <el-row :gutter="16">
-        <el-col :xs="24" :sm="12" :md="8">
+        <!-- How deep this comparison reads, in the same row as the choices it is about:
+             the numbers behind each depth belong to the server, which clamps them to
+             its own ceilings and reports what it actually read, so this is a preference
+             rather than a promise - and one a reader can keep, since the same releases
+             are usually compared over and over. -->
+        <el-col :xs="24" :sm="12" :md="5">
           <el-form-item :label="t('appDiff.depth_label')">
             <div class="depth">
               <el-select v-model="depth" class="depth-select" data-test="depth-select">
-                <el-option :label="t('appDiff.depth_default')" value="default" />
-                <el-option :label="t('appDiff.depth_deep')" value="deep" />
-                <el-option :label="t('appDiff.depth_all')" value="all" />
+                <el-option
+                  v-for="choice in DEPTHS"
+                  :key="choice"
+                  :label="t(`appDiff.depth_${choice}`)"
+                  :value="choice"
+                >
+                  <span class="option-key">{{ t(`appDiff.depth_${choice}`) }}</span>
+                  <span v-if="depthNumbers(choice)" class="option-name">
+                    {{ depthNumbers(choice) }}
+                  </span>
+                </el-option>
               </el-select>
               <el-checkbox v-model="remembered" data-test="depth-remember">
                 {{ t('appDiff.depth_remember') }}
@@ -191,10 +197,18 @@
       </el-row>
     </el-form>
 
+    <!-- Reading a repository's refs is a provider call, and nothing else on the page
+         moves while it is in flight: saying so is what keeps the wait from reading as
+         a page that did nothing at all. -->
+    <p v-if="refsLoading" class="refs-note" data-test="refs-loading">
+      <el-icon class="is-loading"><Loading /></el-icon>
+      {{ t('appDiff.reading_refs') }}
+    </p>
+
     <!-- The picker offers the recent releases and searches the rest, so it says
          which of the two it is doing rather than leaving a short list to look like
          a short repository. -->
-    <p v-if="refsCapped" class="refs-note" data-test="refs-capped">
+    <p v-else-if="refsCapped" class="refs-note" data-test="refs-capped">
       {{ t('appDiff.refs_capped', { loaded: loadedRefCount, total: totalRefCount }) }}
     </p>
     <p v-else-if="refsSearchable" class="refs-note" data-test="refs-searchable">
@@ -510,6 +524,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { Loading } from '@element-plus/icons-vue'
 import ContentLoader from '@/components/common/ContentLoader.vue'
 import CommitComparison from '@/components/release/CommitComparison.vue'
 import { GIT_PROVIDER_OPTIONS } from '@/constants/gitProvider'
@@ -528,7 +543,7 @@ import type {
   AppVersionDiffResponse,
 } from '@/api/appVersionDiff'
 import { useRefCandidates } from '@/composables/useRefCandidates'
-import { useAppDiffDepth } from '@/composables/useAppDiffDepth'
+import { DEPTHS, depthNumbers, useAppDiffDepth } from '@/composables/useAppDiffDepth'
 import {
   buildRows,
   codeTone,
@@ -1061,6 +1076,9 @@ watch(depth, () => {
 }
 
 .refs-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
@@ -1076,9 +1094,11 @@ watch(depth, () => {
   width: 100%;
 }
 
+/* The depth names are single words, so the control stays narrow enough for the row
+   it shares with the other fields */
 .depth-select {
-  flex: 1 1 190px;
-  min-width: 170px;
+  flex: 1 1 120px;
+  min-width: 110px;
 }
 
 .packages-action {

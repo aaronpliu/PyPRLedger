@@ -28,7 +28,20 @@ const DEPTH_REQUESTS: Record<AppDiffDepth, AppDiffDepthRequest> = {
   all: { max_package_comparisons: 50, max_total_package_comparisons: 300 },
 }
 
-const DEPTHS: AppDiffDepth[] = ['default', 'deep', 'all']
+/** The depths a reader chooses between, in the order they are offered. */
+export const DEPTHS: AppDiffDepth[] = ['default', 'deep', 'all']
+
+/**
+ * What a depth asks for, as the numbers a picker shows beside its name.
+ *
+ * The default asks for nothing - the server's own two numbers decide - so it has
+ * none to show, and the option is its name alone.
+ */
+export function depthNumbers(depth: AppDiffDepth): string {
+  const request = DEPTH_REQUESTS[depth]
+  const { max_package_comparisons: perPair, max_total_package_comparisons: pageTotal } = request
+  return perPair && pageTotal ? `${perPair} / ${pageTotal}` : ''
+}
 
 function isDepth(value: string | null): value is AppDiffDepth {
   return DEPTHS.some((depth) => depth === value)

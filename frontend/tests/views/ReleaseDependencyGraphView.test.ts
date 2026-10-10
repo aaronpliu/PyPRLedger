@@ -5,6 +5,8 @@ import { createI18n } from 'vue-i18n'
 import ReleaseDependencyGraphView from '@/views/releases/ReleaseDependencyGraphView.vue'
 import enMessages from '@/locales/en.json'
 import { projectsApi } from '@/api/projects'
+import { releaseDiffApi } from '@/api/releaseDiff'
+import type { ReleaseRefsResponse } from '@/api/releaseDiff'
 
 // The repository and its refs come from the provider in the running app; the
 // stand-ins hand over the one project, the one repository and the refs the
@@ -24,13 +26,13 @@ vi.mock('@/api/projects', () => ({
 
 vi.mock('@/api/releaseDiff', () => ({
   releaseDiffApi: {
-    listRefs: async () => ({
+    listRefs: vi.fn(async () => ({
       project_key: 'CORE',
       repository_slug: 'app',
       git_provider: 'bitbucket_server',
       tags: ['v2.0.0', 'v1.1.0', 'v1.0.0', 'v9.9.9'],
       branches: ['main'],
-    }),
+    })),
   },
 }))
 
@@ -420,6 +422,35 @@ describe('ReleaseDependencyGraphView', () => {
     expect(refSelect.props('remote')).toBe(true)
     expect(refSelect.findAllComponents({ name: 'ElOption' }).map((option) => option.props('value')))
       .toContain('v2.0.0')
+  })
+
+  it('says the repository is being read while its refs are in flight', async () => {
+    let settle: (refs: ReleaseRefsResponse) => void = () => {}
+    vi.mocked(releaseDiffApi.listRefs).mockReturnValueOnce(
+      new Promise<ReleaseRefsResponse>((resolve) => {
+        settle = resolve
+      }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await openRepository(wrapper)
+
+    // reading the tags and branches is a provider call, and nothing else on the page
+    // moves while it is in flight: saying so is what keeps the wait from reading as a
+    // page that did nothing at all
+    expect(wrapper.find('[data-test="refs-loading"]').exists()).toBe(true)
+
+    settle({
+      project_key: 'CORE',
+      repository_slug: 'app',
+      git_provider: 'bitbucket_server',
+      tags: ['v2.0.0'],
+      branches: ['main'],
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="refs-loading"]').exists()).toBe(false)
   })
 
   it('leaves out only the repositories marked as packages', async () => {

@@ -187,10 +187,18 @@
         </el-row>
       </el-form>
 
+      <!-- Reading a repository's refs is a provider call, and nothing else on the page
+           moves while it is in flight: saying so is what keeps the wait from reading as
+           a page that did nothing at all. -->
+      <p v-if="refsLoading" class="refs-note" data-test="refs-loading">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        {{ t('releaseDependencyGraph.reading_refs') }}
+      </p>
+
       <!-- The picker offers the recent refs and searches the rest, so it says
            which of the two it is doing rather than leaving a short list to look
            like a short repository. -->
-      <p v-if="refsCapped" class="refs-note" data-test="refs-capped">
+      <p v-else-if="refsCapped" class="refs-note" data-test="refs-capped">
         {{
           t('releaseDependencyGraph.refs_capped', {
             loaded: loadedRefCount,
@@ -341,6 +349,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { Loading } from '@element-plus/icons-vue'
 import { GIT_PROVIDER_OPTIONS } from '@/constants/gitProvider'
 import { useI18n } from 'vue-i18n'
 import ReleaseDependencyGraphChart from '@/components/charts/ReleaseDependencyGraphChart.vue'
@@ -722,6 +731,9 @@ function secondaryName(value: string, name?: string | null): string | undefined 
 }
 
 .refs-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
