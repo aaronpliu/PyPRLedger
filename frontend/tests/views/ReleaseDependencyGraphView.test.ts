@@ -453,17 +453,16 @@ describe('ReleaseDependencyGraphView', () => {
     expect(wrapper.find('[data-test="refs-loading"]').exists()).toBe(false)
   })
 
-  it('leaves out only the repositories marked as packages', async () => {
+  it('offers the applications the registry names', async () => {
     const wrapper = mountView()
     await flushPromises()
     await openRepository(wrapper)
 
-    // this page reads the releases the dependency database holds, so a repository an
-    // administrator marked as a package is not offered - and everything nobody has
-    // classified is, which is what keeps the classification an opt-in
-    expect(vi.mocked(projectsApi.getProjectRepositories)).toHaveBeenCalledWith('CORE', [
-      'application',
-      'unclassified',
-    ])
+    // this page reads the releases the dependency database holds, so the picker is
+    // what an administrator named as applications - and a project nobody has
+    // classified falls back to every repository it has
+    expect(vi.mocked(projectsApi.getProjectRepositories)).toHaveBeenCalledWith('CORE', {
+      preferApplications: true,
+    })
   })
 })

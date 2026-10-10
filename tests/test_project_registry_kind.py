@@ -268,6 +268,58 @@ async def test_the_listing_takes_the_kinds_it_is_asked_for(async_client, db_sess
         app.dependency_overrides.pop(get_db_session, None)
 
 
+async def test_naming_an_application_decides_the_list(async_client, db_session) -> None:
+    """Once an administrator names one application, the picker is the applications.
+
+    This is the whole point of the classification: a project where somebody has said
+    what the applications are is a project whose picker can stop offering the rest.
+    """
+    await seed_project(db_session)
+
+    app.dependency_overrides[get_db_session] = override_db(db_session)
+    try:
+        response = await async_client.get(
+            "/api/v1/projects/key/CORE/repositories",
+            params={"prefer_applications": "true"},
+        )
+
+        assert response.status_code == 200, response.text
+        # the package is left out, and so is the repository nobody has classified -
+        # the one application named is the list
+        assert [item["repository_slug"] for item in response.json()] == ["app"]
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+
+
+async def test_nothing_disappears_before_an_application_is_named(
+    async_client, db_session
+) -> None:
+    """A project nobody has classified keeps offering what it has.
+
+    The repositories still have to be reachable somewhere: the pages that read an
+    application's releases are how a reader works out which ones are applications.
+    """
+    await seed_project(db_session)
+    # the only application this project had is marked as a package instead
+    await ProjectRegistryService().update_registry_kind(
+        "CORE", "app", ProjectRegistry.KIND_PACKAGE, db_session
+    )
+
+    app.dependency_overrides[get_db_session] = override_db(db_session)
+    try:
+        response = await async_client.get(
+            "/api/v1/projects/key/CORE/repositories",
+            params={"prefer_applications": "true"},
+        )
+
+        assert response.status_code == 200, response.text
+        # no application is named, so the unclassified repository is what is offered -
+        # and both marked packages stay out of it
+        assert [item["repository_slug"] for item in response.json()] == ["unknown"]
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+
+
 async def test_the_listing_refuses_a_kind_no_registration_has(async_client, db_session) -> None:
     """A filter that can never match is a mistake, not an empty page."""
     app.dependency_overrides[get_db_session] = override_db(db_session)

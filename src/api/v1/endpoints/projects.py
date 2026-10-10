@@ -557,6 +557,19 @@ async def get_project_repositories(
             )
         ),
     ] = None,
+    prefer_applications: Annotated[
+        bool,
+        Query(
+            description=(
+                "Offer the repositories the registry marks as applications, falling back to "
+                "everything not marked as a package when the project has no application yet. "
+                "This is what the pages that read an application's releases ask for: naming "
+                "an application is what decides their list, and a project whose registry has "
+                "not been worked through keeps offering every repository it has. Takes "
+                "precedence over registry_kind"
+            )
+        ),
+    ] = False,
 ) -> list[dict]:
     """
     Get all repositories for a specific project by project key
@@ -564,6 +577,8 @@ async def get_project_repositories(
     Args:
         project_key: The project key
         registry_kind: Optional kinds of registration to filter by, comma separated
+        prefer_applications: Offer applications, or everything unclassified when the
+            project has none
         db: Database session
 
     Returns:
@@ -626,7 +641,26 @@ async def get_project_repositories(
             .where(Repository.project_id == project.project_id)
             .order_by(Repository.repository_slug)
         )
-        if kinds:
+        if prefer_applications:
+            # An administrator naming an application is what decides this list: the rest
+            # of the project is repositories nobody has said are applications, so once
+            # one is named the list is the applications. Until then there is nothing to
+            # narrow to, and everything not marked as a package is offered - which is
+            # what keeps a project nobody has classified behaving as it always did.
+            named = await db.scalar(
+                select(ProjectRegistry.id)
+                .where(
+                    ProjectRegistry.project_key == project.project_key,
+                    ProjectRegistry.registry_kind == ProjectRegistry.KIND_APPLICATION,
+                )
+                .limit(1)
+            )
+            repo_query = repo_query.where(
+                ProjectRegistry.registry_kind == ProjectRegistry.KIND_APPLICATION
+                if named is not None
+                else ProjectRegistry.registry_kind.is_(None)
+            )
+        elif kinds:
             wanted = list(dict.fromkeys(kinds))
             marked = [kind for kind in wanted if kind in ProjectRegistry.VALID_KINDS]
             conditions = []

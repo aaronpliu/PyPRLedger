@@ -681,14 +681,13 @@ async function loadRepositories(projectKey: string) {
 
   repositoriesLoading.value = true
   try {
-    // What an administrator marked as a package is left out - this page reads the
-    // releases the dependency database holds, and a package repository has none to
-    // read. Everything nobody has classified comes back, so a project whose registry
-    // has not been worked through offers exactly what it always did.
-    repositories.value = await projectsApi.getProjectRepositories(projectKey, [
-      'application',
-      'unclassified',
-    ])
+    // The applications the project registry names - this page reads the releases the
+    // dependency database holds, and a repository marked as a package has none to
+    // read. A project nobody has classified falls back to every repository it has,
+    // so nothing disappears before an administrator has said what things are.
+    repositories.value = await projectsApi.getProjectRepositories(projectKey, {
+      preferApplications: true,
+    })
   } catch {
     repositories.value = []
   } finally {
@@ -729,8 +728,17 @@ async function loadRefs() {
     setRefCandidates(response)
     // A link that names its releases still opens on them. Otherwise nothing is
     // picked for the reader: the comparison runs when they choose the releases.
-    selectedRefs.value = requestedRefs.value?.length ? [...requestedRefs.value] : []
+    const wanted = requestedRefs.value
     requestedRefs.value = null
+    if (!wanted?.length) {
+      selectedRefs.value = []
+    } else if (wanted.join(',') !== selectedRefs.value.join(',')) {
+      // The link's releases are already picked - they were taken from it before this
+      // listing was read, which is what started their comparison. Picking them again
+      // here would read the same two releases a second time, and start a second round
+      // of the package comparisons that follow one.
+      selectedRefs.value = wanted
+    }
   } catch {
     // Left empty: the picker stays empty and the page waits for a repository
     // whose refs can be read.

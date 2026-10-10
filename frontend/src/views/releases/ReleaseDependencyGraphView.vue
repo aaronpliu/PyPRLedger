@@ -464,14 +464,13 @@ async function loadRepositories(projectKey: string) {
 
   repositoriesLoading.value = true
   try {
-    // What an administrator marked as a package is left out - this page reads the
-    // releases the dependency database holds, and a package repository has none to
-    // read. Everything nobody has classified comes back, so a project whose registry
-    // has not been worked through offers exactly what it always did.
-    repositories.value = await projectsApi.getProjectRepositories(projectKey, [
-      'application',
-      'unclassified',
-    ])
+    // The applications the project registry names - this page reads the releases the
+    // dependency database holds, and a repository marked as a package has none to
+    // read. A project nobody has classified falls back to every repository it has,
+    // so nothing disappears before an administrator has said what things are.
+    repositories.value = await projectsApi.getProjectRepositories(projectKey, {
+      preferApplications: true,
+    })
   } catch {
     repositories.value = []
   } finally {
