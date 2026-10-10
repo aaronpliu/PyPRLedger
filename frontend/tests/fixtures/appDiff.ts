@@ -251,8 +251,8 @@ function compared(): AppVersionDiffResponse {
         ],
       },
     ],
-    // nothing was left for later: this page has nothing more to read
-    auto_compare_remaining: 90,
+    // the budget this answer was read under, and how the page should batch
+    package_comparisons: { per_pair: 6, page_total: 90, batch: 8, remaining: 90 },
   }
 }
 
@@ -272,8 +272,10 @@ function deferred(): AppVersionDiffResponse {
       { ref: RELEASE_EARLIER, released_at: '2026-09-01', has_record: true },
       { ref: RELEASE_DEFERRED, released_at: '2026-10-01', has_record: true },
     ],
-    // one comparison may still be read without being asked for
-    auto_compare_remaining: 1,
+    // One comparison may still be read without being asked for, and the page is told
+    // to ask for one package at a time - so what a reader asks for afterwards goes in
+    // as many requests as there are packages, which is the batch doing its work.
+    package_comparisons: { per_pair: 6, page_total: 90, batch: 1, remaining: 1 },
     intervals: [
       {
         ...base.intervals[0],

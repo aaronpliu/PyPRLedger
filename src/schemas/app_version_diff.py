@@ -106,6 +106,27 @@ class AppVersionDiffRequest(AppVersionDiffCoordinates):
             "presented in the order their datetimes put them."
         ),
     )
+    max_package_comparisons: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "How many dependency comparisons each adjacent pair should carry in this "
+            "response. Null takes the server's default. Asking for a deeper reading asks for "
+            "a longer first response, so the numbers are clamped to the server's ceiling "
+            "rather than refused, and the effective ones ride back with the answer."
+        ),
+    )
+    max_total_package_comparisons: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "How many dependency comparisons this page should run automatically in total - "
+            "what the first response carries plus what the page asks for afterwards. This is "
+            "the dial a reader deepens to have a release that moved dozens of packages read "
+            "whole: the pairs still answer with their first few, and the rest is read behind "
+            "them. Null takes the server's default, and the page ceiling applies."
+        ),
+    )
     include_code: bool = Field(
         default=True,
         description=(
@@ -353,6 +374,32 @@ class AppVersionDiffInterval(BaseModel):
     )
 
 
+class AppVersionDiffPackageBudget(BaseModel):
+    """How many package comparisons the page may run, and how it should ask for them.
+
+    These are the *effective* numbers, not the ones asked for: a request may ask for a
+    deeper reading than the defaults, and it is answered with what the server will
+    actually do - the ceilings any request is held to included. The page reads its
+    pacing from here rather than from numbers compiled into it.
+    """
+
+    per_pair: int = Field(
+        ..., description="Most comparisons an adjacent pair carries in this response"
+    )
+    page_total: int = Field(..., description="Most comparisons this page may run automatically")
+    batch: int = Field(
+        ..., description="Most deferred packages should be asked for at a time"
+    )
+    remaining: int = Field(
+        ...,
+        description=(
+            "How much of ``page_total`` this response leaves. The page asks for its deferred "
+            "packages in batches until this runs out, and leaves whatever is left for a "
+            "reader to ask for."
+        ),
+    )
+
+
 class AppVersionDiffResponse(BaseModel):
     """Two or more releases of one application, compared."""
 
@@ -381,13 +428,12 @@ class AppVersionDiffResponse(BaseModel):
         description="The matrix, the application's own version first, then its direct dependencies",
     )
     intervals: list[AppVersionDiffInterval] = Field(default_factory=list)
-    auto_compare_remaining: int = Field(
-        default=0,
+    package_comparisons: AppVersionDiffPackageBudget = Field(
+        ...,
         description=(
-            "How many more dependency comparisons this page may run automatically. The page "
-            "asks for its deferred packages in batches until this runs out, and leaves whatever "
-            "is left for a reader to ask for explicitly - so a comparison of several releases "
-            "cannot become an unbounded run of provider calls."
+            "The comparison budget this answer was read under, and how much of it is left. "
+            "The page paces its batches by it, so that what a page reads is decided by the "
+            "server rather than by a number compiled into the page."
         ),
     )
 

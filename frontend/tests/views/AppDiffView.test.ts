@@ -123,9 +123,23 @@ function comparePackages() {
   return vi.mocked(appVersionDiffApi.comparePackages)
 }
 
+/** The reading-depth picker, found by its hook rather than by position. */
+function depthPicker(wrapper: View) {
+  return wrapper.find('[data-test="depth-select"]').findComponent(ElSelect)
+}
+
+/** Choose a reading depth the way the picker does. */
+async function setDepth(wrapper: View, value: string) {
+  depthPicker(wrapper).vm.$emit('update:modelValue', value)
+  await flushPromises()
+  await flushPromises()
+}
+
 beforeEach(() => {
   compare().mockClear()
   comparePackages().mockClear()
+  // the depth is a preference, so a test that kept one must not hand it to the next
+  localStorage.clear()
 })
 
 describe('AppDiffView', () => {
@@ -512,5 +526,77 @@ describe('AppDiffView', () => {
     expect(wrapper.find('[data-test="package-packageE-counts"]').exists()).toBe(false)
     // and the reader can ask again
     expect(wrapper.find('[data-test="packages-read-rest"]').exists()).toBe(true)
+  })
+
+  it('asks for the deferred packages in the batches the answer names', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper, [RELEASE_EARLIER, RELEASE_DEFERRED])
+    await flushPromises()
+
+    await wrapper.find('[data-test="packages-read-rest"]').trigger('click')
+    await flushPromises()
+
+    // one package per request: the reader's own ask is not bounded by the allowance,
+    // so a batch of one can only be the batch the answer named
+    const manual = comparePackages().mock.calls[1][0]
+    expect(manual.packages).toHaveLength(1)
+    expect(manual.packages[0].name).toBe('packageF')
+  })
+
+  it('asks for nothing at the default depth, leaving the server its own numbers', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    const sent = compare().mock.calls[0][0]
+    expect(sent.max_package_comparisons).toBeUndefined()
+    expect(sent.max_total_package_comparisons).toBeUndefined()
+  })
+
+  it('asks the server for the reading depth the reader chose', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+    compare().mockClear()
+
+    await setDepth(wrapper, 'all')
+
+    // a deeper reading is a different question, so what is on screen is read again
+    expect(compare()).toHaveBeenCalledWith(
+      expect.objectContaining({
+        max_package_comparisons: 50,
+        max_total_package_comparisons: 300,
+      }),
+    )
+  })
+
+  it('keeps the reading depth when the reader asks it to', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    await wrapper.find('[data-test="depth-remember"] input').setValue(true)
+    await setDepth(wrapper, 'deep')
+
+    expect(localStorage.getItem('app_diff_depth')).toBe('deep')
+    expect(depthPicker(wrapper).props('modelValue')).toBe('deep')
+
+    // letting it go drops it, so a reader is never stuck with a choice they made once
+    await wrapper.find('[data-test="depth-remember"] input').setValue(false)
+
+    expect(localStorage.getItem('app_diff_depth')).toBeNull()
+  })
+
+  it('opens on the depth that was kept', async () => {
+    localStorage.setItem('app_diff_depth', 'deep')
+
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    // the choice is read without the reader making it again, and it is asked for
+    expect(depthPicker(wrapper).props('modelValue')).toBe('deep')
+    expect(compare()).toHaveBeenCalledWith(
+      expect.objectContaining({
+        max_package_comparisons: 25,
+        max_total_package_comparisons: 200,
+      }),
+    )
   })
 })

@@ -14,6 +14,7 @@ from src.api.v1.endpoints.app_version_diff import (
     get_app_version_diff_service,
     get_registry_service,
 )
+from src.core.config import settings
 from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.main import app
@@ -243,6 +244,48 @@ async def test_endpoint_leaves_the_code_axis_out_when_not_asked(
     assert response.status_code == 200, response.text
     assert fake_diff.calls == []
     assert response.json()["intervals"][0]["code"] is None
+
+
+async def test_endpoint_reads_the_budget_the_page_asked_for(
+    async_client, authenticated_client
+) -> None:
+    """A page may ask to read deeper, and is answered with what it actually got."""
+    response = await async_client.post(
+        "/api/v1/release/apps/diff",
+        json=payload(
+            MOCK_TAG,
+            MOCK_BRANCH,
+            max_package_comparisons=25,
+            max_total_package_comparisons=200,
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    budget = response.json()["package_comparisons"]
+    assert (budget["per_pair"], budget["page_total"]) == (25, 200)
+    # the batch to ask in, and what of the allowance this response left
+    assert budget["batch"] == settings.APP_DIFF_PACKAGE_COMPARISON_BATCH_SIZE
+    assert 0 <= budget["remaining"] <= 200
+
+
+async def test_endpoint_answers_a_budget_above_the_ceiling_with_the_ceiling(
+    async_client, authenticated_client
+) -> None:
+    """A dial cannot talk the server into reading without end."""
+    response = await async_client.post(
+        "/api/v1/release/apps/diff",
+        json=payload(
+            MOCK_TAG,
+            MOCK_BRANCH,
+            max_package_comparisons=5000,
+            max_total_package_comparisons=50000,
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    budget = response.json()["package_comparisons"]
+    assert budget["per_pair"] == settings.APP_DIFF_PACKAGE_COMPARISONS_CEILING
+    assert budget["page_total"] == settings.APP_DIFF_PAGE_COMPARISONS_CEILING
 
 
 async def test_endpoint_rejects_a_single_release(async_client, authenticated_client) -> None:

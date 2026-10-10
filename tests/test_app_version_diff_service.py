@@ -153,7 +153,13 @@ def build_service(
     return service, cache, provider
 
 
-def request(*refs: str, refresh: bool = False, include_code: bool = True) -> AppVersionDiffRequest:
+def request(
+    *refs: str,
+    refresh: bool = False,
+    include_code: bool = True,
+    per_pair: int | None = None,
+    page_total: int | None = None,
+) -> AppVersionDiffRequest:
     return AppVersionDiffRequest(
         project_key=PROJECT,
         repository_slug=REPOSITORY,
@@ -161,6 +167,8 @@ def request(*refs: str, refresh: bool = False, include_code: bool = True) -> App
         refs=list(refs),
         refresh=refresh,
         include_code=include_code,
+        max_package_comparisons=per_pair,
+        max_total_package_comparisons=page_total,
     )
 
 
@@ -938,7 +946,10 @@ async def test_a_pairs_first_packages_are_read_and_the_rest_deferred(monkeypatch
     assert entries["packageB"].code.unavailable is None
     assert entries["packageB"].repository_slug == "pkg-b"
     # and the page is told how much more it may read on its own
-    assert result.auto_compare_remaining == settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS - 1
+    assert (
+        result.package_comparisons.remaining
+        == settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS - 1
+    )
 
 
 async def test_each_pair_gets_its_own_share_of_the_ceiling(monkeypatch):
@@ -1016,7 +1027,7 @@ async def test_the_total_ceiling_bounds_a_whole_page(monkeypatch):
 
     package_reads = [item for item in diff.requests if item.repository_slug == "pkg-a"]
     assert len(package_reads) == 1
-    assert result.auto_compare_remaining == 0
+    assert result.package_comparisons.remaining == 0
     # the pair that did not get its read says so, and is still askable
     deferred = [
         entry
@@ -1025,6 +1036,109 @@ async def test_the_total_ceiling_bounds_a_whole_page(monkeypatch):
         if entry.code.deferred
     ]
     assert [entry.name for entry in deferred] == ["packageA"]
+
+
+# ---------------------------------------------------------------------- #
+# The budget a request asks for
+# ---------------------------------------------------------------------- #
+
+
+def three_moved_packages() -> dict[tuple[str, str], dict[str, Any]]:
+    """Two releases whose pair moved three packages."""
+    return {
+        (APP, "1.0.0"): record(
+            "1.0.0",
+            "2026-09-01",
+            {"packageA": "1.0.0", "packageB": "1.0.0", "packageC": "1.0.0"},
+        ),
+        (APP, "1.1.0"): record(
+            "1.1.0",
+            "2026-10-01",
+            {"packageA": "1.1.0", "packageB": "1.1.0", "packageC": "1.1.0"},
+        ),
+    }
+
+
+def three_repositories() -> Any:
+    """Every package of the pair resolved, so each of them is comparable."""
+    return package_resolver(
+        packageA=DependencyRepository(project_key="CORE", repository_slug="pkg-a"),
+        packageB=DependencyRepository(project_key="CORE", repository_slug="pkg-b"),
+        packageC=DependencyRepository(project_key="CORE", repository_slug="pkg-c"),
+    )
+
+
+async def test_a_request_can_ask_to_read_deeper_than_the_default(monkeypatch):
+    """A page whose releases moved a dozen packages may ask to read them all."""
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
+    service, _, _ = build_service(three_moved_packages())
+
+    shallow = await service.compare(
+        request("1.0.0", "1.1.0"), app_name=APP, resolve_dependency_repository=three_repositories()
+    )
+    deep = await service.compare(
+        request("1.0.0", "1.1.0", per_pair=3),
+        app_name=APP,
+        resolve_dependency_repository=three_repositories(),
+    )
+
+    # the default reads one of the three; asking to read deeper reads them all
+    assert [entry.code.deferred for entry in shallow.intervals[0].packages] == [False, True, True]
+    assert not any(entry.code.deferred for entry in deep.intervals[0].packages)
+    # and each answer says which budget it was read under
+    assert (shallow.package_comparisons.per_pair, deep.package_comparisons.per_pair) == (1, 3)
+
+
+async def test_a_deeper_reading_is_not_answered_from_the_shallow_cache(monkeypatch):
+    """How deep the reading went is part of what a cached comparison is keyed by."""
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
+    diff = FakeDiff()
+    service, _, _ = build_service(three_moved_packages(), diff=diff)
+
+    await service.compare(
+        request("1.0.0", "1.1.0"), app_name=APP, resolve_dependency_repository=three_repositories()
+    )
+    reads = len([item for item in diff.requests if item.repository_slug.startswith("pkg-")])
+
+    deeper = await service.compare(
+        request("1.0.0", "1.1.0", per_pair=3),
+        app_name=APP,
+        resolve_dependency_repository=three_repositories(),
+    )
+
+    # the shallow answer was not handed back for a deeper question
+    assert not any(entry.code.deferred for entry in deeper.intervals[0].packages)
+    assert len([item for item in diff.requests if item.repository_slug.startswith("pkg-")]) > reads
+
+
+async def test_a_request_cannot_read_past_the_ceilings(monkeypatch):
+    """Asking past what the server will do is answered with the ceiling, never an error."""
+    monkeypatch.setattr(settings, "APP_DIFF_PACKAGE_COMPARISONS_CEILING", 2)
+    monkeypatch.setattr(settings, "APP_DIFF_PAGE_COMPARISONS_CEILING", 3)
+    service, _, _ = build_service(three_moved_packages())
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0", per_pair=500, page_total=5000),
+        app_name=APP,
+        resolve_dependency_repository=three_repositories(),
+    )
+
+    assert (result.package_comparisons.per_pair, result.package_comparisons.page_total) == (2, 3)
+    # two of the three were read, and the page may read one more on its own
+    assert [entry.code.deferred for entry in result.intervals[0].packages] == [False, False, True]
+    assert result.package_comparisons.remaining == 1
+
+
+async def test_the_answer_carries_the_batch_to_ask_in(monkeypatch):
+    """The page paces its batches by the server's number, not one compiled into it."""
+    monkeypatch.setattr(settings, "APP_DIFF_PACKAGE_COMPARISON_BATCH_SIZE", 4)
+    service, _, _ = build_service(three_moved_packages())
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0"), app_name=APP, resolve_dependency_repository=three_repositories()
+    )
+
+    assert result.package_comparisons.batch == 4
 
 
 # ---------------------------------------------------------------------- #

@@ -56,6 +56,7 @@ from src.schemas.app_version_diff import (
     AppVersionDiffCoordinates,
     AppVersionDiffInterval,
     AppVersionDiffMove,
+    AppVersionDiffPackageBudget,
     AppVersionDiffPackageComparison,
     AppVersionDiffPackageRequest,
     AppVersionDiffPackagesRequest,
@@ -117,6 +118,22 @@ class DependencyRepository:
 
 # Given a package name out of a dependency record, where it lives.
 DependencyRepositoryResolver = Callable[[str], Awaitable[DependencyRepository]]
+
+
+@dataclass(frozen=True)
+class PackageBudget:
+    """How many package comparisons a page may run, and how it asks for them.
+
+    ``per_pair`` and ``page_total`` are different dials: the first decides how long
+    the first response takes to be drawn, the second how much a page reads on its
+    own afterwards. A reader who wants a release that moved thirty packages read
+    whole raises the second, not the first - the pairs still answer with their first
+    few and the rest is read behind them.
+    """
+
+    per_pair: int
+    page_total: int
+    batch: int
 
 # A version as an application declares it: an optional `v`, up to three numeric
 # components, an optional pre-release, an optional build metadata suffix - and,
@@ -316,7 +333,8 @@ class AppVersionDiffService:
             dependency that moved.
         """
         provider_name = resolve_provider_name(request.git_provider)
-        cache_key = self._cache_key(request, app_name, provider_name)
+        budget = self._package_budget(request)
+        cache_key = self._cache_key(request, app_name, provider_name, budget)
 
         if not request.refresh:
             cached = await self._read_cache(cache_key)
@@ -338,6 +356,7 @@ class AppVersionDiffService:
                 intervals,
                 provider_name,
                 resolve_dependency_repository or _no_dependency_repository,
+                budget,
             )
         response = self._build_response(
             request=request,
@@ -347,6 +366,7 @@ class AppVersionDiffService:
             rows=rows,
             intervals=intervals,
             compared_packages=compared_packages,
+            budget=budget,
         )
 
         await self._write_cache(cache_key, response)
@@ -754,12 +774,37 @@ class AppVersionDiffService:
                 truncated=comparison.rendered_truncated,
             )
 
+    def _package_budget(self, request: AppVersionDiffRequest) -> PackageBudget:
+        """What this request asked to read, within what the server will do.
+
+        The two numbers decide how many provider calls a page makes, so a request
+        only ever moves them *down* from the ceilings - and one that asks past a
+        ceiling is answered with the ceiling rather than refused, because this is a
+        performance dial and not a correctness one. The effective numbers ride back
+        with the response, so the page knows what it actually got.
+        """
+        per_pair = min(
+            request.max_package_comparisons or settings.APP_DIFF_MAX_PACKAGE_COMPARISONS,
+            settings.APP_DIFF_PACKAGE_COMPARISONS_CEILING,
+        )
+        page_total = min(
+            request.max_total_package_comparisons or settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS,
+            settings.APP_DIFF_PAGE_COMPARISONS_CEILING,
+        )
+        return PackageBudget(
+            per_pair=max(per_pair, 0),
+            page_total=max(page_total, 0),
+            # a batch of nothing would ask for nothing, and ask for it forever
+            batch=max(settings.APP_DIFF_PACKAGE_COMPARISON_BATCH_SIZE, 1),
+        )
+
     async def _attach_dependency_code(
         self,
         request: AppVersionDiffRequest,
         intervals: list[AppVersionDiffInterval],
         provider_name: str,
         resolve_repository: DependencyRepositoryResolver,
+        budget: PackageBudget,
     ) -> int:
         """Compare the dependencies that moved, a pair's first few at a time.
 
@@ -769,18 +814,18 @@ class AppVersionDiffService:
 
         Each of those is a provider request, and a release that moved thirty packages
         would make thirty of them before the page could be drawn. So a pair answers
-        with its first few - the downgrades first, because a package moving backwards
-        is the one a reader is looking for - and reports the rest as not compared
-        *yet*: not compared is a different thing from compared and found equal, and a
-        different thing again from impossible. Each of those carries the repository it
-        was resolved to, so the page can ask for them in batches.
+        with its first few - as many as the budget allows, which a reader can deepen -
+        and reports the rest as not compared *yet*: not compared is a different thing
+        from compared and found equal, and a different thing again from impossible.
+        Each of those carries the repository it was resolved to, so the page can ask
+        for them in batches.
 
         Returns:
-            How many comparisons were run, which is what the page's remaining
-            automatic allowance is counted down by.
+            How many comparisons were run, which is what the budget's remaining
+            allowance is counted down by.
         """
-        pair_ceiling = max(settings.APP_DIFF_MAX_PACKAGE_COMPARISONS, 0)
-        total_budget = max(settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS, 0)
+        pair_ceiling = budget.per_pair
+        total_budget = budget.page_total
         compared_count = 0
         semaphore = asyncio.Semaphore(PACKAGE_COMPARISON_CONCURRENCY)
         # A package that moved in several pairs lives in one repository: resolved
@@ -946,14 +991,15 @@ class AppVersionDiffService:
         releases: list[dict[str, Any]],
         rows: list[AppVersionDiffRow],
         intervals: list[AppVersionDiffInterval],
+        budget: PackageBudget,
         compared_packages: int = 0,
     ) -> AppVersionDiffResponse:
         """Assemble the answer, including the two parts that must never be faked.
 
         One is the verdict, which is never ``identical`` over a release that has no
-        record. The other is the allowance the page is given to finish the deferred
-        comparisons with: it is the ceiling minus what this response already spent,
-        so the page knows when to stop asking on its own.
+        record. The other is the budget the page is given to finish the deferred
+        comparisons with: the numbers it was read under, and what this response left
+        of them, so the page knows how to batch and when to stop asking on its own.
         """
         incomplete = any(not release["has_record"] for release in releases)
 
@@ -991,8 +1037,12 @@ class AppVersionDiffService:
             summary=summary,
             rows=rows,
             intervals=intervals,
-            auto_compare_remaining=max(
-                settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS - compared_packages, 0
+            package_comparisons=AppVersionDiffPackageBudget(
+                per_pair=budget.per_pair,
+                page_total=budget.page_total,
+                batch=budget.batch,
+                # what is left of the page's allowance once this response spent its share
+                remaining=max(budget.page_total - compared_packages, 0),
             ),
         )
 
@@ -1000,11 +1050,20 @@ class AppVersionDiffService:
     # Cache
     # ------------------------------------------------------------------ #
 
-    def _cache_key(self, request: AppVersionDiffRequest, app_name: str, provider_name: str) -> str:
+    def _cache_key(
+        self,
+        request: AppVersionDiffRequest,
+        app_name: str,
+        provider_name: str,
+        budget: PackageBudget,
+    ) -> str:
         """Keyed by the set of releases, so the order they were chosen in is not a key.
 
         Whether the code axis was read is part of the key: a comparison answered
-        without the commits is not the answer to a request that asked for them.
+        without the commits is not the answer to a request that asked for them. So is
+        how deep the reading went - a response that carried six package comparisons is
+        not the answer to a request that asked for twenty-five, and it would report a
+        different number of them as still waiting.
         """
         parts = [
             app_name,
@@ -1012,6 +1071,8 @@ class AppVersionDiffService:
             request.repository_slug,
             provider_name,
             str(request.include_code),
+            str(budget.per_pair),
+            str(budget.page_total),
             *sorted(request.refs),
         ]
         digest = hashlib.sha256("|".join(str(part) for part in parts).encode()).hexdigest()

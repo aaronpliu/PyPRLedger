@@ -169,6 +169,22 @@
       </el-row>
     </el-form>
 
+    <!-- How deep this comparison reads. The numbers behind each depth belong to the
+         server, which clamps them to its own ceilings and reports what it actually
+         read, so this is a preference rather than a promise - and one a reader can
+         keep, since the same releases are usually compared over and over. -->
+    <div class="depth" data-test="depth">
+      <span class="depth-label">{{ t('appDiff.depth_label') }}</span>
+      <el-select v-model="depth" class="depth-select" data-test="depth-select">
+        <el-option :label="t('appDiff.depth_default')" value="default" />
+        <el-option :label="t('appDiff.depth_deep')" value="deep" />
+        <el-option :label="t('appDiff.depth_all')" value="all" />
+      </el-select>
+      <el-checkbox v-model="remembered" data-test="depth-remember">
+        {{ t('appDiff.depth_remember') }}
+      </el-checkbox>
+    </div>
+
     <!-- The picker offers the recent releases and searches the rest, so it says
          which of the two it is doing rather than leaving a short list to look like
          a short repository. -->
@@ -466,6 +482,7 @@ import type {
   AppVersionDiffResponse,
 } from '@/api/appVersionDiff'
 import { useRefCandidates } from '@/composables/useRefCandidates'
+import { useAppDiffDepth } from '@/composables/useAppDiffDepth'
 import {
   buildRows,
   codeTone,
@@ -532,9 +549,10 @@ const selectedRefs = ref<string[]>([])
 const comparing = ref(false)
 const failed = ref(false)
 const result = ref<AppVersionDiffResponse | null>(null)
-// How many packages one batch asks for. The server refuses more than its own
-// batch, and a smaller one fills the page in sooner.
-const PACKAGE_BATCH = 8
+// How deep a comparison reads, and whether the reader keeps that choice. The
+// numbers behind each depth are the server's to grant: it clamps them to its own
+// ceilings and the answer says what was actually read.
+const { depth, remembered, depthRequest } = useAppDiffDepth()
 // The first response answers each pair with its first few package comparisons; the
 // rest are read behind it, so a release that moved dozens of packages is drawn
 // without waiting for every one of them.
@@ -669,6 +687,8 @@ async function compare(refresh = false) {
       ...coordinates(),
       refs: [...selectedRefs.value],
       refresh,
+      // how deep this reader wants to read, within what the server will grant
+      ...depthRequest(),
     })
     if (run !== compareRun) return
     result.value = response
@@ -734,7 +754,11 @@ async function readDeferredPackages(run: number, manual = false) {
   const response = result.value
   if (!response) return
 
-  let allowance = manual ? Number.POSITIVE_INFINITY : response.auto_compare_remaining
+  // How much of the allowance is left, and how many packages one batch carries: both
+  // are the server's numbers, sent with the answer, so the page paces itself by what
+  // this deployment does rather than by what a page was compiled with.
+  let allowance = manual ? Number.POSITIVE_INFINITY : response.package_comparisons.remaining
+  const batchSize = Math.max(response.package_comparisons.batch, 1)
   autoCompareRunning.value = true
   autoComparePaused.value = false
   try {
@@ -742,7 +766,7 @@ async function readDeferredPackages(run: number, manual = false) {
       if (run !== compareRun) return
       const waiting = interval.packages.filter((entry) => entry.code.deferred)
       while (waiting.length && allowance > 0) {
-        const batch = waiting.splice(0, Math.min(PACKAGE_BATCH, allowance))
+        const batch = waiting.splice(0, Math.min(batchSize, allowance))
         allowance -= batch.length
         let answer
         try {
@@ -932,6 +956,12 @@ watch([selectedProjectKey, selectedRepositorySlug, selectedRefs], syncUrl)
 watch(selectedRefs, (refs) => {
   if (refs.length >= 2 && hasCoordinates.value) void compare()
 })
+
+// Asking to read deeper is a different question, so it is answered rather than left
+// until the next comparison: what is on screen is read again at the new depth.
+watch(depth, () => {
+  if (result.value && canCompare.value) void compare()
+})
 </script>
 
 <style scoped>
@@ -967,6 +997,23 @@ watch(selectedRefs, (refs) => {
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+.depth {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.depth-label {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
+.depth-select {
+  width: 320px;
 }
 
 .packages-action {

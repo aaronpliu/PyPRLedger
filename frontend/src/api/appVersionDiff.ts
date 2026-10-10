@@ -12,6 +12,18 @@ export interface AppVersionDiffRequest {
   refresh?: boolean
   /** Read the commits between every pair as well. Defaults to true. */
   include_code?: boolean
+  /**
+   * How many dependency comparisons each pair should carry in the answer. Null or
+   * absent takes the server's default. This is a depth, not a demand: the server
+   * clamps it to its own ceiling and says what it actually read.
+   */
+  max_package_comparisons?: number | null
+  /**
+   * How many dependency comparisons this page should run automatically in total -
+   * what the answer carries plus what the page asks for afterwards. Null or absent
+   * takes the server's default, and the page ceiling applies.
+   */
+  max_total_package_comparisons?: number | null
 }
 
 /** One selected release, placed on the timeline by the server. */
@@ -134,6 +146,24 @@ export interface AppVersionDiffInterval {
   code: AppVersionDiffCode | null
 }
 
+/**
+ * How deep the page may read: the numbers the server answered with.
+ *
+ * These are the effective ones, not the ones asked for - a request may ask to read
+ * deeper than the defaults and is answered with what the server will actually do.
+ * The page paces itself by these rather than by numbers compiled into it.
+ */
+export interface AppVersionDiffPackageBudget {
+  /** Most comparisons an adjacent pair carries in this answer. */
+  per_pair: number
+  /** Most comparisons this page may run automatically. */
+  page_total: number
+  /** Most deferred packages should be asked for at a time. */
+  batch: number
+  /** How much of `page_total` this answer leaves for the page to spend. */
+  remaining: number
+}
+
 export interface AppVersionDiffResponse {
   project_key: string
   repository_slug: string
@@ -145,12 +175,8 @@ export interface AppVersionDiffResponse {
   /** The matrix: the application's own version first, then its direct dependencies. */
   rows: AppVersionDiffRow[]
   intervals: AppVersionDiffInterval[]
-  /**
-   * How many more dependency comparisons this page may run on its own. The page
-   * asks for its deferred packages in batches until this runs out, then leaves what
-   * is left for the reader to ask for.
-   */
-  auto_compare_remaining: number
+  /** The budget this answer was read under, and how the page should batch. */
+  package_comparisons: AppVersionDiffPackageBudget
 }
 
 /** One package of a pair to compare, as the page read it off the matrix. */

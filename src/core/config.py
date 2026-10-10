@@ -125,6 +125,34 @@ class Settings(BaseSettings):
             "The allowance left rides along with the response, so the page knows when to stop."
         ),
     )
+    APP_DIFF_PACKAGE_COMPARISONS_CEILING: int = Field(
+        default=50,
+        description=(
+            "Most comparisons one adjacent pair may be asked to carry, however deep a request "
+            "asks to read. The two settings above are the defaults a request that asks for "
+            "nothing gets; this is the most one that asks for everything gets, because those "
+            "numbers decide how many provider calls a page makes. A request above the ceiling "
+            "is answered with the ceiling rather than refused - it is a performance dial, not "
+            "a correctness one - and the effective numbers ride back with the response."
+        ),
+    )
+    APP_DIFF_PAGE_COMPARISONS_CEILING: int = Field(
+        default=300,
+        description=(
+            "Most comparisons one App Diff page may be asked to run in total. The per-pair "
+            "ceiling bounds one pair; this bounds the page, which is what a deeper reading "
+            "actually spends - three releases are two pairs, each of them with dozens of "
+            "packages. Same rule: over it is answered with the ceiling, never an error."
+        ),
+    )
+    APP_DIFF_PACKAGE_COMPARISON_BATCH_SIZE: int = Field(
+        default=8,
+        description=(
+            "How many deferred package comparisons the page is told to ask for at a time. It "
+            "rides back with the response, so the batches a page reads are paced by this "
+            "setting rather than by a number compiled into the page."
+        ),
+    )
     DEPENDENCY_API_BASE_URL: str = Field(
         default="", description="Base URL of the dependency database API"
     )
