@@ -55,8 +55,13 @@ MIN_RELEASES = 2
 MAX_RELEASES = 8
 
 
-class AppVersionDiffRequest(BaseModel):
-    """The application whose releases are compared, and which releases."""
+class AppVersionDiffCoordinates(BaseModel):
+    """Where the application lives, and whether to read past the cache.
+
+    Every App Diff request carries these, the batches that continue a comparison
+    included: a batch asks the same question about the same releases, so it is
+    answered with the same reading.
+    """
 
     project_key: str = Field(
         ..., min_length=1, max_length=128, description="Bitbucket project key (or GitHub org)"
@@ -78,6 +83,19 @@ class AppVersionDiffRequest(BaseModel):
         default=None,
         description="Bitbucket Cloud only: workspace holding the repository.",
     )
+    refresh: bool = Field(
+        default=False,
+        description=(
+            "Bypass the cache and read every release from the dependency source again. A "
+            "tag can be moved, so a reader who suspects one should not have to wait for the "
+            "cache to expire."
+        ),
+    )
+
+
+class AppVersionDiffRequest(AppVersionDiffCoordinates):
+    """The application whose releases are compared, and which releases."""
+
     refs: list[str] = Field(
         ...,
         min_length=MIN_RELEASES,
@@ -86,14 +104,6 @@ class AppVersionDiffRequest(BaseModel):
             "The application releases to compare, as they appear in the repository's tags "
             "and branches. The order they are supplied in is ignored: the releases are "
             "presented in the order their datetimes put them."
-        ),
-    )
-    refresh: bool = Field(
-        default=False,
-        description=(
-            "Bypass the cache and read every release from the dependency source again. A "
-            "tag can be moved, so a reader who suspects one should not have to wait for the "
-            "cache to expire."
         ),
     )
     include_code: bool = Field(
@@ -229,6 +239,16 @@ class AppVersionDiffCode(BaseModel):
     truncated: bool = Field(
         default=False, description="Whether more commits exist than the rendered lists carry"
     )
+    deferred: bool = Field(
+        default=False,
+        description=(
+            "Whether this comparison was left for later rather than found impossible: the two "
+            "versions are known and the repository is known, but the pair had more moved "
+            "packages than one response reads. The page asks for these in batches "
+            "(POST /release/apps/diff/packages); until then there is no verdict, which is not "
+            "the same as an inconclusive one and must never be shown as one."
+        ),
+    )
     unavailable: str | None = Field(
         default=None,
         description=(
@@ -361,3 +381,79 @@ class AppVersionDiffResponse(BaseModel):
         description="The matrix, the application's own version first, then its direct dependencies",
     )
     intervals: list[AppVersionDiffInterval] = Field(default_factory=list)
+    auto_compare_remaining: int = Field(
+        default=0,
+        description=(
+            "How many more dependency comparisons this page may run automatically. The page "
+            "asks for its deferred packages in batches until this runs out, and leaves whatever "
+            "is left for a reader to ask for explicitly - so a comparison of several releases "
+            "cannot become an unbounded run of provider calls."
+        ),
+    )
+
+
+# A batch is a few packages at a time, asked for while the page is being read. A
+# request larger than this is not a batch but a way around the ceiling above, so
+# the schema refuses it rather than quietly reading it.
+MAX_PACKAGE_BATCH = 25
+
+
+class AppVersionDiffPackageRequest(BaseModel):
+    """One package to compare, as the page read it off the matrix.
+
+    The versions come from the page rather than being read again here: the pair is
+    the one the first response reported, and a comparison needs no more than the
+    name of the package and the two versions it moved between.
+    """
+
+    name: str = Field(
+        ..., min_length=1, max_length=256, description="Package name as the application declares it"
+    )
+    source_version: str = Field(
+        ..., min_length=1, description="Version in the earlier release of the pair"
+    )
+    target_version: str = Field(
+        ..., min_length=1, description="Version in the later release of the pair"
+    )
+
+
+class AppVersionDiffPackagesRequest(AppVersionDiffCoordinates):
+    """A pair of releases, and the packages of it to compare now.
+
+    One pair per request, because a comparison is between two releases: the batches
+    that finish a comparison are batches of packages within a pair, never across
+    pairs. A package moved in several pairs is asked for once per pair, which is
+    what it takes to answer what changed between those two releases.
+    """
+
+    source_ref: str = Field(
+        ..., min_length=1, max_length=256, description="Earlier release of the pair"
+    )
+    target_ref: str = Field(
+        ..., min_length=1, max_length=256, description="Later release of the pair"
+    )
+    packages: list[AppVersionDiffPackageRequest] = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_PACKAGE_BATCH,
+        description=(
+            f"The packages to compare, up to {MAX_PACKAGE_BATCH} at a time. Each is answered "
+            "the way the first response answers it"
+        ),
+    )
+
+
+class AppVersionDiffPackagesResponse(BaseModel):
+    """The packages of one pair that were asked for, compared."""
+
+    project_key: str
+    repository_slug: str
+    source_ref: str = Field(..., description="Earlier release of the pair")
+    target_ref: str = Field(..., description="Later release of the pair")
+    packages: list[AppVersionDiffPackageComparison] = Field(
+        default_factory=list,
+        description=(
+            "One entry per package asked for, in the shape the first response uses, so a page "
+            "replaces a deferred entry with the answer rather than re-rendering the row"
+        ),
+    )

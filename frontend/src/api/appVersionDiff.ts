@@ -81,6 +81,13 @@ export interface AppVersionDiffCode {
   missing_commits: AppVersionDiffCommit[]
   truncated: boolean
   unavailable: string | null
+  /**
+   * Whether this comparison was left for later rather than found impossible: the
+   * two versions and the repository are known, but the pair moved more packages
+   * than one response reads. The page asks for these in batches; until then there
+   * is no verdict, which is not the same as an inconclusive one.
+   */
+  deferred: boolean
 }
 
 /**
@@ -138,6 +145,42 @@ export interface AppVersionDiffResponse {
   /** The matrix: the application's own version first, then its direct dependencies. */
   rows: AppVersionDiffRow[]
   intervals: AppVersionDiffInterval[]
+  /**
+   * How many more dependency comparisons this page may run on its own. The page
+   * asks for its deferred packages in batches until this runs out, then leaves what
+   * is left for the reader to ask for.
+   */
+  auto_compare_remaining: number
+}
+
+/** One package of a pair to compare, as the page read it off the matrix. */
+export interface AppVersionDiffPackageRequest {
+  name: string
+  source_version: string
+  target_version: string
+}
+
+/** A pair of releases, and the packages of it to compare now. */
+export interface AppVersionDiffPackagesRequest {
+  project_key: string
+  repository_slug: string
+  git_provider?: string | null
+  workspace_slug?: string | null
+  refresh?: boolean
+  source_ref: string
+  target_ref: string
+  /** A few at a time: the server refuses more than a batch. */
+  packages: AppVersionDiffPackageRequest[]
+}
+
+/** The packages of one pair that were asked for, compared. */
+export interface AppVersionDiffPackagesResponse {
+  project_key: string
+  repository_slug: string
+  source_ref: string
+  target_ref: string
+  /** One entry per package asked for, in the shape the first response uses. */
+  packages: AppVersionDiffPackageComparison[]
 }
 
 export const appVersionDiffApi = {
@@ -149,5 +192,17 @@ export const appVersionDiffApi = {
    */
   compare(payload: AppVersionDiffRequest): Promise<AppVersionDiffResponse> {
     return request.post('/release/apps/diff', payload)
+  },
+
+  /**
+   * Compare the packages a pair of releases moved, in batches. The comparison
+   * reports the packages past its own first-read ceiling as deferred; this is how
+   * they are read, so a release that moved dozens of packages is drawn from the
+   * first few and filled in as the rest arrive.
+   */
+  comparePackages(
+    payload: AppVersionDiffPackagesRequest,
+  ): Promise<AppVersionDiffPackagesResponse> {
+    return request.post('/release/apps/diff/packages', payload)
   },
 }

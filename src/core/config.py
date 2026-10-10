@@ -105,12 +105,24 @@ class Settings(BaseSettings):
 
     # Dependency database - the system of record for what an application shipped
     APP_DIFF_MAX_PACKAGE_COMPARISONS: int = Field(
-        default=12,
+        default=6,
         description=(
-            "Most dependency comparisons one App Diff request runs. Each one asks the git "
-            "provider for the commits between two versions of a package, so a release that "
-            "moved dozens of them is read on demand: whatever is past this ceiling is "
-            "reported as not compared rather than silently left out."
+            "Most dependency comparisons one adjacent pair of releases carries in the first "
+            "response. Each one asks the git provider for the commits between two versions of "
+            "a package, and a release that moved thirty of them would make thirty of those "
+            "calls before the page could be drawn. So a pair answers with its first few - the "
+            "downgrades first - and reports the rest as not compared *yet*, which the page "
+            "asks for afterwards in batches (POST /release/apps/diff/packages)."
+        ),
+    )
+    APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS: int = Field(
+        default=90,
+        description=(
+            "Most dependency comparisons one App Diff page runs automatically: the ones the "
+            "first response carries plus the ones the page asks for afterwards. Past it the "
+            "remaining packages stay uncompared until a reader asks for them explicitly, so a "
+            "comparison of several releases cannot become an unbounded run of provider calls. "
+            "The allowance left rides along with the response, so the page knows when to stop."
         ),
     )
     DEPENDENCY_API_BASE_URL: str = Field(

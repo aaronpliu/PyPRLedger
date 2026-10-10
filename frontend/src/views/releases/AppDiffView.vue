@@ -222,6 +222,30 @@
         data-test="incomplete"
       />
 
+      <!-- A pair that moved dozens of packages is drawn from its first few
+           comparisons while the rest are read behind it, and what is still unread
+           says so rather than reading as a package that was checked. -->
+      <p
+        v-if="deferredTotal && (autoCompareRunning || pendingPackages)"
+        class="refs-note"
+        data-test="packages-pending"
+      >
+        {{
+          autoCompareRunning
+            ? t('appDiff.packages_progress', { done: deferredDone, total: deferredTotal })
+            : t('appDiff.packages_left', { count: pendingPackages })
+        }}
+      </p>
+      <el-button
+        v-if="!autoCompareRunning && pendingPackages"
+        class="packages-action"
+        size="small"
+        data-test="packages-read-rest"
+        @click="readRemainingPackages"
+      >
+        {{ t('appDiff.packages_read_rest', { count: pendingPackages }) }}
+      </el-button>
+
       <section v-if="intervals.length" class="intervals" data-test="intervals">
         <article
           v-for="interval in intervals"
@@ -421,7 +445,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import ContentLoader from '@/components/common/ContentLoader.vue'
@@ -508,6 +532,18 @@ const selectedRefs = ref<string[]>([])
 const comparing = ref(false)
 const failed = ref(false)
 const result = ref<AppVersionDiffResponse | null>(null)
+// How many packages one batch asks for. The server refuses more than its own
+// batch, and a smaller one fills the page in sooner.
+const PACKAGE_BATCH = 8
+// The first response answers each pair with its first few package comparisons; the
+// rest are read behind it, so a release that moved dozens of packages is drawn
+// without waiting for every one of them.
+const autoCompareRunning = ref(false)
+const autoComparePaused = ref(false)
+const deferredTotal = ref(0)
+// Every read belongs to one comparison: a result cleared, or a comparison started
+// again, leaves the batches of the previous one with nowhere to land.
+let compareRun = 0
 // Refs a URL asked for, held until the ref list arrives so the picker does not
 // overwrite them.
 const requestedRefs = ref<string[] | null>(null)
@@ -621,26 +657,127 @@ async function loadRefs() {
 async function compare(refresh = false) {
   if (!canCompare.value) return
 
+  // A comparison started again cancels the batches of the one before it.
+  const run = ++compareRun
+  autoCompareRunning.value = false
+  autoComparePaused.value = false
+  deferredTotal.value = 0
   comparing.value = true
   failed.value = false
   try {
-    result.value = await appVersionDiffApi.compare({
+    const response = await appVersionDiffApi.compare({
       ...coordinates(),
       refs: [...selectedRefs.value],
       refresh,
     })
+    if (run !== compareRun) return
+    result.value = response
+    deferredTotal.value = countDeferred(response.intervals)
+    if (deferredTotal.value) void readDeferredPackages(run)
   } catch {
+    if (run !== compareRun) return
     // The failure is reported rather than emptied: an empty matrix would read as
     // a comparison in which nothing moved.
     result.value = null
     failed.value = true
   } finally {
-    comparing.value = false
+    if (run === compareRun) comparing.value = false
   }
 }
 
 function refresh() {
   void compare(true)
+}
+
+/** How many package comparisons a set of pairs is leaving for later. */
+function countDeferred(list: AppVersionDiffInterval[]): number {
+  return list.reduce(
+    (count, interval) => count + interval.packages.filter((entry) => entry.code.deferred).length,
+    0,
+  )
+}
+
+/** How many package comparisons are still waiting to be read. */
+const pendingPackages = computed(() => countDeferred(intervals.value))
+
+/** How many of the deferred ones have been read since the page was drawn. */
+const deferredDone = computed(() => Math.max(deferredTotal.value - pendingPackages.value, 0))
+
+/** Stop reading whatever batches are in flight: their answer is no longer wanted. */
+function cancelPackageReads() {
+  compareRun += 1
+  autoCompareRunning.value = false
+  autoComparePaused.value = false
+  deferredTotal.value = 0
+}
+
+/** Put the answers where their entries were, so a row stops saying "not compared yet". */
+function mergeComparisons(
+  interval: AppVersionDiffInterval,
+  answered: AppVersionDiffPackageComparison[],
+) {
+  const byName = new Map(answered.map((entry) => [entry.name, entry]))
+  interval.packages = interval.packages.map((entry) => byName.get(entry.name) ?? entry)
+}
+
+/**
+ * Read the package comparisons the first response deferred.
+ *
+ * The response answers each pair with its first few packages so the page can be
+ * drawn without waiting for all of them; the rest are asked for here, a batch at a
+ * time, until nothing is left. The allowance the response carries bounds what the
+ * page reads on its own - a reader who asks by hand is not bounded by it, because
+ * it exists to keep the page from reading without end, not to stop the person
+ * looking at it.
+ */
+async function readDeferredPackages(run: number, manual = false) {
+  const response = result.value
+  if (!response) return
+
+  let allowance = manual ? Number.POSITIVE_INFINITY : response.auto_compare_remaining
+  autoCompareRunning.value = true
+  autoComparePaused.value = false
+  try {
+    for (const interval of response.intervals) {
+      if (run !== compareRun) return
+      const waiting = interval.packages.filter((entry) => entry.code.deferred)
+      while (waiting.length && allowance > 0) {
+        const batch = waiting.splice(0, Math.min(PACKAGE_BATCH, allowance))
+        allowance -= batch.length
+        let answer
+        try {
+          answer = await appVersionDiffApi.comparePackages({
+            ...coordinates(),
+            source_ref: interval.source_ref,
+            target_ref: interval.target_ref,
+            packages: batch.map((entry) => ({
+              name: entry.name,
+              source_version: entry.source_version ?? '',
+              target_version: entry.target_version ?? '',
+            })),
+          })
+        } catch {
+          // A batch that could not be read leaves its packages as they were: still
+          // visibly unread, and askable again - never shown as compared, and never
+          // as a package that contained nothing.
+          if (run === compareRun) autoComparePaused.value = true
+          return
+        }
+        if (run !== compareRun) return
+        mergeComparisons(interval, answer.packages)
+      }
+    }
+  } finally {
+    if (run === compareRun) {
+      autoCompareRunning.value = false
+      autoComparePaused.value = pendingPackages.value > 0
+    }
+  }
+}
+
+/** Ask for the packages the automatic read did not get to. */
+function readRemainingPackages() {
+  void readDeferredPackages(compareRun, true)
 }
 
 function cellText(cell: AppDiffCell): string {
@@ -747,6 +884,10 @@ onMounted(async () => {
   }
 })
 
+// Leaving the page ends the reads it started: a batch landing afterwards has
+// nowhere to be shown, and no reader waiting for it.
+onUnmounted(cancelPackageReads)
+
 // The project catalog carries the provider each repository lives on, so picking
 // a project fills it in - the reader never has to know which one it is.
 watch(selectedProjectKey, async (projectKey) => {
@@ -760,6 +901,7 @@ watch(selectedProjectKey, async (projectKey) => {
   }
   clearRefCandidates()
   result.value = null
+  cancelPackageReads()
 
   // Unknown project keys (typed manually) have no local repository catalog
   if (project) {
@@ -777,6 +919,7 @@ watch(selectedRepositorySlug, (repositorySlug) => {
   selectedRefs.value = []
   requestedRefs.value = null
   clearRefCandidates()
+  cancelPackageReads()
   if (repositorySlug && hasCoordinates.value) void loadRefs()
 })
 
@@ -824,6 +967,10 @@ watch(selectedRefs, (refs) => {
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+.packages-action {
+  margin: 0 0 12px;
 }
 
 .ref-empty {

@@ -19,6 +19,7 @@ export const RELEASE_LATER = 'v2.0.0'
 export const RELEASE_MISSING = 'v9.9.9'
 export const RELEASE_REBUILT = 'v3.0.0'
 export const RELEASE_UNAVAILABLE = 'v4.0.0'
+export const RELEASE_DEFERRED = 'v5.0.0'
 
 function commit(id: string, subject: string): AppVersionDiffCommit {
   return {
@@ -44,6 +45,7 @@ function code(added: number, missing = 0) {
     missing_commits: [],
     truncated: false,
     unavailable: null,
+    deferred: false,
   }
 }
 
@@ -75,6 +77,28 @@ function notCompared(reason: string): AppVersionDiffCode {
     missing_commits: [],
     truncated: false,
     unavailable: reason,
+    deferred: false,
+  }
+}
+
+/**
+ * A comparison the first response left for the batches that follow.
+ *
+ * There is a pair of versions and a repository, so this is a comparison waiting
+ * its turn - not one that cannot be made, and not one that was made and found
+ * empty.
+ */
+function deferredCode(): AppVersionDiffCode {
+  return {
+    verdict: 'inconclusive',
+    scan_complete: false,
+    added_count: 0,
+    missing_count: 0,
+    added_commits: [],
+    missing_commits: [],
+    truncated: false,
+    unavailable: null,
+    deferred: true,
   }
 }
 
@@ -227,7 +251,71 @@ function compared(): AppVersionDiffResponse {
         ],
       },
     ],
+    // nothing was left for later: this page has nothing more to read
+    auto_compare_remaining: 90,
   }
+}
+
+/**
+ * A pair that moved more packages than one response reads.
+ *
+ * The first response carries one package's comparison and leaves two for the
+ * batches that follow, with an allowance of one - so a page reading on its own
+ * reaches the end of what it may read and has to say so.
+ */
+function deferred(): AppVersionDiffResponse {
+  const base = compared()
+
+  return {
+    ...base,
+    releases: [
+      { ref: RELEASE_EARLIER, released_at: '2026-09-01', has_record: true },
+      { ref: RELEASE_DEFERRED, released_at: '2026-10-01', has_record: true },
+    ],
+    // one comparison may still be read without being asked for
+    auto_compare_remaining: 1,
+    intervals: [
+      {
+        ...base.intervals[0],
+        target_ref: RELEASE_DEFERRED,
+        packages: [
+          packageComparison('packageA', 'changed', ['1.0.0', '1.0.1'], code(4), 'CORE/pkg-a'),
+          // these two moved and have a repository, so they are comparisons waiting
+          // their turn - each carrying where it lives, which is what lets the page
+          // ask for it on its own
+          packageComparison(
+            'packageE',
+            'changed',
+            ['2.1.0', '2.0.0'],
+            deferredCode(),
+            'CORE/pkg-e',
+          ),
+          packageComparison(
+            'packageF',
+            'changed',
+            ['1.0.0', '^2.0.0'],
+            deferredCode(),
+            'CORE/pkg-f',
+          ),
+        ],
+      },
+    ],
+  }
+}
+
+/** The answer the batch endpoint gives for the packages a page asked about. */
+export function packageAnswers(
+  packages: { name: string; source_version: string; target_version: string }[],
+): AppVersionDiffPackageComparison[] {
+  return packages.map((item) =>
+    packageComparison(
+      item.name,
+      'changed',
+      [item.source_version, item.target_version],
+      code(2),
+      `CORE/${item.name.toLowerCase()}`,
+    ),
+  )
 }
 
 /** The same comparison with a third release the source holds no record for. */
@@ -325,6 +413,7 @@ function unreadable(): AppVersionDiffResponse {
           missing_commits: [],
           truncated: false,
           unavailable: 'provider unreachable',
+          deferred: false,
         },
       },
     ],
@@ -336,5 +425,6 @@ export function diffOf(payload: { refs: string[] }): AppVersionDiffResponse {
   if (payload.refs.includes(RELEASE_MISSING)) return withMissing()
   if (payload.refs.includes(RELEASE_REBUILT)) return rebuilt()
   if (payload.refs.includes(RELEASE_UNAVAILABLE)) return unreadable()
+  if (payload.refs.includes(RELEASE_DEFERRED)) return deferred()
   return compared()
 }

@@ -53,9 +53,13 @@ from src.schemas.app_version_diff import (
     VERDICT_IDENTICAL,
     VERDICT_INCOMPLETE,
     AppVersionDiffCode,
+    AppVersionDiffCoordinates,
     AppVersionDiffInterval,
     AppVersionDiffMove,
     AppVersionDiffPackageComparison,
+    AppVersionDiffPackageRequest,
+    AppVersionDiffPackagesRequest,
+    AppVersionDiffPackagesResponse,
     AppVersionDiffRelease,
     AppVersionDiffRequest,
     AppVersionDiffResponse,
@@ -226,18 +230,38 @@ def package_comparison(
 
 
 def package_not_compared(
-    move: AppVersionDiffMove, reason: str
+    move: AppVersionDiffMove, repository: DependencyRepository, reason: str
 ) -> AppVersionDiffPackageComparison:
     """A package there was nothing to compare for, and why.
 
     It says so in the same place a comparison says how it went, so that what could
     not be checked is as visible as what was - a check that silently skipped a
-    package reads as a pass it never earned.
+    package reads as a pass it never earned. The repository rides along when one
+    was resolved: knowing where a package lives is worth having even when its two
+    versions cannot be compared.
     """
     return package_comparison(
         move,
-        DependencyRepository(),
+        repository,
         AppVersionDiffCode(verdict=VERDICT_INCONCLUSIVE, unavailable=reason),
+    )
+
+
+def package_deferred(
+    move: AppVersionDiffMove, repository: DependencyRepository
+) -> AppVersionDiffPackageComparison:
+    """A package whose comparison was left for the batches that follow.
+
+    A pair that moved more packages than one response reads reports the rest this
+    way: there is a pair of versions and a repository to read them in, so this is a
+    comparison waiting its turn and not one that cannot be made. It carries the
+    repository it was resolved to, which is what lets the page ask for it on its
+    own, and it claims no verdict - which is not the same as an inconclusive one.
+    """
+    return package_comparison(
+        move,
+        repository,
+        AppVersionDiffCode(verdict=VERDICT_INCONCLUSIVE, deferred=True),
     )
 
 
@@ -306,9 +330,10 @@ class AppVersionDiffService:
 
         rows = self._build_matrix(release_entries, app_name)
         intervals = self._compare_intervals(release_entries, rows)
+        compared_packages = 0
         if request.include_code:
             await self._attach_code(request, release_entries, intervals, provider_name)
-            await self._attach_dependency_code(
+            compared_packages = await self._attach_dependency_code(
                 request,
                 intervals,
                 provider_name,
@@ -321,6 +346,7 @@ class AppVersionDiffService:
             releases=release_entries,
             rows=rows,
             intervals=intervals,
+            compared_packages=compared_packages,
         )
 
         await self._write_cache(cache_key, response)
@@ -338,6 +364,72 @@ class AppVersionDiffService:
             },
         )
         return response
+
+    async def compare_packages(
+        self,
+        request: AppVersionDiffPackagesRequest,
+        resolve_dependency_repository: DependencyRepositoryResolver | None = None,
+    ) -> AppVersionDiffPackagesResponse:
+        """Compare named packages of one pair, on their own.
+
+        The first response answers a pair with its first few comparisons and reports
+        the rest as deferred; this is how the page asks for those - a batch at a time,
+        so a release that moved thirty packages fills in as it is read instead of
+        holding the page back. Each package goes through the same path the first
+        response used, and the comparison underneath is cached, so asking for one
+        twice - a page reloaded, a second reader - is cheap.
+
+        Args:
+            request: The coordinates the comparison was made with, the pair the
+                packages belong to, and the packages themselves
+            resolve_dependency_repository: Where a package lives - the same resolver
+                the first response used. Without one, packages are reported as not
+                compared rather than guessed at
+
+        Returns:
+            One comparison per package asked for, in the shape the first response
+            uses, so a page replaces a deferred entry with the answer.
+        """
+        provider_name = resolve_provider_name(request.git_provider)
+        resolver = resolve_dependency_repository or _no_dependency_repository
+        semaphore = asyncio.Semaphore(PACKAGE_COMPARISON_CONCURRENCY)
+
+        async def compare(item: AppVersionDiffPackageRequest) -> AppVersionDiffPackageComparison:
+            # The state is read from the two versions rather than taken on trust, by
+            # the same reading the matrix was built with.
+            state, direction, orderable = compare_versions(
+                item.source_version, item.target_version
+            )
+            move = AppVersionDiffMove(
+                name=item.name,
+                kind=KIND_DEPENDENCY,
+                source_version=item.source_version,
+                target_version=item.target_version,
+                state=state,
+                direction=direction,
+                orderable=orderable,
+            )
+            async with semaphore:
+                return await self._compare_package(request, move, provider_name, resolver)
+
+        packages = await asyncio.gather(*(compare(item) for item in request.packages))
+        logger.info(
+            "Deferred package comparisons read",
+            extra={
+                "project_key": request.project_key,
+                "repository_slug": request.repository_slug,
+                "source_ref": request.source_ref,
+                "target_ref": request.target_ref,
+                "packages": [entry.name for entry in request.packages],
+            },
+        )
+        return AppVersionDiffPackagesResponse(
+            project_key=request.project_key,
+            repository_slug=request.repository_slug,
+            source_ref=request.source_ref,
+            target_ref=request.target_ref,
+            packages=list(packages),
+        )
 
     # ------------------------------------------------------------------ #
     # Reading the releases
@@ -668,19 +760,37 @@ class AppVersionDiffService:
         intervals: list[AppVersionDiffInterval],
         provider_name: str,
         resolve_repository: DependencyRepositoryResolver,
-    ) -> None:
-        """Compare every dependency that moved, in the repository it lives in.
+    ) -> int:
+        """Compare the dependencies that moved, a pair's first few at a time.
 
         A package's version is the tag it was released under, so the two versions a
         release moved between are the two refs to compare: the same question a
         repository comparison asks, asked about a package.
 
-        Each of those is a provider request, so they run a few at a time and only
-        up to a ceiling. What the ceiling leaves out is reported as not compared,
-        which is a different thing from a package that was compared and matched.
+        Each of those is a provider request, and a release that moved thirty packages
+        would make thirty of them before the page could be drawn. So a pair answers
+        with its first few - the downgrades first, because a package moving backwards
+        is the one a reader is looking for - and reports the rest as not compared
+        *yet*: not compared is a different thing from compared and found equal, and a
+        different thing again from impossible. Each of those carries the repository it
+        was resolved to, so the page can ask for them in batches.
+
+        Returns:
+            How many comparisons were run, which is what the page's remaining
+            automatic allowance is counted down by.
         """
-        budget = max(settings.APP_DIFF_MAX_PACKAGE_COMPARISONS, 0)
+        pair_ceiling = max(settings.APP_DIFF_MAX_PACKAGE_COMPARISONS, 0)
+        total_budget = max(settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS, 0)
+        compared_count = 0
         semaphore = asyncio.Semaphore(PACKAGE_COMPARISON_CONCURRENCY)
+        # A package that moved in several pairs lives in one repository: resolved
+        # once, however many pairs ask where it is.
+        repositories: dict[str, DependencyRepository] = {}
+
+        async def repository_of(name: str) -> DependencyRepository:
+            if name not in repositories:
+                repositories[name] = await resolve_repository(name)
+            return repositories[name]
 
         for interval in intervals:
             if not interval.complete:
@@ -689,15 +799,27 @@ class AppVersionDiffService:
             if not moves:
                 continue
 
-            comparable = [move for move in moves if move.state == STATE_CHANGED]
-            within_budget = comparable[:budget]
-            budget -= len(within_budget)
+            # Every moved package is resolved before any of them is compared. The
+            # lookup is local, and it is what makes a deferred entry something the
+            # page can ask for later rather than a dead end.
+            resolved = {move.name: await repository_of(move.name) for move in moves}
+            comparable = [
+                move
+                for move in moves
+                if move.state == STATE_CHANGED
+                and resolved[move.name].repository_slug
+                and not resolved[move.name].reason
+            ]
+            # Each pair gets its own share: a pair that moved dozens of packages must
+            # not spend the read of the pairs beside it. The total is what bounds the
+            # page as a whole.
+            within_budget = self._most_important(comparable)[: min(pair_ceiling, total_budget)]
+            total_budget -= len(within_budget)
+            compared_count += len(within_budget)
 
             async def compare(move: AppVersionDiffMove) -> AppVersionDiffPackageComparison:
                 async with semaphore:
-                    return await self._compare_package(
-                        request, move, provider_name, resolve_repository
-                    )
+                    return await self._compare_package(request, move, provider_name, repository_of)
 
             compared = await asyncio.gather(*(compare(move) for move in within_budget))
             by_name = {entry.name: entry for entry in compared}
@@ -706,30 +828,62 @@ class AppVersionDiffService:
                 if move.name in by_name:
                     interval.packages.append(by_name[move.name])
                     continue
-                interval.packages.append(
-                    package_not_compared(
-                        move,
-                        (
-                            f"not compared: {len(comparable)} packages moved and the ceiling "
-                            f"is {settings.APP_DIFF_MAX_PACKAGE_COMPARISONS}"
-                            if move.state == STATE_CHANGED
-                            else "only one version is recorded, so there is no pair to compare"
-                        ),
-                    )
-                )
+                interval.packages.append(self._uncompared_package(move, resolved[move.name]))
+
+        return compared_count
+
+    @staticmethod
+    def _most_important(moves: list[AppVersionDiffMove]) -> list[AppVersionDiffMove]:
+        """The comparisons to run first: the downgrades, then the matrix order.
+
+        A package that moved backwards is the one a reader is looking for, so a
+        ceiling must never be what hides it. Everything else keeps the order the
+        matrix put it in - which keeps two opens of the same page reading alike, and
+        is why this uses a stable sort rather than ordering by name.
+        """
+        return sorted(moves, key=lambda move: move.direction != DIRECTION_DOWNGRADE)
+
+    @staticmethod
+    def _uncompared_package(
+        move: AppVersionDiffMove, repository: DependencyRepository
+    ) -> AppVersionDiffPackageComparison:
+        """What to report for a moved package that was not compared, and why.
+
+        Three different things end up here and they must not read alike: a package
+        the registry cannot place, a package with a single version (added or removed,
+        which has no pair to compare), and a package that has both versions and a
+        repository but was left for the batches that follow.
+        """
+        if repository.reason or not repository.repository_slug:
+            return package_not_compared(
+                move,
+                repository,
+                repository.reason or f"no repository is known for '{move.name}'",
+            )
+        if move.state != STATE_CHANGED:
+            return package_not_compared(
+                move, repository, "only one version is recorded, so there is no pair to compare"
+            )
+        return package_deferred(move, repository)
 
     async def _compare_package(
         self,
-        request: AppVersionDiffRequest,
+        request: AppVersionDiffCoordinates,
         move: AppVersionDiffMove,
         provider_name: str,
         resolve_repository: DependencyRepositoryResolver,
     ) -> AppVersionDiffPackageComparison:
-        """One moved package, compared between the two versions it moved between."""
+        """One moved package, compared between the two versions it moved between.
+
+        The request is read for its coordinates alone, so both the first response and
+        the batches that continue it run through this one path.
+        """
         repository = await resolve_repository(move.name)
         if repository.reason or not repository.repository_slug:
             return package_not_compared(
-                move, repository.reason or f"no repository is known for '{move.name}'"
+                move,
+                repository,
+                repository.reason or f"no repository is known for '{move.name}'",
             )
 
         # A repository on Cloud is addressed by its workspace, which a dependency
@@ -792,8 +946,15 @@ class AppVersionDiffService:
         releases: list[dict[str, Any]],
         rows: list[AppVersionDiffRow],
         intervals: list[AppVersionDiffInterval],
+        compared_packages: int = 0,
     ) -> AppVersionDiffResponse:
-        """Assemble the answer, including the one part that must never be faked."""
+        """Assemble the answer, including the two parts that must never be faked.
+
+        One is the verdict, which is never ``identical`` over a release that has no
+        record. The other is the allowance the page is given to finish the deferred
+        comparisons with: it is the ceiling minus what this response already spent,
+        so the page knows when to stop asking on its own.
+        """
         incomplete = any(not release["has_record"] for release in releases)
 
         # Totals come from the intervals that could be compared. An incomplete
@@ -830,6 +991,9 @@ class AppVersionDiffService:
             summary=summary,
             rows=rows,
             intervals=intervals,
+            auto_compare_remaining=max(
+                settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS - compared_packages, 0
+            ),
         )
 
     # ------------------------------------------------------------------ #

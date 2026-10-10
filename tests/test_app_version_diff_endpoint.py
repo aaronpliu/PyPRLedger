@@ -18,6 +18,7 @@ from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.main import app
 from src.models.auth_user import AuthUser
+from src.schemas.app_version_diff import MAX_PACKAGE_BATCH
 from src.schemas.release_diff import ReleaseCompareRequest, ReleaseCompareResponse
 from src.services.app_version_diff_service import AppVersionDiffService
 from src.services.dependency_graph_service import DependencyGraphService
@@ -337,3 +338,101 @@ async def test_a_moved_package_is_compared_in_the_repository_the_registry_names(
     assert (package_request.source_ref, package_request.target_ref) == ("1.0.0", "1.1.0")
     # and the application itself stays in its own repository
     assert any(request.repository_slug == "app" for request in diff.requests)
+
+
+def package_batch_payload(*packages: tuple[str, str, str], **extra: Any) -> dict[str, Any]:
+    """A batch request in the shape the page sends it."""
+    return {
+        "project_key": "CORE",
+        "repository_slug": "app",
+        "git_provider": "bitbucket_server",
+        "source_ref": MOCK_TAG,
+        "target_ref": MOCK_BRANCH,
+        "packages": [
+            {"name": name, "source_version": source, "target_version": target}
+            for name, source, target in packages
+        ],
+        **extra,
+    }
+
+
+async def test_a_batch_compares_the_deferred_packages_of_a_pair(
+    async_client, authenticated_client, db_session
+) -> None:
+    """The page asks for what the first response deferred, a batch at a time."""
+    registry = ProjectRegistryService()
+    await registry.register_project(MOCK_APP_NAME, "CORE", "app", db=db_session)
+    await registry.register_project(
+        "pkg-a-app", "CORE", "pkg-a", db=db_session, app_alias="packageA"
+    )
+
+    diff = FakeDiff(added=3)
+    app.dependency_overrides[get_registry_service] = lambda: registry
+    app.dependency_overrides[get_app_version_diff_service] = lambda: AppVersionDiffService(
+        cache=FakeCache(),
+        graph_service=DependencyGraphService(cache=FakeCache()),
+        diff_service=diff,
+    )
+
+    response = await async_client.post(
+        "/api/v1/release/apps/diff/packages",
+        json=package_batch_payload(("packageA", "1.0.0", "1.1.0")),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["source_ref"], body["target_ref"]) == (MOCK_TAG, MOCK_BRANCH)
+    assert len(body["packages"]) == 1
+    entry = body["packages"][0]
+    assert entry["name"] == "packageA"
+    assert (entry["project_key"], entry["repository_slug"]) == ("CORE", "pkg-a")
+    assert (entry["source_version"], entry["target_version"]) == ("1.0.0", "1.1.0")
+    assert entry["code"]["verdict"] == "contained"
+    assert entry["code"]["added_count"] == 3
+    assert entry["code"]["deferred"] is False
+
+    # read at its two versions, in the repository the registry resolved for it
+    package_request = next(item for item in diff.requests if item.repository_slug == "pkg-a")
+    assert (package_request.source_ref, package_request.target_ref) == ("1.0.0", "1.1.0")
+
+
+async def test_a_batch_answers_for_a_package_no_repository_is_known_for(
+    async_client, authenticated_client
+) -> None:
+    """An external library is reported, not dropped: the batch answers about it too."""
+    response = await async_client.post(
+        "/api/v1/release/apps/diff/packages",
+        json=package_batch_payload(("packageX", "1.0.0", "1.1.0")),
+    )
+
+    assert response.status_code == 200, response.text
+    entry = response.json()["packages"][0]
+    assert entry["name"] == "packageX"
+    assert entry["code"]["verdict"] == "inconclusive"
+    assert "packageX" in (entry["code"]["unavailable"] or "")
+    assert entry["code"]["deferred"] is False
+
+
+async def test_a_batch_rejects_an_empty_package_list(
+    async_client, authenticated_client
+) -> None:
+    response = await async_client.post(
+        "/api/v1/release/apps/diff/packages",
+        json=package_batch_payload(),
+    )
+
+    assert response.status_code == 422
+
+
+async def test_a_batch_rejects_more_packages_than_a_batch_may_carry(
+    async_client, authenticated_client
+) -> None:
+    """A batch is a few packages: a larger request is the ceiling asked around."""
+    oversized = [f"package{index}" for index in range(MAX_PACKAGE_BATCH + 1)]
+
+    response = await async_client.post(
+        "/api/v1/release/apps/diff/packages",
+        json=package_batch_payload(*[(name, "1.0.0", "1.1.0") for name in oversized]),
+    )
+
+    assert response.status_code == 422

@@ -6,7 +6,13 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import AppDiffView from '@/views/releases/AppDiffView.vue'
 import enMessages from '@/locales/en.json'
 import { appVersionDiffApi } from '@/api/appVersionDiff'
-import { APP_NAME, RELEASE_EARLIER, RELEASE_LATER, RELEASE_MISSING } from '../fixtures/appDiff'
+import {
+  APP_NAME,
+  RELEASE_DEFERRED,
+  RELEASE_EARLIER,
+  RELEASE_LATER,
+  RELEASE_MISSING,
+} from '../fixtures/appDiff'
 
 // The repository and its refs come from the provider in the running app; the
 // stand-ins hand over the one project, the one repository and the refs the
@@ -39,10 +45,26 @@ vi.mock('@/api/releaseDiff', () => ({
 // The comparison endpoint answers from the fixtures, so every state the page
 // has to read can be produced without a running backend.
 vi.mock('@/api/appVersionDiff', async () => {
-  const { diffOf } = await import('../fixtures/appDiff')
+  const { diffOf, packageAnswers } = await import('../fixtures/appDiff')
   return {
     appVersionDiffApi: {
       compare: vi.fn(async (payload: { refs: string[] }) => diffOf(payload)),
+      // the batch the page asks for afterwards answers about the packages it named
+      comparePackages: vi.fn(
+        async (payload: {
+          project_key: string
+          repository_slug: string
+          source_ref: string
+          target_ref: string
+          packages: { name: string; source_version: string; target_version: string }[]
+        }) => ({
+          project_key: payload.project_key,
+          repository_slug: payload.repository_slug,
+          source_ref: payload.source_ref,
+          target_ref: payload.target_ref,
+          packages: packageAnswers(payload.packages),
+        }),
+      ),
     },
   }
 })
@@ -96,8 +118,14 @@ function compare() {
   return vi.mocked(appVersionDiffApi.compare)
 }
 
+/** The batch that reads the packages the first response deferred. */
+function comparePackages() {
+  return vi.mocked(appVersionDiffApi.comparePackages)
+}
+
 beforeEach(() => {
   compare().mockClear()
+  comparePackages().mockClear()
 })
 
 describe('AppDiffView', () => {
@@ -416,5 +444,73 @@ describe('AppDiffView', () => {
     )
     expect(wrapper.find('[data-test="need-two"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="matrix"]').exists()).toBe(true)
+  })
+
+  it('says a package is not compared yet instead of leaving the row empty', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper, [RELEASE_EARLIER, RELEASE_DEFERRED])
+    await flushPromises()
+
+    // the response deferred it: there is a pair and a repository, so it is waiting
+    // its turn - which is not the same as a package that was checked
+    expect(wrapper.find('[data-test="package-packageF-deferred"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="package-packageF-unavailable"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="package-packageF-counts"]').exists()).toBe(false)
+  })
+
+  it('reads what the response deferred, up to the allowance it carries', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper, [RELEASE_EARLIER, RELEASE_DEFERRED])
+    await flushPromises()
+
+    // the deferred packages are asked for without the reader doing anything
+    expect(comparePackages()).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source_ref: RELEASE_EARLIER,
+        target_ref: RELEASE_DEFERRED,
+        packages: [{ name: 'packageE', source_version: '2.1.0', target_version: '2.0.0' }],
+      }),
+    )
+    // the answer replaced the entry that was waiting
+    expect(wrapper.find('[data-test="package-packageE-counts"]').text()).toContain(
+      '2 commits added',
+    )
+    expect(wrapper.find('[data-test="package-packageE-deferred"]').exists()).toBe(false)
+
+    // the allowance was one, so what is left says so rather than reading as checked
+    expect(wrapper.find('[data-test="package-packageF-deferred"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="packages-pending"]').text()).toContain('were not read')
+  })
+
+  it('reads the rest when the reader asks, past the allowance', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper, [RELEASE_EARLIER, RELEASE_DEFERRED])
+    await flushPromises()
+
+    expect(comparePackages()).toHaveBeenCalledTimes(1)
+
+    await wrapper.find('[data-test="packages-read-rest"]').trigger('click')
+    await flushPromises()
+
+    expect(comparePackages()).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-test="package-packageF-counts"]').text()).toContain(
+      '2 commits added',
+    )
+    // nothing is left waiting, so nothing says it is
+    expect(wrapper.find('[data-test="packages-pending"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="packages-read-rest"]').exists()).toBe(false)
+  })
+
+  it('leaves a package the batch could not read saying so', async () => {
+    comparePackages().mockRejectedValueOnce(new Error('git provider unreachable'))
+    const wrapper = await mountView()
+    await openOn(wrapper, [RELEASE_EARLIER, RELEASE_DEFERRED])
+    await flushPromises()
+
+    // a batch that failed must not read as a comparison that found nothing
+    expect(wrapper.find('[data-test="package-packageE-deferred"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="package-packageE-counts"]').exists()).toBe(false)
+    // and the reader can ask again
+    expect(wrapper.find('[data-test="packages-read-rest"]').exists()).toBe(true)
   })
 })

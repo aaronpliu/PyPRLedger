@@ -1,6 +1,12 @@
 <template>
   <div class="code" :data-test="testId('axis')">
-    <p v-if="code.unavailable" class="code-unavailable" :data-test="testId('unavailable')">
+    <!-- Waiting its turn is not the same as impossible and not the same as read:
+         it says so, and the page fills it in as the batches come back. -->
+    <p v-if="code.deferred" class="code-deferred" :data-test="testId('deferred')">
+      {{ t('appDiff.code_deferred') }}
+    </p>
+
+    <p v-else-if="code.unavailable" class="code-unavailable" :data-test="testId('unavailable')">
       {{ t('appDiff.code_unavailable', { reason: code.unavailable }) }}
     </p>
 
@@ -123,6 +129,12 @@ const verdictType = computed<'success' | 'danger' | 'info'>(() => {
 .code-unavailable {
   margin: 0;
   color: var(--el-color-warning-dark-2);
+}
+
+.code-deferred {
+  margin: 0;
+  color: var(--el-text-color-secondary);
+  font-style: italic;
 }
 
 .commits {

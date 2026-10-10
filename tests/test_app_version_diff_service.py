@@ -12,7 +12,11 @@ import pytest
 
 from src.core.config import settings
 from src.core.exceptions import DependencyApiException
-from src.schemas.app_version_diff import AppVersionDiffRequest
+from src.schemas.app_version_diff import (
+    AppVersionDiffPackageRequest,
+    AppVersionDiffPackagesRequest,
+    AppVersionDiffRequest,
+)
 from src.schemas.release_diff import ReleaseCompareRequest, ReleaseCompareResponse
 from src.services.app_version_diff_service import (
     AppVersionDiffService,
@@ -898,8 +902,12 @@ async def test_an_added_dependency_has_no_pair_of_versions_to_compare():
     assert entry.code.verdict == "inconclusive"
 
 
-async def test_the_packages_past_the_ceiling_are_reported_as_not_compared(monkeypatch):
-    """A release that moved a dozen packages is read at a pace, not all at once."""
+async def test_a_pairs_first_packages_are_read_and_the_rest_deferred(monkeypatch):
+    """A release that moved a dozen packages is drawn from its first few.
+
+    What the ceiling leaves out has to read as what it is: a comparison waiting its
+    turn, not one that was made and found equal, and not one that cannot be made.
+    """
     monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
     service, _, _ = build_service(
         {
@@ -922,5 +930,158 @@ async def test_the_packages_past_the_ceiling_are_reported_as_not_compared(monkey
     )
 
     entries = {entry.name: entry for entry in result.intervals[0].packages}
+    # the pair's first package is read
     assert entries["packageA"].code.unavailable is None
-    assert "ceiling is 1" in (entries["packageB"].code.unavailable or "")
+    assert entries["packageA"].code.deferred is False
+    # the rest is deferred, carrying where it lives so it can still be asked for
+    assert entries["packageB"].code.deferred is True
+    assert entries["packageB"].code.unavailable is None
+    assert entries["packageB"].repository_slug == "pkg-b"
+    # and the page is told how much more it may read on its own
+    assert result.auto_compare_remaining == settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS - 1
+
+
+async def test_each_pair_gets_its_own_share_of_the_ceiling(monkeypatch):
+    """One pair must not spend the read of the pairs beside it."""
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.1.0"}),
+            (APP, "1.2.0"): record("1.2.0", "2026-11-01", {"packageA": "1.2.0"}),
+        }
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0", "1.2.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            packageA=DependencyRepository(project_key="CORE", repository_slug="pkg-a"),
+        ),
+    )
+
+    assert [interval.packages[0].code.deferred for interval in result.intervals] == [False, False]
+
+
+async def test_a_downgrade_is_read_before_an_upgrade(monkeypatch):
+    """The ceiling must never be what hides a package that moved backwards."""
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record(
+                "1.0.0", "2026-09-01", {"aUp": "1.0.0", "zDown": "2.0.0"}
+            ),
+            (APP, "1.1.0"): record(
+                "1.1.0", "2026-10-01", {"aUp": "1.1.0", "zDown": "1.0.0"}
+            ),
+        }
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            aUp=DependencyRepository(project_key="CORE", repository_slug="pkg-up"),
+            zDown=DependencyRepository(project_key="CORE", repository_slug="pkg-down"),
+        ),
+    )
+
+    entries = {entry.name: entry for entry in result.intervals[0].packages}
+    # the downgrade is read although the matrix order would have read the upgrade
+    assert entries["zDown"].code.deferred is False
+    assert entries["aUp"].code.deferred is True
+
+
+async def test_the_total_ceiling_bounds_a_whole_page(monkeypatch):
+    """Two pairs do not buy two ceilings: a page reads a bounded number, and says so."""
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 5)
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS", 1)
+    diff = FakeDiff()
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.1.0"}),
+            (APP, "1.2.0"): record("1.2.0", "2026-11-01", {"packageA": "1.2.0"}),
+        },
+        diff=diff,
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0", "1.2.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            packageA=DependencyRepository(project_key="CORE", repository_slug="pkg-a"),
+        ),
+    )
+
+    package_reads = [item for item in diff.requests if item.repository_slug == "pkg-a"]
+    assert len(package_reads) == 1
+    assert result.auto_compare_remaining == 0
+    # the pair that did not get its read says so, and is still askable
+    deferred = [
+        entry
+        for interval in result.intervals
+        for entry in interval.packages
+        if entry.code.deferred
+    ]
+    assert [entry.name for entry in deferred] == ["packageA"]
+
+
+# ---------------------------------------------------------------------- #
+# Reading the deferred packages in batches
+# ---------------------------------------------------------------------- #
+
+
+def package_batch(*packages: tuple[str, str, str]) -> AppVersionDiffPackagesRequest:
+    """A batch request in the shape the page sends it."""
+    return AppVersionDiffPackagesRequest(
+        project_key=PROJECT,
+        repository_slug=REPOSITORY,
+        git_provider="bitbucket_server",
+        source_ref="1.0.0",
+        target_ref="1.1.0",
+        packages=[
+            AppVersionDiffPackageRequest(name=name, source_version=source, target_version=target)
+            for name, source, target in packages
+        ],
+    )
+
+
+async def test_a_batch_reads_the_packages_it_names():
+    """A deferred package is read the way the first response reads one."""
+    diff = FakeDiff(added=2)
+    service, _, _ = build_service({}, diff=diff)
+
+    response = await service.compare_packages(
+        package_batch(("packageA", "1.0.0", "1.1.0")),
+        resolve_dependency_repository=package_resolver(
+            packageA=DependencyRepository(project_key="CORE", repository_slug="pkg-a")
+        ),
+    )
+
+    assert (response.source_ref, response.target_ref) == ("1.0.0", "1.1.0")
+    entry = response.packages[0]
+    assert entry.name == "packageA"
+    assert entry.state == "changed"
+    assert entry.code.verdict == "contained"
+    assert entry.code.added_count == 2
+    assert entry.code.deferred is False
+    # read at its two versions, in the repository the registry named for it
+    assert diff.requests[-1].repository_slug == "pkg-a"
+    assert (diff.requests[-1].source_ref, diff.requests[-1].target_ref) == ("1.0.0", "1.1.0")
+
+
+async def test_a_batch_package_the_registry_cannot_place_is_reported_not_dropped():
+    """A batch answers for every package it was asked about."""
+    service, _, _ = build_service({}, diff=FakeDiff())
+
+    response = await service.compare_packages(
+        package_batch(("packageB", "1.0.0", "1.1.0")),
+        resolve_dependency_repository=package_resolver(),
+    )
+
+    entry = response.packages[0]
+    assert entry.name == "packageB"
+    assert entry.code.verdict == "inconclusive"
+    assert entry.code.unavailable == "no repository is registered as 'packageB'"
+    assert entry.code.deferred is False
