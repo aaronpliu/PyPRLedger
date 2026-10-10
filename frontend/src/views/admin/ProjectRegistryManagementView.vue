@@ -56,6 +56,19 @@
             </span>
           </template>
         </el-table-column>
+        <el-table-column label="Kind" width="130">
+          <template #default="{ row }">
+            <!-- What a registration is decides which pickers offer it: the pages that
+                 read an application's releases offer applications alone -->
+            <el-tag
+              :type="row.registry_kind === 'package' ? 'info' : 'success'"
+              size="small"
+              data-test="registry-kind"
+            >
+              {{ kindLabel(row.registry_kind) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="project_key" label="Project Key" width="150" />
         <el-table-column prop="repository_slug" label="Repository Slug" min-width="200" />
         <el-table-column prop="git_provider" label="Git Provider" width="180">
@@ -71,10 +84,13 @@
             {{ formatDate(row.created_date) }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="300" fixed="right">
+        <el-table-column label="Actions" width="460" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEditAlias(row)">
               Edit Alias
+            </el-button>
+            <el-button size="small" @click="handleToggleKind(row)">
+              {{ row.registry_kind === 'package' ? 'Mark as Application' : 'Mark as Package' }}
             </el-button>
             <el-button size="small" type="primary" @click="handleUpdate(row)">
               Move App
@@ -161,6 +177,19 @@
           <div class="field-hint">
             The name the dependency database knows this application as, when it differs from
             the application name. Only the Releases pages ask it for this name.
+          </div>
+        </el-form-item>
+
+        <el-form-item label="Kind" prop="registryKind">
+          <el-select v-model="registerForm.registryKind" style="width: 100%">
+            <el-option label="Application" value="application" />
+            <el-option label="Package" value="package" />
+          </el-select>
+          <div class="field-hint">
+            What this repository is. The Release Dependency Graph and the App Diff list
+            applications only, because the dependency database holds release records for
+            those - a package repository has none to read. Register a package here so a
+            moved dependency can be compared in its own repository.
           </div>
         </el-form-item>
 
@@ -314,8 +343,14 @@ const registerForm = reactive({
   repositorySlug: '',
   gitProvider: DEFAULT_GIT_PROVIDER,
   appAlias: '',
+  // a registration that says nothing is an application: that is what this table was for
+  registryKind: 'application',
   description: '',
 })
+
+/** What a registration is, as the page reads it. */
+const kindLabel = (kind: string | undefined) =>
+  kind === 'package' ? 'Package' : 'Application'
 
 const getProviderLabel = (provider: string) => getGitProviderLabel(provider)
 
@@ -466,7 +501,8 @@ const handleRegister = async () => {
           registerForm.repositorySlug,
           registerForm.description || undefined,
           registerForm.gitProvider,
-          registerForm.appAlias || undefined
+          registerForm.appAlias || undefined,
+          registerForm.registryKind
         )
         ElMessage.success('Project registered successfully')
         showRegisterDialog.value = false
@@ -476,6 +512,7 @@ const handleRegister = async () => {
         registerForm.repositorySlug = ''
         registerForm.gitProvider = DEFAULT_GIT_PROVIDER
         registerForm.appAlias = ''
+        registerForm.registryKind = 'application'
         registerForm.description = ''
         // Reload data
         await loadApps()
@@ -521,6 +558,30 @@ const handleUpdateSubmit = async () => {
       }
     }
   })
+}
+
+/**
+ * Move a registration between the two kinds.
+ *
+ * The pages that read an application's releases offer applications alone, so this is
+ * what takes a repository out of their pickers - and what puts it back.
+ */
+const handleToggleKind = async (project: ProjectRegistry) => {
+  const next = project.registry_kind === 'package' ? 'application' : 'package'
+  try {
+    await projectRegistryApi.updateRegistryKind(
+      project.project_key,
+      project.repository_slug,
+      next
+    )
+    ElMessage.success(
+      `${project.project_key}/${project.repository_slug} is now a ${next}`
+    )
+    await loadProjects()
+  } catch (error: any) {
+    const message = error.response?.data?.detail?.message || 'Failed to update the kind'
+    ElMessage.error(message)
+  }
 }
 
 const handleEditAlias = (project: ProjectRegistry) => {

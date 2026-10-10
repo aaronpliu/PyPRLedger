@@ -8,6 +8,12 @@ export interface ProjectRegistry {
    * from app_name. Empty means the application name is used.
    */
   app_alias?: string | null
+  /**
+   * What this registration is: `application` for a repository whose releases the
+   * dependency database holds, `package` for one that is only a dependency of
+   * another. The pages that read an application's releases offer the first alone.
+   */
+  registry_kind?: string
   project_key: string
   repository_slug: string
   git_provider?: string
@@ -72,11 +78,13 @@ export const projectRegistryApi = {
     repositorySlug: string,
     description?: string,
     gitProvider?: string,
-    appAlias?: string
+    appAlias?: string,
+    registryKind?: string
   ): Promise<{
     message: string
     app_name: string
     app_alias?: string | null
+    registry_kind?: string
     project_key: string
     repository_slug: string
     git_provider?: string
@@ -90,6 +98,34 @@ export const projectRegistryApi = {
         ...(description && { description }),
         ...(gitProvider && { git_provider: gitProvider }),
         ...(appAlias && { app_alias: appAlias }),
+        ...(registryKind && { registry_kind: registryKind }),
+      },
+    })
+  },
+
+  /**
+   * Say whether a registration is an application or a package.
+   *
+   * This is what takes a repository out of the Release Dependency Graph and App
+   * Diff pickers - which read an application's releases, and so offer applications
+   * alone - and what puts it back.
+   */
+  async updateRegistryKind(
+    projectKey: string,
+    repositorySlug: string,
+    registryKind: 'application' | 'package'
+  ): Promise<{
+    message: string
+    project_key: string
+    repository_slug: string
+    app_name: string
+    registry_kind: string
+  }> {
+    return request.put('/admin/registry/kind', null, {
+      params: {
+        project_key: projectKey,
+        repository_slug: repositorySlug,
+        registry_kind: registryKind,
       },
     })
   },

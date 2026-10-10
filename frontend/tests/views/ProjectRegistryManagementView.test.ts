@@ -4,6 +4,7 @@ import ElementPlus from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ProjectRegistryManagementView from '@/views/admin/ProjectRegistryManagementView.vue'
 import enMessages from '@/locales/en.json'
+import { projectRegistryApi } from '@/api/projectRegistry'
 
 // The page's own reads are the stand-ins: what it says about a registration's
 // dependency-database name is the whole subject here. What the name is used for -
@@ -24,6 +25,7 @@ vi.mock('@/api/projectRegistry', () => ({
     }),
     registerProject: vi.fn(),
     updateAppAlias: vi.fn(),
+    updateRegistryKind: vi.fn(),
   },
 }))
 
@@ -39,6 +41,7 @@ function registration(patch: Record<string, unknown> = {}) {
     id: 1,
     app_name: 'trmyapp',
     app_alias: 'myapptr',
+    registry_kind: 'application',
     project_key: 'CORE',
     repository_slug: 'app',
     git_provider: 'bitbucket_server',
@@ -80,5 +83,26 @@ describe('ProjectRegistryManagementView', () => {
     const row = wrapper.findAll('.el-table__row')[0]
     expect(row.find('[data-test="app-alias"]').exists()).toBe(false)
     expect(row.text()).toContain('Follows trmyapp')
+  })
+
+  it('says what a registration is, and moves it between the two kinds', async () => {
+    const wrapper = await mountView([registration({ registry_kind: 'application' })])
+
+    const row = wrapper.findAll('.el-table__row')[0]
+    expect(row.find('[data-test="registry-kind"]').text()).toBe('Application')
+
+    // the pages that read an application's releases offer applications alone, so this
+    // is the switch that takes a repository out of their pickers
+    const mark = row.findAll('button').find((button) => button.text() === 'Mark as Package')
+    expect(mark).toBeTruthy()
+
+    await mark!.trigger('click')
+    await flushPromises()
+
+    expect(vi.mocked(projectRegistryApi.updateRegistryKind)).toHaveBeenCalledWith(
+      'CORE',
+      'app',
+      'package',
+    )
   })
 })

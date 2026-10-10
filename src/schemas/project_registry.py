@@ -13,6 +13,15 @@ class ProjectRegistryResponse(BaseModel):
             "from app_name. Empty means the application name is used"
         ),
     )
+    registry_kind: str = Field(
+        default="application",
+        description=(
+            "'application' for a repository whose releases the dependency database holds, "
+            "'package' for one that is only a dependency of another. The pages that read an "
+            "application's releases offer the first alone: a package repository has no "
+            "release records to read"
+        ),
+    )
     project_key: str
     repository_slug: str
     git_provider: str

@@ -25,6 +25,13 @@ export interface RepositorySummary {
   repository_slug: string
   repository_url: string
   project_id: number
+  /**
+   * What the project registry says this repository is, where it is registered at
+   * all: `application` for one whose releases the dependency database holds,
+   * `package` for one that is only a dependency of another. Null where nothing is
+   * registered for it.
+   */
+  registry_kind?: string | null
   created_date: string
   updated_date: string
 }
@@ -62,9 +69,21 @@ export const projectsApi = {
     return payload?.workspaces ?? []
   },
 
-  // Get repositories for a specific project
-  async getProjectRepositories(projectKey: string): Promise<RepositorySummary[]> {
-    const response = await request.get(`/projects/key/${projectKey}/repositories`)
+  /**
+   * Get repositories for a specific project.
+   *
+   * Passing a `registryKind` asks for the repositories the project registry marks
+   * with it. The pages that read an application's releases ask for `application`:
+   * the dependency database holds release records for applications alone, so a
+   * package repository offered beside them is a dead end.
+   */
+  async getProjectRepositories(
+    projectKey: string,
+    registryKind?: 'application' | 'package',
+  ): Promise<RepositorySummary[]> {
+    const response = await request.get(`/projects/key/${projectKey}/repositories`, {
+      params: registryKind ? { registry_kind: registryKind } : undefined,
+    })
     return response.data || response
   },
 }

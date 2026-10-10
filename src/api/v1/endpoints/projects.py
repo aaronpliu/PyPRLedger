@@ -539,21 +539,49 @@ async def get_project_by_key(
 async def get_project_repositories(
     project_key: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    registry_kind: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Only repositories the project registry marks with this kind: 'application' "
+                "for the ones whose releases the dependency database holds, 'package' for the "
+                "ones that are only dependencies of another. Left out, every repository of "
+                "the project is returned"
+            )
+        ),
+    ] = None,
 ) -> list[dict]:
     """
     Get all repositories for a specific project by project key
 
     Args:
         project_key: The project key
+        registry_kind: Optional kind of registration to filter by
         db: Database session
 
     Returns:
-        List of repository dictionaries with id, repository_id, repository_name, repository_slug, etc.
+        List of repository dictionaries with id, repository_id, repository_name,
+        repository_slug, registry_kind, etc.
+
+    Raises:
+        HTTPException: If the project does not exist, or the kind is unknown
     """
-    from sqlalchemy import select
+    from sqlalchemy import and_, select
 
     from src.models.project import Project
+    from src.models.project_registry import ProjectRegistry
     from src.models.repository import Repository
+
+    kind = (registry_kind or "").strip().lower() or None
+    if kind is not None and kind not in ProjectRegistry.VALID_KINDS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "VALIDATION_ERROR",
+                "message": f"Invalid registry_kind '{registry_kind}'. "
+                f"Must be one of: {', '.join(ProjectRegistry.VALID_KINDS)}",
+            },
+        )
 
     try:
         # First get the project
@@ -570,10 +598,25 @@ async def get_project_repositories(
                 },
             )
 
-        # Get all repositories for this project
-        repo_query = select(Repository).where(Repository.project_id == project.project_id)
-        repo_result = await db.execute(repo_query)
-        repositories = repo_result.scalars().all()
+        # The registry says what each repository is, where it is registered at all: an
+        # outer join keeps the ones that are not - which is what a caller asking for no
+        # kind still wants - and asking for a kind turns it into the inner join it is.
+        repo_query = (
+            select(Repository, ProjectRegistry.registry_kind)
+            .outerjoin(
+                ProjectRegistry,
+                and_(
+                    ProjectRegistry.project_key == project.project_key,
+                    ProjectRegistry.repository_slug == Repository.repository_slug,
+                ),
+            )
+            .where(Repository.project_id == project.project_id)
+            .order_by(Repository.repository_slug)
+        )
+        if kind is not None:
+            repo_query = repo_query.where(ProjectRegistry.registry_kind == kind)
+
+        rows = (await db.execute(repo_query)).all()
 
         return [
             {
@@ -582,10 +625,12 @@ async def get_project_repositories(
                 "repository_name": repo.repository_name,
                 "repository_slug": repo.repository_slug,
                 "repository_url": repo.repository_url,
+                # what the registry marks this repository as, when it is registered
+                "registry_kind": repository_kind,
                 "created_date": repo.created_date.isoformat() if repo.created_date else None,
                 "updated_date": repo.updated_date.isoformat() if repo.updated_date else None,
             }
-            for repo in repositories
+            for repo, repository_kind in rows
         ]
     except HTTPException:
         raise

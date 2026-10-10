@@ -375,6 +375,7 @@ class ProjectRegistryService:
         db: AsyncSession = None,
         git_provider: str = ProjectRegistry.DEFAULT_PROVIDER,
         app_alias: str | None = None,
+        registry_kind: str | None = None,
     ) -> ProjectRegistry:
         """
         Register a new project-repo pair to an app
@@ -387,18 +388,30 @@ class ProjectRegistryService:
             db: Database session
             git_provider: Git provider (bitbucket_server, github_enterprise)
             app_alias: Optional name the dependency database knows the app as
+            registry_kind: Whether this is an application, whose releases the
+                dependency database holds, or a package that is only a dependency of
+                one. Left out, a new registration is an application and an existing
+                one keeps what it is
 
         Returns:
             Created ProjectRegistry entry
 
         Raises:
-            ValueError: If project-repo pair already registered to different app or invalid git_provider
+            ValueError: If project-repo pair already registered to different app,
+                or invalid git_provider, or an unknown registry_kind
         """
         # Validate git_provider
         if not GitProvider.is_valid(git_provider):
             raise ValueError(
                 f"Invalid git_provider '{git_provider}'. "
                 f"Must be one of: {', '.join(sorted(GitProvider.values()))}"
+            )
+
+        kind = (registry_kind or "").strip().lower() or None
+        if kind is not None and kind not in ProjectRegistry.VALID_KINDS:
+            raise ValueError(
+                f"Invalid registry_kind '{registry_kind}'. "
+                f"Must be one of: {', '.join(ProjectRegistry.VALID_KINDS)}"
             )
 
         # Check if already registered
@@ -426,6 +439,9 @@ class ProjectRegistryService:
             if alias is not None and existing.app_alias != alias:
                 existing.app_alias = alias
                 updated = True
+            if kind is not None and existing.registry_kind != kind:
+                existing.registry_kind = kind
+                updated = True
             if updated:
                 await db.commit()
                 await db.refresh(existing)
@@ -438,6 +454,7 @@ class ProjectRegistryService:
             repository_slug=repository_slug,
             git_provider=git_provider,
             app_alias=(app_alias or "").strip() or None,
+            registry_kind=kind or ProjectRegistry.DEFAULT_KIND,
             description=description or f"Registered to {app_name}",
         )
 
@@ -449,6 +466,43 @@ class ProjectRegistryService:
             f"Registered {project_key}/{repository_slug} to app '{app_name}' (provider: {git_provider})"
         )
         return registry
+
+    async def update_registry_kind(
+        self, project_key: str, repository_slug: str, registry_kind: str, db: AsyncSession
+    ) -> ProjectRegistry:
+        """Say whether a registration is an application or a package.
+
+        The pages that read an application's releases offer applications alone, so
+        this is what takes a repository out of their list - and what puts it back.
+
+        Args:
+            project_key: Project key
+            repository_slug: Repository slug
+            registry_kind: 'application' or 'package'
+            db: Database session
+
+        Returns:
+            The updated entry
+
+        Raises:
+            ValueError: If the kind is unknown, or the pair is not registered
+        """
+        kind = (registry_kind or "").strip().lower()
+        if kind not in ProjectRegistry.VALID_KINDS:
+            raise ValueError(
+                f"Invalid registry_kind '{registry_kind}'. "
+                f"Must be one of: {', '.join(ProjectRegistry.VALID_KINDS)}"
+            )
+
+        entry = await self._get_registry_entry(project_key, repository_slug, db)
+        if not entry:
+            raise ValueError(f"Project {project_key}/{repository_slug} is not registered")
+
+        entry.registry_kind = kind
+        await db.commit()
+        await db.refresh(entry)
+        logger.info(f"Marked {project_key}/{repository_slug} as a {kind}")
+        return entry
 
     async def unregister_project(
         self, project_key: str, repository_slug: str, db: AsyncSession

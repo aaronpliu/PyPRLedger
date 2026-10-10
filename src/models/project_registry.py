@@ -26,6 +26,8 @@ class ProjectRegistry(Base):
     3. Admin-managed application boundaries
     4. Multiple projects per application
     5. Per-project Git provider tracking
+    6. Telling an application from a package, which are registered here for two
+       different reasons
     """
 
     PROVIDER_BITBUCKET_SERVER = GitProvider.BITBUCKET_SERVER.value
@@ -33,6 +35,13 @@ class ProjectRegistry(Base):
     PROVIDER_GITHUB_ENTERPRISE = GitProvider.GITHUB_ENTERPRISE.value
     VALID_PROVIDERS = GitProvider.values()
     DEFAULT_PROVIDER = GitProvider.default().value
+
+    # What a registration is: an application, whose releases the dependency
+    # database holds records of, or a package that is only ever a dependency of one.
+    KIND_APPLICATION = "application"
+    KIND_PACKAGE = "package"
+    VALID_KINDS = (KIND_APPLICATION, KIND_PACKAGE)
+    DEFAULT_KIND = KIND_APPLICATION
 
     __tablename__ = "project_registry"
 
@@ -60,6 +69,17 @@ class ProjectRegistry(Base):
     # Git provider for this project (bitbucket_server, github_enterprise)
     git_provider: Mapped[str] = mapped_column(
         String(32), nullable=False, default=DEFAULT_PROVIDER, server_default=DEFAULT_PROVIDER
+    )
+
+    # What this registration is for. The registry serves two purposes - resolving a
+    # repository to the application the dependency database knows it by, and
+    # resolving a package name back to the repository it lives in - and only the
+    # first is something the pages that read an application's releases can use: a
+    # package repository has no release records, so offering it as an application is
+    # a dead end. Defaults to application, because that is what this table was for
+    # and a registration that says nothing is one.
+    registry_kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=DEFAULT_KIND, server_default=DEFAULT_KIND, index=True
     )
 
     # Optional description

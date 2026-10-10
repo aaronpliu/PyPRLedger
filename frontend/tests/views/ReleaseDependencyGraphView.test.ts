@@ -4,20 +4,21 @@ import ElementPlus, { ElRadioGroup, ElSelect, ElSwitch } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ReleaseDependencyGraphView from '@/views/releases/ReleaseDependencyGraphView.vue'
 import enMessages from '@/locales/en.json'
+import { projectsApi } from '@/api/projects'
 
 // The repository and its refs come from the provider in the running app; the
 // stand-ins hand over the one project, the one repository and the refs the
 // assertions below read.
 vi.mock('@/api/projects', () => ({
   projectsApi: {
-    getAllProjects: async () => [
+    getAllProjects: vi.fn(async () => [
       { project_key: 'CORE', project_name: 'Core' },
       { project_key: 'GHE', project_name: 'GitHub', git_provider: 'github_enterprise' },
-    ],
-    getProjectRepositories: async () => [
+    ]),
+    getProjectRepositories: vi.fn(async () => [
       { repository_slug: 'app', repository_name: 'Application' },
-    ],
-    getCloudWorkspaces: async () => [],
+    ]),
+    getCloudWorkspaces: vi.fn(async () => []),
   },
 }))
 
@@ -419,5 +420,29 @@ describe('ReleaseDependencyGraphView', () => {
     expect(refSelect.props('remote')).toBe(true)
     expect(refSelect.findAllComponents({ name: 'ElOption' }).map((option) => option.props('value')))
       .toContain('v2.0.0')
+  })
+
+  it('offers the applications of the project, and nothing else', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openRepository(wrapper)
+
+    // this page reads the releases the dependency database holds; a repository
+    // registered as a package has none to read, so it is not offered
+    expect(vi.mocked(projectsApi.getProjectRepositories)).toHaveBeenCalledWith(
+      'CORE',
+      'application',
+    )
+  })
+
+  it('says so when the project has no application registered', async () => {
+    vi.mocked(projectsApi.getProjectRepositories).mockResolvedValueOnce([])
+
+    const wrapper = mountView()
+    await flushPromises()
+    await openRepository(wrapper)
+
+    // an empty picker reads as a broken one: the note says what decides the list
+    expect(wrapper.find('[data-test="no-applications"]').exists()).toBe(true)
   })
 })

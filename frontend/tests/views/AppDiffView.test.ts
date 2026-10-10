@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus, { ElSelect } from 'element-plus'
+import ElementPlus, { ElRadioButton, ElRadioGroup, ElSelect } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import AppDiffView from '@/views/releases/AppDiffView.vue'
 import enMessages from '@/locales/en.json'
 import { appVersionDiffApi } from '@/api/appVersionDiff'
+import { projectsApi } from '@/api/projects'
 import {
   APP_NAME,
   RELEASE_DEFERRED,
@@ -19,14 +20,14 @@ import {
 // assertions below read.
 vi.mock('@/api/projects', () => ({
   projectsApi: {
-    getAllProjects: async () => [
+    getAllProjects: vi.fn(async () => [
       { project_key: 'CORE', project_name: 'Core' },
       { project_key: 'GHE', project_name: 'GitHub', git_provider: 'github_enterprise' },
-    ],
-    getProjectRepositories: async () => [
+    ]),
+    getProjectRepositories: vi.fn(async () => [
       { repository_slug: 'app', repository_name: 'Application' },
-    ],
-    getCloudWorkspaces: async () => [],
+    ]),
+    getCloudWorkspaces: vi.fn(async () => []),
   },
 }))
 
@@ -597,6 +598,75 @@ describe('AppDiffView', () => {
         max_package_comparisons: 25,
         max_total_package_comparisons: 200,
       }),
+    )
+  })
+
+  it('puts the matrix above the pair details', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    const matrix = wrapper.find('[data-test="matrix"]').element
+    const details = wrapper.find('[data-test="intervals"]').element
+
+    // the matrix is the whole comparison at a glance; a page of pair details above it
+    // is what used to push it off the screen
+    expect(matrix.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('shows one pair at a time when a comparison has several', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+    await pick(wrapper, 3, [RELEASE_LATER, RELEASE_EARLIER, RELEASE_MISSING])
+
+    const articles = wrapper.findAll('[data-test="intervals"] article')
+    expect(articles).toHaveLength(2)
+    // two pairs, one on screen: a stack of them is what made the page unreadable
+    expect(articles[0].attributes('style') ?? '').not.toContain('display: none')
+    expect(articles[1].attributes('style')).toContain('display: none')
+
+    expect(wrapper.findAll('[data-test="pair-tab"]')).toHaveLength(2)
+
+    // choosing the second pair shows it, and takes the first out of the page
+    const second = wrapper.findAllComponents(ElRadioButton)[1].props('value')
+    wrapper.findComponent(ElRadioGroup).vm.$emit('update:modelValue', second)
+    await flushPromises()
+
+    const after = wrapper.findAll('[data-test="intervals"] article')
+    expect(after[1].attributes('style') ?? '').not.toContain('display: none')
+    expect(after[0].attributes('style')).toContain('display: none')
+  })
+
+  it('shows no pair selector for a single pair', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    // the common case says nothing about pairs, because there is only one
+    expect(wrapper.find('[data-test="pair-tabs"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="intervals"] article').isVisible()).toBe(true)
+  })
+
+  it('offers the applications of the project, and nothing else', async () => {
+    const wrapper = await mountView()
+    await openRepository(wrapper)
+
+    // a repository registered as a package has no release records to read, so the
+    // page asks the registry for applications alone
+    expect(vi.mocked(projectsApi.getProjectRepositories)).toHaveBeenCalledWith(
+      'CORE',
+      'application',
+    )
+  })
+
+  it('says so when the project has no application registered', async () => {
+    vi.mocked(projectsApi.getProjectRepositories).mockResolvedValueOnce([])
+
+    // a link's coordinates save the walk through the pickers this test is not about
+    const wrapper = await mountView('?project_key=CORE&repository_slug=app')
+    await flushPromises()
+
+    // an empty picker reads as a broken one: the note says what decides the list
+    expect(wrapper.find('[data-test="no-applications"]').text()).toContain(
+      'no repository registered as an application',
     )
   })
 })

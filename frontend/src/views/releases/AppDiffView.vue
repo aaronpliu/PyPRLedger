@@ -167,23 +167,39 @@
           </el-form-item>
         </el-col>
       </el-row>
+
+      <!-- How deep this comparison reads, as a field of the same form rather than a
+           row of its own: the numbers behind each depth belong to the server, which
+           clamps them to its own ceilings and reports what it actually read, so this
+           is a preference rather than a promise - and one a reader can keep, since the
+           same releases are usually compared over and over. -->
+      <el-row :gutter="16">
+        <el-col :xs="24" :sm="12" :md="8">
+          <el-form-item :label="t('appDiff.depth_label')">
+            <div class="depth">
+              <el-select v-model="depth" class="depth-select" data-test="depth-select">
+                <el-option :label="t('appDiff.depth_default')" value="default" />
+                <el-option :label="t('appDiff.depth_deep')" value="deep" />
+                <el-option :label="t('appDiff.depth_all')" value="all" />
+              </el-select>
+              <el-checkbox v-model="remembered" data-test="depth-remember">
+                {{ t('appDiff.depth_remember') }}
+              </el-checkbox>
+            </div>
+          </el-form-item>
+        </el-col>
+      </el-row>
     </el-form>
 
-    <!-- How deep this comparison reads. The numbers behind each depth belong to the
-         server, which clamps them to its own ceilings and reports what it actually
-         read, so this is a preference rather than a promise - and one a reader can
-         keep, since the same releases are usually compared over and over. -->
-    <div class="depth" data-test="depth">
-      <span class="depth-label">{{ t('appDiff.depth_label') }}</span>
-      <el-select v-model="depth" class="depth-select" data-test="depth-select">
-        <el-option :label="t('appDiff.depth_default')" value="default" />
-        <el-option :label="t('appDiff.depth_deep')" value="deep" />
-        <el-option :label="t('appDiff.depth_all')" value="all" />
-      </el-select>
-      <el-checkbox v-model="remembered" data-test="depth-remember">
-        {{ t('appDiff.depth_remember') }}
-      </el-checkbox>
-    </div>
+    <!-- The picker offers the applications of a project, and says so when there are
+         none rather than leaving an empty list to read as a broken one. -->
+    <p
+      v-if="hasCoordinates && !repositoriesLoading && !repositories.length"
+      class="refs-note"
+      data-test="no-applications"
+    >
+      {{ t('appDiff.no_applications') }}
+    </p>
 
     <!-- The picker offers the recent releases and searches the rest, so it says
          which of the two it is doing rather than leaving a short list to look like
@@ -238,6 +254,84 @@
         data-test="incomplete"
       />
 
+      <!-- The matrix first: it is the whole comparison at a glance - every package
+           against every release - and it is what the details below are read against.
+           A page of pair-by-pair details used to sit above it and push it off the
+           screen the moment a comparison had more than one pair. -->
+      <el-empty v-if="!rows.length" :description="t('appDiff.no_records')" data-test="no-records" />
+
+      <div v-else class="matrix-wrap">
+        <table class="matrix" data-test="matrix">
+          <thead>
+            <tr>
+              <th class="package-col" scope="col">{{ t('appDiff.package') }}</th>
+              <th
+                v-for="release in releases"
+                :key="release.ref"
+                scope="col"
+                :class="{ 'col-missing': !release.has_record }"
+              >
+                <span class="release-ref">{{ release.ref }}</span>
+                <span class="release-date">
+                  {{ release.released_at || t('appDiff.no_date') }}
+                </span>
+                <el-tag
+                  v-if="!release.has_record"
+                  size="small"
+                  type="info"
+                  data-test="column-missing"
+                >
+                  {{ t('appDiff.no_record') }}
+                </el-tag>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in rows"
+              :key="`${row.kind}:${row.name}`"
+              :class="{ 'row-application': row.kind === 'application' }"
+              :data-test="`row-${row.kind}`"
+            >
+              <th class="package-col" scope="row">
+                <span>{{ row.name }}</span>
+                <!-- the application's own version is a row like the others, and
+                     is marked so it does not read as one of its dependencies -->
+                <el-tag
+                  v-if="row.kind === 'application'"
+                  class="kind"
+                  size="small"
+                  type="primary"
+                  data-test="application-row"
+                >
+                  {{ t('appDiff.application') }}
+                </el-tag>
+              </th>
+              <td
+                v-for="(cell, index) in row.cells"
+                :key="`${row.name}:${cell.ref}`"
+                :class="cellClass(cell)"
+                :data-test="`cell-${row.name}-${index}`"
+              >
+                <span
+                  v-if="isMarked(cell.move)"
+                  class="move"
+                  :class="`move-${moveTone(cell.move)}`"
+                  :title="t(moveLabelKey(moveTone(cell.move)))"
+                  data-test="move"
+                >
+                  {{ moveSymbol(moveTone(cell.move)) }}
+                </span>
+                <span class="version" :class="versionClass(cell)">{{ cellText(cell) }}</span>
+                <span v-if="isRisk(cell.move)" class="risk" data-test="risk">
+                  {{ t('appDiff.risk') }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <!-- A pair that moved dozens of packages is drawn from its first few
            comparisons while the rest are read behind it, and what is still unread
            says so rather than reading as a package that was checked. -->
@@ -262,10 +356,46 @@
         {{ t('appDiff.packages_read_rest', { count: pendingPackages }) }}
       </el-button>
 
+      <!-- One pair at a time. A comparison of several releases has a pair per adjacent
+           step, and stacking them all is what made the page unreadable: the reader
+           picks the step they are reading, and the matrix above carries what changed
+           across all of them. A single pair needs no selector. -->
+      <div v-if="intervals.length > 1" class="pairs" data-test="pair-tabs">
+        <el-radio-group v-model="activePair" size="small">
+          <el-radio-button
+            v-for="interval in intervals"
+            :key="intervalKey(interval)"
+            :value="intervalKey(interval)"
+            data-test="pair-tab"
+          >
+            <span class="pair-label">
+              <span class="pair-refs">{{ interval.source_ref }} → {{ interval.target_ref }}</span>
+              <el-tag
+                v-if="!interval.complete"
+                size="small"
+                type="info"
+                data-test="pair-incomplete"
+              >
+                {{ t('appDiff.no_record') }}
+              </el-tag>
+              <el-tag
+                v-else-if="pendingOf(interval)"
+                size="small"
+                type="warning"
+                data-test="pair-pending"
+              >
+                {{ pendingOf(interval) }}
+              </el-tag>
+            </span>
+          </el-radio-button>
+        </el-radio-group>
+      </div>
+
       <section v-if="intervals.length" class="intervals" data-test="intervals">
         <article
           v-for="interval in intervals"
-          :key="`${interval.source_ref}->${interval.target_ref}`"
+          v-show="showsPair(interval)"
+          :key="intervalKey(interval)"
           class="interval"
           :class="{ 'interval-incomplete': !interval.complete }"
         >
@@ -380,80 +510,6 @@
           </CommitComparison>
         </article>
       </section>
-
-      <el-empty v-if="!rows.length" :description="t('appDiff.no_records')" data-test="no-records" />
-
-      <div v-else class="matrix-wrap">
-        <table class="matrix" data-test="matrix">
-          <thead>
-            <tr>
-              <th class="package-col" scope="col">{{ t('appDiff.package') }}</th>
-              <th
-                v-for="release in releases"
-                :key="release.ref"
-                scope="col"
-                :class="{ 'col-missing': !release.has_record }"
-              >
-                <span class="release-ref">{{ release.ref }}</span>
-                <span class="release-date">
-                  {{ release.released_at || t('appDiff.no_date') }}
-                </span>
-                <el-tag
-                  v-if="!release.has_record"
-                  size="small"
-                  type="info"
-                  data-test="column-missing"
-                >
-                  {{ t('appDiff.no_record') }}
-                </el-tag>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in rows"
-              :key="`${row.kind}:${row.name}`"
-              :class="{ 'row-application': row.kind === 'application' }"
-              :data-test="`row-${row.kind}`"
-            >
-              <th class="package-col" scope="row">
-                <span>{{ row.name }}</span>
-                <!-- the application's own version is a row like the others, and
-                     is marked so it does not read as one of its dependencies -->
-                <el-tag
-                  v-if="row.kind === 'application'"
-                  class="kind"
-                  size="small"
-                  type="primary"
-                  data-test="application-row"
-                >
-                  {{ t('appDiff.application') }}
-                </el-tag>
-              </th>
-              <td
-                v-for="(cell, index) in row.cells"
-                :key="`${row.name}:${cell.ref}`"
-                :class="cellClass(cell)"
-                :data-test="`cell-${row.name}-${index}`"
-              >
-                <span
-                  v-if="isMarked(cell.move)"
-                  class="move"
-                  :class="`move-${moveTone(cell.move)}`"
-                  :title="t(moveLabelKey(moveTone(cell.move)))"
-                  data-test="move"
-                >
-                  {{ moveSymbol(moveTone(cell.move)) }}
-                </span>
-                <span class="version" :class="versionClass(cell)">{{ cellText(cell) }}</span>
-                <span v-if="isRisk(cell.move)" class="risk" data-test="risk">
-                  {{ t('appDiff.risk') }}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
     </template>
 
     <el-empty v-else :description="t('appDiff.no_result')" />
@@ -620,7 +676,9 @@ async function loadRepositories(projectKey: string) {
 
   repositoriesLoading.value = true
   try {
-    repositories.value = await projectsApi.getProjectRepositories(projectKey)
+    // applications alone: this page reads the releases the dependency database holds,
+    // and a repository registered as a package has none to read
+    repositories.value = await projectsApi.getProjectRepositories(projectKey, 'application')
   } catch {
     repositories.value = []
   } finally {
@@ -692,6 +750,8 @@ async function compare(refresh = false) {
     })
     if (run !== compareRun) return
     result.value = response
+    // a comparison opens on its first pair, which is where a reader starts reading
+    activePair.value = response.intervals.length ? intervalKey(response.intervals[0]) : ''
     deferredTotal.value = countDeferred(response.intervals)
     if (deferredTotal.value) void readDeferredPackages(run)
   } catch {
@@ -709,12 +769,24 @@ function refresh() {
   void compare(true)
 }
 
+/** How many of one pair's package comparisons are still waiting to be read. */
+function pendingOf(interval: AppVersionDiffInterval): number {
+  return interval.packages.filter((entry) => entry.code.deferred).length
+}
+
 /** How many package comparisons a set of pairs is leaving for later. */
 function countDeferred(list: AppVersionDiffInterval[]): number {
-  return list.reduce(
-    (count, interval) => count + interval.packages.filter((entry) => entry.code.deferred).length,
-    0,
-  )
+  return list.reduce((count, interval) => count + pendingOf(interval), 0)
+}
+
+// The pair a reader is looking at, when a comparison has more than one. Held by the
+// pair's own identity rather than by its position, so re-reading the same releases
+// leaves the reader where they were.
+const activePair = ref('')
+
+/** Whether one pair's detail is the one on screen. A single pair is always shown. */
+function showsPair(interval: AppVersionDiffInterval): boolean {
+  return intervals.value.length === 1 || activePair.value === intervalKey(interval)
 }
 
 /** How many package comparisons are still waiting to be read. */
@@ -999,21 +1071,19 @@ watch(depth, () => {
   color: var(--el-text-color-secondary);
 }
 
+/* The select and the checkbox share the field, and the checkbox drops beneath the
+   select rather than squeezing it when the column is narrow. */
 .depth {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 0 0 12px;
-}
-
-.depth-label {
-  font-size: 13px;
-  color: var(--el-text-color-regular);
+  width: 100%;
 }
 
 .depth-select {
-  width: 320px;
+  flex: 1 1 190px;
+  min-width: 170px;
 }
 
 .packages-action {
@@ -1049,6 +1119,27 @@ watch(depth, () => {
 .scope {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+/* The pair the reader is looking at, when a comparison has more than one. The
+   selector names the pair, so a pair's own header would say the same thing twice. */
+.pairs {
+  margin: 0 0 12px;
+}
+
+.pairs :deep(.el-radio-group) {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pair-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pairs + .intervals .interval-head {
+  display: none;
 }
 
 .intervals {
