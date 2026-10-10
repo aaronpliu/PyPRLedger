@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-10-10
+
+**Backend Version**: 1.28.0
+**Frontend Version**: 1.23.0
+
 ### Added
 - The App Diff compares each moved dependency's own commits. The page said which version a package moved to and compared the application's refs, but a package is a repository of its own: what came with `packageA 1.0.0 → 1.1.0` was nowhere to be seen. A moved package is now compared between its two versions - which are the tags it was released under - in the repository the **project registry** resolves its name to, that name being the one this side sends the dependency database, looked up from the other side; the result reads exactly like the application's own code axis, with a containment verdict, the counts and the commits behind a toggle. The application's own pair is compared at the `tagOrBranch` its record names rather than at the ref the reader picked. A package no repository is registered as (an external library), a name several repositories are registered under, or one whose versions the provider cannot compare is reported as inconclusive **with the reason**, never as a package that contained everything - a production check that silently skipped a package would read as a pass it never earned. The comparisons run a few at a time, a pair's first ones before the page is drawn and the rest behind it
 - The App Diff says what moved, not only how many. A pair of releases carried the counts ("three changed, one added") and the commits between them, but not which package went from which version to which - the thing one app release is read for - so a reader had to compare the matrix columns by eye and take a direction off a glyph. Every pair now lists its changes: the package, the two versions it went between, and what the move was (an upgrade, a downgrade, an addition, a removal, or a change whose direction the two versions do not settle). The application's own version is one entry among them, marked as the application so it does not read as one of its dependencies, and a pair whose releases have no record still lists nothing - that pair is unknown, not unchanged
