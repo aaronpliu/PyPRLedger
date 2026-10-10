@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElSelect } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ProjectRegistryManagementView from '@/views/admin/ProjectRegistryManagementView.vue'
 import enMessages from '@/locales/en.json'
@@ -85,24 +85,37 @@ describe('ProjectRegistryManagementView', () => {
     expect(row.text()).toContain('Follows trmyapp')
   })
 
-  it('says what a registration is, and moves it between the two kinds', async () => {
+  it('says what a registration is, and lets the kind be set from the row', async () => {
     const wrapper = await mountView([registration({ registry_kind: 'application' })])
 
     const row = wrapper.findAll('.el-table__row')[0]
     expect(row.find('[data-test="registry-kind"]').text()).toBe('Application')
 
-    // the pages that read an application's releases offer applications alone, so this
-    // is the switch that takes a repository out of their pickers
-    const mark = row.findAll('button').find((button) => button.text() === 'Mark as Package')
-    expect(mark).toBeTruthy()
+    // the pages that read an application's releases leave out what is marked as a
+    // package, so this is the switch that takes a repository out of their pickers
+    const control = row.find('[data-test="kind-select"]')
+    expect(control.exists()).toBe(true)
 
-    await mark!.trigger('click')
+    wrapper
+      .findAllComponents(ElSelect)
+      .find((select) => select.attributes('data-test') === 'kind-select')!
+      .vm.$emit('change', 'package')
     await flushPromises()
 
     expect(vi.mocked(projectRegistryApi.updateRegistryKind)).toHaveBeenCalledWith(
       'CORE',
       'app',
       'package',
+    )
+  })
+
+  it('says a registration nobody has classified is not set', async () => {
+    const wrapper = await mountView([registration({ registry_kind: null })])
+
+    // an empty kind is not a gap in the table: it is what every registration starts
+    // as, and it keeps behaving as it always did
+    expect(wrapper.findAll('.el-table__row')[0].find('[data-test="registry-kind"]').text()).toBe(
+      'Not set',
     )
   })
 })

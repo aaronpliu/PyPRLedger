@@ -390,8 +390,8 @@ class ProjectRegistryService:
             app_alias: Optional name the dependency database knows the app as
             registry_kind: Whether this is an application, whose releases the
                 dependency database holds, or a package that is only a dependency of
-                one. Left out, a new registration is an application and an existing
-                one keeps what it is
+                one. Left out, a new registration is left unclassified - it keeps
+                behaving as it always did - and an existing one keeps what it is
 
         Returns:
             Created ProjectRegistry entry
@@ -454,7 +454,7 @@ class ProjectRegistryService:
             repository_slug=repository_slug,
             git_provider=git_provider,
             app_alias=(app_alias or "").strip() or None,
-            registry_kind=kind or ProjectRegistry.DEFAULT_KIND,
+            registry_kind=kind,
             description=description or f"Registered to {app_name}",
         )
 
@@ -468,17 +468,20 @@ class ProjectRegistryService:
         return registry
 
     async def update_registry_kind(
-        self, project_key: str, repository_slug: str, registry_kind: str, db: AsyncSession
+        self, project_key: str, repository_slug: str, registry_kind: str | None, db: AsyncSession
     ) -> ProjectRegistry:
-        """Say whether a registration is an application or a package.
+        """Say whether a registration is an application or a package, or say nothing.
 
-        The pages that read an application's releases offer applications alone, so
-        this is what takes a repository out of their list - and what puts it back.
+        The pages that read an application's releases offer the applications an
+        administrator has marked and leave out the packages they have marked; a
+        registration nobody has classified is offered as it always was. So this is
+        both what takes a repository out of those lists and what puts it back.
 
         Args:
             project_key: Project key
             repository_slug: Repository slug
-            registry_kind: 'application' or 'package'
+            registry_kind: 'application' or 'package', or empty to leave it
+                unclassified again
             db: Database session
 
         Returns:
@@ -487,8 +490,8 @@ class ProjectRegistryService:
         Raises:
             ValueError: If the kind is unknown, or the pair is not registered
         """
-        kind = (registry_kind or "").strip().lower()
-        if kind not in ProjectRegistry.VALID_KINDS:
+        kind = (registry_kind or "").strip().lower() or None
+        if kind is not None and kind not in ProjectRegistry.VALID_KINDS:
             raise ValueError(
                 f"Invalid registry_kind '{registry_kind}'. "
                 f"Must be one of: {', '.join(ProjectRegistry.VALID_KINDS)}"

@@ -28,13 +28,21 @@ export interface RepositorySummary {
   /**
    * What the project registry says this repository is, where it is registered at
    * all: `application` for one whose releases the dependency database holds,
-   * `package` for one that is only a dependency of another. Null where nothing is
-   * registered for it.
+   * `package` for one that is only a dependency of another. Null where nobody has
+   * classified it - including where nothing is registered for it at all.
    */
   registry_kind?: string | null
   created_date: string
   updated_date: string
 }
+
+/**
+ * What a repository can be, as a filter asks for it.
+ *
+ * `unclassified` is what a filter names a registration nobody has classified; it is
+ * not a stored value, and it covers a repository with no registration at all.
+ */
+export type RegistryKind = 'application' | 'package' | 'unclassified'
 
 export interface CloudWorkspaceOption {
   slug: string
@@ -72,17 +80,19 @@ export const projectsApi = {
   /**
    * Get repositories for a specific project.
    *
-   * Passing a `registryKind` asks for the repositories the project registry marks
-   * with it. The pages that read an application's releases ask for `application`:
-   * the dependency database holds release records for applications alone, so a
-   * package repository offered beside them is a dead end.
+   * Passing `registryKinds` asks for the repositories the registry has marked with
+   * any of them. The pages that read an application's releases ask for
+   * `['application', 'unclassified']`: what is marked as a package is left out,
+   * because the dependency database holds no release records for it, and everything
+   * else keeps behaving as it always did - which is what makes the classification an
+   * administrator can make an opt-in rather than a migration nobody can finish.
    */
   async getProjectRepositories(
     projectKey: string,
-    registryKind?: 'application' | 'package',
+    registryKinds?: RegistryKind[],
   ): Promise<RepositorySummary[]> {
     const response = await request.get(`/projects/key/${projectKey}/repositories`, {
-      params: registryKind ? { registry_kind: registryKind } : undefined,
+      params: registryKinds?.length ? { registry_kind: registryKinds.join(',') } : undefined,
     })
     return response.data || response
   },

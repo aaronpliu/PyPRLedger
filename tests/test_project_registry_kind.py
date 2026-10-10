@@ -38,13 +38,18 @@ class AllowingRbac:
 # --------------------------------------------------------------------------- #
 
 
-async def test_a_registration_is_an_application_unless_it_says_otherwise(
+async def test_a_registration_nobody_classified_says_nothing(
     db_session: AsyncSession,
 ) -> None:
-    """This table began as an application map, so saying nothing keeps saying that."""
+    """The column is an opt-in: what nobody has said, it does not say for them.
+
+    The registry fills itself in - every repository that gets a review is registered
+    as it goes - so a default of any kind would either claim packages are
+    applications or take applications out of the pages nobody has worked through.
+    """
     entry = await ProjectRegistryService().register_project("core-app", "CORE", "app", db=db_session)
 
-    assert entry.registry_kind == ProjectRegistry.KIND_APPLICATION
+    assert entry.registry_kind is None
 
 
 async def test_a_registration_can_be_made_a_package(db_session: AsyncSession) -> None:
@@ -88,6 +93,18 @@ async def test_marking_an_unregistered_repository_is_refused(db_session: AsyncSe
         await ProjectRegistryService().update_registry_kind(
             "CORE", "unregistered", ProjectRegistry.KIND_PACKAGE, db_session
         )
+
+
+async def test_a_mark_can_be_taken_back(db_session: AsyncSession) -> None:
+    """An administrator who marked the wrong thing gets the previous behaviour back."""
+    service = ProjectRegistryService()
+    await service.register_project(
+        "core-app", "CORE", "app", db=db_session, registry_kind=ProjectRegistry.KIND_PACKAGE
+    )
+
+    entry = await service.update_registry_kind("CORE", "app", None, db_session)
+
+    assert entry.registry_kind is None
 
 
 async def test_re_registering_a_known_pair_can_change_what_it_is(db_session: AsyncSession) -> None:
@@ -162,7 +179,9 @@ async def seed_project(db: AsyncSession) -> None:
     await db.commit()
 
     service = ProjectRegistryService()
-    await service.register_project("core-app", "CORE", "app", db=db)
+    await service.register_project(
+        "core-app", "CORE", "app", db=db, registry_kind=ProjectRegistry.KIND_APPLICATION
+    )
     await service.register_project(
         "core-pkg-a",
         "CORE",
@@ -213,6 +232,38 @@ async def test_the_listing_offers_applications_alone(async_client, db_session) -
             ("pkg-a", ProjectRegistry.KIND_PACKAGE),
             ("unknown", None),
         ]
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+
+
+async def test_the_listing_takes_the_kinds_it_is_asked_for(async_client, db_session) -> None:
+    """Several kinds at once, and the unclassified ones a page that wants them names.
+
+    This is what the Release Dependency Graph and the App Diff ask for: the
+    applications an administrator marked, plus every repository nobody has
+    classified - so a registry that has never been worked through behaves as it
+    always did.
+    """
+    await seed_project(db_session)
+
+    app.dependency_overrides[get_db_session] = override_db(db_session)
+    try:
+        reached = await async_client.get(
+            "/api/v1/projects/key/CORE/repositories",
+            params={"registry_kind": "application,unclassified"},
+        )
+
+        assert reached.status_code == 200, reached.text
+        # the package that was marked is the only one left out - and the repository
+        # with no registration at all is unclassified, so it is offered
+        assert [item["repository_slug"] for item in reached.json()] == ["app", "unknown"]
+
+        unclassified = await async_client.get(
+            "/api/v1/projects/key/CORE/repositories", params={"registry_kind": "unclassified"}
+        )
+
+        assert unclassified.status_code == 200, unclassified.text
+        assert [item["repository_slug"] for item in unclassified.json()] == ["unknown"]
     finally:
         app.dependency_overrides.pop(get_db_session, None)
 
@@ -280,6 +331,16 @@ async def test_endpoint_marks_a_registration(async_client, db_session) -> None:
         )
 
         assert missing.status_code == 404
+
+        # sending nothing back takes the mark back, which is the state an upgrade
+        # leaves every registration in
+        cleared = await async_client.put(
+            "/api/v1/admin/registry/kind",
+            params={"project_key": "CORE", "repository_slug": "app", "registry_kind": ""},
+        )
+
+        assert cleared.status_code == 200, cleared.text
+        assert cleared.json()["registry_kind"] is None
     finally:
         app.dependency_overrides.pop(get_current_user_with_token, None)
         app.dependency_overrides.pop(get_db_session, None)

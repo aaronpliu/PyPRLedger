@@ -104,28 +104,30 @@ export const projectRegistryApi = {
   },
 
   /**
-   * Say whether a registration is an application or a package.
+   * Say whether a registration is an application or a package, or say nothing.
    *
    * This is what takes a repository out of the Release Dependency Graph and App
-   * Diff pickers - which read an application's releases, and so offer applications
-   * alone - and what puts it back.
+   * Diff pickers - which read an application's releases, and so leave out what is
+   * marked as a package - and what puts it back. A null leaves it unclassified,
+   * which is the behaviour nobody has classified gets.
    */
   async updateRegistryKind(
     projectKey: string,
     repositorySlug: string,
-    registryKind: 'application' | 'package'
+    registryKind: 'application' | 'package' | null
   ): Promise<{
     message: string
     project_key: string
     repository_slug: string
     app_name: string
-    registry_kind: string
+    registry_kind: string | null
   }> {
     return request.put('/admin/registry/kind', null, {
       params: {
         project_key: projectKey,
         repository_slug: repositorySlug,
-        registry_kind: registryKind,
+        // an explicit empty value takes the mark back, so it is sent rather than left out
+        registry_kind: registryKind ?? '',
       },
     })
   },

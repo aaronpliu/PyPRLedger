@@ -645,28 +645,18 @@ describe('AppDiffView', () => {
     expect(wrapper.find('[data-test="intervals"] article').isVisible()).toBe(true)
   })
 
-  it('offers the applications of the project, and nothing else', async () => {
-    const wrapper = await mountView()
-    await openRepository(wrapper)
-
-    // a repository registered as a package has no release records to read, so the
-    // page asks the registry for applications alone
-    expect(vi.mocked(projectsApi.getProjectRepositories)).toHaveBeenCalledWith(
-      'CORE',
-      'application',
-    )
-  })
-
-  it('says so when the project has no application registered', async () => {
-    vi.mocked(projectsApi.getProjectRepositories).mockResolvedValueOnce([])
-
+  it('leaves out only the repositories marked as packages', async () => {
     // a link's coordinates save the walk through the pickers this test is not about
     const wrapper = await mountView('?project_key=CORE&repository_slug=app')
     await flushPromises()
 
-    // an empty picker reads as a broken one: the note says what decides the list
-    expect(wrapper.find('[data-test="no-applications"]').text()).toContain(
-      'no repository registered as an application',
-    )
+    // a package has no release records to read, so a repository an administrator
+    // marked as one is left out - and everything nobody has classified comes back,
+    // so a registry nobody has worked through behaves as it always did
+    expect(vi.mocked(projectsApi.getProjectRepositories)).toHaveBeenCalledWith('CORE', [
+      'application',
+      'unclassified',
+    ])
+    expect(wrapper.find('[data-test="no-applications"]').exists()).toBe(false)
   })
 })

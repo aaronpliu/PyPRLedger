@@ -59,12 +59,9 @@
         <el-table-column label="Kind" width="130">
           <template #default="{ row }">
             <!-- What a registration is decides which pickers offer it: the pages that
-                 read an application's releases offer applications alone -->
-            <el-tag
-              :type="row.registry_kind === 'package' ? 'info' : 'success'"
-              size="small"
-              data-test="registry-kind"
-            >
+                 read an application's releases leave out what is marked as a package,
+                 and offer everything nobody has classified -->
+            <el-tag :type="kindTagType(row.registry_kind)" size="small" data-test="registry-kind">
               {{ kindLabel(row.registry_kind) }}
             </el-tag>
           </template>
@@ -84,14 +81,24 @@
             {{ formatDate(row.created_date) }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="460" fixed="right">
+        <el-table-column label="Actions" width="520" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleEditAlias(row)">
               Edit Alias
             </el-button>
-            <el-button size="small" @click="handleToggleKind(row)">
-              {{ row.registry_kind === 'package' ? 'Mark as Application' : 'Mark as Package' }}
-            </el-button>
+            <!-- What this registration is. Empty is a choice of its own - where every
+                 registration starts, and what keeps behaving as it always did. -->
+            <el-select
+              :model-value="row.registry_kind ?? ''"
+              class="kind-select"
+              size="small"
+              data-test="kind-select"
+              @change="(value: string) => handleKindChange(row, value)"
+            >
+              <el-option label="Not set" value="" />
+              <el-option label="Application" value="application" />
+              <el-option label="Package" value="package" />
+            </el-select>
             <el-button size="small" type="primary" @click="handleUpdate(row)">
               Move App
             </el-button>
@@ -184,12 +191,13 @@
           <el-select v-model="registerForm.registryKind" style="width: 100%">
             <el-option label="Application" value="application" />
             <el-option label="Package" value="package" />
+            <el-option label="Not set" value="" />
           </el-select>
           <div class="field-hint">
-            What this repository is. The Release Dependency Graph and the App Diff list
-            applications only, because the dependency database holds release records for
-            those - a package repository has none to read. Register a package here so a
-            moved dependency can be compared in its own repository.
+            What this repository is. The Release Dependency Graph and the App Diff leave
+            out the repositories marked as packages, because the dependency database holds
+            no release records for those - and they offer everything that is not
+            classified, so leaving this unset changes nothing.
           </div>
         </el-form-item>
 
@@ -348,9 +356,13 @@ const registerForm = reactive({
   description: '',
 })
 
-/** What a registration is, as the page reads it. */
-const kindLabel = (kind: string | undefined) =>
-  kind === 'package' ? 'Package' : 'Application'
+/** What a registration is, as the page reads it. Empty is not a kind: nobody has said. */
+const kindLabel = (kind: string | null | undefined) =>
+  kind === 'package' ? 'Package' : kind === 'application' ? 'Application' : 'Not set'
+
+/** How the tag reads: a package is set aside, an unclassified row claims nothing. */
+const kindTagType = (kind: string | null | undefined): '' | 'success' | 'info' =>
+  kind === 'package' ? 'info' : kind === 'application' ? 'success' : ''
 
 const getProviderLabel = (provider: string) => getGitProviderLabel(provider)
 
@@ -561,21 +573,23 @@ const handleUpdateSubmit = async () => {
 }
 
 /**
- * Move a registration between the two kinds.
+ * Set, change, or take back what a registration is.
  *
- * The pages that read an application's releases offer applications alone, so this is
- * what takes a repository out of their pickers - and what puts it back.
+ * The pages that read an application's releases leave out what is marked as a
+ * package and offer everything else, so an empty value is how an administrator
+ * returns a repository to the behaviour an unclassified one gets.
  */
-const handleToggleKind = async (project: ProjectRegistry) => {
-  const next = project.registry_kind === 'package' ? 'application' : 'package'
+const handleKindChange = async (project: ProjectRegistry, kind: string) => {
   try {
     await projectRegistryApi.updateRegistryKind(
       project.project_key,
       project.repository_slug,
-      next
+      kind === '' ? null : (kind as 'application' | 'package')
     )
     ElMessage.success(
-      `${project.project_key}/${project.repository_slug} is now a ${next}`
+      kind === ''
+        ? `${project.project_key}/${project.repository_slug} is left unclassified`
+        : `${project.project_key}/${project.repository_slug} is now a ${kind}`
     )
     await loadProjects()
   } catch (error: any) {
@@ -686,6 +700,12 @@ onMounted(async () => {
 .alias-follows {
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+/* the kind, set from the row it belongs to */
+.kind-select {
+  width: 128px;
+  margin: 0 8px;
 }
 
 .field-hint {

@@ -36,12 +36,13 @@ class ProjectRegistry(Base):
     VALID_PROVIDERS = GitProvider.values()
     DEFAULT_PROVIDER = GitProvider.default().value
 
-    # What a registration is: an application, whose releases the dependency
-    # database holds records of, or a package that is only ever a dependency of one.
+    # What a registration is: an application, whose releases the dependency database
+    # holds records of, or a package that is only ever a dependency of one. Empty
+    # means nobody has said, and a registration nobody has classified is treated as
+    # it always was - which is what keeps this an opt-in.
     KIND_APPLICATION = "application"
     KIND_PACKAGE = "package"
     VALID_KINDS = (KIND_APPLICATION, KIND_PACKAGE)
-    DEFAULT_KIND = KIND_APPLICATION
 
     __tablename__ = "project_registry"
 
@@ -76,11 +77,13 @@ class ProjectRegistry(Base):
     # resolving a package name back to the repository it lives in - and only the
     # first is something the pages that read an application's releases can use: a
     # package repository has no release records, so offering it as an application is
-    # a dead end. Defaults to application, because that is what this table was for
-    # and a registration that says nothing is one.
-    registry_kind: Mapped[str] = mapped_column(
-        String(16), nullable=False, default=DEFAULT_KIND, server_default=DEFAULT_KIND, index=True
-    )
+    # a dead end.
+    #
+    # Empty means nobody has said, and a registration nobody has classified behaves
+    # as it always did - shown everywhere. That is what makes the classification an
+    # administrator can make in the registry page an opt-in: applying this column to
+    # a registry that fills itself in changes nothing until someone makes a choice.
+    registry_kind: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
 
     # Optional description
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)

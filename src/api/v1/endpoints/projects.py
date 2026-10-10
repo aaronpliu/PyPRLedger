@@ -28,6 +28,12 @@ from src.utils.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
+# What a caller asks for to get the registrations nobody has classified. It is not a
+# stored value: the column is empty for those, and a repository with no registration
+# at all is unclassified the same way - which is how a project whose registry has
+# never been worked through keeps listing every repository it has.
+REGISTRY_KIND_UNCLASSIFIED = "unclassified"
+
 router = APIRouter()
 
 
@@ -543,10 +549,11 @@ async def get_project_repositories(
         str | None,
         Query(
             description=(
-                "Only repositories the project registry marks with this kind: 'application' "
-                "for the ones whose releases the dependency database holds, 'package' for the "
-                "ones that are only dependencies of another. Left out, every repository of "
-                "the project is returned"
+                "Only repositories whose registry entry is marked with one of these kinds, "
+                "comma separated: 'application' for the ones whose releases the dependency "
+                "database holds, 'package' for the ones that are only dependencies of "
+                "another, and 'unclassified' for the ones nobody has classified. Left out, "
+                "every repository of the project is returned"
             )
         ),
     ] = None,
@@ -556,7 +563,7 @@ async def get_project_repositories(
 
     Args:
         project_key: The project key
-        registry_kind: Optional kind of registration to filter by
+        registry_kind: Optional kinds of registration to filter by, comma separated
         db: Database session
 
     Returns:
@@ -564,22 +571,28 @@ async def get_project_repositories(
         repository_slug, registry_kind, etc.
 
     Raises:
-        HTTPException: If the project does not exist, or the kind is unknown
+        HTTPException: If the project does not exist, or a kind is unknown
     """
-    from sqlalchemy import and_, select
+    from sqlalchemy import and_, or_, select
 
     from src.models.project import Project
     from src.models.project_registry import ProjectRegistry
     from src.models.repository import Repository
 
-    kind = (registry_kind or "").strip().lower() or None
-    if kind is not None and kind not in ProjectRegistry.VALID_KINDS:
+    kinds = [part.strip().lower() for part in (registry_kind or "").split(",") if part.strip()]
+    unknown = [
+        kind
+        for kind in kinds
+        if kind not in (*ProjectRegistry.VALID_KINDS, REGISTRY_KIND_UNCLASSIFIED)
+    ]
+    if unknown:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "error": "VALIDATION_ERROR",
-                "message": f"Invalid registry_kind '{registry_kind}'. "
-                f"Must be one of: {', '.join(ProjectRegistry.VALID_KINDS)}",
+                "message": f"Invalid registry_kind '{', '.join(unknown)}'. "
+                f"Must be one of: "
+                f"{', '.join((*ProjectRegistry.VALID_KINDS, REGISTRY_KIND_UNCLASSIFIED))}",
             },
         )
 
@@ -600,7 +613,7 @@ async def get_project_repositories(
 
         # The registry says what each repository is, where it is registered at all: an
         # outer join keeps the ones that are not - which is what a caller asking for no
-        # kind still wants - and asking for a kind turns it into the inner join it is.
+        # kind still wants - and asking for kinds narrows it to those.
         repo_query = (
             select(Repository, ProjectRegistry.registry_kind)
             .outerjoin(
@@ -613,8 +626,18 @@ async def get_project_repositories(
             .where(Repository.project_id == project.project_id)
             .order_by(Repository.repository_slug)
         )
-        if kind is not None:
-            repo_query = repo_query.where(ProjectRegistry.registry_kind == kind)
+        if kinds:
+            wanted = list(dict.fromkeys(kinds))
+            marked = [kind for kind in wanted if kind in ProjectRegistry.VALID_KINDS]
+            conditions = []
+            if marked:
+                conditions.append(ProjectRegistry.registry_kind.in_(marked))
+            if REGISTRY_KIND_UNCLASSIFIED in wanted:
+                # a registration nobody has classified, and a repository with no
+                # registration at all: both are "not said", and both keep being
+                # offered to a caller that asks for them
+                conditions.append(ProjectRegistry.registry_kind.is_(None))
+            repo_query = repo_query.where(or_(*conditions))
 
         rows = (await db.execute(repo_query)).all()
 

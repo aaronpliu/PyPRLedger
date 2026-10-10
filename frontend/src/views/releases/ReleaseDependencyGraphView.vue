@@ -190,16 +190,6 @@
       <!-- The picker offers the recent refs and searches the rest, so it says
            which of the two it is doing rather than leaving a short list to look
            like a short repository. -->
-      <!-- The picker offers the applications of a project, and says so when there are
-           none rather than leaving an empty list to read as a broken one. -->
-      <p
-        v-if="hasCoordinates && !repositoriesLoading && !repositories.length"
-        class="refs-note"
-        data-test="no-applications"
-      >
-        {{ t('releaseDependencyGraph.no_applications') }}
-      </p>
-
       <p v-if="refsCapped" class="refs-note" data-test="refs-capped">
         {{
           t('releaseDependencyGraph.refs_capped', {
@@ -465,9 +455,14 @@ async function loadRepositories(projectKey: string) {
 
   repositoriesLoading.value = true
   try {
-    // applications alone: this page reads the releases the dependency database holds,
-    // and a repository registered as a package has none to read
-    repositories.value = await projectsApi.getProjectRepositories(projectKey, 'application')
+    // What an administrator marked as a package is left out - this page reads the
+    // releases the dependency database holds, and a package repository has none to
+    // read. Everything nobody has classified comes back, so a project whose registry
+    // has not been worked through offers exactly what it always did.
+    repositories.value = await projectsApi.getProjectRepositories(projectKey, [
+      'application',
+      'unclassified',
+    ])
   } catch {
     repositories.value = []
   } finally {

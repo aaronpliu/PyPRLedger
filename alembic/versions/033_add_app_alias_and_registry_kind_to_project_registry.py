@@ -20,9 +20,15 @@ application the dependency database knows it by, and resolving a *package* name
 back to the repository it lives in (which is how the App Diff compares a moved
 dependency in its own repository). Only the first is something the pages that read
 an application's releases can use, because the dependency database holds release
-records for applications alone. Existing rows are marked ``application``: that is
-what the table was built for, and a registration made for another purpose is the
-exception an administrator can point out.
+records for applications alone - so those pages offer the registrations an
+administrator has marked as applications, and leave out the ones marked as
+packages.
+
+It is left empty for every registration that exists, and an empty kind means *not
+said*: a registration nobody has classified keeps behaving exactly as it did, which
+is what makes this safe to apply to a registry that is filled in automatically.
+Nothing is guessed here - the classification is the administrator's, made in the
+Project Registry page when they want it.
 """
 
 from collections.abc import Sequence
@@ -46,7 +52,10 @@ def upgrade() -> None:
     )
     op.add_column(
         "project_registry",
-        sa.Column("registry_kind", sa.String(16), nullable=False, server_default="application"),
+        # nullable on purpose: no default claims a kind for a registration nobody
+        # has classified, so an upgrade changes no behaviour until an administrator
+        # makes a choice
+        sa.Column("registry_kind", sa.String(16), nullable=True),
     )
     op.create_index(
         "ix_project_registry_registry_kind", "project_registry", ["registry_kind"]

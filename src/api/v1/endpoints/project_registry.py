@@ -319,8 +319,10 @@ async def register_project_to_app(
             },
         )
 
-    # Validate registry_kind
-    if registry_kind is not None and registry_kind.strip().lower() not in ProjectRegistry.VALID_KINDS:
+    # Validate registry_kind. An empty value is a choice of its own: it leaves the
+    # registration unclassified, which is where an upgrade leaves every row.
+    kind = (registry_kind or "").strip().lower() or None
+    if kind is not None and kind not in ProjectRegistry.VALID_KINDS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
@@ -355,7 +357,7 @@ async def register_project_to_app(
             db,
             git_provider=git_provider,
             app_alias=app_alias,
-            registry_kind=registry_kind,
+            registry_kind=kind,
         )
         return {
             "message": "Successfully registered",
@@ -454,16 +456,16 @@ async def update_project_registry_kind(
         str, Query(min_length=1, max_length=128, description="Repository slug")
     ],
     registry_kind: Annotated[
-        str,
+        str | None,
         Query(
-            min_length=1,
             max_length=16,
             description=(
                 "'application' for a repository whose releases the dependency database "
-                "holds, 'package' for one that is only a dependency of another"
+                "holds, 'package' for one that is only a dependency of another. Send it "
+                "empty to leave the registration unclassified again"
             ),
         ),
-    ],
+    ] = None,
     db: Annotated[AsyncSession, Depends(get_db_session)] = None,
     registry_service: Annotated[ProjectRegistryService, Depends(get_registry_service)] = None,
 ):
@@ -471,16 +473,18 @@ async def update_project_registry_kind(
     Say whether a registration is an application or a package (Admin only)
 
     The pages that read an application's releases - the Release Dependency Graph and
-    the App Diff - offer applications alone, because the dependency database holds
-    release records for applications and a package repository has none to read. This
-    is what takes a repository out of those lists, and what puts it back.
+    the App Diff - leave out the repositories marked as packages, because the
+    dependency database holds release records for applications and a package
+    repository has none to read. A registration nobody has classified is offered as
+    it always was, so this classification is an opt-in: what it is set to is what
+    takes a repository out of those lists, and what puts it back.
 
     Requires system_admin role with project_registry:manage permission.
 
     Args:
         project_key: Project key
         repository_slug: Repository slug
-        registry_kind: 'application' or 'package'
+        registry_kind: 'application', 'package', or empty to leave it unclassified
 
     Returns:
         Dict with the stored kind
@@ -489,7 +493,8 @@ async def update_project_registry_kind(
         HTTPException: If insufficient permissions, the kind is unknown, or the
             repository is not registered
     """
-    if registry_kind.strip().lower() not in ProjectRegistry.VALID_KINDS:
+    kind = (registry_kind or "").strip().lower() or None
+    if kind is not None and kind not in ProjectRegistry.VALID_KINDS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
@@ -516,7 +521,7 @@ async def update_project_registry_kind(
 
     try:
         registry = await registry_service.update_registry_kind(
-            project_key, repository_slug, registry_kind, db
+            project_key, repository_slug, kind, db
         )
         return {
             "message": "Successfully updated",

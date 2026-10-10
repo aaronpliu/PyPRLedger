@@ -422,27 +422,17 @@ describe('ReleaseDependencyGraphView', () => {
       .toContain('v2.0.0')
   })
 
-  it('offers the applications of the project, and nothing else', async () => {
+  it('leaves out only the repositories marked as packages', async () => {
     const wrapper = mountView()
     await flushPromises()
     await openRepository(wrapper)
 
-    // this page reads the releases the dependency database holds; a repository
-    // registered as a package has none to read, so it is not offered
-    expect(vi.mocked(projectsApi.getProjectRepositories)).toHaveBeenCalledWith(
-      'CORE',
+    // this page reads the releases the dependency database holds, so a repository an
+    // administrator marked as a package is not offered - and everything nobody has
+    // classified is, which is what keeps the classification an opt-in
+    expect(vi.mocked(projectsApi.getProjectRepositories)).toHaveBeenCalledWith('CORE', [
       'application',
-    )
-  })
-
-  it('says so when the project has no application registered', async () => {
-    vi.mocked(projectsApi.getProjectRepositories).mockResolvedValueOnce([])
-
-    const wrapper = mountView()
-    await flushPromises()
-    await openRepository(wrapper)
-
-    // an empty picker reads as a broken one: the note says what decides the list
-    expect(wrapper.find('[data-test="no-applications"]').exists()).toBe(true)
+      'unclassified',
+    ])
   })
 })

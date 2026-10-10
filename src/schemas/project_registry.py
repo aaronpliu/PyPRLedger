@@ -13,13 +13,14 @@ class ProjectRegistryResponse(BaseModel):
             "from app_name. Empty means the application name is used"
         ),
     )
-    registry_kind: str = Field(
-        default="application",
+    registry_kind: str | None = Field(
+        default=None,
         description=(
             "'application' for a repository whose releases the dependency database holds, "
-            "'package' for one that is only a dependency of another. The pages that read an "
-            "application's releases offer the first alone: a package repository has no "
-            "release records to read"
+            "'package' for one that is only a dependency of another, null where nobody has "
+            "classified it. The pages that read an application's releases leave out what is "
+            "marked as a package, and offer everything else - so a registration nobody has "
+            "classified behaves as it always did"
         ),
     )
     project_key: str
