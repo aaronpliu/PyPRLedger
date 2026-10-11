@@ -214,8 +214,10 @@ class ReleaseNoteConfluenceStatusResponse(BaseModel):
     configured: bool = Field(
         ...,
         description=(
-            "Whether a sync can be attempted at all. False when the base URL, the "
-            "space key or the credentials are unset."
+            "Whether a sync can be attempted at all. False when the base URL or the "
+            "credentials are unset. Which space a release goes to is decided per "
+            "repository, so a space that is missing for one of them is reported by "
+            "the sync itself rather than here."
         ),
     )
     auto_sync: bool = Field(

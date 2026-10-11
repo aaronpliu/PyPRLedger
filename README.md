@@ -18,6 +18,7 @@ A production-ready FastAPI + Vue 3 PR Code Review Result Storage System with MyS
 - **Export**: Export review data to PDF, Excel, CSV, or JSON with `page_size=0` sentinel for full dataset export
 - **Release Tooling**: Standalone release comparison (verdicts per commit against a target release) and GitHub-style release notes, both driven by the same repository coordinates and the same provider resolution as the rest of the app
 - **Release Dependency Graph**: Reads what one repository ref shipped from the dependency database and draws it — the modules the application pinned to an exact version, the ranges packages declare between themselves, and the cycles a closure contains — in one consolidated call per ref
+- **Confluence Publishing**: Writes a published release note to Confluence as a page, with the space and parent page resolved per repository, then its project, then the instance — each repository can also be kept out of it on its own
 - **Frontend**: Vue 3 + Element Plus SPA with review listing, detail views, task assignment management, release tooling, analytics dashboards, and rule management UI
 - **Database Integration**: MySQL database with SQLAlchemy ORM and Alembic migrations
 - **Caching Layer**: Redis integration for improved performance
@@ -666,4 +667,5 @@ Additional documentation is available in the [`docs/`](docs/) directory:
 - **[Project Structure](docs/PROJECT_STRUCTURE.md)** - Detailed codebase overview
 - **[System Design](docs/FastAPI_code_review_system_design.md)** - Architecture documentation
 - **[Dependency API Contract](docs/DEPENDENCY_API_CONTRACT.md)** - Interface for the third-party dependency database
+- **[Confluence Publishing](docs/CONFLUENCE_RELEASE_SYNC.md)** - Enabling Confluence publishing and where each repository's releases go
 - **[Versioning Guide](docs/VERSIONING.md)** - Version management instructions

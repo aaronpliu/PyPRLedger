@@ -41,6 +41,12 @@ Welcome to the PRLedger documentation directory. This folder contains comprehens
   - Folding a two-level source (module maps keyed by module name) into that shape
   - Status codes, configuration, and how to verify an implementation
 
+- **[CONFLUENCE_RELEASE_SYNC.md](CONFLUENCE_RELEASE_SYNC.md)** - Publishing release notes to Confluence
+  - Credentials and the instance defaults that live in the environment
+  - Where a release goes: the repository → project → instance fallback, and how to set it
+  - What a repeat sync does, where a failure shows up, and the API involved
+  - Troubleshooting, message by message
+
 ### Version Management
 
 - **[VERSIONING.md](VERSIONING.md)** - Complete version management guide
@@ -87,6 +93,7 @@ See [CHANGELOG.md](../CHANGELOG.md#160---2026-04-13) for complete details.
 | [VERSIONING.md](VERSIONING.md) | Learn how to manage releases |
 | [FastAPI_code_review_system_design.md](FastAPI_code_review_system_design.md) | Deep dive into system architecture |
 | [DEPENDENCY_API_CONTRACT.md](DEPENDENCY_API_CONTRACT.md) | Implement the third-party dependency database interface |
+| [CONFLUENCE_RELEASE_SYNC.md](CONFLUENCE_RELEASE_SYNC.md) | Enable and configure Confluence publishing |
 | [CHANGELOG.md](../CHANGELOG.md) | Latest features and bug fixes (v1.6.0 / UI 1.1.0 released) |
 
 ## 🔗 External Resources
