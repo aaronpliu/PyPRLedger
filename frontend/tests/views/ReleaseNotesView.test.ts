@@ -211,6 +211,37 @@ function buttonsByLabel(wrapper: AnyWrapper, label: string) {
   return wrapper.findAll('button').filter((button: AnyWrapper) => button.text() === label)
 }
 
+/**
+ * Open the overflow menu of one release entry.
+ *
+ * The control sits on the entry; the menu itself is teleported to the document,
+ * and only the menu that was opened is rendered - which is what makes reading it
+ * from there unambiguous.
+ */
+async function openNoteMenu(wrapper: AnyWrapper, index = 0) {
+  const menus = wrapper.findAll('[data-test="note-menu"]')
+  expect(menus.length, 'no release entry offers a menu').toBeGreaterThan(index)
+  await menus[index].trigger('click')
+  await flushPromises()
+  await nextTick()
+}
+
+/** One item of an open release menu, by the command it carries. */
+function noteMenuItem(command: string): HTMLElement | undefined {
+  const items = document.querySelectorAll<HTMLElement>(`[data-test="note-menu-${command}"]`)
+  return items.length ? items[items.length - 1] : undefined
+}
+
+/** Ask one release's menu to do something, the way a reader would. */
+async function useNoteMenu(wrapper: AnyWrapper, command: string, index = 0) {
+  await openNoteMenu(wrapper, index)
+  const item = noteMenuItem(command)
+  expect(item, `the menu offers no '${command}' item`).toBeTruthy()
+  item!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await flushPromises()
+  await nextTick()
+}
+
 function selectByPlaceholder(wrapper: AnyWrapper, placeholder: string) {
   return wrapper
     .findAllComponents({ name: 'ElSelect' })
@@ -423,10 +454,24 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
-    await flushPromises()
+    // a draft is the one state that offers publishing, and it is in the menu
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('publish')?.textContent?.trim()).toBe(enMessages.releaseNotes.publish)
+
+    await useNoteMenu(wrapper, 'publish')
 
     expect(releaseNotesApi.update).toHaveBeenCalledWith(1, { status: 'published' })
+  })
+
+  it('leaves publishing out of the menu of a release that is already out', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await openNoteMenu(wrapper)
+
+    expect(noteMenuItem('publish')).toBeUndefined()
+    expect(noteMenuItem('edit')).toBeDefined()
   })
 
   it('generates the release notes from the commits of the release scope', async () => {
@@ -613,8 +658,20 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.delete)[0].trigger('click')
-    await flushPromises()
+    // the destructive one is set apart and marked, so it is not hit by accident,
+    // and the way in is a labelled control rather than a bare glyph
+    await openNoteMenu(wrapper)
+    const remove = noteMenuItem('delete')
+    expect(remove?.className).toContain('note-menu-danger')
+    // Element Plus draws `divided` as a rule before the item rather than a class
+    expect(remove?.previousElementSibling?.className).toContain(
+      'el-dropdown-menu__item--divided',
+    )
+    expect(wrapper.findAll('[data-test="note-menu"]')[0].attributes('aria-label')).toBe(
+      enMessages.releaseNotes.more_actions,
+    )
+
+    await useNoteMenu(wrapper, 'delete')
 
     expect(confirmSpy).toHaveBeenCalled()
     expect(releaseNotesApi.remove).toHaveBeenCalledWith(1)
@@ -630,8 +687,7 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.delete)[0].trigger('click')
-    await flushPromises()
+    await useNoteMenu(wrapper, 'delete')
 
     expect(confirmSpy).toHaveBeenCalled()
     expect(releaseNotesApi.remove).not.toHaveBeenCalled()
@@ -658,9 +714,41 @@ describe('ReleaseNotesView', () => {
     expect(readOnlyTooltip!.props('content')).toBe(enMessages.releaseNotes.read_only_help)
     // but no management affordances
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)).toHaveLength(0)
-    expect(buttonsByLabel(wrapper, enMessages.releaseNotes.edit_release)).toHaveLength(0)
-    expect(buttonsByLabel(wrapper, enMessages.releaseNotes.delete)).toHaveLength(0)
+    // nothing to manage and nowhere to go: the entry offers no menu at all
+    expect(wrapper.findAll('[data-test="note-menu"]')).toHaveLength(0)
+    expect(noteMenuItem('edit')).toBeUndefined()
+    expect(noteMenuItem('delete')).toBeUndefined()
     expect(wrapper.find('.md-editor-stub').exists()).toBe(false)
+  })
+
+  it('offers a reader the release page and nothing to manage', async () => {
+    signIn(['viewer'])
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ external_url: 'https://git.local/ALPHA/alpha-api/releases/v1.1.0' })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // The menu stays where it is, even holding a single item: a reader finds the
+    // release page in the same place whoever they are.
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('provider')?.textContent?.trim()).toBe(
+      enMessages.releaseNotes.view_on_provider,
+    )
+    expect(noteMenuItem('edit')).toBeUndefined()
+    expect(noteMenuItem('delete')).toBeUndefined()
+
+    await useNoteMenu(wrapper, 'provider')
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://git.local/ALPHA/alpha-api/releases/v1.1.0',
+      '_blank',
+      'noopener',
+    )
+    openSpy.mockRestore()
   })
 
   it('opens release note links in a new tab', async () => {
@@ -1480,7 +1568,9 @@ describe('ReleaseNotesView', () => {
     await selectRepository(wrapper)
 
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.import_from_provider)).toHaveLength(0)
-    expect(buttonsByLabel(wrapper, enMessages.releaseNotes.push_to_provider)).toHaveLength(0)
+    // the entry still has a menu (it can be edited), just not that item
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('push')).toBeUndefined()
   })
 
   it('pushes an existing release to GitHub from the list', async () => {
@@ -1500,11 +1590,12 @@ describe('ReleaseNotesView', () => {
     await selects[1].vm.$emit('update:modelValue', 'pyledger')
     await flushPromises()
 
-    const pushButton = buttonsByLabel(wrapper, enMessages.releaseNotes.push_to_provider)
-    expect(pushButton).toHaveLength(1)
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('push')?.textContent?.trim()).toBe(
+      enMessages.releaseNotes.push_to_provider,
+    )
 
-    await pushButton[0].trigger('click')
-    await flushPromises()
+    await useNoteMenu(wrapper, 'push')
 
     expect(releaseNotesApi.push).toHaveBeenCalledWith(
       1,
@@ -1570,8 +1661,7 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.edit_release)[0].trigger('click')
-    await flushPromises()
+    await useNoteMenu(wrapper, 'edit')
 
     const editor = wrapper.find('.md-editor-stub')
     expect((editor.element as HTMLTextAreaElement).value).toContain('add login page')
@@ -1634,12 +1724,8 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    const older = wrapper.findAll('.note-entry')[1]
-    const edit = older
-      .findAll('button')
-      .find((button) => button.text() === enMessages.releaseNotes.edit_release)!
-    await edit.trigger('click')
-    await flushPromises()
+    // the menu of the second entry: the command carries the release it belongs to
+    await useNoteMenu(wrapper, 'edit', 1)
 
     // the entry's own release is edited, not the one in focus
     const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
@@ -1739,12 +1825,7 @@ describe('ReleaseNotesView', () => {
       await flushPromises()
       expect(wrapper.findAll('.note-entry')).toHaveLength(1)
 
-      const remove = wrapper
-        .find('.note-entry')
-        .findAll('button')
-        .find((button) => button.text() === enMessages.releaseNotes.delete)!
-      await remove.trigger('click')
-      await flushPromises()
+      await useNoteMenu(wrapper, 'delete')
 
       // page 2 held nothing else: the reader steps back instead of facing an empty list
       expect(releaseNotesApi.list).toHaveBeenLastCalledWith(
@@ -1848,10 +1929,14 @@ describe('ReleaseNotesView export', () => {
     expect(button().disabled).toBe(false)
   })
 
-  it('exports the open release from the detail header', async () => {
+  it('exports one release through the selection the list already carries', async () => {
     const wrapper = await mountAndSelect()
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.export_one)[0].trigger('click')
+    // The entry no longer carries an export of its own: selecting it and using
+    // the export above is how one release is written out.
+    exportCheckboxes(wrapper)[1].vm.$emit('change', true)
+    await flushPromises()
+    await wrapper.find('[data-test="export-selected"]').trigger('click')
     await flushPromises()
 
     expect(releaseNotesApi.exportNotes).toHaveBeenCalledWith(
@@ -1881,7 +1966,11 @@ describe('ReleaseNotesView export', () => {
     const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as any)
     const wrapper = await mountAndSelect()
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.copy_one)[0].trigger('click')
+    // an icon now: it says what it copies to a screen reader, and to a pointer
+    const copy = wrapper.find('[data-test="note-copy"]')
+    expect(copy.attributes('aria-label')).toBe(enMessages.releaseNotes.copy_one)
+
+    await copy.trigger('click')
     await flushPromises()
 
     // the same document the download would use, and nothing downloaded
@@ -1895,7 +1984,7 @@ describe('ReleaseNotesView export', () => {
     const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
     const wrapper = await mountAndSelect()
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.copy_one)[0].trigger('click')
+    await wrapper.find('[data-test="note-copy"]').trigger('click')
     await flushPromises()
 
     expect(

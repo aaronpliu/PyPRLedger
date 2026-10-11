@@ -651,19 +651,12 @@
                 </div>
 
                 <!-- The actions belong to the entry they sit on, so a release can
-                     be acted on without selecting it first -->
+                     be acted on without selecting it first. Only what is reached
+                     for constantly stays outside the menu: the page the release is
+                     on - or the way to put it there - and copying its notes.
+                     Everything else is one menu, one row of icons wide, however
+                     many releases the page holds. -->
                 <div class="note-entry-actions">
-                  <el-button
-                    v-if="note.external_url"
-                    link
-                    size="small"
-                    tag="a"
-                    :href="note.external_url"
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    {{ t('releaseNotes.view_on_provider') }}
-                  </el-button>
                   <!-- The page it is already on, or the way to put it there -->
                   <el-button
                     v-if="note.confluence_url"
@@ -673,6 +666,7 @@
                     :href="note.confluence_url"
                     target="_blank"
                     rel="noopener"
+                    data-test="note-confluence-view"
                   >
                     {{ t('releaseNotes.view_on_confluence') }}
                   </el-button>
@@ -682,54 +676,53 @@
                     size="small"
                     :type="note.confluence_sync_error ? 'warning' : 'primary'"
                     :loading="syncingNoteId === note.id"
+                    data-test="note-confluence-sync"
                     @click="syncToConfluence(note)"
                   >
                     {{ t('releaseNotes.sync_to_confluence') }}
                   </el-button>
-                  <el-button
-                    link
-                    type="primary"
-                    size="small"
-                    :loading="exportingNotes"
-                    @click="exportNotes([note.id])"
-                  >
-                    {{ t('releaseNotes.export_one') }}
-                  </el-button>
-                  <el-button
-                    link
-                    type="primary"
-                    size="small"
-                    :loading="copyingNote"
-                    @click="copyNote(note)"
-                  >
-                    {{ t('releaseNotes.copy_one') }}
-                  </el-button>
-                  <template v-if="canManage">
-                    <el-button link type="primary" size="small" @click="editNote(note)">
-                      {{ t('releaseNotes.edit_release') }}
-                    </el-button>
+
+                  <el-tooltip :content="t('releaseNotes.copy_one')" placement="top">
                     <el-button
-                      v-if="note.status === 'draft'"
                       link
-                      type="success"
                       size="small"
-                      @click="publishNote(note)"
-                    >
-                      {{ t('releaseNotes.publish') }}
-                    </el-button>
+                      :icon="CopyDocument"
+                      :loading="copyingNote"
+                      :aria-label="t('releaseNotes.copy_one')"
+                      data-test="note-copy"
+                      @click="copyNote(note)"
+                    />
+                  </el-tooltip>
+
+                  <!-- Nothing to offer, nothing to show: a control that opens an
+                       empty menu is worse than no control -->
+                  <el-dropdown
+                    v-if="noteMenuItems(note).length"
+                    trigger="click"
+                    @command="(command: string) => handleNoteCommand(command, note)"
+                  >
                     <el-button
-                      v-if="canImportFromProvider"
                       link
-                      type="primary"
                       size="small"
-                      @click="pushNote(note)"
-                    >
-                      {{ t('releaseNotes.push_to_provider') }}
-                    </el-button>
-                    <el-button link type="danger" size="small" @click="confirmDelete(note)">
-                      {{ t('releaseNotes.delete') }}
-                    </el-button>
-                  </template>
+                      :icon="MoreFilled"
+                      :aria-label="t('releaseNotes.more_actions')"
+                      data-test="note-menu"
+                    />
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item
+                          v-for="item in noteMenuItems(note)"
+                          :key="item.command"
+                          :command="item.command"
+                          :divided="item.divided"
+                          :class="{ 'note-menu-danger': item.danger }"
+                          :data-test="`note-menu-${item.command}`"
+                        >
+                          {{ item.label }}
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
                 </div>
               </header>
 
@@ -832,7 +825,16 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { GIT_PROVIDER_OPTIONS } from '@/constants/gitProvider'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Close, Document, InfoFilled, Refresh, Search } from '@element-plus/icons-vue'
+import {
+  ArrowDown,
+  Close,
+  CopyDocument,
+  Document,
+  InfoFilled,
+  MoreFilled,
+  Refresh,
+  Search,
+} from '@element-plus/icons-vue'
 import { MdEditor, MdPreview, type ToolbarNames } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { projectsApi } from '@/api/projects'
@@ -1771,6 +1773,77 @@ function startNewRelease(tag?: string) {
   formCard.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
+/** What one release's overflow menu can be asked to do. */
+type NoteCommand = 'provider' | 'edit' | 'publish' | 'push' | 'delete'
+
+interface NoteMenuItem {
+  command: NoteCommand
+  label: string
+  divided?: boolean
+  danger?: boolean
+}
+
+/**
+ * The actions of one release, in the order they are shown; empty means no menu.
+ *
+ * What is left here is either rare or destructive - the entry keeps the page the
+ * release is on and copying its notes outside, and everything else inside, so a
+ * page full of releases reads as one row of controls each rather than a wall of
+ * text buttons repeated for every version.
+ */
+function noteMenuItems(note: ReleaseNote): NoteMenuItem[] {
+  const items: NoteMenuItem[] = []
+
+  if (note.external_url) {
+    items.push({ command: 'provider', label: t('releaseNotes.view_on_provider') })
+  }
+  if (canManage.value) {
+    items.push({ command: 'edit', label: t('releaseNotes.edit_release') })
+  }
+  if (canManage.value && note.status === 'draft') {
+    items.push({ command: 'publish', label: t('releaseNotes.publish') })
+  }
+  if (canImportFromProvider.value) {
+    items.push({ command: 'push', label: t('releaseNotes.push_to_provider') })
+  }
+  if (canManage.value) {
+    // Set apart and last: it is the one action here that cannot be undone.
+    items.push({
+      command: 'delete',
+      label: t('releaseNotes.delete'),
+      divided: true,
+      danger: true,
+    })
+  }
+
+  return items
+}
+
+/** Carry out what the menu was asked to do, for the release it was opened on. */
+function handleNoteCommand(command: string, note: ReleaseNote) {
+  switch (command) {
+    case 'provider':
+      // A menu item is not a link, so the release is opened the way the link
+      // that used to sit here would have opened it.
+      if (note.external_url) {
+        window.open(note.external_url, '_blank', 'noopener')
+      }
+      break
+    case 'edit':
+      editNote(note)
+      break
+    case 'publish':
+      publishNote(note)
+      break
+    case 'push':
+      pushNote(note)
+      break
+    case 'delete':
+      confirmDelete(note)
+      break
+  }
+}
+
 function editNote(note: ReleaseNote) {
   selectedId.value = note.id
   selectedTag.value = null
@@ -2413,7 +2486,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
+  /* Fewer controls than there used to be, and further apart: an icon needs more
+     room around it than a word does. */
+  gap: 6px;
+}
+
+/* The one action in a release menu that cannot be undone */
+.note-menu-danger {
+  color: var(--el-color-danger);
 }
 
 /* A long note is clamped with a fade; the expand control follows it */
