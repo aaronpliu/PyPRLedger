@@ -24,6 +24,15 @@ export interface ReleaseNote {
   external_provider?: string | null
   external_id?: string | null
   external_url?: string | null
+  /**
+   * Confluence page (an optional integration, absent on most instances). Null
+   * until the release has been synced there; `confluence_sync_error` says why the
+   * last attempt did not manage it.
+   */
+  confluence_page_id?: string | null
+  confluence_url?: string | null
+  confluence_synced_date?: string | null
+  confluence_sync_error?: string | null
 }
 
 export interface ReleaseNoteListResponse {
@@ -45,6 +54,8 @@ export interface ReleaseNoteCreateRequest extends ReleaseNoteCoordinates {
   previous_tag?: string | null
   status?: ReleaseNoteStatus
   is_prerelease?: boolean
+  /** Write the release to Confluence too when publishing it (ignored if not set up) */
+  sync_to_confluence?: boolean
 }
 
 export interface ReleaseNoteUpdateRequest {
@@ -53,6 +64,8 @@ export interface ReleaseNoteUpdateRequest {
   previous_tag?: string | null
   status?: ReleaseNoteStatus
   is_prerelease?: boolean
+  /** Write the release to Confluence too when this update leaves it published */
+  sync_to_confluence?: boolean
 }
 
 export interface ReleaseNotePushRequest extends ReleaseNoteCoordinates {
@@ -155,6 +168,21 @@ export interface ReleaseNoteExportResponse {
   truncated: boolean
 }
 
+export interface ReleaseNoteConfluenceStatus {
+  /** Whether a sync can be attempted at all on this instance */
+  configured: boolean
+  /** Whether publishing syncs by itself; the manual retry works either way */
+  auto_sync: boolean
+}
+
+export interface ReleaseNoteConfluenceSyncResult {
+  synced: boolean
+  /** The page the release is on, once it is synced */
+  page_url?: string | null
+  /** One line describing what happened */
+  message: string
+}
+
 export const releaseNotesApi = {
   /** List the version releases of a repository (drafts included), newest first. */
   async list(params: {
@@ -213,6 +241,23 @@ export const releaseNotesApi = {
   /** Export one or more releases as a single markdown document. */
   async exportNotes(payload: ReleaseNoteExportRequest): Promise<ReleaseNoteExportResponse> {
     const response = await request.post('/release/notes/export', payload)
+    return response.data || response
+  },
+
+  /**
+   * Whether this instance syncs releases to Confluence.
+   *
+   * Asked once by the page, which only offers the sync controls where a sync
+   * could actually happen.
+   */
+  async confluenceStatus(): Promise<ReleaseNoteConfluenceStatus> {
+    const response = await request.get('/release/notes/confluence')
+    return response.data || response
+  },
+
+  /** Write one release to Confluence (or try again after a failure). */
+  async syncToConfluence(noteId: number): Promise<ReleaseNoteConfluenceSyncResult> {
+    const response = await request.post(`/release/notes/${noteId}/confluence-sync`)
     return response.data || response
   },
 }

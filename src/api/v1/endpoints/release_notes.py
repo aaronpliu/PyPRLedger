@@ -10,6 +10,15 @@ Mirrors the GitHub Releases workflow for the repositories tracked by PyPRLedger:
 * ``POST   /release/notes/preview``     - draft notes from the commits of a version
 * ``POST   /release/notes/{id}/push``   - publish the release on the git provider
 * ``POST   /release/notes/import``      - import the releases of a repository
+* ``GET    /release/notes/confluence``  - whether Confluence sync is available here
+* ``POST   /release/notes/{id}/confluence-sync`` - write the release to Confluence
+
+Confluence is an optional addition rather than a dependency. Publishing schedules
+a sync when the integration is configured and switched on, and that sync runs
+after the response with a session of its own, so a release is published whether
+or not Confluence answers - a failure is recorded on the release, where the page
+can offer the retry that this module also exposes. An instance that configures
+nothing reaches none of that code.
 
 Access control uses the ``release_note`` RBAC resource: every role may read
 releases, only review administrators (``review_admin`` / ``system_admin``) may
@@ -21,7 +30,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
@@ -30,6 +39,8 @@ from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
 from src.schemas.release_note import (
+    ReleaseNoteConfluenceStatusResponse,
+    ReleaseNoteConfluenceSyncResponse,
     ReleaseNoteCreateRequest,
     ReleaseNoteExportRequest,
     ReleaseNoteExportResponse,
@@ -41,6 +52,12 @@ from src.schemas.release_note import (
     ReleaseNotePushRequest,
     ReleaseNoteResponse,
     ReleaseNoteUpdateRequest,
+)
+from src.services.confluence.client import has_credentials as has_confluence_credentials
+from src.services.confluence.service import (
+    ConfluenceSyncService,
+    is_auto_sync_enabled,
+    sync_release_note_to_confluence,
 )
 from src.services.git_provider_resolver import with_repository_provider
 from src.services.rbac_service import RBACService
@@ -67,6 +84,15 @@ def get_rbac_service(
 ) -> RBACService:
     """Dependency provider for RBACService (release note permissions)."""
     return RBACService(db)
+
+
+def get_confluence_sync_service() -> ConfluenceSyncService:
+    """Dependency provider for the Confluence sync.
+
+    It is given no session on purpose: it opens one of its own, so a sync never
+    writes through the transaction the request is still holding.
+    """
+    return ConfluenceSyncService()
 
 
 async def ensure_permission(
@@ -126,6 +152,47 @@ async def serialize_notes(
     """Serialize releases, resolving the profile pictures of their authors."""
     avatars = await service.author_avatars([note.author for note in notes])
     return [_serialize(note, latest_id, avatars) for note in notes]
+
+
+def schedule_confluence_sync(background_tasks: BackgroundTasks, note: ReleaseNote) -> None:
+    """Queue a Confluence sync for a release that has just been published.
+
+    It runs after the response, with a session of its own, so publishing is
+    neither delayed by Confluence nor affected by whether it answers. Nothing is
+    queued at all unless the integration is configured and switched on, which is
+    what keeps it optional.
+    """
+    if note.status != ReleaseNoteStatus.PUBLISHED:
+        return
+    if not is_auto_sync_enabled():
+        return
+
+    background_tasks.add_task(sync_release_note_to_confluence, note.id)
+
+
+@router.get(
+    "/confluence",
+    response_model=ReleaseNoteConfluenceStatusResponse,
+    summary="Whether Confluence sync is available on this instance",
+    description=(
+        "Reporting, not changing. The release page asks once so that the sync "
+        "controls are only offered where a sync could actually happen."
+    ),
+)
+async def get_confluence_status(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> ReleaseNoteConfluenceStatusResponse:
+    """Report the state of the optional Confluence integration."""
+    await ensure_permission(rbac_service, current_user, "read")
+
+    # Credentials, not a space: which space a release goes to is decided per
+    # repository, so an instance can be ready to sync while a particular
+    # repository still has no target - that is reported by the sync itself.
+    return ReleaseNoteConfluenceStatusResponse(
+        configured=has_confluence_credentials(),
+        auto_sync=is_auto_sync_enabled(),
+    )
 
 
 @router.get(
@@ -343,6 +410,7 @@ async def import_release_notes(
 )
 async def create_release_note(
     payload: ReleaseNoteCreateRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
@@ -357,6 +425,9 @@ async def create_release_note(
             status_code=status.HTTP_409_CONFLICT,
             detail={"error": "CONFLICT", "message": str(e)},
         )
+
+    if payload.sync_to_confluence:
+        schedule_confluence_sync(background_tasks, note)
 
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug
@@ -401,6 +472,7 @@ async def get_release_note(
 async def update_release_note(
     note_id: int,
     payload: ReleaseNoteUpdateRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
@@ -414,6 +486,9 @@ async def update_release_note(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "NOT_FOUND", "message": f"Release {note_id} not found"},
         )
+
+    if payload.sync_to_confluence:
+        schedule_confluence_sync(background_tasks, note)
 
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug
@@ -502,3 +577,53 @@ async def push_release_note(
         project_key=note.project_key, repository_slug=note.repository_slug
     )
     return await serialize_note(service, note, latest_id)
+
+
+@router.post(
+    "/{note_id}/confluence-sync",
+    response_model=ReleaseNoteConfluenceSyncResponse,
+    summary="Write one release to Confluence",
+    description=(
+        "Sync one release by hand, whether or not publishing syncs by itself. The "
+        "page is updated where it exists and created where it does not, so asking "
+        "twice does not leave two. Failing to reach Confluence is reported in the "
+        "response rather than raised: the release is unaffected either way."
+    ),
+)
+async def sync_release_note_now(
+    note_id: int,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
+    confluence: Annotated[ConfluenceSyncService, Depends(get_confluence_sync_service)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> ReleaseNoteConfluenceSyncResponse:
+    """Sync a release to Confluence on demand."""
+    await ensure_permission(rbac_service, current_user, "manage")
+
+    note = await service.get_note(note_id)
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "NOT_FOUND", "message": f"Release {note_id} not found"},
+        )
+
+    # The sync writes on a session of its own, so what happened is what it returns
+    # rather than anything re-read here.
+    outcome = await confluence.sync_note(note_id)
+
+    logger.info(
+        "Confluence sync requested",
+        extra={
+            "note_id": note_id,
+            "tag_name": note.tag_name,
+            "synced": outcome.synced,
+            "skipped": outcome.skipped,
+            "user_id": current_user.id,
+        },
+    )
+
+    return ReleaseNoteConfluenceSyncResponse(
+        synced=outcome.synced,
+        page_url=outcome.page_url,
+        message=outcome.message,
+    )

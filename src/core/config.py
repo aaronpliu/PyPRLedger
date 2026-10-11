@@ -291,6 +291,62 @@ class Settings(BaseSettings):
         description="GitHub Enterprise personal access token or app token",
     )
 
+    # Confluence sync configuration
+    #
+    # Publishing a release can also write it to Confluence as a page. The whole
+    # integration is an addition rather than a dependency: with the base URL or
+    # the credentials unset, nothing is configured and no code path reaches
+    # Confluence, so the release flow behaves exactly as it did before. The
+    # enabled flag is a second gate, so the sync can be switched off without
+    # clearing the credentials.
+    CONFLUENCE_BASE_URL: str | None = Field(
+        default=None,
+        description="Confluence Server/Data Center base URL (e.g., https://confluence.example.com)",
+    )
+    CONFLUENCE_TOKEN: str | None = Field(
+        default=None,
+        description=(
+            "Confluence Server/Data Center Personal Access Token (7.9+). When set it is "
+            "preferred over CONFLUENCE_USERNAME/CONFLUENCE_PASSWORD and sent as a Bearer "
+            "token. PATs exist on Server/Data Center only, not on Cloud."
+        ),
+    )
+    CONFLUENCE_USERNAME: str | None = Field(
+        default=None,
+        description="Confluence Server/Data Center username for Basic authentication",
+    )
+    CONFLUENCE_PASSWORD: str | None = Field(
+        default=None,
+        description="Confluence Server/Data Center password for Basic authentication",
+    )
+    CONFLUENCE_SPACE_KEY: str | None = Field(
+        default=None, description="Space key the release pages are written to"
+    )
+    CONFLUENCE_PARENT_PAGE_ID: str | None = Field(
+        default=None,
+        description=(
+            "Optional id of the page the release pages are created under. Without it "
+            "they are created at the root of the space."
+        ),
+    )
+    CONFLUENCE_SYNC_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Whether publishing a release also writes it to Confluence. Off by default: "
+            "the release flow must not depend on a third party system being reachable."
+        ),
+    )
+    CONFLUENCE_VERIFY_SSL: bool = Field(
+        default=True,
+        description=(
+            "Whether to verify the Confluence TLS certificate. Enterprise instances "
+            "often sit behind an internal CA, which is why this can be turned off."
+        ),
+    )
+    CONFLUENCE_TIMEOUT_SECONDS: float = Field(
+        default=15.0, description="Timeout for a single Confluence request"
+    )
+
     # Review status constants
     REVIEW_STATUS_OPEN: str = "open"
     REVIEW_STATUS_MERGED: str = "merged"

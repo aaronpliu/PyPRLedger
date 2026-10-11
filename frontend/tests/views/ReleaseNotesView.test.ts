@@ -61,6 +61,8 @@ vi.mock('@/api/releaseNotes', () => ({
     push: vi.fn(),
     importReleases: vi.fn(),
     exportNotes: vi.fn(),
+    confluenceStatus: vi.fn(),
+    syncToConfluence: vi.fn(),
   },
 }))
 
@@ -281,6 +283,11 @@ describe('ReleaseNotesView', () => {
     vi.mocked(releaseNotesApi.remove).mockResolvedValue({ message: 'ok' })
     // JIRA is off unless a test asks for it
     vi.mocked(rbacApi.getJiraSettings).mockResolvedValue({ base_url: '', project_keys: [] })
+    // Confluence is absent unless a test asks for it
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: false,
+      auto_sync: false,
+    })
     // no LLM configured unless a test asks for one
     vi.mocked(llmApi.getConfig).mockResolvedValue({ enabled: false, model: '', base_url: '' })
     resetJiraSettings()
@@ -1894,5 +1901,97 @@ describe('ReleaseNotesView export', () => {
     expect(
       warning.mock.calls.some((call) => String(call[0]).includes('clipboard')),
     ).toBe(true)
+  })
+
+  // ---------------------------------------------------------------- #
+  // Confluence (an optional integration: absent unless configured)
+
+  it('offers to write a release to Confluence where it is set up', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+    const wrapper = await mountAndSelect()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.sync_confluence_label)
+  })
+
+  it('says nothing about Confluence where it is not set up', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: false,
+      auto_sync: false,
+    })
+    const wrapper = await mountAndSelect()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.sync_confluence_label)
+    expect(buttonsByLabel(wrapper, enMessages.releaseNotes.sync_to_confluence)).toHaveLength(0)
+  })
+
+  it('links to the Confluence page a release is already on', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ confluence_url: 'https://confluence.local/spaces/DOC/pages/100' })],
+    })
+
+    const wrapper = await mountAndSelect()
+
+    const link = wrapper
+      .findAll('a')
+      .find((anchor: AnyWrapper) => anchor.text() === enMessages.releaseNotes.view_on_confluence)
+    expect(link?.attributes('href')).toBe('https://confluence.local/spaces/DOC/pages/100')
+    // Once it is on a page there is nothing left to sync
+    expect(buttonsByLabel(wrapper, enMessages.releaseNotes.sync_to_confluence)).toHaveLength(0)
+  })
+
+  it('syncs a release to Confluence on request', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+    vi.mocked(releaseNotesApi.syncToConfluence).mockResolvedValue({
+      synced: true,
+      page_url: 'https://confluence.local/spaces/DOC/pages/100',
+      message: 'Synced to Confluence',
+    })
+    const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as any)
+
+    const wrapper = await mountAndSelect()
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.sync_to_confluence)[0].trigger('click')
+    await flushPromises()
+
+    // The first release of the fixture list, which is the one clicked
+    expect(releaseNotesApi.syncToConfluence).toHaveBeenCalledWith(11)
+    expect(success).toHaveBeenCalled()
+    // The page url is on the release, so the list is read back for it
+    expect(releaseNotesApi.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports a sync that failed without hiding the release', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+    vi.mocked(releaseNotesApi.syncToConfluence).mockResolvedValue({
+      synced: false,
+      message: 'Confluence returned 500',
+    })
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+
+    const wrapper = await mountAndSelect()
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.sync_to_confluence)[0].trigger('click')
+    await flushPromises()
+
+    expect(warning).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('v1.1.0')
   })
 })

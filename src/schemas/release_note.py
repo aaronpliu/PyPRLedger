@@ -108,6 +108,14 @@ class ReleaseNoteCreateRequest(ReleaseNoteCoordinates):
     )
     status: str = Field(default="draft", description="draft or published")
     is_prerelease: bool = Field(default=False, description="Mark the version as a pre-release")
+    sync_to_confluence: bool = Field(
+        default=True,
+        description=(
+            "Write the release to Confluence when publishing it. Ignored when the "
+            "integration is not configured or has been switched off, and only "
+            "considered for a release that is published."
+        ),
+    )
 
     @field_validator("status")
     def validate_status(cls, v: str) -> str:
@@ -124,6 +132,13 @@ class ReleaseNoteUpdateRequest(BaseModel):
     previous_tag: str | None = Field(default=None, max_length=255)
     status: str | None = Field(default=None, description="draft or published")
     is_prerelease: bool | None = Field(default=None)
+    sync_to_confluence: bool = Field(
+        default=True,
+        description=(
+            "Write the release to Confluence when this update leaves it published. "
+            "Ignored when the integration is not configured or is switched off."
+        ),
+    )
 
     @field_validator("status")
     def validate_status(cls, v: str | None) -> str | None:
@@ -165,6 +180,20 @@ class ReleaseNoteResponse(BaseModel):
     external_id: str | None = Field(default=None, description="Provider side release id")
     external_url: str | None = Field(default=None, description="Provider side release url")
 
+    # Confluence page (optional integration). Kept apart from the provider fields
+    # above, which the git provider release owns: one release can be on both.
+    # Null for every release on an instance that does not use Confluence.
+    confluence_page_id: str | None = Field(
+        default=None, description="Confluence page holding this release, when it was synced"
+    )
+    confluence_url: str | None = Field(default=None, description="Confluence page url")
+    confluence_synced_date: datetime | None = Field(
+        default=None, description="When the release was last synced to Confluence"
+    )
+    confluence_sync_error: str | None = Field(
+        default=None, description="Why the last Confluence sync failed, if it did"
+    )
+
     model_config = {"from_attributes": True}
 
 
@@ -173,6 +202,37 @@ class ReleaseNoteListResponse(BaseModel):
 
     total: int
     items: list[ReleaseNoteResponse]
+
+
+class ReleaseNoteConfluenceStatusResponse(BaseModel):
+    """Whether the Confluence integration is available on this instance.
+
+    Asked once by the release page, which shows the sync controls only where they
+    would do something.
+    """
+
+    configured: bool = Field(
+        ...,
+        description=(
+            "Whether a sync can be attempted at all. False when the base URL, the "
+            "space key or the credentials are unset."
+        ),
+    )
+    auto_sync: bool = Field(
+        ...,
+        description=(
+            "Whether publishing writes to Confluence by itself. The manual retry is "
+            "available either way, as long as the integration is configured."
+        ),
+    )
+
+
+class ReleaseNoteConfluenceSyncResponse(BaseModel):
+    """What one sync attempt did."""
+
+    synced: bool
+    page_url: str | None = Field(default=None, description="The page the release is on")
+    message: str = Field(..., description="One line describing the outcome")
 
 
 class ReleaseNotePreviewRequest(ReleaseNoteCoordinates):

@@ -529,6 +529,15 @@
               </el-checkbox>
             </el-form-item>
 
+            <!-- Only offered where the server has Confluence set up, so an
+                 instance that does not use it shows nothing about it -->
+            <el-form-item v-if="confluence.configured">
+              <el-checkbox v-model="form.sync_to_confluence">
+                {{ t('releaseNotes.sync_confluence_label') }}
+              </el-checkbox>
+              <div class="field-hint">{{ t('releaseNotes.sync_confluence_help') }}</div>
+            </el-form-item>
+
             <template v-if="isGithubProvider">
               <el-form-item>
                 <el-checkbox v-model="form.push_to_provider">
@@ -627,6 +636,18 @@
                   <el-tag v-if="note.status === 'draft'" size="small" type="info" round>
                     {{ t('releaseNotes.badge_draft') }}
                   </el-tag>
+                  <!-- The sync is a side errand: when it fails the release is
+                       still published, and this is where that reads -->
+                  <el-tag
+                    v-if="note.confluence_sync_error"
+                    size="small"
+                    type="danger"
+                    effect="plain"
+                    round
+                    :title="note.confluence_sync_error"
+                  >
+                    {{ t('releaseNotes.badge_confluence_failed') }}
+                  </el-tag>
                 </div>
 
                 <!-- The actions belong to the entry they sit on, so a release can
@@ -642,6 +663,28 @@
                     rel="noopener"
                   >
                     {{ t('releaseNotes.view_on_provider') }}
+                  </el-button>
+                  <!-- The page it is already on, or the way to put it there -->
+                  <el-button
+                    v-if="note.confluence_url"
+                    link
+                    size="small"
+                    tag="a"
+                    :href="note.confluence_url"
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    {{ t('releaseNotes.view_on_confluence') }}
+                  </el-button>
+                  <el-button
+                    v-else-if="confluence.configured && canManage && note.status === 'published'"
+                    link
+                    size="small"
+                    :type="note.confluence_sync_error ? 'warning' : 'primary'"
+                    :loading="syncingNoteId === note.id"
+                    @click="syncToConfluence(note)"
+                  >
+                    {{ t('releaseNotes.sync_to_confluence') }}
                   </el-button>
                   <el-button
                     link
@@ -1049,7 +1092,13 @@ const form = ref({
   is_prerelease: false,
   push_to_provider: false,
   target_commitish: '',
+  sync_to_confluence: true,
 })
+
+// Confluence is an optional integration. The server says whether it is set up
+// here, and the page only offers what a sync could actually do.
+const confluence = ref({ configured: false, auto_sync: false })
+const syncingNoteId = ref<number | null>(null)
 
 const editingId = ref<number | null>(null)
 const editingStatus = ref<'draft' | 'published'>('draft')
@@ -1667,6 +1716,7 @@ function resetForm() {
     is_prerelease: false,
     push_to_provider: false,
     target_commitish: '',
+    sync_to_confluence: true,
   }
 }
 
@@ -1736,6 +1786,7 @@ function editNote(note: ReleaseNote) {
     is_prerelease: note.is_prerelease,
     push_to_provider: false,
     target_commitish: '',
+    sync_to_confluence: true,
   }
   formCard.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
@@ -1799,6 +1850,7 @@ async function saveRelease(status: 'draft' | 'published') {
         previous_tag: form.value.previous_tag.trim() || null,
         is_prerelease: form.value.is_prerelease,
         status,
+        sync_to_confluence: form.value.sync_to_confluence,
       })
     } else {
       saved = await releaseNotesApi.create({
@@ -1809,6 +1861,7 @@ async function saveRelease(status: 'draft' | 'published') {
         previous_tag: form.value.previous_tag.trim() || null,
         is_prerelease: form.value.is_prerelease,
         status,
+        sync_to_confluence: form.value.sync_to_confluence,
       })
     }
 
@@ -1830,6 +1883,42 @@ async function saveRelease(status: 'draft' | 'published') {
     ElMessage.error(t('releaseNotes.save_failed'))
   } finally {
     saving.value = false
+  }
+}
+
+/** Ask whether this instance syncs releases to Confluence. */
+async function loadConfluenceStatus() {
+  try {
+    // No answer means not available, which is also what an instance without the
+    // integration says - the controls that need it stay out of the way either way.
+    const status = await releaseNotesApi.confluenceStatus()
+    confluence.value = status ?? { configured: false, auto_sync: false }
+  } catch {
+    // Whatever went wrong, the controls that need it stay out of the way.
+  }
+}
+
+/**
+ * Write one release to Confluence, or try again after a failure.
+ *
+ * Failing here is not a failed release: the response says what happened, and the
+ * release keeps whatever it had.
+ */
+async function syncToConfluence(note: ReleaseNote) {
+  syncingNoteId.value = note.id
+  try {
+    const result = await releaseNotesApi.syncToConfluence(note.id)
+    if (result.synced) {
+      ElMessage.success(t('releaseNotes.sync_confluence_ok'))
+    } else {
+      ElMessage.warning(result.message)
+    }
+    // The page url or the reason it failed is on the release, so read it back
+    await loadNotes()
+  } catch {
+    ElMessage.error(t('releaseNotes.sync_confluence_failed'))
+  } finally {
+    syncingNoteId.value = null
   }
 }
 
@@ -2025,6 +2114,7 @@ onMounted(() => {
   void loadProjects()
   void loadJiraSettings()
   void loadLlmConfig()
+  void loadConfluenceStatus()
 })
 
 onBeforeUnmount(() => {
