@@ -25,8 +25,28 @@ export interface RepositorySummary {
   repository_slug: string
   repository_url: string
   project_id: number
+  /**
+   * What the project registry says this repository is, where it is registered at
+   * all: `application` for one whose releases the dependency database holds,
+   * `package` for one that is only a dependency of another. Null where nobody has
+   * classified it - including where nothing is registered for it at all.
+   */
+  registry_kind?: string | null
   created_date: string
   updated_date: string
+}
+
+/** What to offer out of a project's repositories. */
+export interface RepositoryFilters {
+  /**
+   * Offer the repositories the registry marks as applications, falling back to
+   * everything not marked as a package when the project has no application yet.
+   *
+   * This is what the pages that read an application's releases want: an
+   * administrator naming an application is what decides their picker, and a project
+   * nobody has classified keeps offering every repository it has.
+   */
+  preferApplications?: boolean
 }
 
 export interface CloudWorkspaceOption {
@@ -62,9 +82,21 @@ export const projectsApi = {
     return payload?.workspaces ?? []
   },
 
-  // Get repositories for a specific project
-  async getProjectRepositories(projectKey: string): Promise<RepositorySummary[]> {
-    const response = await request.get(`/projects/key/${projectKey}/repositories`)
+  /**
+   * Get repositories for a specific project.
+   *
+   * The pages that read an application's releases pass `preferApplications`, which
+   * leaves out what is marked as a package - the dependency database holds no release
+   * records for one - and narrows the list to the applications once an administrator
+   * has named any.
+   */
+  async getProjectRepositories(
+    projectKey: string,
+    filters: RepositoryFilters = {},
+  ): Promise<RepositorySummary[]> {
+    const response = await request.get(`/projects/key/${projectKey}/repositories`, {
+      params: filters.preferApplications ? { prefer_applications: true } : undefined,
+    })
     return response.data || response
   },
 }

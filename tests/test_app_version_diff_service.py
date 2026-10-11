@@ -10,11 +10,17 @@ from typing import Any
 
 import pytest
 
+from src.core.config import settings
 from src.core.exceptions import DependencyApiException
-from src.schemas.app_version_diff import AppVersionDiffRequest
+from src.schemas.app_version_diff import (
+    AppVersionDiffPackageRequest,
+    AppVersionDiffPackagesRequest,
+    AppVersionDiffRequest,
+)
 from src.schemas.release_diff import ReleaseCompareRequest, ReleaseCompareResponse
 from src.services.app_version_diff_service import (
     AppVersionDiffService,
+    DependencyRepository,
     compare_versions,
     parse_version,
 )
@@ -147,7 +153,13 @@ def build_service(
     return service, cache, provider
 
 
-def request(*refs: str, refresh: bool = False, include_code: bool = True) -> AppVersionDiffRequest:
+def request(
+    *refs: str,
+    refresh: bool = False,
+    include_code: bool = True,
+    per_pair: int | None = None,
+    page_total: int | None = None,
+) -> AppVersionDiffRequest:
     return AppVersionDiffRequest(
         project_key=PROJECT,
         repository_slug=REPOSITORY,
@@ -155,6 +167,8 @@ def request(*refs: str, refresh: bool = False, include_code: bool = True) -> App
         refs=list(refs),
         refresh=refresh,
         include_code=include_code,
+        max_package_comparisons=per_pair,
+        max_total_package_comparisons=page_total,
     )
 
 
@@ -254,6 +268,36 @@ async def test_the_application_is_the_first_row_and_carries_its_own_version():
     # while the summary still counts the application's own move
     assert result.intervals[0].summary["changed"] == 1
     assert result.verdict == "changed"
+
+
+async def test_every_change_says_which_kind_of_row_it_was():
+    """The page lists what moved in a pair, so the application has to be told apart."""
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0_10000"): record(
+                "1.0.0_10000", "2026-09-01", {"packageA": "1.0.0", "packageB": "2.0.0"}
+            ),
+            (APP, "1.1.0_10000"): record(
+                "1.1.0_10000", "2026-10-01", {"packageA": "1.2.0", "packageB": "2.0.0"}
+            ),
+        }
+    )
+
+    result = await service.compare(request("1.0.0_10000", "1.1.0_10000"), app_name=APP)
+
+    # in matrix row order: the application first, then its dependencies
+    assert [(change.kind, change.name) for change in result.intervals[0].changes] == [
+        ("application", APP),
+        ("dependency", "packageA"),
+    ]
+    # and each change carries the two versions it is about, which is what is read
+    application, dependency = result.intervals[0].changes
+    assert (application.source_version, application.target_version) == (
+        "1.0.0_10000",
+        "1.1.0_10000",
+    )
+    assert (dependency.source_version, dependency.target_version) == ("1.0.0", "1.2.0")
+    assert dependency.direction == "upgrade"
 
 
 async def test_a_build_number_moves_the_row_without_a_direction():
@@ -734,3 +778,424 @@ async def test_refresh_reaches_the_provider_comparison_too():
     await service.compare(request("1.0.0", "1.1.0", refresh=True), app_name=APP)
 
     assert diff.requests[0].refresh is True
+
+
+# ---------------------------------------------------------------------- #
+# The dependency axis: each package's own two versions, compared
+# ---------------------------------------------------------------------- #
+
+
+def package_resolver(**repositories: DependencyRepository) -> Any:
+    """A resolver answering with the repository each package name was handed.
+
+    A package it was not handed is one the project registry does not know, which
+    is what an external library looks like.
+    """
+
+    async def resolve(name: str) -> DependencyRepository:
+        return repositories.get(
+            name, DependencyRepository(reason=f"no repository is registered as '{name}'")
+        )
+
+    return resolve
+
+
+async def test_the_application_is_compared_at_the_tag_its_record_names():
+    """The reader picks a release; the record names the tag the build was cut from."""
+    diff = FakeDiff(added=1)
+    service, _, _ = build_service(
+        {
+            (APP, "v1.0.0"): record(
+                "v1.0.0", "2026-09-01", {"packageA": "1.0.0"}, app_version="1.0.0_10000"
+            ),
+            (APP, "v1.1.0"): record(
+                "v1.1.0", "2026-10-01", {"packageA": "1.0.0"}, app_version="1.1.0_10000"
+            ),
+        },
+        diff=diff,
+    )
+
+    await service.compare(request("v1.0.0", "v1.1.0"), app_name=APP)
+
+    assert (diff.requests[0].source_ref, diff.requests[0].target_ref) == (
+        "1.0.0_10000",
+        "1.1.0_10000",
+    )
+
+
+async def test_a_moved_dependency_is_compared_in_its_own_repository():
+    """A package's version is the tag it was released under, so it is the ref to compare."""
+    diff = FakeDiff(added=2)
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0_10000"): record("1.0.0_10000", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0_10000"): record("1.1.0_10000", "2026-10-01", {"packageA": "1.1.0"}),
+        },
+        diff=diff,
+    )
+
+    result = await service.compare(
+        request("1.0.0_10000", "1.1.0_10000"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            packageA=DependencyRepository(
+                project_key="CORE", repository_slug="pkg-a", git_provider="bitbucket_server"
+            )
+        ),
+    )
+
+    packages = result.intervals[0].packages
+    assert [(entry.name, entry.state) for entry in packages] == [("packageA", "changed")]
+    entry = packages[0]
+    assert (entry.project_key, entry.repository_slug, entry.git_provider) == (
+        "CORE",
+        "pkg-a",
+        "bitbucket_server",
+    )
+    assert (entry.source_version, entry.target_version) == ("1.0.0", "1.1.0")
+    assert entry.code.verdict == "contained"
+    assert entry.code.added_count == 2
+
+    # the package was asked of its own repository, at its two versions as refs
+    package_request = next(item for item in diff.requests if item.repository_slug == "pkg-a")
+    assert (package_request.source_ref, package_request.target_ref) == ("1.0.0", "1.1.0")
+    # while the application's own axis stays the application's repository
+    application_request = next(
+        item for item in diff.requests if item.repository_slug == REPOSITORY
+    )
+    assert application_request.project_key == PROJECT
+
+
+async def test_a_dependency_with_no_registered_repository_is_reported_not_compared():
+    """An external package has no repository here, which is not a package that matched."""
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.1.0"}),
+        }
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(),
+    )
+
+    entry = result.intervals[0].packages[0]
+    assert entry.project_key is None
+    assert entry.code.verdict == "inconclusive"
+    assert entry.code.unavailable == "no repository is registered as 'packageA'"
+    assert (entry.code.added_count, entry.code.missing_count) == (0, 0)
+
+
+async def test_an_added_dependency_has_no_pair_of_versions_to_compare():
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageD": "0.9.0"}),
+        }
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            packageD=DependencyRepository(project_key="CORE", repository_slug="pkg-d")
+        ),
+    )
+
+    entry = result.intervals[0].packages[0]
+    assert entry.state == "added"
+    assert "only one version is recorded" in (entry.code.unavailable or "")
+    assert entry.code.verdict == "inconclusive"
+
+
+async def test_a_pairs_first_packages_are_read_and_the_rest_deferred(monkeypatch):
+    """A release that moved a dozen packages is drawn from its first few.
+
+    What the ceiling leaves out has to read as what it is: a comparison waiting its
+    turn, not one that was made and found equal, and not one that cannot be made.
+    """
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record(
+                "1.0.0", "2026-09-01", {"packageA": "1.0.0", "packageB": "1.0.0"}
+            ),
+            (APP, "1.1.0"): record(
+                "1.1.0", "2026-10-01", {"packageA": "1.1.0", "packageB": "1.1.0"}
+            ),
+        }
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            packageA=DependencyRepository(project_key="CORE", repository_slug="pkg-a"),
+            packageB=DependencyRepository(project_key="CORE", repository_slug="pkg-b"),
+        ),
+    )
+
+    entries = {entry.name: entry for entry in result.intervals[0].packages}
+    # the pair's first package is read
+    assert entries["packageA"].code.unavailable is None
+    assert entries["packageA"].code.deferred is False
+    # the rest is deferred, carrying where it lives so it can still be asked for
+    assert entries["packageB"].code.deferred is True
+    assert entries["packageB"].code.unavailable is None
+    assert entries["packageB"].repository_slug == "pkg-b"
+    # and the page is told how much more it may read on its own
+    assert (
+        result.package_comparisons.remaining
+        == settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS - 1
+    )
+
+
+async def test_each_pair_gets_its_own_share_of_the_ceiling(monkeypatch):
+    """One pair must not spend the read of the pairs beside it."""
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.1.0"}),
+            (APP, "1.2.0"): record("1.2.0", "2026-11-01", {"packageA": "1.2.0"}),
+        }
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0", "1.2.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            packageA=DependencyRepository(project_key="CORE", repository_slug="pkg-a"),
+        ),
+    )
+
+    assert [interval.packages[0].code.deferred for interval in result.intervals] == [False, False]
+
+
+async def test_a_downgrade_is_read_before_an_upgrade(monkeypatch):
+    """The ceiling must never be what hides a package that moved backwards."""
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record(
+                "1.0.0", "2026-09-01", {"aUp": "1.0.0", "zDown": "2.0.0"}
+            ),
+            (APP, "1.1.0"): record(
+                "1.1.0", "2026-10-01", {"aUp": "1.1.0", "zDown": "1.0.0"}
+            ),
+        }
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            aUp=DependencyRepository(project_key="CORE", repository_slug="pkg-up"),
+            zDown=DependencyRepository(project_key="CORE", repository_slug="pkg-down"),
+        ),
+    )
+
+    entries = {entry.name: entry for entry in result.intervals[0].packages}
+    # the downgrade is read although the matrix order would have read the upgrade
+    assert entries["zDown"].code.deferred is False
+    assert entries["aUp"].code.deferred is True
+
+
+async def test_the_total_ceiling_bounds_a_whole_page(monkeypatch):
+    """Two pairs do not buy two ceilings: a page reads a bounded number, and says so."""
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 5)
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS", 1)
+    diff = FakeDiff()
+    service, _, _ = build_service(
+        {
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"packageA": "1.0.0"}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"packageA": "1.1.0"}),
+            (APP, "1.2.0"): record("1.2.0", "2026-11-01", {"packageA": "1.2.0"}),
+        },
+        diff=diff,
+    )
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0", "1.2.0"),
+        app_name=APP,
+        resolve_dependency_repository=package_resolver(
+            packageA=DependencyRepository(project_key="CORE", repository_slug="pkg-a"),
+        ),
+    )
+
+    package_reads = [item for item in diff.requests if item.repository_slug == "pkg-a"]
+    assert len(package_reads) == 1
+    assert result.package_comparisons.remaining == 0
+    # the pair that did not get its read says so, and is still askable
+    deferred = [
+        entry
+        for interval in result.intervals
+        for entry in interval.packages
+        if entry.code.deferred
+    ]
+    assert [entry.name for entry in deferred] == ["packageA"]
+
+
+# ---------------------------------------------------------------------- #
+# The budget a request asks for
+# ---------------------------------------------------------------------- #
+
+
+def three_moved_packages() -> dict[tuple[str, str], dict[str, Any]]:
+    """Two releases whose pair moved three packages."""
+    return {
+        (APP, "1.0.0"): record(
+            "1.0.0",
+            "2026-09-01",
+            {"packageA": "1.0.0", "packageB": "1.0.0", "packageC": "1.0.0"},
+        ),
+        (APP, "1.1.0"): record(
+            "1.1.0",
+            "2026-10-01",
+            {"packageA": "1.1.0", "packageB": "1.1.0", "packageC": "1.1.0"},
+        ),
+    }
+
+
+def three_repositories() -> Any:
+    """Every package of the pair resolved, so each of them is comparable."""
+    return package_resolver(
+        packageA=DependencyRepository(project_key="CORE", repository_slug="pkg-a"),
+        packageB=DependencyRepository(project_key="CORE", repository_slug="pkg-b"),
+        packageC=DependencyRepository(project_key="CORE", repository_slug="pkg-c"),
+    )
+
+
+async def test_a_request_can_ask_to_read_deeper_than_the_default(monkeypatch):
+    """A page whose releases moved a dozen packages may ask to read them all."""
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
+    service, _, _ = build_service(three_moved_packages())
+
+    shallow = await service.compare(
+        request("1.0.0", "1.1.0"), app_name=APP, resolve_dependency_repository=three_repositories()
+    )
+    deep = await service.compare(
+        request("1.0.0", "1.1.0", per_pair=3),
+        app_name=APP,
+        resolve_dependency_repository=three_repositories(),
+    )
+
+    # the default reads one of the three; asking to read deeper reads them all
+    assert [entry.code.deferred for entry in shallow.intervals[0].packages] == [False, True, True]
+    assert not any(entry.code.deferred for entry in deep.intervals[0].packages)
+    # and each answer says which budget it was read under
+    assert (shallow.package_comparisons.per_pair, deep.package_comparisons.per_pair) == (1, 3)
+
+
+async def test_a_deeper_reading_is_not_answered_from_the_shallow_cache(monkeypatch):
+    """How deep the reading went is part of what a cached comparison is keyed by."""
+    monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
+    diff = FakeDiff()
+    service, _, _ = build_service(three_moved_packages(), diff=diff)
+
+    await service.compare(
+        request("1.0.0", "1.1.0"), app_name=APP, resolve_dependency_repository=three_repositories()
+    )
+    reads = len([item for item in diff.requests if item.repository_slug.startswith("pkg-")])
+
+    deeper = await service.compare(
+        request("1.0.0", "1.1.0", per_pair=3),
+        app_name=APP,
+        resolve_dependency_repository=three_repositories(),
+    )
+
+    # the shallow answer was not handed back for a deeper question
+    assert not any(entry.code.deferred for entry in deeper.intervals[0].packages)
+    assert len([item for item in diff.requests if item.repository_slug.startswith("pkg-")]) > reads
+
+
+async def test_a_request_cannot_read_past_the_ceilings(monkeypatch):
+    """Asking past what the server will do is answered with the ceiling, never an error."""
+    monkeypatch.setattr(settings, "APP_DIFF_PACKAGE_COMPARISONS_CEILING", 2)
+    monkeypatch.setattr(settings, "APP_DIFF_PAGE_COMPARISONS_CEILING", 3)
+    service, _, _ = build_service(three_moved_packages())
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0", per_pair=500, page_total=5000),
+        app_name=APP,
+        resolve_dependency_repository=three_repositories(),
+    )
+
+    assert (result.package_comparisons.per_pair, result.package_comparisons.page_total) == (2, 3)
+    # two of the three were read, and the page may read one more on its own
+    assert [entry.code.deferred for entry in result.intervals[0].packages] == [False, False, True]
+    assert result.package_comparisons.remaining == 1
+
+
+async def test_the_answer_carries_the_batch_to_ask_in(monkeypatch):
+    """The page paces its batches by the server's number, not one compiled into it."""
+    monkeypatch.setattr(settings, "APP_DIFF_PACKAGE_COMPARISON_BATCH_SIZE", 4)
+    service, _, _ = build_service(three_moved_packages())
+
+    result = await service.compare(
+        request("1.0.0", "1.1.0"), app_name=APP, resolve_dependency_repository=three_repositories()
+    )
+
+    assert result.package_comparisons.batch == 4
+
+
+# ---------------------------------------------------------------------- #
+# Reading the deferred packages in batches
+# ---------------------------------------------------------------------- #
+
+
+def package_batch(*packages: tuple[str, str, str]) -> AppVersionDiffPackagesRequest:
+    """A batch request in the shape the page sends it."""
+    return AppVersionDiffPackagesRequest(
+        project_key=PROJECT,
+        repository_slug=REPOSITORY,
+        git_provider="bitbucket_server",
+        source_ref="1.0.0",
+        target_ref="1.1.0",
+        packages=[
+            AppVersionDiffPackageRequest(name=name, source_version=source, target_version=target)
+            for name, source, target in packages
+        ],
+    )
+
+
+async def test_a_batch_reads_the_packages_it_names():
+    """A deferred package is read the way the first response reads one."""
+    diff = FakeDiff(added=2)
+    service, _, _ = build_service({}, diff=diff)
+
+    response = await service.compare_packages(
+        package_batch(("packageA", "1.0.0", "1.1.0")),
+        resolve_dependency_repository=package_resolver(
+            packageA=DependencyRepository(project_key="CORE", repository_slug="pkg-a")
+        ),
+    )
+
+    assert (response.source_ref, response.target_ref) == ("1.0.0", "1.1.0")
+    entry = response.packages[0]
+    assert entry.name == "packageA"
+    assert entry.state == "changed"
+    assert entry.code.verdict == "contained"
+    assert entry.code.added_count == 2
+    assert entry.code.deferred is False
+    # read at its two versions, in the repository the registry named for it
+    assert diff.requests[-1].repository_slug == "pkg-a"
+    assert (diff.requests[-1].source_ref, diff.requests[-1].target_ref) == ("1.0.0", "1.1.0")
+
+
+async def test_a_batch_package_the_registry_cannot_place_is_reported_not_dropped():
+    """A batch answers for every package it was asked about."""
+    service, _, _ = build_service({}, diff=FakeDiff())
+
+    response = await service.compare_packages(
+        package_batch(("packageB", "1.0.0", "1.1.0")),
+        resolve_dependency_repository=package_resolver(),
+    )
+
+    entry = response.packages[0]
+    assert entry.name == "packageB"
+    assert entry.code.verdict == "inconclusive"
+    assert entry.code.unavailable == "no repository is registered as 'packageB'"
+    assert entry.code.deferred is False

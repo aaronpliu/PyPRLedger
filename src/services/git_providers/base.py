@@ -311,8 +311,13 @@ class BaseGitProvider(ABC):
         project_key: str,
         repository_slug: str,
         limit: int = 100,
-    ) -> dict[str, list[str]]:
+    ) -> dict[str, Any]:
         """Return the tags and branches of a repository.
+
+        The listing is a picker's candidate set, so it is ordered most recently
+        modified first where the provider allows it, and read whole rather than as a
+        small page: a ref the picker never received is a release the reader cannot
+        choose.
 
         Args:
             project_key: Project key (Bitbucket) or org/owner (GitHub)
@@ -320,7 +325,11 @@ class BaseGitProvider(ABC):
             limit: Maximum number of names returned per ref type
 
         Returns:
-            Dict with ``tags`` and ``branches`` keys, each holding ref names.
+            Dict with ``tags`` and ``branches`` keys, each holding ref names, plus
+            ``tags_total`` / ``branches_total`` when the provider reports how many
+            the repository holds - the caller needs them to tell a complete listing
+            from one ``limit`` cut short. A provider that cannot report them leaves
+            the keys out.
 
         Raises:
             NotImplementedError: When the provider does not expose ref listing.

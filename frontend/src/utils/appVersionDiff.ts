@@ -120,6 +120,16 @@ export function moveSymbol(tone: MoveTone): string {
   return MOVE_SYMBOLS[tone]
 }
 
+/**
+ * What a move is about, as it is read: the version it was, and the one it became.
+ *
+ * A side the move does not have is drawn as a dash rather than left blank, so an
+ * added or removed package reads as a change of state and not as a missing value.
+ */
+export function moveVersions(move: AppVersionDiffMove): string {
+  return `${move.source_version ?? '—'} → ${move.target_version ?? '—'}`
+}
+
 /** How a pair's code axis reads. `unavailable` and `none` are deliberately different. */
 export type CodeTone = 'unavailable' | 'none' | 'commits'
 

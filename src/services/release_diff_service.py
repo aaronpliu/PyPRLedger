@@ -280,6 +280,8 @@ class ReleaseDiffService:
             git_provider=provider_name,
             tags=self._clean_refs(raw_refs.get("tags")),
             branches=self._clean_refs(raw_refs.get("branches")),
+            tags_total=raw_refs.get("tags_total"),
+            branches_total=raw_refs.get("branches_total"),
         )
 
         await self._write_cache(
@@ -295,6 +297,9 @@ class ReleaseDiffService:
                 "repository_slug": request.repository_slug,
                 "tag_count": len(response.tags),
                 "branch_count": len(response.branches),
+                # the repository's own counts: a listing shorter than these was capped
+                "tag_total": response.tags_total,
+                "branch_total": response.branches_total,
             },
         )
 

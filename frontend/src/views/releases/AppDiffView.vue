@@ -24,7 +24,7 @@
          picks a repository and the rest follows. -->
     <el-form class="coordinates" :model="repo" label-width="130px">
       <el-row :gutter="16">
-        <el-col :xs="24" :sm="12" :md="5">
+        <el-col :xs="24" :sm="12" :md="4">
           <el-form-item :label="t('releaseDiff.project_key')" required>
             <el-select
               v-model="repo.project_key"
@@ -54,7 +54,7 @@
           </el-form-item>
         </el-col>
 
-        <el-col :xs="24" :sm="12" :md="5">
+        <el-col :xs="24" :sm="12" :md="4">
           <el-form-item :label="t('releaseDiff.repository_slug')" required>
             <el-select
               v-model="repo.repository_slug"
@@ -85,7 +85,7 @@
           </el-form-item>
         </el-col>
 
-        <el-col :xs="24" :sm="12" :md="4">
+        <el-col :xs="24" :sm="12" :md="3">
           <el-form-item :label="t('releaseDiff.git_provider')">
             <el-select
               v-model="repo.git_provider"
@@ -103,7 +103,7 @@
           </el-form-item>
         </el-col>
 
-        <el-col v-if="isCloudProvider" :xs="24" :sm="12" :md="4">
+        <el-col v-if="isCloudProvider" :xs="24" :sm="12" :md="3">
           <el-form-item :label="t('releaseDiff.workspace_slug')">
             <el-select
               v-model="repo.workspace_slug"
@@ -125,36 +125,95 @@
           </el-form-item>
         </el-col>
 
-        <el-col :xs="24" :sm="12" :md="6">
+        <el-col :xs="24" :sm="12" :md="5">
           <el-form-item :label="t('appDiff.releases_label')" required>
             <el-select
               v-model="selectedRefs"
               multiple
               filterable
-              allow-create
+              remote
               default-first-option
+              :remote-method="onRefSearch"
               :disabled="!hasCoordinates"
               :loading="refsLoading"
               :placeholder="t('appDiff.select_releases')"
               style="width: 100%"
               data-test="releases-select"
+              @visible-change="onRefVisibility"
             >
-              <el-option-group v-if="tags.length" :label="t('appDiff.tags_group')">
-                <el-option v-for="tag in tags" :key="`tag:${tag}`" :label="tag" :value="tag" />
-              </el-option-group>
-              <el-option-group v-if="branches.length" :label="t('appDiff.branches_group')">
+              <el-option-group v-if="visibleTags.length" :label="t('appDiff.tags_group')">
                 <el-option
-                  v-for="branch in branches"
+                  v-for="tag in visibleTags"
+                  :key="`tag:${tag}`"
+                  :label="tag"
+                  :value="tag"
+                />
+              </el-option-group>
+              <el-option-group v-if="visibleBranches.length" :label="t('appDiff.branches_group')">
+                <el-option
+                  v-for="branch in visibleBranches"
                   :key="`branch:${branch}`"
                   :label="branch"
                   :value="branch"
                 />
               </el-option-group>
+              <!-- A release the repository does not report is not offered, and only
+                   an offered release can be picked: a comparison needs releases that
+                   exist. -->
+              <template #empty>
+                <p class="ref-empty">{{ t('appDiff.ref_no_match') }}</p>
+              </template>
             </el-select>
+          </el-form-item>
+        </el-col>
+
+        <!-- How deep this comparison reads, in the same row as the choices it is about:
+             the numbers behind each depth belong to the server, which clamps them to
+             its own ceilings and reports what it actually read, so this is a preference
+             rather than a promise - and one a reader can keep, since the same releases
+             are usually compared over and over. -->
+        <el-col :xs="24" :sm="12" :md="5">
+          <el-form-item :label="t('appDiff.depth_label')">
+            <div class="depth">
+              <el-select v-model="depth" class="depth-select" data-test="depth-select">
+                <el-option
+                  v-for="choice in DEPTHS"
+                  :key="choice"
+                  :label="t(`appDiff.depth_${choice}`)"
+                  :value="choice"
+                >
+                  <span class="option-key">{{ t(`appDiff.depth_${choice}`) }}</span>
+                  <span v-if="depthNumbers(choice)" class="option-name">
+                    {{ depthNumbers(choice) }}
+                  </span>
+                </el-option>
+              </el-select>
+              <el-checkbox v-model="remembered" data-test="depth-remember">
+                {{ t('appDiff.depth_remember') }}
+              </el-checkbox>
+            </div>
           </el-form-item>
         </el-col>
       </el-row>
     </el-form>
+
+    <!-- Reading a repository's refs is a provider call, and nothing else on the page
+         moves while it is in flight: saying so is what keeps the wait from reading as
+         a page that did nothing at all. -->
+    <p v-if="refsLoading" class="refs-note" data-test="refs-loading">
+      <el-icon class="is-loading"><Loading /></el-icon>
+      {{ t('appDiff.reading_refs') }}
+    </p>
+
+    <!-- The picker offers the recent releases and searches the rest, so it says
+         which of the two it is doing rather than leaving a short list to look like
+         a short repository. -->
+    <p v-else-if="refsCapped" class="refs-note" data-test="refs-capped">
+      {{ t('appDiff.refs_capped', { loaded: loadedRefCount, total: totalRefCount }) }}
+    </p>
+    <p v-else-if="refsSearchable" class="refs-note" data-test="refs-searchable">
+      {{ t('appDiff.refs_searchable', { total: totalRefCount }) }}
+    </p>
 
     <el-empty v-if="!hasCoordinates" :description="t('appDiff.pick_repository')" />
 
@@ -199,121 +258,10 @@
         data-test="incomplete"
       />
 
-      <section v-if="intervals.length" class="intervals" data-test="intervals">
-        <article
-          v-for="interval in intervals"
-          :key="`${interval.source_ref}->${interval.target_ref}`"
-          class="interval"
-          :class="{ 'interval-incomplete': !interval.complete }"
-        >
-          <header class="interval-head">
-            <span class="ref">{{ interval.source_ref }}</span>
-            <span class="arrow" aria-hidden="true">→</span>
-            <span class="ref">{{ interval.target_ref }}</span>
-          </header>
-
-          <p v-if="!interval.complete" class="interval-unknown" data-test="interval-incomplete">
-            {{ t('appDiff.interval_incomplete') }}
-          </p>
-
-          <div v-else class="chips">
-            <span
-              v-for="entry in summaryEntries(interval.summary)"
-              :key="entry.state"
-              class="chip"
-              :class="`chip-${entry.state}`"
-            >
-              {{ entry.count }} {{ t(`appDiff.state_${entry.state}`) }}
-            </span>
-            <span
-              v-if="!summaryEntries(interval.summary).length"
-              class="chip chip-none"
-              data-test="interval-unchanged"
-            >
-              {{ t('appDiff.no_changes') }}
-            </span>
-            <span
-              v-if="downgradeCount(interval.summary)"
-              class="chip chip-downgrade"
-              data-test="interval-risk"
-            >
-              {{ t('appDiff.risk_downgrade', { count: downgradeCount(interval.summary) }) }}
-            </span>
-          </div>
-
-          <!-- The commits between the two releases. A pair whose commits could
-               not be read says so: an empty list would read as "none". -->
-          <div v-if="interval.code" class="code" data-test="code-axis">
-            <p
-              v-if="interval.code.unavailable"
-              class="code-unavailable"
-              data-test="code-unavailable"
-            >
-              {{ t('appDiff.code_unavailable', { reason: interval.code.unavailable }) }}
-            </p>
-
-            <template v-else>
-              <p class="code-counts" data-test="code-counts">
-                <span :class="`code-${codeTone(interval.code)}`">
-                  {{ t('appDiff.code_added', { count: interval.code.added_count }) }}
-                </span>
-                <span v-if="interval.code.missing_count" data-test="code-missing">
-                  · {{ t('appDiff.code_missing', { count: interval.code.missing_count }) }}
-                </span>
-              </p>
-
-              <p
-                v-if="rebuiltWithUnchangedDependencies(interval, interval.code)"
-                class="rebuilt"
-                data-test="rebuilt"
-              >
-                {{ t('appDiff.rebuilt') }}
-              </p>
-
-              <el-button
-                v-if="commitTotal(interval.code)"
-                link
-                type="primary"
-                data-test="code-toggle"
-                @click="toggleCommits(intervalKey(interval))"
-              >
-                {{
-                  isExpanded(intervalKey(interval))
-                    ? t('appDiff.code_hide')
-                    : t('appDiff.code_show')
-                }}
-              </el-button>
-
-              <div v-if="isExpanded(intervalKey(interval))" class="commits" data-test="commits">
-                <template v-if="interval.code.added_commits.length">
-                  <h4>{{ t('appDiff.code_added_heading') }}</h4>
-                  <ul>
-                    <li v-for="commit in interval.code.added_commits" :key="commit.id">
-                      <code>{{ shortCommitId(commit) }}</code>
-                      <span class="subject">{{ commitSubject(commit) }}</span>
-                    </li>
-                  </ul>
-                </template>
-
-                <template v-if="interval.code.missing_commits.length">
-                  <h4>{{ t('appDiff.code_missing_heading') }}</h4>
-                  <ul>
-                    <li v-for="commit in interval.code.missing_commits" :key="commit.id">
-                      <code>{{ shortCommitId(commit) }}</code>
-                      <span class="subject">{{ commitSubject(commit) }}</span>
-                    </li>
-                  </ul>
-                </template>
-
-                <p v-if="interval.code.truncated" class="truncated" data-test="code-truncated">
-                  {{ t('appDiff.code_truncated') }}
-                </p>
-              </div>
-            </template>
-          </div>
-        </article>
-      </section>
-
+      <!-- The matrix first: it is the whole comparison at a glance - every package
+           against every release - and it is what the details below are read against.
+           A page of pair-by-pair details used to sit above it and push it off the
+           screen the moment a comparison had more than one pair. -->
       <el-empty v-if="!rows.length" :description="t('appDiff.no_records')" data-test="no-records" />
 
       <div v-else class="matrix-wrap">
@@ -387,6 +335,210 @@
           </tbody>
         </table>
       </div>
+
+      <!-- A pair that moved dozens of packages is drawn from its first few
+           comparisons while the rest are read behind it, and what is still unread
+           says so rather than reading as a package that was checked. -->
+      <p
+        v-if="deferredTotal && (autoCompareRunning || pendingPackages)"
+        class="refs-note"
+        data-test="packages-pending"
+      >
+        {{
+          autoCompareRunning
+            ? t('appDiff.packages_progress', { done: deferredDone, total: deferredTotal })
+            : t('appDiff.packages_left', { count: pendingPackages })
+        }}
+      </p>
+      <el-button
+        v-if="!autoCompareRunning && pendingPackages"
+        class="packages-action"
+        size="small"
+        data-test="packages-read-rest"
+        @click="readRemainingPackages"
+      >
+        {{ t('appDiff.packages_read_rest', { count: pendingPackages }) }}
+      </el-button>
+
+      <!-- One pair at a time. A comparison of several releases has a pair per adjacent
+           step, and stacking them all is what made the page unreadable: the reader
+           picks the step they are reading, and the matrix above carries what changed
+           across all of them. A single pair needs no selector. -->
+      <div v-if="intervals.length > 1" class="pairs" data-test="pair-tabs">
+        <el-radio-group v-model="activePair" size="small">
+          <el-radio-button
+            v-for="interval in intervals"
+            :key="intervalKey(interval)"
+            :value="intervalKey(interval)"
+            data-test="pair-tab"
+          >
+            <span class="pair-label">
+              <span class="pair-refs">{{ interval.source_ref }} → {{ interval.target_ref }}</span>
+              <el-tag
+                v-if="!interval.complete"
+                size="small"
+                type="info"
+                data-test="pair-incomplete"
+              >
+                {{ t('appDiff.no_record') }}
+              </el-tag>
+              <el-tag
+                v-else-if="pendingOf(interval)"
+                size="small"
+                type="warning"
+                data-test="pair-pending"
+              >
+                {{ pendingOf(interval) }}
+              </el-tag>
+            </span>
+          </el-radio-button>
+        </el-radio-group>
+      </div>
+
+      <section v-if="intervals.length" class="intervals" data-test="intervals">
+        <article
+          v-for="interval in intervals"
+          v-show="showsPair(interval)"
+          :key="intervalKey(interval)"
+          class="interval"
+          :class="{ 'interval-incomplete': !interval.complete }"
+        >
+          <header class="interval-head">
+            <span class="ref">{{ interval.source_ref }}</span>
+            <span class="arrow" aria-hidden="true">→</span>
+            <span class="ref">{{ interval.target_ref }}</span>
+          </header>
+
+          <p v-if="!interval.complete" class="interval-unknown" data-test="interval-incomplete">
+            {{ t('appDiff.interval_incomplete') }}
+          </p>
+
+          <div v-else class="chips">
+            <span
+              v-for="entry in summaryEntries(interval.summary)"
+              :key="entry.state"
+              class="chip"
+              :class="`chip-${entry.state}`"
+            >
+              {{ entry.count }} {{ t(`appDiff.state_${entry.state}`) }}
+            </span>
+            <span
+              v-if="!summaryEntries(interval.summary).length"
+              class="chip chip-none"
+              data-test="interval-unchanged"
+            >
+              {{ t('appDiff.no_changes') }}
+            </span>
+            <span
+              v-if="downgradeCount(interval.summary)"
+              class="chip chip-downgrade"
+              data-test="interval-risk"
+            >
+              {{ t('appDiff.risk_downgrade', { count: downgradeCount(interval.summary) }) }}
+            </span>
+          </div>
+
+          <!-- The application's own change, and the commits it brought, read the way
+               a package's are and shown in the same place: under its name. They used
+               to sit below the packages, where the one comparison the page is mostly
+               about read as an appendix to the ones it carried. -->
+          <div
+            v-if="interval.complete && interval.code"
+            class="change-item application-change"
+            :class="applicationTone(interval)"
+            :data-test="`change-${appName}`"
+          >
+            <div class="change">
+              <span
+                v-if="applicationChange(interval)"
+                class="move"
+                :class="`move-${moveTone(applicationChange(interval)!)}`"
+                aria-hidden="true"
+              >
+                {{ moveSymbol(moveTone(applicationChange(interval)!)) }}
+              </span>
+              <span class="change-name">{{ appName }}</span>
+              <el-tag class="kind" size="small" type="primary" data-test="change-application">
+                {{ t('appDiff.application') }}
+              </el-tag>
+              <!-- a release whose version did not move still carries commits, and
+                   those are all it has to say about itself -->
+              <template v-if="applicationChange(interval)">
+                <span class="change-versions">
+                  {{ moveVersions(applicationChange(interval)!) }}
+                </span>
+                <span class="change-state">
+                  {{ t(moveLabelKey(moveTone(applicationChange(interval)!))) }}
+                </span>
+              </template>
+            </div>
+
+            <!-- The commits between the two releases. A pair whose commits could
+                 not be read says so: an empty list would read as "none". -->
+            <CommitComparison
+              :code="interval.code"
+              :expanded="isExpanded(intervalKey(interval))"
+              @toggle="toggleCommits(intervalKey(interval))"
+            >
+              <template #note>
+                <p
+                  v-if="rebuiltWithUnchangedDependencies(interval, interval.code)"
+                  class="rebuilt"
+                  data-test="rebuilt"
+                >
+                  {{ t('appDiff.rebuilt') }}
+                </p>
+              </template>
+            </CommitComparison>
+          </div>
+
+          <!-- The counts say how many moved; this says which one moved where, which
+               is what one app release is read for. -->
+          <h4
+            v-if="interval.complete && dependencyChanges(interval).length"
+            class="changes-heading"
+            data-test="changes-heading"
+          >
+            {{ t('appDiff.changes_heading') }}
+          </h4>
+          <ul
+            v-if="interval.complete && dependencyChanges(interval).length"
+            class="changes"
+            data-test="changes"
+          >
+            <li
+              v-for="change in dependencyChanges(interval)"
+              :key="`${change.kind}:${change.name}`"
+              class="change-item"
+              :class="`change-${moveTone(change)}`"
+              :data-test="`change-${change.name}`"
+            >
+              <div class="change">
+                <span class="move" :class="`move-${moveTone(change)}`" aria-hidden="true">
+                  {{ moveSymbol(moveTone(change)) }}
+                </span>
+                <span class="change-name">{{ change.name }}</span>
+                <span class="change-versions">{{ moveVersions(change) }}</span>
+                <span class="change-state">{{ t(moveLabelKey(moveTone(change))) }}</span>
+                <!-- the repository a package was compared in, when the registry named one -->
+                <span v-if="packageRepository(packageOf(interval, change))" class="change-repository">
+                  {{ packageRepository(packageOf(interval, change)) }}
+                </span>
+              </div>
+
+              <!-- What came with that version: the commits between the package's own
+                   two versions, read the way the application's pair is read -->
+              <CommitComparison
+                v-if="packageOf(interval, change)"
+                :code="packageOf(interval, change)!.code"
+                :scope="`package-${change.name}`"
+                :expanded="isExpanded(packageKey(interval, change.name))"
+                @toggle="toggleCommits(packageKey(interval, change.name))"
+              />
+            </li>
+          </ul>
+        </article>
+      </section>
     </template>
 
     <el-empty v-else :description="t('appDiff.no_result')" />
@@ -394,10 +546,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { Loading } from '@element-plus/icons-vue'
 import ContentLoader from '@/components/common/ContentLoader.vue'
+import CommitComparison from '@/components/release/CommitComparison.vue'
 import { GIT_PROVIDER_OPTIONS } from '@/constants/gitProvider'
 import { projectsApi } from '@/api/projects'
 import type {
@@ -407,7 +561,14 @@ import type {
 } from '@/api/projects'
 import { releaseDiffApi } from '@/api/releaseDiff'
 import { appVersionDiffApi } from '@/api/appVersionDiff'
-import type { AppVersionDiffResponse } from '@/api/appVersionDiff'
+import type {
+  AppVersionDiffInterval,
+  AppVersionDiffMove,
+  AppVersionDiffPackageComparison,
+  AppVersionDiffResponse,
+} from '@/api/appVersionDiff'
+import { useRefCandidates } from '@/composables/useRefCandidates'
+import { DEPTHS, depthNumbers, useAppDiffDepth } from '@/composables/useAppDiffDepth'
 import {
   buildRows,
   codeTone,
@@ -419,6 +580,7 @@ import {
   moveLabelKey,
   moveSymbol,
   moveTone,
+  moveVersions,
   rebuiltWithUnchangedDependencies,
   shortCommitId,
   summaryEntries,
@@ -444,13 +606,48 @@ const repositoriesLoading = ref(false)
 const workspacesLoading = ref(false)
 const workspacesLoaded = ref(false)
 const refsLoading = ref(false)
-const tags = ref<string[]>([])
-const branches = ref<string[]>([])
+// The provider's whole listing, searched, with the recent releases offered up front
+const {
+  search: refSearch,
+  visibleTags,
+  visibleBranches,
+  loadedCount: loadedRefCount,
+  totalCount: totalRefCount,
+  capped: refsCapped,
+  searchable: refsSearchable,
+  setCandidates: setRefCandidates,
+  clearCandidates: clearRefCandidates,
+} = useRefCandidates()
+
+/** What the reader typed: it searches the whole listing, not the offered page. */
+function onRefSearch(query: string) {
+  refSearch.value = query ?? ''
+}
+
+/** A picker that has just closed goes back to offering the recent releases. */
+function onRefVisibility(visible: boolean) {
+  if (!visible) {
+    refSearch.value = ''
+  }
+}
 
 const selectedRefs = ref<string[]>([])
 const comparing = ref(false)
 const failed = ref(false)
 const result = ref<AppVersionDiffResponse | null>(null)
+// How deep a comparison reads, and whether the reader keeps that choice. The
+// numbers behind each depth are the server's to grant: it clamps them to its own
+// ceilings and the answer says what was actually read.
+const { depth, remembered, depthRequest } = useAppDiffDepth()
+// The first response answers each pair with its first few package comparisons; the
+// rest are read behind it, so a release that moved dozens of packages is drawn
+// without waiting for every one of them.
+const autoCompareRunning = ref(false)
+const autoComparePaused = ref(false)
+const deferredTotal = ref(0)
+// Every read belongs to one comparison: a result cleared, or a comparison started
+// again, leaves the batches of the previous one with nowhere to land.
+let compareRun = 0
 // Refs a URL asked for, held until the ref list arrives so the picker does not
 // overwrite them.
 const requestedRefs = ref<string[] | null>(null)
@@ -509,7 +706,13 @@ async function loadRepositories(projectKey: string) {
 
   repositoriesLoading.value = true
   try {
-    repositories.value = await projectsApi.getProjectRepositories(projectKey)
+    // The applications the project registry names - this page reads the releases the
+    // dependency database holds, and a repository marked as a package has none to
+    // read. A project nobody has classified falls back to every repository it has,
+    // so nothing disappears before an administrator has said what things are.
+    repositories.value = await projectsApi.getProjectRepositories(projectKey, {
+      preferApplications: true,
+    })
   } catch {
     repositories.value = []
   } finally {
@@ -533,21 +736,34 @@ async function ensureWorkspaceSuggestions() {
   }
 }
 
-/** Tags and branches are suggestions of the provider; any ref stays typeable. */
+/**
+ * Read the repository's refs as the picker's candidate set.
+ *
+ * No `limit` is sent: the API answers with the repository's whole listing (up to
+ * its safety ceiling) because a release the picker never received is one the
+ * reader cannot choose.
+ */
 async function loadRefs() {
-  tags.value = []
-  branches.value = []
+  clearRefCandidates()
   if (!hasCoordinates.value) return
 
   refsLoading.value = true
   try {
-    const response = await releaseDiffApi.listRefs({ ...coordinates(), limit: 200 })
-    tags.value = response.tags
-    branches.value = response.branches
+    const response = await releaseDiffApi.listRefs(coordinates())
+    setRefCandidates(response)
     // A link that names its releases still opens on them. Otherwise nothing is
     // picked for the reader: the comparison runs when they choose the releases.
-    selectedRefs.value = requestedRefs.value?.length ? [...requestedRefs.value] : []
+    const wanted = requestedRefs.value
     requestedRefs.value = null
+    if (!wanted?.length) {
+      selectedRefs.value = []
+    } else if (wanted.join(',') !== selectedRefs.value.join(',')) {
+      // The link's releases are already picked - they were taken from it before this
+      // listing was read, which is what started their comparison. Picking them again
+      // here would read the same two releases a second time, and start a second round
+      // of the package comparisons that follow one.
+      selectedRefs.value = wanted
+    }
   } catch {
     // Left empty: the picker stays empty and the page waits for a repository
     // whose refs can be read.
@@ -560,26 +776,147 @@ async function loadRefs() {
 async function compare(refresh = false) {
   if (!canCompare.value) return
 
+  // A comparison started again cancels the batches of the one before it.
+  const run = ++compareRun
+  autoCompareRunning.value = false
+  autoComparePaused.value = false
+  deferredTotal.value = 0
   comparing.value = true
   failed.value = false
   try {
-    result.value = await appVersionDiffApi.compare({
+    const response = await appVersionDiffApi.compare({
       ...coordinates(),
       refs: [...selectedRefs.value],
       refresh,
+      // how deep this reader wants to read, within what the server will grant
+      ...depthRequest(),
     })
+    if (run !== compareRun) return
+    result.value = response
+    // a comparison opens on its first pair, which is where a reader starts reading
+    activePair.value = response.intervals.length ? intervalKey(response.intervals[0]) : ''
+    deferredTotal.value = countDeferred(response.intervals)
+    if (deferredTotal.value) void readDeferredPackages(run)
   } catch {
+    if (run !== compareRun) return
     // The failure is reported rather than emptied: an empty matrix would read as
     // a comparison in which nothing moved.
     result.value = null
     failed.value = true
   } finally {
-    comparing.value = false
+    if (run === compareRun) comparing.value = false
   }
 }
 
 function refresh() {
   void compare(true)
+}
+
+/** How many of one pair's package comparisons are still waiting to be read. */
+function pendingOf(interval: AppVersionDiffInterval): number {
+  return interval.packages.filter((entry) => entry.code.deferred).length
+}
+
+/** How many package comparisons a set of pairs is leaving for later. */
+function countDeferred(list: AppVersionDiffInterval[]): number {
+  return list.reduce((count, interval) => count + pendingOf(interval), 0)
+}
+
+// The pair a reader is looking at, when a comparison has more than one. Held by the
+// pair's own identity rather than by its position, so re-reading the same releases
+// leaves the reader where they were.
+const activePair = ref('')
+
+/** Whether one pair's detail is the one on screen. A single pair is always shown. */
+function showsPair(interval: AppVersionDiffInterval): boolean {
+  return intervals.value.length === 1 || activePair.value === intervalKey(interval)
+}
+
+/** How many package comparisons are still waiting to be read. */
+const pendingPackages = computed(() => countDeferred(intervals.value))
+
+/** How many of the deferred ones have been read since the page was drawn. */
+const deferredDone = computed(() => Math.max(deferredTotal.value - pendingPackages.value, 0))
+
+/** Stop reading whatever batches are in flight: their answer is no longer wanted. */
+function cancelPackageReads() {
+  compareRun += 1
+  autoCompareRunning.value = false
+  autoComparePaused.value = false
+  deferredTotal.value = 0
+}
+
+/** Put the answers where their entries were, so a row stops saying "not compared yet". */
+function mergeComparisons(
+  interval: AppVersionDiffInterval,
+  answered: AppVersionDiffPackageComparison[],
+) {
+  const byName = new Map(answered.map((entry) => [entry.name, entry]))
+  interval.packages = interval.packages.map((entry) => byName.get(entry.name) ?? entry)
+}
+
+/**
+ * Read the package comparisons the first response deferred.
+ *
+ * The response answers each pair with its first few packages so the page can be
+ * drawn without waiting for all of them; the rest are asked for here, a batch at a
+ * time, until nothing is left. The allowance the response carries bounds what the
+ * page reads on its own - a reader who asks by hand is not bounded by it, because
+ * it exists to keep the page from reading without end, not to stop the person
+ * looking at it.
+ */
+async function readDeferredPackages(run: number, manual = false) {
+  const response = result.value
+  if (!response) return
+
+  // How much of the allowance is left, and how many packages one batch carries: both
+  // are the server's numbers, sent with the answer, so the page paces itself by what
+  // this deployment does rather than by what a page was compiled with.
+  let allowance = manual ? Number.POSITIVE_INFINITY : response.package_comparisons.remaining
+  const batchSize = Math.max(response.package_comparisons.batch, 1)
+  autoCompareRunning.value = true
+  autoComparePaused.value = false
+  try {
+    for (const interval of response.intervals) {
+      if (run !== compareRun) return
+      const waiting = interval.packages.filter((entry) => entry.code.deferred)
+      while (waiting.length && allowance > 0) {
+        const batch = waiting.splice(0, Math.min(batchSize, allowance))
+        allowance -= batch.length
+        let answer
+        try {
+          answer = await appVersionDiffApi.comparePackages({
+            ...coordinates(),
+            source_ref: interval.source_ref,
+            target_ref: interval.target_ref,
+            packages: batch.map((entry) => ({
+              name: entry.name,
+              source_version: entry.source_version ?? '',
+              target_version: entry.target_version ?? '',
+            })),
+          })
+        } catch {
+          // A batch that could not be read leaves its packages as they were: still
+          // visibly unread, and askable again - never shown as compared, and never
+          // as a package that contained nothing.
+          if (run === compareRun) autoComparePaused.value = true
+          return
+        }
+        if (run !== compareRun) return
+        mergeComparisons(interval, answer.packages)
+      }
+    }
+  } finally {
+    if (run === compareRun) {
+      autoCompareRunning.value = false
+      autoComparePaused.value = pendingPackages.value > 0
+    }
+  }
+}
+
+/** Ask for the packages the automatic read did not get to. */
+function readRemainingPackages() {
+  void readDeferredPackages(compareRun, true)
 }
 
 function cellText(cell: AppDiffCell): string {
@@ -601,6 +938,51 @@ function versionClass(cell: AppDiffCell) {
 /** A pair's identity, for the commit lists a reader opens by hand. */
 function intervalKey(interval: { source_ref: string; target_ref: string }): string {
   return `${interval.source_ref}->${interval.target_ref}`
+}
+
+/** The key one package's commit list is expanded under. */
+function packageKey(interval: AppVersionDiffInterval, name: string): string {
+  return `${intervalKey(interval)}:${name}`
+}
+
+/**
+ * The comparison of one changed package, when the pair carries one.
+ *
+ * The list holds every package that moved, including the ones there was nothing
+ * to compare for - they say so in their own comparison entry, which is what keeps
+ * an unchecked package visible next to a checked one.
+ */
+/** The application's own move in a pair, when its version moved between the two. */
+function applicationChange(interval: AppVersionDiffInterval): AppVersionDiffMove | undefined {
+  return interval.changes.find((change) => change.kind === 'application')
+}
+
+/** The tone the application's own block is shown in: empty when it did not move. */
+function applicationTone(interval: AppVersionDiffInterval): string {
+  const change = applicationChange(interval)
+  return change ? `change-${moveTone(change)}` : ''
+}
+
+/**
+ * The pair's moves among its dependencies.
+ *
+ * The application's own move is not among them: it is read as the release's own
+ * change, shown above them with the commits it brought.
+ */
+function dependencyChanges(interval: AppVersionDiffInterval): AppVersionDiffMove[] {
+  return interval.changes.filter((change) => change.kind !== 'application')
+}
+
+function packageOf(
+  interval: AppVersionDiffInterval,
+  change: AppVersionDiffMove,
+): AppVersionDiffPackageComparison | undefined {
+  return interval.packages.find((entry) => entry.name === change.name)
+}
+
+/** The repository a package was compared in, or nothing when none was resolved. */
+function packageRepository(entry: AppVersionDiffPackageComparison | undefined): string {
+  return entry?.repository_slug ? `${entry.project_key}/${entry.repository_slug}` : ''
 }
 
 const expandedCommits = ref<string[]>([])
@@ -662,6 +1044,10 @@ onMounted(async () => {
   }
 })
 
+// Leaving the page ends the reads it started: a batch landing afterwards has
+// nowhere to be shown, and no reader waiting for it.
+onUnmounted(cancelPackageReads)
+
 // The project catalog carries the provider each repository lives on, so picking
 // a project fills it in - the reader never has to know which one it is.
 watch(selectedProjectKey, async (projectKey) => {
@@ -673,9 +1059,9 @@ watch(selectedProjectKey, async (projectKey) => {
   if (!repo.value.git_provider) {
     repo.value.git_provider = project?.git_provider || null
   }
-  tags.value = []
-  branches.value = []
+  clearRefCandidates()
   result.value = null
+  cancelPackageReads()
 
   // Unknown project keys (typed manually) have no local repository catalog
   if (project) {
@@ -692,8 +1078,8 @@ watch(selectedRepositorySlug, (repositorySlug) => {
   result.value = null
   selectedRefs.value = []
   requestedRefs.value = null
-  tags.value = []
-  branches.value = []
+  clearRefCandidates()
+  cancelPackageReads()
   if (repositorySlug && hasCoordinates.value) void loadRefs()
 })
 
@@ -705,6 +1091,12 @@ watch([selectedProjectKey, selectedRepositorySlug, selectedRefs], syncUrl)
 
 watch(selectedRefs, (refs) => {
   if (refs.length >= 2 && hasCoordinates.value) void compare()
+})
+
+// Asking to read deeper is a different question, so it is answered rather than left
+// until the next comparison: what is on screen is read again at the new depth.
+watch(depth, () => {
+  if (result.value && canCompare.value) void compare()
 })
 </script>
 
@@ -737,6 +1129,44 @@ watch(selectedRefs, (refs) => {
   margin-bottom: 8px;
 }
 
+.refs-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+/* The select and the checkbox share the field, and the checkbox drops beneath the
+   select rather than squeezing it when the column is narrow. */
+.depth {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+/* The depth names are single words, so the control stays narrow enough for the row
+   it shares with the other fields */
+.depth-select {
+  flex: 1 1 120px;
+  min-width: 110px;
+}
+
+.packages-action {
+  margin: 0 0 12px;
+}
+
+.ref-empty {
+  margin: 0;
+  padding: 8px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
 .option-key {
   font-weight: 600;
 }
@@ -758,6 +1188,27 @@ watch(selectedRefs, (refs) => {
 .scope {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+/* The pair the reader is looking at, when a comparison has more than one. The
+   selector names the pair, so a pair's own header would say the same thing twice. */
+.pairs {
+  margin: 0 0 12px;
+}
+
+.pairs :deep(.el-radio-group) {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pair-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pairs + .intervals .interval-head {
+  display: none;
 }
 
 .intervals {
@@ -823,6 +1274,58 @@ watch(selectedRefs, (refs) => {
 .chip-downgrade {
   color: #fff;
   background: var(--el-color-danger);
+}
+
+/* What moved in one pair, one line per package */
+.changes-heading {
+  margin: 12px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-regular);
+}
+
+.changes {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.change {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 13px;
+}
+
+.change-name {
+  overflow-wrap: anywhere;
+}
+
+.change-versions {
+  font-family: var(--el-font-family-mono, monospace);
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+}
+
+.change-state {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.change-change .change-state,
+.change-upgrade .change-state,
+.change-added .change-state {
+  color: var(--el-color-success);
+}
+
+.change-downgrade .change-state {
+  color: var(--el-color-danger);
+}
+
+.change-removed .change-state {
+  color: var(--el-color-info);
 }
 
 .matrix-wrap {
@@ -932,75 +1435,28 @@ watch(selectedRefs, (refs) => {
   color: var(--el-text-color-placeholder);
 }
 
-.code {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--el-border-color-lighter);
-  font-size: 12px;
+/* One moved package, with the two versions it moved between below it */
+.change-item {
+  padding: 2px 0;
 }
 
-.code-counts {
-  margin: 0;
-  color: var(--el-text-color-regular);
+/* The release's own move and commits, above the dependencies it carried */
+.application-change {
+  margin-top: 12px;
 }
 
-.code-counts .code-commits {
-  font-weight: 600;
-}
-
-.code-counts .code-none {
+/* The repository a package was compared in, when the registry named one */
+.change-repository {
+  font-family: var(--el-font-family-mono, monospace);
+  font-size: 11px;
   color: var(--el-text-color-secondary);
 }
 
-.code-unavailable {
-  margin: 0;
-  color: var(--el-color-warning-dark-2);
-}
-
+/* A pair that was rebuilt under the same versions: the view's own reading, since
+   only it knows whether the dependencies moved */
 .rebuilt {
   margin: 6px 0 0;
   color: var(--el-color-warning-dark-2);
   font-weight: 600;
-}
-
-.commits {
-  margin-top: 6px;
-}
-
-.commits h4 {
-  margin: 6px 0 2px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--el-text-color-secondary);
-}
-
-.commits ul {
-  margin: 0;
-  padding-left: 0;
-  list-style: none;
-}
-
-.commits li {
-  display: flex;
-  gap: 6px;
-  padding: 1px 0;
-}
-
-.commits code {
-  color: var(--el-text-color-secondary);
-  font-size: 11px;
-}
-
-.commits .subject {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.truncated {
-  margin: 4px 0 0;
-  color: var(--el-text-color-secondary);
-  font-style: italic;
 }
 </style>

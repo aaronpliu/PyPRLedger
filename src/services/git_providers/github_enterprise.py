@@ -318,10 +318,15 @@ class GitHubEnterpriseProvider(BaseGitProvider):
         project_key: str,
         repository_slug: str,
         limit: int = 100,
-    ) -> dict[str, list[str]]:
+    ) -> dict[str, Any]:
         """Fetch tags and branches of a repository.
 
         Maps to GET /api/v3/repos/{owner}/{repo}/tags and /branches
+
+        GitHub reports neither a modification date for a ref nor a total in the
+        body - the total lives in a ``Link`` header a listing stopped at ``limit``
+        never reads - so this keeps GitHub's own order and claims no count rather
+        than inventing one.
         """
         base = f"{self.api_url}/repos/{project_key}/{repository_slug}"
         logger.info(f"Listing refs on GitHub: {project_key}/{repository_slug}")

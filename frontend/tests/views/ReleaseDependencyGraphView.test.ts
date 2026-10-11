@@ -4,32 +4,35 @@ import ElementPlus, { ElRadioGroup, ElSelect, ElSwitch } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ReleaseDependencyGraphView from '@/views/releases/ReleaseDependencyGraphView.vue'
 import enMessages from '@/locales/en.json'
+import { projectsApi } from '@/api/projects'
+import { releaseDiffApi } from '@/api/releaseDiff'
+import type { ReleaseRefsResponse } from '@/api/releaseDiff'
 
 // The repository and its refs come from the provider in the running app; the
 // stand-ins hand over the one project, the one repository and the refs the
 // assertions below read.
 vi.mock('@/api/projects', () => ({
   projectsApi: {
-    getAllProjects: async () => [
+    getAllProjects: vi.fn(async () => [
       { project_key: 'CORE', project_name: 'Core' },
       { project_key: 'GHE', project_name: 'GitHub', git_provider: 'github_enterprise' },
-    ],
-    getProjectRepositories: async () => [
+    ]),
+    getProjectRepositories: vi.fn(async () => [
       { repository_slug: 'app', repository_name: 'Application' },
-    ],
-    getCloudWorkspaces: async () => [],
+    ]),
+    getCloudWorkspaces: vi.fn(async () => []),
   },
 }))
 
 vi.mock('@/api/releaseDiff', () => ({
   releaseDiffApi: {
-    listRefs: async () => ({
+    listRefs: vi.fn(async () => ({
       project_key: 'CORE',
       repository_slug: 'app',
       git_provider: 'bitbucket_server',
       tags: ['v2.0.0', 'v1.1.0', 'v1.0.0', 'v9.9.9'],
       branches: ['main'],
-    }),
+    })),
   },
 }))
 
@@ -405,5 +408,61 @@ describe('ReleaseDependencyGraphView', () => {
 
     expect(wrapper.text()).toContain('No dependency data for this ref')
     expect(wrapper.find('[data-test="release-dependency-graph-chart"]').exists()).toBe(false)
+  })
+
+  it('picks only a ref the repository reports', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openRepository(wrapper)
+
+    // The picker searches the repository's listing rather than accepting a typed
+    // name: a tag that does not exist cannot be read, so it cannot be picked.
+    const refSelect = wrapper.findAllComponents(ElSelect)[3]
+    expect(refSelect.props('allowCreate')).toBe(false)
+    expect(refSelect.props('remote')).toBe(true)
+    expect(refSelect.findAllComponents({ name: 'ElOption' }).map((option) => option.props('value')))
+      .toContain('v2.0.0')
+  })
+
+  it('says the repository is being read while its refs are in flight', async () => {
+    let settle: (refs: ReleaseRefsResponse) => void = () => {}
+    vi.mocked(releaseDiffApi.listRefs).mockReturnValueOnce(
+      new Promise<ReleaseRefsResponse>((resolve) => {
+        settle = resolve
+      }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await openRepository(wrapper)
+
+    // reading the tags and branches is a provider call, and nothing else on the page
+    // moves while it is in flight: saying so is what keeps the wait from reading as a
+    // page that did nothing at all
+    expect(wrapper.find('[data-test="refs-loading"]').exists()).toBe(true)
+
+    settle({
+      project_key: 'CORE',
+      repository_slug: 'app',
+      git_provider: 'bitbucket_server',
+      tags: ['v2.0.0'],
+      branches: ['main'],
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="refs-loading"]').exists()).toBe(false)
+  })
+
+  it('offers the applications the registry names', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openRepository(wrapper)
+
+    // this page reads the releases the dependency database holds, so the picker is
+    // what an administrator named as applications - and a project nobody has
+    // classified falls back to every repository it has
+    expect(vi.mocked(projectsApi.getProjectRepositories)).toHaveBeenCalledWith('CORE', {
+      preferApplications: true,
+    })
   })
 })

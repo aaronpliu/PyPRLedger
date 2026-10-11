@@ -45,6 +45,47 @@
       <el-table :data="projects" v-loading="loading" stripe style="width: 100%">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="app_name" label="Application" width="180" />
+        <el-table-column label="App alias" width="220">
+          <template #default="{ row }">
+            <div class="alias-cell">
+              <!-- An empty alias is not a gap: it means the application name is asked for -->
+              <span v-if="row.app_alias" class="alias-value" data-test="app-alias">
+                {{ row.app_alias }}
+              </span>
+              <span v-else class="alias-follows">Follows {{ row.app_name }}</span>
+              <!-- The alias is edited where it is read, not from a column of actions
+                   that belongs to the row as a whole -->
+              <el-button
+                link
+                type="primary"
+                size="small"
+                data-test="edit-alias"
+                @click="handleEditAlias(row)"
+              >
+                Edit
+              </el-button>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="Kind" width="170">
+          <template #default="{ row }">
+            <!-- What a registration is, set where it is read. Empty is a choice of its
+                 own: it is where every registration starts, and what keeps behaving as
+                 it always did - the pages that read an application's releases leave out
+                 what is marked as a package and offer everything else. -->
+            <el-select
+              :model-value="row.registry_kind ?? ''"
+              size="small"
+              style="width: 100%"
+              data-test="kind-select"
+              @change="(value: string) => handleKindChange(row, value)"
+            >
+              <el-option label="Not set" value="" />
+              <el-option label="Application" value="application" />
+              <el-option label="Package" value="package" />
+            </el-select>
+          </template>
+        </el-table-column>
         <el-table-column prop="project_key" label="Project Key" width="150" />
         <el-table-column prop="repository_slug" label="Repository Slug" min-width="200" />
         <el-table-column prop="git_provider" label="Git Provider" width="180">
@@ -60,8 +101,10 @@
             {{ formatDate(row.created_date) }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="200" fixed="right">
+        <el-table-column label="Actions" width="220" fixed="right">
           <template #default="{ row }">
+            <!-- What is about the row as a whole: what it is and what it is called are
+                 set in their own columns -->
             <el-button size="small" type="primary" @click="handleUpdate(row)">
               Move App
             </el-button>
@@ -138,6 +181,32 @@
           </el-select>
         </el-form-item>
 
+        <el-form-item label="App alias" prop="appAlias">
+          <el-input
+            v-model="registerForm.appAlias"
+            maxlength="64"
+            placeholder="Optional - follows the application name when empty"
+          />
+          <div class="field-hint">
+            The name the dependency database knows this application as, when it differs from
+            the application name. Only the Releases pages ask it for this name.
+          </div>
+        </el-form-item>
+
+        <el-form-item label="Kind" prop="registryKind">
+          <el-select v-model="registerForm.registryKind" style="width: 100%">
+            <el-option label="Application" value="application" />
+            <el-option label="Package" value="package" />
+            <el-option label="Not set" value="" />
+          </el-select>
+          <div class="field-hint">
+            What this repository is. The Release Dependency Graph and the App Diff leave
+            out the repositories marked as packages, because the dependency database holds
+            no release records for those - and they offer everything that is not
+            classified, so leaving this unset changes nothing.
+          </div>
+        </el-form-item>
+
         <el-form-item label="Description" prop="description">
           <el-input 
             v-model="registerForm.description" 
@@ -190,11 +259,52 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- App Alias Dialog -->
+    <el-dialog v-model="showAliasDialog" title="Dependency Database Name" width="600px">
+      <el-form :model="aliasForm" label-width="140px">
+        <el-form-item label="Project Key">
+          <el-input :value="selectedProject?.project_key" disabled />
+        </el-form-item>
+
+        <el-form-item label="Repository Slug">
+          <el-input :value="selectedProject?.repository_slug" disabled />
+        </el-form-item>
+
+        <el-form-item label="Application">
+          <el-input :value="selectedProject?.app_name" disabled />
+        </el-form-item>
+
+        <el-form-item label="App alias">
+          <el-input
+            v-model="aliasForm.appAlias"
+            maxlength="64"
+            show-word-limit
+            clearable
+            :placeholder="aliasPlaceholder"
+          />
+          <div class="field-hint">
+            The name the dependency database knows this application as, when it differs from
+            the application name. Leave it empty to ask for the application name, and only
+            the Releases pages are affected either way.
+          </div>
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showAliasDialog = false">Cancel</el-button>
+          <el-button type="primary" :loading="updatingAlias" @click="handleAliasSubmit">
+            Save
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
+import { computed, ref, reactive, onMounted, watch } from 'vue'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { projectRegistryApi } from '@/api/projectRegistry'
 import { projectsApi } from '@/api/projects'
@@ -235,6 +345,7 @@ const loadingRepositories = ref(false)
 // Dialogs
 const showRegisterDialog = ref(false)
 const showUpdateDialog = ref(false)
+const showAliasDialog = ref(false)
 
 // Forms
 const registerFormRef = ref<FormInstance>()
@@ -245,6 +356,11 @@ const registerForm = reactive({
   projectKey: '',
   repositorySlug: '',
   gitProvider: DEFAULT_GIT_PROVIDER,
+  appAlias: '',
+  // the dialog opens on the choice this page exists for - an application - with
+  // "Not set" beside it, which is what keeps a registration that says nothing
+  // behaving as it always did
+  registryKind: 'application',
   description: '',
 })
 
@@ -256,6 +372,16 @@ const getProviderTagType = (provider: string): '' | 'success' | 'warning' | 'inf
 const updateForm = reactive({
   newAppName: '',
 })
+
+const updatingAlias = ref(false)
+const aliasForm = reactive({
+  appAlias: '',
+})
+
+/** An empty alias is the application name, so the field says which one it would be. */
+const aliasPlaceholder = computed(
+  () => `Follows the application name (${selectedProject.value?.app_name ?? ''})`
+)
 
 // Watch for project key changes to load repositories
 watch(
@@ -386,7 +512,9 @@ const handleRegister = async () => {
           registerForm.projectKey,
           registerForm.repositorySlug,
           registerForm.description || undefined,
-          registerForm.gitProvider
+          registerForm.gitProvider,
+          registerForm.appAlias || undefined,
+          registerForm.registryKind
         )
         ElMessage.success('Project registered successfully')
         showRegisterDialog.value = false
@@ -395,6 +523,8 @@ const handleRegister = async () => {
         registerForm.projectKey = ''
         registerForm.repositorySlug = ''
         registerForm.gitProvider = DEFAULT_GIT_PROVIDER
+        registerForm.appAlias = ''
+        registerForm.registryKind = 'application'
         registerForm.description = ''
         // Reload data
         await loadApps()
@@ -440,6 +570,62 @@ const handleUpdateSubmit = async () => {
       }
     }
   })
+}
+
+/**
+ * Set, change, or take back what a registration is.
+ *
+ * The pages that read an application's releases leave out what is marked as a
+ * package and offer everything else, so an empty value is how an administrator
+ * returns a repository to the behaviour an unclassified one gets.
+ */
+const handleKindChange = async (project: ProjectRegistry, kind: string) => {
+  try {
+    await projectRegistryApi.updateRegistryKind(
+      project.project_key,
+      project.repository_slug,
+      kind === '' ? null : (kind as 'application' | 'package')
+    )
+    ElMessage.success(
+      kind === ''
+        ? `${project.project_key}/${project.repository_slug} is left unclassified`
+        : `${project.project_key}/${project.repository_slug} is now a ${kind}`
+    )
+    await loadProjects()
+  } catch (error: any) {
+    const message = error.response?.data?.detail?.message || 'Failed to update the kind'
+    ElMessage.error(message)
+  }
+}
+
+const handleEditAlias = (project: ProjectRegistry) => {
+  selectedProject.value = project
+  // the stored alias, not the effective name: an empty field keeps following
+  aliasForm.appAlias = project.app_alias ?? ''
+  showAliasDialog.value = true
+}
+
+const handleAliasSubmit = async () => {
+  if (!selectedProject.value) return
+
+  updatingAlias.value = true
+  try {
+    const result = await projectRegistryApi.updateAppAlias(
+      selectedProject.value.project_key,
+      selectedProject.value.repository_slug,
+      aliasForm.appAlias.trim()
+    )
+    ElMessage.success(
+      `The dependency database will be asked for '${result.dependency_app_name}'`
+    )
+    showAliasDialog.value = false
+    await loadProjects()
+  } catch (error: any) {
+    const message = error.response?.data?.detail?.message || 'Failed to update the app alias'
+    ElMessage.error(message)
+  } finally {
+    updatingAlias.value = false
+  }
 }
 
 const handleUnregister = async (project: ProjectRegistry) => {
@@ -503,5 +689,31 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+/* the alias, with the action that edits it beside what it says */
+.alias-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* the name the dependency database is asked for, when it differs from the app */
+.alias-value {
+  font-family: var(--el-font-family-mono, monospace);
+}
+
+/* an empty alias is the application name, said rather than left blank */
+.alias-follows {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.field-hint {
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 </style>

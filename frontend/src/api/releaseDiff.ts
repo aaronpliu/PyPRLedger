@@ -29,8 +29,16 @@ export interface ReleaseRefsResponse {
   project_key: string
   repository_slug: string
   git_provider: string
+  /** Ref names, most recently modified first. */
   tags: string[]
   branches: string[]
+  /**
+   * How many tags / branches the repository holds, when the provider reports it.
+   * A count larger than the length of the list means the safety ceiling cut the
+   * listing short, so the repository holds releases this picker cannot offer.
+   */
+  tags_total?: number | null
+  branches_total?: number | null
 }
 
 export interface ReleaseCompareRequest {

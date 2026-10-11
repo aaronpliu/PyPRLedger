@@ -12,6 +12,18 @@ export interface AppVersionDiffRequest {
   refresh?: boolean
   /** Read the commits between every pair as well. Defaults to true. */
   include_code?: boolean
+  /**
+   * How many dependency comparisons each pair should carry in the answer. Null or
+   * absent takes the server's default. This is a depth, not a demand: the server
+   * clamps it to its own ceiling and says what it actually read.
+   */
+  max_package_comparisons?: number | null
+  /**
+   * How many dependency comparisons this page should run automatically in total -
+   * what the answer carries plus what the page asks for afterwards. Null or absent
+   * takes the server's default, and the page ceiling applies.
+   */
+  max_total_package_comparisons?: number | null
 }
 
 /** One selected release, placed on the timeline by the server. */
@@ -26,6 +38,11 @@ export interface AppVersionDiffRelease {
 /** What one package did between two adjacent releases. */
 export interface AppVersionDiffMove {
   name: string
+  /**
+   * What the name is: the application's own version, or one of the packages it
+   * declares. A comparison reports both, and a reader has to tell them apart.
+   */
+  kind: 'application' | 'dependency'
   source_version: string | null
   target_version: string | null
   state: 'unchanged' | 'changed' | 'added' | 'removed'
@@ -76,6 +93,33 @@ export interface AppVersionDiffCode {
   missing_commits: AppVersionDiffCommit[]
   truncated: boolean
   unavailable: string | null
+  /**
+   * Whether this comparison was left for later rather than found impossible: the
+   * two versions and the repository are known, but the pair moved more packages
+   * than one response reads. The page asks for these in batches; until then there
+   * is no verdict, which is not the same as an inconclusive one.
+   */
+  deferred: boolean
+}
+
+/**
+ * One dependency's own comparison between the two releases of a pair.
+ *
+ * Which repository a package lives in is not in the dependency record, so it is
+ * resolved through the project registry by the name the record uses; a package
+ * that resolves to no repository, to several, or whose versions cannot be compared
+ * says so in `code.unavailable` rather than being left out.
+ */
+export interface AppVersionDiffPackageComparison {
+  name: string
+  /** The move this package made: `changed` has two versions, `added`/`removed` one. */
+  state: 'changed' | 'added' | 'removed'
+  source_version: string | null
+  target_version: string | null
+  project_key: string | null
+  repository_slug: string | null
+  git_provider: string | null
+  code: AppVersionDiffCode
 }
 
 /** One adjacent pair of releases, compared. */
@@ -92,8 +136,32 @@ export interface AppVersionDiffInterval {
    */
   dependencies_moved: boolean
   changes: AppVersionDiffMove[]
+  /**
+   * Every dependency that moved in this pair, with the commits between the two
+   * versions it moved between. The application's own version is not among them -
+   * it is the pair's code axis, read above.
+   */
+  packages: AppVersionDiffPackageComparison[]
   /** Null when the pair is incomplete or the request did not ask for the code axis. */
   code: AppVersionDiffCode | null
+}
+
+/**
+ * How deep the page may read: the numbers the server answered with.
+ *
+ * These are the effective ones, not the ones asked for - a request may ask to read
+ * deeper than the defaults and is answered with what the server will actually do.
+ * The page paces itself by these rather than by numbers compiled into it.
+ */
+export interface AppVersionDiffPackageBudget {
+  /** Most comparisons an adjacent pair carries in this answer. */
+  per_pair: number
+  /** Most comparisons this page may run automatically. */
+  page_total: number
+  /** Most deferred packages should be asked for at a time. */
+  batch: number
+  /** How much of `page_total` this answer leaves for the page to spend. */
+  remaining: number
 }
 
 export interface AppVersionDiffResponse {
@@ -107,6 +175,38 @@ export interface AppVersionDiffResponse {
   /** The matrix: the application's own version first, then its direct dependencies. */
   rows: AppVersionDiffRow[]
   intervals: AppVersionDiffInterval[]
+  /** The budget this answer was read under, and how the page should batch. */
+  package_comparisons: AppVersionDiffPackageBudget
+}
+
+/** One package of a pair to compare, as the page read it off the matrix. */
+export interface AppVersionDiffPackageRequest {
+  name: string
+  source_version: string
+  target_version: string
+}
+
+/** A pair of releases, and the packages of it to compare now. */
+export interface AppVersionDiffPackagesRequest {
+  project_key: string
+  repository_slug: string
+  git_provider?: string | null
+  workspace_slug?: string | null
+  refresh?: boolean
+  source_ref: string
+  target_ref: string
+  /** A few at a time: the server refuses more than a batch. */
+  packages: AppVersionDiffPackageRequest[]
+}
+
+/** The packages of one pair that were asked for, compared. */
+export interface AppVersionDiffPackagesResponse {
+  project_key: string
+  repository_slug: string
+  source_ref: string
+  target_ref: string
+  /** One entry per package asked for, in the shape the first response uses. */
+  packages: AppVersionDiffPackageComparison[]
 }
 
 export const appVersionDiffApi = {
@@ -118,5 +218,17 @@ export const appVersionDiffApi = {
    */
   compare(payload: AppVersionDiffRequest): Promise<AppVersionDiffResponse> {
     return request.post('/release/apps/diff', payload)
+  },
+
+  /**
+   * Compare the packages a pair of releases moved, in batches. The comparison
+   * reports the packages past its own first-read ceiling as deferred; this is how
+   * they are read, so a release that moved dozens of packages is drawn from the
+   * first few and filled in as the rest arrive.
+   */
+  comparePackages(
+    payload: AppVersionDiffPackagesRequest,
+  ): Promise<AppVersionDiffPackagesResponse> {
+    return request.post('/release/apps/diff/packages', payload)
   },
 }

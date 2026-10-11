@@ -84,6 +84,16 @@ class Settings(BaseSettings):
             "(refresh=true) always bypasses the cache."
         ),
     )
+    RELEASE_REFS_MAX_LIMIT: int = Field(
+        default=2000,
+        description=(
+            "Most refs one listing may carry, per kind (tags, branches). A ref picker has to "
+            "search a complete list to be able to offer every release, so the provider is "
+            "paged to its own last page rather than to a small page: this is the safety "
+            "ceiling for a repository holding thousands of tags, and a response that reaches "
+            "it reports the repository's own count so the UI can say the list was cut."
+        ),
+    )
 
     CACHE_TTL_DEPENDENCY_GRAPH: int = Field(
         default=3600,
@@ -94,6 +104,55 @@ class Settings(BaseSettings):
     )
 
     # Dependency database - the system of record for what an application shipped
+    APP_DIFF_MAX_PACKAGE_COMPARISONS: int = Field(
+        default=6,
+        description=(
+            "Most dependency comparisons one adjacent pair of releases carries in the first "
+            "response. Each one asks the git provider for the commits between two versions of "
+            "a package, and a release that moved thirty of them would make thirty of those "
+            "calls before the page could be drawn. So a pair answers with its first few - the "
+            "downgrades first - and reports the rest as not compared *yet*, which the page "
+            "asks for afterwards in batches (POST /release/apps/diff/packages)."
+        ),
+    )
+    APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS: int = Field(
+        default=90,
+        description=(
+            "Most dependency comparisons one App Diff page runs automatically: the ones the "
+            "first response carries plus the ones the page asks for afterwards. Past it the "
+            "remaining packages stay uncompared until a reader asks for them explicitly, so a "
+            "comparison of several releases cannot become an unbounded run of provider calls. "
+            "The allowance left rides along with the response, so the page knows when to stop."
+        ),
+    )
+    APP_DIFF_PACKAGE_COMPARISONS_CEILING: int = Field(
+        default=50,
+        description=(
+            "Most comparisons one adjacent pair may be asked to carry, however deep a request "
+            "asks to read. The two settings above are the defaults a request that asks for "
+            "nothing gets; this is the most one that asks for everything gets, because those "
+            "numbers decide how many provider calls a page makes. A request above the ceiling "
+            "is answered with the ceiling rather than refused - it is a performance dial, not "
+            "a correctness one - and the effective numbers ride back with the response."
+        ),
+    )
+    APP_DIFF_PAGE_COMPARISONS_CEILING: int = Field(
+        default=300,
+        description=(
+            "Most comparisons one App Diff page may be asked to run in total. The per-pair "
+            "ceiling bounds one pair; this bounds the page, which is what a deeper reading "
+            "actually spends - three releases are two pairs, each of them with dozens of "
+            "packages. Same rule: over it is answered with the ceiling, never an error."
+        ),
+    )
+    APP_DIFF_PACKAGE_COMPARISON_BATCH_SIZE: int = Field(
+        default=8,
+        description=(
+            "How many deferred package comparisons the page is told to ask for at a time. It "
+            "rides back with the response, so the batches a page reads are paced by this "
+            "setting rather than by a number compiled into the page."
+        ),
+    )
     DEPENDENCY_API_BASE_URL: str = Field(
         default="", description="Base URL of the dependency database API"
     )
@@ -108,7 +167,7 @@ class Settings(BaseSettings):
         ),
     )
     DEPENDENCY_API_RELEASE_PATH: str = Field(
-        default="/api/v1/appReleaseInfo",
+        default="/appBuildDependencies",
         description=(
             "Path returning one application ref: the modules it declared with their "
             "exact versions, and what every package the database knows declared for its own"

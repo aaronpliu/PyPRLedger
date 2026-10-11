@@ -19,8 +19,14 @@ from src.core.permissions import get_current_user_with_token
 from src.main import app
 from src.models.auth_user import AuthUser
 from src.services.dependency_graph_service import DependencyGraphService
-from src.services.dependency_mock_data import MOCK_APP_NAME, MOCK_BRANCH, MOCK_TAG
-from src.services.project_registry_service import ProjectRegistryService
+from src.services.dependency_mock_data import (
+    MOCK_APP_NAME,
+    MOCK_BRANCH,
+    MOCK_SECOND_APP_NAME,
+    MOCK_SECOND_TAG,
+    MOCK_TAG,
+)
+from src.services.project_registry_service import ProjectRegistryService, dependency_app_name
 
 
 class FakeCache:
@@ -35,13 +41,21 @@ class FakeCache:
 
 
 class FakeRegistry(ProjectRegistryService):
-    """A registry mapping the repository onto an application name."""
+    """A registry mapping the repository onto an application name and its alias."""
 
-    def __init__(self, app_name: str = MOCK_APP_NAME) -> None:
+    def __init__(self, app_name: str = MOCK_APP_NAME, app_alias: str | None = None) -> None:
         self.app_name = app_name
+        self.app_alias = app_alias
 
     async def get_app_name(self, project_key: str, repository_slug: str, db: Any) -> str:
         return self.app_name
+
+    async def get_dependency_app_name(
+        self, project_key: str, repository_slug: str, db: Any
+    ) -> str:
+        # the endpoint's own resolution, so a test states a registration and reads
+        # the name the page asks the database for
+        return dependency_app_name(self.app_name, self.app_alias)
 
 
 @pytest.fixture
@@ -142,6 +156,25 @@ async def test_endpoint_asks_the_database_with_a_lower_case_app_name(
     # the record was found under the lower-case name, and the graph is built on it
     assert MOCK_APP_NAME in packages
     assert packages[MOCK_APP_NAME]["category"] == 0
+
+
+async def test_endpoint_asks_the_database_for_the_registered_alias(
+    async_client, authenticated_client
+) -> None:
+    """A repository registered under one name may be known to the database as another."""
+    app.dependency_overrides[get_registry_service] = lambda: FakeRegistry(
+        f"{MOCK_SECOND_APP_NAME}-workspace", MOCK_SECOND_APP_NAME
+    )
+
+    response = await async_client.post(
+        "/api/v1/release/dependency-graph/read",
+        json={"project_key": "CORE", "repository_slug": "app", "ref": MOCK_SECOND_TAG},
+    )
+
+    # the record was found under the alias, not under the registered name
+    assert response.status_code == 200, response.text
+    packages = {entry["id"]: entry for entry in response.json()["packages"]}
+    assert MOCK_SECOND_APP_NAME in packages
 
 
 async def test_endpoint_rejects_a_request_without_a_ref(async_client, authenticated_client) -> None:

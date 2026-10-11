@@ -142,32 +142,73 @@
               <el-select
                 v-model="selectedRef"
                 filterable
+                remote
                 clearable
+                default-first-option
+                :remote-method="onRefSearch"
                 :disabled="!hasCoordinates"
                 :loading="refsLoading"
                 :placeholder="t('releaseDependencyGraph.select_ref')"
                 style="width: 100%"
                 data-test="ref-select"
+                @visible-change="onRefVisibility"
               >
-                <el-option-group v-if="tags.length" :label="t('releaseDependencyGraph.tags_group')">
-                  <el-option v-for="tag in tags" :key="`tag:${tag}`" :label="tag" :value="tag" />
+                <el-option-group
+                  v-if="visibleTags.length"
+                  :label="t('releaseDependencyGraph.tags_group')"
+                >
+                  <el-option
+                    v-for="tag in visibleTags"
+                    :key="`tag:${tag}`"
+                    :label="tag"
+                    :value="tag"
+                  />
                 </el-option-group>
                 <el-option-group
-                  v-if="branches.length"
+                  v-if="visibleBranches.length"
                   :label="t('releaseDependencyGraph.branches_group')"
                 >
                   <el-option
-                    v-for="branch in branches"
+                    v-for="branch in visibleBranches"
                     :key="`branch:${branch}`"
                     :label="branch"
                     :value="branch"
                   />
                 </el-option-group>
+                <!-- A ref the repository does not report is not offered, and only an
+                     offered ref can be picked: a release that does not exist cannot
+                     be read. -->
+                <template #empty>
+                  <p class="ref-empty">{{ t('releaseDependencyGraph.ref_no_match') }}</p>
+                </template>
               </el-select>
             </el-form-item>
           </el-col>
         </el-row>
       </el-form>
+
+      <!-- Reading a repository's refs is a provider call, and nothing else on the page
+           moves while it is in flight: saying so is what keeps the wait from reading as
+           a page that did nothing at all. -->
+      <p v-if="refsLoading" class="refs-note" data-test="refs-loading">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        {{ t('releaseDependencyGraph.reading_refs') }}
+      </p>
+
+      <!-- The picker offers the recent refs and searches the rest, so it says
+           which of the two it is doing rather than leaving a short list to look
+           like a short repository. -->
+      <p v-else-if="refsCapped" class="refs-note" data-test="refs-capped">
+        {{
+          t('releaseDependencyGraph.refs_capped', {
+            loaded: loadedRefCount,
+            total: totalRefCount,
+          })
+        }}
+      </p>
+      <p v-else-if="refsSearchable" class="refs-note" data-test="refs-searchable">
+        {{ t('releaseDependencyGraph.refs_searchable', { total: totalRefCount }) }}
+      </p>
 
       <el-empty
         v-if="!hasCoordinates"
@@ -248,44 +289,53 @@
                 :title="t('releaseDependencyGraph.circular_warning')"
               />
 
-              <div class="detail-section">
-                <h4>{{ t('releaseDependencyGraph.dependencies') }} ({{ directDependencies.length }})</h4>
-                <ul v-if="directDependencies.length" class="detail-list">
-                  <li v-for="entry in directDependencies" :key="entry.node.id">
-                    <button class="detail-link" type="button" @click="selectNode(entry.node.id)">
-                      {{ entry.node.name ?? entry.node.id }}
-                    </button>
-                    <span
-                      v-if="entry.constraint"
-                      class="detail-constraint"
-                      :class="{ 'is-range': !entry.pinned }"
-                      :title="entry.constraint"
-                    >
-                      {{ entry.constraint }}
-                    </span>
-                  </li>
-                </ul>
-                <p v-else class="detail-empty">{{ t('releaseDependencyGraph.no_dependencies') }}</p>
-              </div>
+              <!-- Two columns: stacked, a list that outgrows its half of the panel
+                   scrolls while the space beside it stands empty, and a package
+                   worth reading is one of many -->
+              <div class="detail-sections">
+                <div class="detail-section">
+                  <h4>
+                    {{ t('releaseDependencyGraph.dependencies') }} ({{ directDependencies.length }})
+                  </h4>
+                  <ul v-if="directDependencies.length" class="detail-list">
+                    <li v-for="entry in directDependencies" :key="entry.node.id">
+                      <button class="detail-link" type="button" @click="selectNode(entry.node.id)">
+                        {{ entry.node.name ?? entry.node.id }}
+                      </button>
+                      <span
+                        v-if="entry.constraint"
+                        class="detail-constraint"
+                        :class="{ 'is-range': !entry.pinned }"
+                        :title="entry.constraint"
+                      >
+                        {{ entry.constraint }}
+                      </span>
+                    </li>
+                  </ul>
+                  <p v-else class="detail-empty">{{ t('releaseDependencyGraph.no_dependencies') }}</p>
+                </div>
 
-              <div class="detail-section">
-                <h4>{{ t('releaseDependencyGraph.dependents') }} ({{ directDependents.length }})</h4>
-                <ul v-if="directDependents.length" class="detail-list">
-                  <li v-for="entry in directDependents" :key="entry.node.id">
-                    <button class="detail-link" type="button" @click="selectNode(entry.node.id)">
-                      {{ entry.node.name ?? entry.node.id }}
-                    </button>
-                    <span
-                      v-if="entry.constraint"
-                      class="detail-constraint"
-                      :class="{ 'is-range': !entry.pinned }"
-                      :title="entry.constraint"
-                    >
-                      {{ entry.constraint }}
-                    </span>
-                  </li>
-                </ul>
-                <p v-else class="detail-empty">{{ t('releaseDependencyGraph.no_dependents') }}</p>
+                <div class="detail-section">
+                  <h4>
+                    {{ t('releaseDependencyGraph.dependents') }} ({{ directDependents.length }})
+                  </h4>
+                  <ul v-if="directDependents.length" class="detail-list">
+                    <li v-for="entry in directDependents" :key="entry.node.id">
+                      <button class="detail-link" type="button" @click="selectNode(entry.node.id)">
+                        {{ entry.node.name ?? entry.node.id }}
+                      </button>
+                      <span
+                        v-if="entry.constraint"
+                        class="detail-constraint"
+                        :class="{ 'is-range': !entry.pinned }"
+                        :title="entry.constraint"
+                      >
+                        {{ entry.constraint }}
+                      </span>
+                    </li>
+                  </ul>
+                  <p v-else class="detail-empty">{{ t('releaseDependencyGraph.no_dependents') }}</p>
+                </div>
               </div>
             </template>
 
@@ -299,6 +349,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { Loading } from '@element-plus/icons-vue'
 import { GIT_PROVIDER_OPTIONS } from '@/constants/gitProvider'
 import { useI18n } from 'vue-i18n'
 import ReleaseDependencyGraphChart from '@/components/charts/ReleaseDependencyGraphChart.vue'
@@ -316,6 +367,7 @@ import type {
 } from '@/api/projects'
 import { releaseDiffApi } from '@/api/releaseDiff'
 import { releaseDependencyGraphApi } from '@/api/releaseDependencyGraph'
+import { useRefCandidates } from '@/composables/useRefCandidates'
 
 const { t } = useI18n()
 
@@ -334,8 +386,30 @@ const repositoriesLoading = ref(false)
 const workspacesLoading = ref(false)
 const workspacesLoaded = ref(false)
 const refsLoading = ref(false)
-const tags = ref<string[]>([])
-const branches = ref<string[]>([])
+// The provider's whole listing, searched, with the recent refs offered up front
+const {
+  search: refSearch,
+  visibleTags,
+  visibleBranches,
+  loadedCount: loadedRefCount,
+  totalCount: totalRefCount,
+  capped: refsCapped,
+  searchable: refsSearchable,
+  setCandidates: setRefCandidates,
+  clearCandidates: clearRefCandidates,
+} = useRefCandidates()
+
+/** What the reader typed: it searches the whole listing, not the offered page. */
+function onRefSearch(query: string) {
+  refSearch.value = query ?? ''
+}
+
+/** A picker that has just closed goes back to offering the recent refs. */
+function onRefVisibility(visible: boolean) {
+  if (!visible) {
+    refSearch.value = ''
+  }
+}
 
 const selectedProjectKey = computed(() => (repo.value.project_key ?? '').trim())
 const selectedRepositorySlug = computed(() => (repo.value.repository_slug ?? '').trim())
@@ -390,7 +464,13 @@ async function loadRepositories(projectKey: string) {
 
   repositoriesLoading.value = true
   try {
-    repositories.value = await projectsApi.getProjectRepositories(projectKey)
+    // The applications the project registry names - this page reads the releases the
+    // dependency database holds, and a repository marked as a package has none to
+    // read. A project nobody has classified falls back to every repository it has,
+    // so nothing disappears before an administrator has said what things are.
+    repositories.value = await projectsApi.getProjectRepositories(projectKey, {
+      preferApplications: true,
+    })
   } catch {
     repositories.value = []
   } finally {
@@ -414,20 +494,23 @@ async function ensureWorkspaceSuggestions() {
   }
 }
 
-/** Tags and branches are suggestions of the provider; any ref stays typeable. */
+/**
+ * Read the repository's refs as the picker's candidate set.
+ *
+ * No `limit` is sent: the API answers with the repository's whole listing (up to
+ * its safety ceiling) because a ref a picker never received is a release the
+ * reader cannot choose. Nothing is picked for them either - the graph is read
+ * when they choose a ref.
+ */
 async function loadRefs() {
-  tags.value = []
-  branches.value = []
+  clearRefCandidates()
   selectedRef.value = ''
   if (!hasCoordinates.value) return
 
   refsLoading.value = true
   try {
-    const response = await releaseDiffApi.listRefs({ ...coordinates(), limit: 200 })
-    tags.value = response.tags
-    branches.value = response.branches
-    // The refs are suggestions: the newest tag is offered, never picked. The graph
-    // is read when the reader chooses one.
+    const response = await releaseDiffApi.listRefs(coordinates())
+    setRefCandidates(response)
   } catch {
     // Left empty: the picker stays empty and the canvas stays blank.
   } finally {
@@ -469,8 +552,7 @@ watch(selectedProjectKey, async (projectKey) => {
 
   repo.value.repository_slug = ''
   repo.value.git_provider = project?.git_provider || null
-  tags.value = []
-  branches.value = []
+  clearRefCandidates()
   selectedRef.value = ''
 
   // Unknown project keys (typed manually) have no local repository catalog
@@ -647,6 +729,23 @@ function secondaryName(value: string, name?: string | null): string | undefined 
   color: var(--el-text-color-regular);
 }
 
+.refs-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.ref-empty {
+  margin: 0;
+  padding: 8px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
 .legend-note {
   display: flex;
   align-items: center;
@@ -692,8 +791,16 @@ function secondaryName(value: string, name?: string | null): string | undefined 
   margin-bottom: 12px;
 }
 
+/* The two lists share the panel's height instead of splitting it in half */
+.detail-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .detail-section {
   margin-top: 16px;
+  min-width: 0;
 }
 
 .detail-section h4 {
@@ -707,16 +814,21 @@ function secondaryName(value: string, name?: string | null): string | undefined 
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 220px;
+  /* The chart sets the page's height; a list reads down it rather than stopping
+     at a fixed one and scrolling while the space beside it stands empty. The cap
+     stays as a backstop for a package nothing should have that many of. */
+  max-height: max(240px, calc(100vh - 460px));
   overflow-y: auto;
 }
 
 .detail-list li {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 3px 0;
   font-size: 13px;
+  min-width: 0;
 }
 
 .detail-link {
@@ -727,6 +839,9 @@ function secondaryName(value: string, name?: string | null): string | undefined 
   cursor: pointer;
   font-size: 13px;
   text-align: left;
+  /* half the panel's width, so a long package name wraps rather than spills */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .detail-link:hover {

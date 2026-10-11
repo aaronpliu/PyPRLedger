@@ -415,15 +415,21 @@
               <el-select
                 v-model="form.tag_name"
                 filterable
+                remote
                 clearable
-                allow-create
                 default-first-option
+                :remote-method="onRefSearch"
                 :loading="refsLoading"
                 :disabled="Boolean(editingId)"
                 :placeholder="t('releaseNotes.tag_placeholder')"
                 style="width: 100%"
               >
-                <el-option v-for="tag in sortedTags" :key="tag" :label="tag" :value="tag" />
+                <el-option v-for="tag in candidateTags" :key="tag" :label="tag" :value="tag" />
+                <!-- Only a tag the repository reports can carry a note: a name typed
+                     by hand would be a note about a release that does not exist. -->
+                <template #empty>
+                  <p class="ref-empty">{{ t('releaseNotes.ref_no_match') }}</p>
+                </template>
               </el-select>
               <el-tooltip :content="t('releaseNotes.refresh_tags')" placement="top">
                 <el-button
@@ -443,13 +449,17 @@
               <el-select
                 v-model="form.previous_tag"
                 filterable
+                remote
                 clearable
-                allow-create
+                :remote-method="onRefSearch"
                 :disabled="Boolean(editingId)"
                 :placeholder="t('releaseNotes.previous_tag_placeholder')"
                 style="width: 100%"
               >
-                <el-option v-for="ref in selectableRefs" :key="ref" :label="ref" :value="ref" />
+                <el-option v-for="ref in candidateRefs" :key="ref" :label="ref" :value="ref" />
+                <template #empty>
+                  <p class="ref-empty">{{ t('releaseNotes.ref_no_match') }}</p>
+                </template>
               </el-select>
               <div class="field-hint">{{ t('releaseNotes.previous_tag_help') }}</div>
             </el-form-item>
@@ -790,6 +800,7 @@ import CommitTable from '@/components/release/CommitTable.vue'
 import ContentLoader from '@/components/common/ContentLoader.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
 import { useJira } from '@/composables/useJira'
+import { searchCandidates } from '@/composables/useRefCandidates'
 import { linkifyJiraMarkdown } from '@/utils/jira'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
 import type {
@@ -851,6 +862,15 @@ const workspacesLoaded = ref(false)
 const refsLoading = ref(false)
 const tags = ref<string[]>([])
 const branches = ref<string[]>([])
+// The pickers hold the provider's whole listing - they offer part of it and search
+// the rest. Which part is offered is this page's own call: its tags are read in
+// version order rather than in the order the provider happens to return them.
+const refSearch = ref('')
+
+/** What the reader typed: it searches the whole listing, not the offered page. */
+function onRefSearch(query: string) {
+  refSearch.value = query ?? ''
+}
 
 // The coordinate panel is open on arrival: it is what a first visit fills in
 const coordinatesOpen = ref(true)
@@ -1072,12 +1092,19 @@ const canImportFromProvider = computed(() => canManage.value && isGithubProvider
 const canSave = computed(() => hasCoordinates.value && Boolean(form.value.tag_name.trim()))
 
 // Newest first: versions compare numerically so v1.10.0 sorts above v1.9.0.
-// The provider returns the tags in its own order (Bitbucket Cloud lists them
-// alphabetically, i.e. oldest first), so every tag picker uses this order.
+// The provider orders the tags by modification, which is not the order a release
+// line is read in (a patch on an old line is modified after a newer minor), so
+// this page's own tag list is put in version order instead.
 const sortedTags = computed(() =>
   [...tags.value].sort((a, b) => b.localeCompare(a, undefined, { numeric: true })),
 )
-const selectableRefs = computed(() => [...sortedTags.value, ...branches.value])
+
+// What the two ref pickers offer: a version-ordered part of the whole listing,
+// narrowed by what the reader typed - the rest is still reachable by searching it.
+const candidateTags = computed(() => searchCandidates(sortedTags.value, refSearch.value))
+const candidateRefs = computed(() =>
+  searchCandidates([...sortedTags.value, ...branches.value], refSearch.value),
+)
 
 /** Whether a tag survives the search box, by a plain substring of its name. */
 function tagMatchesQuery(tag: string): boolean {
@@ -1444,13 +1471,17 @@ async function loadRefs(force = false) {
 
   refsLoading.value = true
   try {
+    // No `limit`: the API answers with the repository's whole listing (up to its
+    // safety ceiling), because a tag the picker never received is a tag this page
+    // cannot record a note for.
     const response = await releaseDiffApi.listRefs({
       ...coordinates(),
-      limit: 200,
       refresh: force,
     })
-    tags.value = uniqueRefs(response.tags)
-    branches.value = uniqueRefs(response.branches)
+    const tagNames = uniqueRefs(response.tags)
+    const branchNames = uniqueRefs(response.branches)
+    tags.value = tagNames
+    branches.value = branchNames
     tagPage.value = 1
     // The tags tab always has a selection so the commits of a tag are visible
     if (tabIsTags.value && !selectedTag.value) {
@@ -1469,7 +1500,7 @@ async function loadRefs(force = false) {
       }
     }
   } catch {
-    // refs are only suggestions - typing the tag manually stays possible
+    // Left empty: the pickers offer nothing and the note keeps its own tag
   } finally {
     refsLoading.value = false
   }
@@ -2446,6 +2477,14 @@ onBeforeUnmount(() => {
   margin-top: 4px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+.ref-empty {
+  margin: 0;
+  padding: 8px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 }
 
 /* a summary that was asked for and could not be made is not a help text */

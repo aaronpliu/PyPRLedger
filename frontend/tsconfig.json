@@ -20,15 +20,15 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
 
-    /* Suppress baseUrl deprecation (TS 6.0 wave). The installed compiler is
-       typescript@~6.0, which requires exactly "6.0" to accept this option.
-       Will migrate before TS 7.0 (drop baseUrl, keep paths under bundler resolution). */
-    "ignoreDeprecations": "6.0",
-
-    /* Path aliases */
-    "baseUrl": ".",
+    /* Path aliases. Without "baseUrl" - deprecated in TypeScript 6.0 - the
+       mappings resolve against this file's directory, which is the same place
+       "baseUrl": "." pointed them at. Keeping the config free of options that
+       only one compiler version accepts is what lets an editor's own TypeScript
+       read it: a rejected option there costs the whole project config, path
+       mappings included, and with them an editor's ability to resolve the
+       .vue imports of the tests. */
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     },
 
     /* Ambient types for the whole project (incl. test files type-checked above).

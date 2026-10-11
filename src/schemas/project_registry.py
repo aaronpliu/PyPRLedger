@@ -6,6 +6,23 @@ from pydantic import BaseModel, Field
 class ProjectRegistryResponse(BaseModel):
     id: int
     app_name: str
+    app_alias: str | None = Field(
+        default=None,
+        description=(
+            "The name the dependency database knows this application as, when that differs "
+            "from app_name. Empty means the application name is used"
+        ),
+    )
+    registry_kind: str | None = Field(
+        default=None,
+        description=(
+            "'application' for a repository whose releases the dependency database holds, "
+            "'package' for one that is only a dependency of another, null where nobody has "
+            "classified it. The pages that read an application's releases leave out what is "
+            "marked as a package, and offer everything else - so a registration nobody has "
+            "classified behaves as it always did"
+        ),
+    )
     project_key: str
     repository_slug: str
     git_provider: str

@@ -40,8 +40,11 @@ POST /api/v1/release/dependency-graph/read      src/api/v1/endpoints/release_dep
 Two things to keep in mind:
 
 - The **application name is what the record is keyed by**, and the application a
-  repository belongs to is resolved through the project registry. A repository
-  that is not registered resolves to `Unknown` (and has no record).
+  repository belongs to is resolved through the project registry. The name actually
+  asked for is the repository's **app alias** when it has one - the name an
+  administrator recorded because the database knows the application by a name of
+  its own - and the registered application name otherwise. A repository that is
+  not registered resolves to `Unknown` (and has no record).
 - Nothing on this side walks a dependency graph. **One call answers for one
   application ref**: the modules the application declared, and what each of those
   modules pulls in. That is why the endpoint must answer with the *closure it
@@ -58,7 +61,7 @@ Authorization: Bearer <DEPENDENCY_API_TOKEN>     (sent only when the token is co
 
 | Parameter | Value |
 |---|---|
-| `app_name` | The application the repository resolved to through the project registry, **lower-cased**: the database keys its applications by a lower-case enum, so a repository registered under `MyApp` is asked for as `myapp` |
+| `app_name` | The application the repository resolved to through the project registry. When the registration carries an **app alias**, that is what is sent, **exactly as the administrator entered it**: the database keys applications by a vocabulary of its own, which does not always follow from the registered name (`trmyapp` may have to be asked for as `myapptr`). Without an alias the registered application name is sent **lower-cased**, since the database keys by a lower-case enum - a repository registered under `MyApp` is asked for as `myapp`. Both are set on the Project Registry page |
 | `tagOrBranch` | The tag or branch the user picked on the page |
 
 | Client behaviour | Value |

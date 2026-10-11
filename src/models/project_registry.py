@@ -26,6 +26,8 @@ class ProjectRegistry(Base):
     3. Admin-managed application boundaries
     4. Multiple projects per application
     5. Per-project Git provider tracking
+    6. Telling an application from a package, which are registered here for two
+       different reasons
     """
 
     PROVIDER_BITBUCKET_SERVER = GitProvider.BITBUCKET_SERVER.value
@@ -34,6 +36,14 @@ class ProjectRegistry(Base):
     VALID_PROVIDERS = GitProvider.values()
     DEFAULT_PROVIDER = GitProvider.default().value
 
+    # What a registration is: an application, whose releases the dependency database
+    # holds records of, or a package that is only ever a dependency of one. Empty
+    # means nobody has said, and a registration nobody has classified is treated as
+    # it always was - which is what keeps this an opt-in.
+    KIND_APPLICATION = "application"
+    KIND_PACKAGE = "package"
+    VALID_KINDS = (KIND_APPLICATION, KIND_PACKAGE)
+
     __tablename__ = "project_registry"
 
     # Primary key
@@ -41,6 +51,11 @@ class ProjectRegistry(Base):
 
     # Application name - logical grouping
     app_name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+
+    # What the dependency database knows this application as, when that differs
+    # from the name above. Empty means the application name is used, so a
+    # registration that needs no alias keeps following a rename of it.
+    app_alias: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Business keys for project identification
     project_key: Mapped[str] = mapped_column(
@@ -56,6 +71,19 @@ class ProjectRegistry(Base):
     git_provider: Mapped[str] = mapped_column(
         String(32), nullable=False, default=DEFAULT_PROVIDER, server_default=DEFAULT_PROVIDER
     )
+
+    # What this registration is for. The registry serves two purposes - resolving a
+    # repository to the application the dependency database knows it by, and
+    # resolving a package name back to the repository it lives in - and only the
+    # first is something the pages that read an application's releases can use: a
+    # package repository has no release records, so offering it as an application is
+    # a dead end.
+    #
+    # Empty means nobody has said, and a registration nobody has classified behaves
+    # as it always did - shown everywhere. That is what makes the classification an
+    # administrator can make in the registry page an opt-in: applying this column to
+    # a registry that fills itself in changes nothing until someone makes a choice.
+    registry_kind: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
 
     # Optional description
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)

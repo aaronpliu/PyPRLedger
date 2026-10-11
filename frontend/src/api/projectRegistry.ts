@@ -3,6 +3,17 @@ import request from '@/utils/request'
 export interface ProjectRegistry {
   id?: number
   app_name: string
+  /**
+   * The name the dependency database knows this application as, when that differs
+   * from app_name. Empty means the application name is used.
+   */
+  app_alias?: string | null
+  /**
+   * What this registration is: `application` for a repository whose releases the
+   * dependency database holds, `package` for one that is only a dependency of
+   * another. The pages that read an application's releases offer the first alone.
+   */
+  registry_kind?: string
   project_key: string
   repository_slug: string
   git_provider?: string
@@ -66,10 +77,14 @@ export const projectRegistryApi = {
     projectKey: string,
     repositorySlug: string,
     description?: string,
-    gitProvider?: string
+    gitProvider?: string,
+    appAlias?: string,
+    registryKind?: string
   ): Promise<{
     message: string
     app_name: string
+    app_alias?: string | null
+    registry_kind?: string
     project_key: string
     repository_slug: string
     git_provider?: string
@@ -82,6 +97,65 @@ export const projectRegistryApi = {
         repository_slug: repositorySlug,
         ...(description && { description }),
         ...(gitProvider && { git_provider: gitProvider }),
+        ...(appAlias && { app_alias: appAlias }),
+        ...(registryKind && { registry_kind: registryKind }),
+      },
+    })
+  },
+
+  /**
+   * Say whether a registration is an application or a package, or say nothing.
+   *
+   * This is what takes a repository out of the Release Dependency Graph and App
+   * Diff pickers - which read an application's releases, and so leave out what is
+   * marked as a package - and what puts it back. A null leaves it unclassified,
+   * which is the behaviour nobody has classified gets.
+   */
+  async updateRegistryKind(
+    projectKey: string,
+    repositorySlug: string,
+    registryKind: 'application' | 'package' | null
+  ): Promise<{
+    message: string
+    project_key: string
+    repository_slug: string
+    app_name: string
+    registry_kind: string | null
+  }> {
+    return request.put('/admin/registry/kind', null, {
+      params: {
+        project_key: projectKey,
+        repository_slug: repositorySlug,
+        // an explicit empty value takes the mark back, so it is sent rather than left out
+        registry_kind: registryKind ?? '',
+      },
+    })
+  },
+
+  /**
+   * Set or clear the dependency database name of one repository.
+   *
+   * Only the Releases pages ask the dependency database, and they ask it for this
+   * name; an empty value puts the application name back in use.
+   */
+  async updateAppAlias(
+    projectKey: string,
+    repositorySlug: string,
+    appAlias: string | null
+  ): Promise<{
+    message: string
+    project_key: string
+    repository_slug: string
+    app_name: string
+    app_alias: string | null
+    dependency_app_name: string
+  }> {
+    return request.put('/admin/registry/app-alias', null, {
+      params: {
+        project_key: projectKey,
+        repository_slug: repositorySlug,
+        // an explicit empty value clears it, so it is sent rather than left out
+        app_alias: appAlias ?? '',
       },
     })
   },
