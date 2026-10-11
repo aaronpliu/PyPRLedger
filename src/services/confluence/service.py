@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 from src.core.config import settings
 from src.core.database import get_session_maker
-from src.models.release_note import ReleaseNote
+from src.models.release_note import ReleaseNote, ReleaseNoteStatus
 from src.services.confluence.client import (
     MAX_ERROR_LENGTH,
     ConfluenceClient,
@@ -68,7 +68,7 @@ def is_auto_sync_enabled() -> bool:
     retry is not gated by the switch - it is how a release is synced while the
     automatic path is off.
     """
-    return settings.CONFLUENCE_SYNC_ENABLED and has_credentials()
+    return settings.CONFLUENCE_SERVER_SYNC_ENABLED and has_credentials()
 
 
 def page_title(app_name: str, repository_slug: str, tag_name: str) -> str:
@@ -106,6 +106,15 @@ class ConfluenceSyncService:
             note = await session.get(ReleaseNote, note_id)
             if note is None:
                 return SyncOutcome(attempted=False, skipped=f"Release {note_id} not found")
+
+            # Only a published release goes out. The automatic path checks this
+            # before scheduling one at all; saying it here as well is what keeps a
+            # draft from reaching Confluence through any other caller.
+            if note.status != ReleaseNoteStatus.PUBLISHED:
+                return SyncOutcome(
+                    attempted=False,
+                    skipped=f"Release {note_id} is {note.status}, not published",
+                )
 
             return await self._sync(note, session)
 

@@ -709,7 +709,7 @@ def _confluence_settings_payload(
     return {
         "instance": {
             **confluence_instance_defaults(),
-            "base_url": (settings.CONFLUENCE_BASE_URL or "").rstrip("/"),
+            "base_url": (settings.CONFLUENCE_SERVER_BASE_URL or "").rstrip("/"),
             "has_credentials": has_confluence_credentials(),
         },
         "projects": config["projects"],

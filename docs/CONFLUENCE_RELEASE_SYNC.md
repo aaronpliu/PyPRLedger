@@ -36,7 +36,7 @@ Confluence answers, so a failure is recorded on the release rather than raised.
 
 | | |
 |---|---|
-| Confluence | Server or Data Center. The client speaks the v1 content API, and personal access tokens are a Server/Data Center feature |
+| Confluence | **Server or Data Center** — which is what the `SERVER` in every setting name refers to. The client speaks the v1 content API, and personal access tokens are a Server/Data Center feature |
 | Credential | A Personal Access Token (7.9+), or a username and password |
 | Rights | An account that may create and update pages in every space that releases are published to |
 | Database | Migrations run: the release row carries the Confluence columns from migration `034` |
@@ -45,26 +45,29 @@ Confluence answers, so a failure is recorded on the release rather than raised.
 
 ## 1. Credentials, and the instance defaults
 
-Set in `.env` (see `.env.example`):
+Set in `.env` (see `.env.example`). The names carry the edition, as the Bitbucket
+ones do: everything here is `CONFLUENCE_SERVER_*`, because the client speaks the
+Server/Data Center API. A Cloud edition would be a `CONFLUENCE_CLOUD_*` sibling of
+these rather than a rename of them.
 
 | Variable | Default | What it does |
 |---|---|---|
-| `CONFLUENCE_BASE_URL` | *(unset)* | The instance, e.g. `https://confluence.example.com`. Without it nothing is attempted |
-| `CONFLUENCE_TOKEN` | *(unset)* | A personal access token, sent as a Bearer token. Takes precedence over the pair below |
-| `CONFLUENCE_USERNAME` / `CONFLUENCE_PASSWORD` | *(unset)* | Basic authentication, for instances without tokens |
-| `CONFLUENCE_SPACE_KEY` | *(unset)* | The **fallback** space: what a repository that names none of its own publishes to |
-| `CONFLUENCE_PARENT_PAGE_ID` | *(unset)* | The **fallback** parent page. Without one, pages are created at the root of the space |
-| `CONFLUENCE_SYNC_ENABLED` | `False` | Whether publishing writes to Confluence by itself |
-| `CONFLUENCE_VERIFY_SSL` | `True` | Turn off for an instance behind an internal CA |
-| `CONFLUENCE_TIMEOUT_SECONDS` | `15` | Timeout for a single Confluence request |
+| `CONFLUENCE_SERVER_BASE_URL` | *(unset)* | The instance, e.g. `https://confluence.example.com`. Without it nothing is attempted |
+| `CONFLUENCE_SERVER_TOKEN` | *(unset)* | A personal access token, sent as a Bearer token. Takes precedence over the pair below |
+| `CONFLUENCE_SERVER_USERNAME` / `CONFLUENCE_SERVER_PASSWORD` | *(unset)* | Basic authentication, for instances without tokens |
+| `CONFLUENCE_SERVER_SPACE_KEY` | *(unset)* | The **fallback** space: what a repository that names none of its own publishes to |
+| `CONFLUENCE_SERVER_PARENT_PAGE_ID` | *(unset)* | The **fallback** parent page. Without one, pages are created at the root of the space |
+| `CONFLUENCE_SERVER_SYNC_ENABLED` | `False` | Whether publishing writes to Confluence by itself |
+| `CONFLUENCE_SERVER_VERIFY_SSL` | `True` | Turn off for an instance behind an internal CA |
+| `CONFLUENCE_SERVER_TIMEOUT_SECONDS` | `15` | Timeout for a single Confluence request |
 
 **What is set here is the instance default, not the whole configuration.** Where a
 release actually goes is decided per repository — see the next section — and what
 is set above is what every repository that names nothing of its own falls back to.
-So `CONFLUENCE_SPACE_KEY` may legitimately stay empty: a repository whose space is
+So `CONFLUENCE_SERVER_SPACE_KEY` may legitimately stay empty: a repository whose space is
 set on its project needs nothing at this level.
 
-`CONFLUENCE_SYNC_ENABLED` is the master switch for the **automatic** path. While it
+`CONFLUENCE_SERVER_SYNC_ENABLED` is the master switch for the **automatic** path. While it
 is off, publishing does not schedule a sync at all; the manual sync on the release
 page still works, as long as the credentials above are set.
 
@@ -132,17 +135,40 @@ environment and are never stored there.
 
 ---
 
-## 3. Publishing
+## 3. What triggers a sync
 
-- **Automatic.** With the instance switch on, publishing schedules a sync that runs
-  after the response, so the release is never delayed by Confluence. The publish
-  form offers **"Write to Confluence as well"**, shown only where the instance is
-  configured; clearing it publishes without syncing (the API field is
-  `sync_to_confluence`). Drafts are never synced.
-- **Manual.** A published release has a **"Sync to Confluence"** action (requires
-  `manage` on `release_note`). It works while the automatic path is off, which is
-  how a release is synced during an outage that has been switched around.
-- A repository switched off is skipped by both, with the reason reported back.
+| Action | Syncs? |
+|---|---|
+| **Publishing a release** — `POST /release/notes`, or publishing a draft by updating it | Yes, when the integration is configured, the switch is on, the repository is not switched off, and the release ends up published |
+| **Editing a published release** — `PUT /release/notes/{id}`, any of title, notes, previous version, pre-release flag | Yes: the page is updated with what the release now says |
+| **Writing a draft** — created as `draft`, or an edit that leaves it one | No. Publishing is what puts a release in front of people |
+| **Importing releases** — `POST /release/notes/import` | **No.** An import brings in a repository's history at once, and writing all of it to Confluence is not what an import is for. Each imported release is synced by hand when it is wanted |
+| **Pushing to the git provider** — `POST /release/notes/{id}/push` | No: it writes to the provider, not to the release's state |
+| **Changing a target** — space, parent page or switch, in System settings | No. What is already written stays where it is; the change applies to what is written from then on |
+| **The manual action** — release page → **Sync to Confluence** | Yes, always: see below |
+
+The automatic path runs as a background task after the response, so a release is
+never delayed by Confluence, and a failure is recorded on the release rather than
+raised. Both automatic checkboxes are the `sync_to_confluence` field on the
+request and default to `true`; the publish form offers it as **"Write to
+Confluence as well"**, shown only where the instance is configured.
+
+### The manual sync
+
+`POST /api/v1/release/notes/{id}/confluence-sync`, offered on the release row as
+**Sync to Confluence** (requires `manage` on `release_note`). It is not a second
+copy of the automatic path: it is the answer to the cases that path cannot cover.
+
+- the automatic path is off (`CONFLUENCE_SERVER_SYNC_ENABLED=False`), or was off when the
+  release was published;
+- the release failed, and the cause has been fixed — the retry is also what clears
+  the recorded failure;
+- the release was published before its repository had a space configured, or before
+  the integration existed at all;
+- the release was **imported**, which never syncs by itself.
+
+There is **no bulk sync**: releases that were never written are synced one at a
+time. A draft is refused with `409` — only a published release is written.
 
 ---
 
@@ -180,7 +206,7 @@ Recorded on the release itself:
 | Endpoint | Permission | Purpose |
 |---|---|---|
 | `GET /api/v1/release/notes/confluence` | `read` on `release_note` | `{configured, auto_sync}` — whether the controls are offered at all |
-| `POST /api/v1/release/notes/{id}/confluence-sync` | `manage` on `release_note` | Sync one release; answers `{synced, page_url, message}` |
+| `POST /api/v1/release/notes/{id}/confluence-sync` | `manage` on `release_note` | Sync one release; answers `{synced, page_url, message}`, or `409` for a draft |
 | `GET /api/v1/rbac/settings/confluence` | `manage` on `settings` | The configuration, the instance defaults, and what each repository resolves to |
 | `PUT /api/v1/rbac/settings/confluence` | `manage` on `settings` | Replace `{projects: [...], repositories: [...]}` wholesale |
 
@@ -193,14 +219,14 @@ or as the answer to a manual sync.
 
 | Message | What it means | What to do |
 |---|---|---|
-| `Not synced: Confluence is not configured` | `CONFLUENCE_BASE_URL` or the credentials are unset | Set them and restart the backend |
+| `Not synced: Confluence is not configured` | `CONFLUENCE_SERVER_BASE_URL` or the credentials are unset | Set them and restart the backend |
 | `No Confluence space is configured for PROJ/repo` | No space at any of the three levels for that repository | Set one on the repository, on its project, or in the environment |
-| `Not synced: sync is switched off for PROJ/repo` | The resolved switch is off: an explicit off on the repository or its project, or the instance switch with nothing overriding it | Turn that repository back on in the Confluence card, or set `CONFLUENCE_SYNC_ENABLED=True` |
+| `Not synced: sync is switched off for PROJ/repo` | The resolved switch is off: an explicit off on the repository or its project, or the instance switch with nothing overriding it | Turn that repository back on in the Confluence card, or set `CONFLUENCE_SERVER_SYNC_ENABLED=True` |
 | `Confluence returned 401: ...` / `403: ...` | The credential is rejected, or that account may not write to the space | Check the token, and the account's rights in the space |
 | `Confluence returned 404: ...` | A space key that does not exist, or a parent page that is gone or not visible to that account | Check the space and parent page for that repository |
 | `Confluence returned 400: ...` | Confluence refused the payload — most often a parent page in another space, which is not a place a page can be created | Check the parent page id of that repository, and that it belongs to the same space |
-| `Confluence could not be reached: ...` | Network, DNS, or TLS | For an internal CA, set `CONFLUENCE_VERIFY_SSL=False` |
-| `Confluence returned a body that is not JSON` | Something answered instead of the API — a proxy or a login page | Check `CONFLUENCE_BASE_URL`: it is the instance, without a path |
+| `Confluence could not be reached: ...` | Network, DNS, or TLS | For an internal CA, set `CONFLUENCE_SERVER_VERIFY_SSL=False` |
+| `Confluence returned a body that is not JSON` | Something answered instead of the API — a proxy or a login page | Check `CONFLUENCE_SERVER_BASE_URL`: it is the instance, without a path |
 | A second page appeared | The release was re-imported (so the recorded page id was gone) **and** its title or space had changed, so the lookup found nothing | Look for the older page by title and delete it there; nothing in this integration deletes pages |
 
 A sync never fails a release: the release is published either way, and the failure
@@ -209,6 +235,37 @@ waits on the release row for a retry.
 ---
 
 ## Verifying an installation
+
+### With no instance to point at
+
+`scripts/mock_confluence_api.py` serves the four calls the sync makes, so the whole
+path can be exercised without a Confluence to hand:
+
+```bash
+uv run python scripts/mock_confluence_api.py --port 8099 --parent-id 123456
+```
+
+```
+CONFLUENCE_SERVER_BASE_URL=http://127.0.0.1:8099
+CONFLUENCE_SERVER_TOKEN=mock-token
+CONFLUENCE_SERVER_SYNC_ENABLED=True
+```
+
+Publish a release, or sync one by hand, and watch it arrive: every request is
+logged as it is served, and http://127.0.0.1:8099/ lists the pages written so far
+with their space, title, parent page and version. That page is also the quickest
+way to see that a second sync updated the first page rather than adding another.
+
+It refuses the three mistakes worth catching, as an instance would:
+
+- no credential → `401`, so the token is part of what is under test;
+- a parent page id it was not told about → `400` (start it with `--parent-id <id>`
+  to stand in for a page that exists);
+- an update that does not move the version on → `409`.
+
+Pages live in memory only, so restarting it forgets them.
+
+### Against a real instance
 
 1. `GET /api/v1/release/notes/confluence` answers `{"configured": true, ...}`.
    `configured` is about the base URL and the credentials; it says nothing about a
@@ -220,3 +277,7 @@ waits on the release row for a retry.
 4. Sync one release from the release row and confirm **View on Confluence** appears,
    then open the page: it should sit under the parent page of that repository, with
    the notes as the release page shows them.
+
+Working without a target for a repository that needs one is reported on the release
+row (`No Confluence space is configured for PROJ/repo`), which is how a missing
+target is noticed in the first place.

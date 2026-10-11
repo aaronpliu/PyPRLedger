@@ -44,9 +44,9 @@ TARGETS_URL = "/api/v1/rbac/settings/confluence"
 @pytest.fixture
 def instance_defaults_set(monkeypatch):
     """An instance whose environment supplies all three defaults."""
-    monkeypatch.setattr(settings, "CONFLUENCE_SPACE_KEY", "DOC")
-    monkeypatch.setattr(settings, "CONFLUENCE_PARENT_PAGE_ID", "100")
-    monkeypatch.setattr(settings, "CONFLUENCE_SYNC_ENABLED", True)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SPACE_KEY", "DOC")
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_PARENT_PAGE_ID", "100")
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SYNC_ENABLED", True)
 
 
 # --------------------------------------------------------------------------- #
@@ -150,8 +150,8 @@ def test_one_repository_being_off_leaves_its_neighbours_alone(instance_defaults_
 
 
 def test_a_repository_can_switch_the_sync_on_where_the_instance_is_off(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "CONFLUENCE_SYNC_ENABLED", False)
-    monkeypatch.setattr(settings, "CONFLUENCE_SPACE_KEY", "DOC")
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SYNC_ENABLED", False)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SPACE_KEY", "DOC")
     config = normalize_targets(
         {"repositories": [{"project_key": "PROJ", "repository_slug": "my-repo", "enabled": True}]}
     )
@@ -161,9 +161,9 @@ def test_a_repository_can_switch_the_sync_on_where_the_instance_is_off(monkeypat
 
 def test_a_repository_with_no_space_anywhere_has_none(monkeypatch) -> None:
     """The instance may have no space of its own: the space is asked of the tiers."""
-    monkeypatch.setattr(settings, "CONFLUENCE_SYNC_ENABLED", True)
-    monkeypatch.setattr(settings, "CONFLUENCE_SPACE_KEY", None)
-    monkeypatch.setattr(settings, "CONFLUENCE_PARENT_PAGE_ID", None)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SYNC_ENABLED", True)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SPACE_KEY", None)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_PARENT_PAGE_ID", None)
 
     resolution = resolve(empty_targets(), "PROJ", "my-repo")
 

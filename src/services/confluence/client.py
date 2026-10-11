@@ -63,21 +63,23 @@ def has_credentials() -> bool:
     Nothing here is required by the application: with these unset, no code path
     reaches Confluence and releasing behaves exactly as it did.
     """
-    if not settings.CONFLUENCE_BASE_URL:
+    if not settings.CONFLUENCE_SERVER_BASE_URL:
         return False
 
     return bool(
-        settings.CONFLUENCE_TOKEN or (settings.CONFLUENCE_USERNAME and settings.CONFLUENCE_PASSWORD)
+        settings.CONFLUENCE_SERVER_TOKEN
+        or (settings.CONFLUENCE_SERVER_USERNAME and settings.CONFLUENCE_SERVER_PASSWORD)
     )
 
 
 def auth_header() -> dict[str, str]:
     """The credential, as a Bearer token when there is one and Basic otherwise."""
-    if settings.CONFLUENCE_TOKEN:
-        return {"Authorization": f"Bearer {settings.CONFLUENCE_TOKEN}"}
+    if settings.CONFLUENCE_SERVER_TOKEN:
+        return {"Authorization": f"Bearer {settings.CONFLUENCE_SERVER_TOKEN}"}
 
-    pair = f"{settings.CONFLUENCE_USERNAME or ''}:{settings.CONFLUENCE_PASSWORD or ''}"
-    encoded = base64.b64encode(pair.encode()).decode()
+    user = settings.CONFLUENCE_SERVER_USERNAME or ""
+    password = settings.CONFLUENCE_SERVER_PASSWORD or ""
+    encoded = base64.b64encode(f"{user}:{password}".encode()).decode()
 
     return {"Authorization": f"Basic {encoded}"}
 
@@ -91,7 +93,7 @@ class ConfluenceClient:
         # The space is not held here: it is resolved per repository and passed to
         # each call, so one client serves every project of the instance.
         self._transport = transport
-        self._base_url = (settings.CONFLUENCE_BASE_URL or "").rstrip("/")
+        self._base_url = (settings.CONFLUENCE_SERVER_BASE_URL or "").rstrip("/")
 
     async def find_page(self, title: str, space_key: str) -> ConfluencePage | None:
         """The page with this title in the space, or None when there is none.
@@ -175,8 +177,8 @@ class ConfluenceClient:
 
         try:
             async with httpx.AsyncClient(
-                verify=settings.CONFLUENCE_VERIFY_SSL,
-                timeout=settings.CONFLUENCE_TIMEOUT_SECONDS,
+                verify=settings.CONFLUENCE_SERVER_VERIFY_SSL,
+                timeout=settings.CONFLUENCE_SERVER_TIMEOUT_SECONDS,
                 transport=self._transport,
             ) as client:
                 response = await client.request(method, url, headers=headers, **kwargs)

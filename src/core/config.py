@@ -299,51 +299,56 @@ class Settings(BaseSettings):
     # Confluence, so the release flow behaves exactly as it did before. The
     # enabled flag is a second gate, so the sync can be switched off without
     # clearing the credentials.
-    CONFLUENCE_BASE_URL: str | None = Field(
+    #
+    # The names carry the edition, as the Bitbucket ones do: this client speaks the
+    # Server/Data Center API, so everything it reads is CONFLUENCE_SERVER_*. A Cloud
+    # edition would be a CONFLUENCE_CLOUD_* sibling of these rather than a change
+    # to them.
+    CONFLUENCE_SERVER_BASE_URL: str | None = Field(
         default=None,
         description="Confluence Server/Data Center base URL (e.g., https://confluence.example.com)",
     )
-    CONFLUENCE_TOKEN: str | None = Field(
+    CONFLUENCE_SERVER_TOKEN: str | None = Field(
         default=None,
         description=(
             "Confluence Server/Data Center Personal Access Token (7.9+). When set it is "
-            "preferred over CONFLUENCE_USERNAME/CONFLUENCE_PASSWORD and sent as a Bearer "
-            "token. PATs exist on Server/Data Center only, not on Cloud."
+            "preferred over CONFLUENCE_SERVER_USERNAME/CONFLUENCE_SERVER_PASSWORD and sent "
+            "as a Bearer token. PATs exist on Server/Data Center only, not on Cloud."
         ),
     )
-    CONFLUENCE_USERNAME: str | None = Field(
+    CONFLUENCE_SERVER_USERNAME: str | None = Field(
         default=None,
         description="Confluence Server/Data Center username for Basic authentication",
     )
-    CONFLUENCE_PASSWORD: str | None = Field(
+    CONFLUENCE_SERVER_PASSWORD: str | None = Field(
         default=None,
         description="Confluence Server/Data Center password for Basic authentication",
     )
-    CONFLUENCE_SPACE_KEY: str | None = Field(
+    CONFLUENCE_SERVER_SPACE_KEY: str | None = Field(
         default=None, description="Space key the release pages are written to"
     )
-    CONFLUENCE_PARENT_PAGE_ID: str | None = Field(
+    CONFLUENCE_SERVER_PARENT_PAGE_ID: str | None = Field(
         default=None,
         description=(
             "Optional id of the page the release pages are created under. Without it "
             "they are created at the root of the space."
         ),
     )
-    CONFLUENCE_SYNC_ENABLED: bool = Field(
+    CONFLUENCE_SERVER_SYNC_ENABLED: bool = Field(
         default=False,
         description=(
             "Whether publishing a release also writes it to Confluence. Off by default: "
             "the release flow must not depend on a third party system being reachable."
         ),
     )
-    CONFLUENCE_VERIFY_SSL: bool = Field(
+    CONFLUENCE_SERVER_VERIFY_SSL: bool = Field(
         default=True,
         description=(
             "Whether to verify the Confluence TLS certificate. Enterprise instances "
             "often sit behind an internal CA, which is why this can be turned off."
         ),
     )
-    CONFLUENCE_TIMEOUT_SECONDS: float = Field(
+    CONFLUENCE_SERVER_TIMEOUT_SECONDS: float = Field(
         default=15.0, description="Timeout for a single Confluence request"
     )
 

@@ -310,12 +310,12 @@ def resolve(
     repository = _repository_entry(config, project_key, repository_slug)
 
     space_key, space_source = _field(
-        repository, project, "space_key", settings.CONFLUENCE_SPACE_KEY or ""
+        repository, project, "space_key", settings.CONFLUENCE_SERVER_SPACE_KEY or ""
     )
     parent_page_id, parent_source = _field(
-        repository, project, "parent_page_id", settings.CONFLUENCE_PARENT_PAGE_ID or ""
+        repository, project, "parent_page_id", settings.CONFLUENCE_SERVER_PARENT_PAGE_ID or ""
     )
-    enabled, enabled_source = _flag(repository, project, settings.CONFLUENCE_SYNC_ENABLED)
+    enabled, enabled_source = _flag(repository, project, settings.CONFLUENCE_SERVER_SYNC_ENABLED)
 
     return Resolution(
         space_key=space_key,
@@ -332,9 +332,9 @@ def resolve(
 def instance_defaults() -> dict[str, Any]:
     """The instance-wide target, which is what an unconfigured repository gets."""
     return {
-        "space_key": settings.CONFLUENCE_SPACE_KEY or "",
-        "parent_page_id": settings.CONFLUENCE_PARENT_PAGE_ID or "",
-        "enabled": bool(settings.CONFLUENCE_SYNC_ENABLED),
+        "space_key": settings.CONFLUENCE_SERVER_SPACE_KEY or "",
+        "parent_page_id": settings.CONFLUENCE_SERVER_PARENT_PAGE_ID or "",
+        "enabled": bool(settings.CONFLUENCE_SERVER_SYNC_ENABLED),
     }
 
 

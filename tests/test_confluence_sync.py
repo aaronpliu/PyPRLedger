@@ -144,11 +144,27 @@ class SharedSession:
 @pytest.fixture
 def confluence_settings(monkeypatch):
     """A configured and switched-on integration, undone with the test."""
-    monkeypatch.setattr(settings, "CONFLUENCE_BASE_URL", BASE_URL)
-    monkeypatch.setattr(settings, "CONFLUENCE_SPACE_KEY", SPACE_KEY)
-    monkeypatch.setattr(settings, "CONFLUENCE_TOKEN", "pat_test")
-    monkeypatch.setattr(settings, "CONFLUENCE_SYNC_ENABLED", True)
-    monkeypatch.setattr(settings, "CONFLUENCE_PARENT_PAGE_ID", None)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_BASE_URL", BASE_URL)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SPACE_KEY", SPACE_KEY)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_TOKEN", "pat_test")
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SYNC_ENABLED", True)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_PARENT_PAGE_ID", None)
+
+
+@pytest.fixture
+def unconfigured_confluence(monkeypatch):
+    """The integration off, whatever the environment the tests run in holds.
+
+    `.env` is read into `settings` when the module is imported, so a machine that
+    has Confluence configured would otherwise decide tests that are about an
+    instance without it: what they assert is what nothing set looks like, so
+    nothing is set here.
+    """
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_BASE_URL", None)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_TOKEN", None)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_USERNAME", None)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_PASSWORD", None)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SYNC_ENABLED", False)
 
 
 def build_sync(fake: FakeConfluence, db_session) -> ConfluenceSyncService:
@@ -201,15 +217,15 @@ def test_the_switch_gates_the_automatic_sync_only(confluence_settings, monkeypat
 
     # Switched off: configured, so a manual retry is still possible, but
     # publishing stops writing to Confluence by itself.
-    monkeypatch.setattr(settings, "CONFLUENCE_SYNC_ENABLED", False)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SYNC_ENABLED", False)
     assert has_credentials() is True
     assert is_auto_sync_enabled() is False
 
 
 def test_an_unset_base_url_leaves_the_integration_unconfigured(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "CONFLUENCE_BASE_URL", None)
-    monkeypatch.setattr(settings, "CONFLUENCE_TOKEN", "pat_test")
-    monkeypatch.setattr(settings, "CONFLUENCE_SPACE_KEY", SPACE_KEY)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_BASE_URL", None)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_TOKEN", "pat_test")
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SPACE_KEY", SPACE_KEY)
 
     assert has_credentials() is False
     assert is_auto_sync_enabled() is False
@@ -217,7 +233,7 @@ def test_an_unset_base_url_leaves_the_integration_unconfigured(monkeypatch) -> N
 
 def test_a_space_is_no_longer_part_of_being_ready(confluence_settings, monkeypatch) -> None:
     """Whether there is a space is asked of each repository, not of the instance."""
-    monkeypatch.setattr(settings, "CONFLUENCE_SPACE_KEY", None)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SPACE_KEY", None)
 
     assert has_credentials() is True
     assert is_auto_sync_enabled() is True
@@ -236,7 +252,9 @@ def test_a_title_identifies_the_release_on_its_own() -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def test_an_unconfigured_instance_contacts_nothing(db_session) -> None:
+async def test_an_unconfigured_instance_contacts_nothing(
+    db_session, unconfigured_confluence
+) -> None:
     fake = FakeConfluence()
     outcome = await build_sync(fake, db_session).sync_note(1)
 
@@ -470,7 +488,7 @@ async def test_a_repository_with_no_space_anywhere_is_recorded_as_a_failure(
     db_session, confluence_settings, monkeypatch
 ) -> None:
     """Nothing is attempted, and the release says why rather than looking untouched."""
-    monkeypatch.setattr(settings, "CONFLUENCE_SPACE_KEY", None)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SPACE_KEY", None)
     fake = FakeConfluence()
     note = await make_note(db_session)
 
@@ -536,6 +554,19 @@ async def test_an_update_keeps_the_space_the_page_is_already_in(
     assert fake.calls("POST") == []
 
 
+async def test_a_draft_is_not_written_anywhere(db_session, confluence_settings) -> None:
+    """Confluence is read by other people; publishing is what puts a release there."""
+    fake = FakeConfluence()
+    note = await make_note(db_session, status=ReleaseNoteStatus.DRAFT)
+
+    outcome = await build_sync(fake, db_session).sync_note(note.id)
+
+    assert outcome.attempted is False
+    assert "not published" in (outcome.skipped or "")
+    assert note.confluence_page_id is None
+    assert fake.requests == []
+
+
 # --------------------------------------------------------------------------- #
 # Endpoints
 # --------------------------------------------------------------------------- #
@@ -587,7 +618,7 @@ async def test_the_page_is_told_whether_a_sync_is_possible(
 
 
 async def test_the_page_is_told_when_the_integration_is_absent(
-    async_client, authenticated_client
+    async_client, authenticated_client, unconfigured_confluence
 ) -> None:
     response = await async_client.get("/api/v1/release/notes/confluence")
 
@@ -638,6 +669,18 @@ async def test_the_manual_sync_says_so_when_it_did_nothing(
     assert response.json()["message"] == "Not synced: Confluence is not configured"
 
 
+async def test_the_manual_sync_refuses_a_draft(
+    async_client, authenticated_client, db_session
+) -> None:
+    """Asking for a draft to be published to Confluence is answered, not obeyed."""
+    note = await make_note(db_session, status=ReleaseNoteStatus.DRAFT)
+
+    response = await async_client.post(f"/api/v1/release/notes/{note.id}/confluence-sync")
+
+    assert response.status_code == 409
+    assert "only a published release" in response.json()["detail"]["message"]
+
+
 async def test_the_manual_sync_needs_manage_permission(
     async_client, authenticated_client, db_session
 ) -> None:
@@ -658,7 +701,7 @@ async def test_the_manual_sync_reports_a_release_that_is_not_there(
 
 
 async def test_publishing_does_not_touch_confluence_when_it_is_off(
-    async_client, authenticated_client, monkeypatch
+    async_client, authenticated_client, unconfigured_confluence, monkeypatch
 ) -> None:
     """The integration is absent: nothing is scheduled, and calls are unchanged."""
     scheduled: list[int] = []

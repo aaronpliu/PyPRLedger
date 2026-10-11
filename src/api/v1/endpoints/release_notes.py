@@ -587,7 +587,8 @@ async def push_release_note(
         "Sync one release by hand, whether or not publishing syncs by itself. The "
         "page is updated where it exists and created where it does not, so asking "
         "twice does not leave two. Failing to reach Confluence is reported in the "
-        "response rather than raised: the release is unaffected either way."
+        "response rather than raised: the release is unaffected either way. Only a "
+        "published release is written - a draft is refused with 409."
     ),
 )
 async def sync_release_note_now(
@@ -605,6 +606,21 @@ async def sync_release_note_now(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "NOT_FOUND", "message": f"Release {note_id} not found"},
+        )
+
+    # Confluence is somewhere other people read, and publishing is what puts a
+    # release in front of them - so a draft is refused here rather than written.
+    # The release page only offers the action for a published release either way.
+    if note.status != ReleaseNoteStatus.PUBLISHED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": "CONFLICT",
+                "message": (
+                    f"Release {note_id} is {note.status}: only a published release is "
+                    "written to Confluence"
+                ),
+            },
         )
 
     # The sync writes on a session of its own, so what happened is what it returns
