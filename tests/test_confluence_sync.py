@@ -804,3 +804,94 @@ async def test_the_request_can_decline_the_sync(
 
     assert response.status_code == 201
     assert scheduled == []
+
+
+# --------------------------------------------------------------------------- #
+# What an update is worth writing
+# --------------------------------------------------------------------------- #
+
+
+def record_scheduled(monkeypatch) -> list[int]:
+    """Collect the release ids the endpoint hands to the background task."""
+    scheduled: list[int] = []
+
+    async def _record(note_id: int) -> None:
+        scheduled.append(note_id)
+
+    monkeypatch.setattr(
+        "src.api.v1.endpoints.release_notes.sync_release_note_to_confluence", _record
+    )
+
+    return scheduled
+
+
+async def test_editing_the_notes_writes_the_page_again(
+    async_client, authenticated_client, db_session, confluence_settings, monkeypatch
+) -> None:
+    scheduled = record_scheduled(monkeypatch)
+    note = await make_note(db_session)
+
+    response = await async_client.put(
+        f"/api/v1/release/notes/{note.id}",
+        json={"body": "# Notes\n\nFixed another thing."},
+    )
+
+    assert response.status_code == 200
+    assert scheduled == [note.id]
+
+
+async def test_saving_a_published_release_unchanged_writes_nothing(
+    async_client, authenticated_client, db_session, confluence_settings, monkeypatch
+) -> None:
+    """The form is saved whole, so most saves carry the notes as they already are.
+
+    Writing those again would only add a version to a page that says what it
+    already says - and the version the release compares to, or whether it is a
+    pre-release, are not on the page at all.
+    """
+    scheduled = record_scheduled(monkeypatch)
+    note = await make_note(db_session)
+
+    response = await async_client.put(
+        f"/api/v1/release/notes/{note.id}",
+        json={
+            "name": note.name,
+            "body": note.body,
+            "previous_tag": "v0.9.0",
+            "is_prerelease": True,
+            "status": "published",
+        },
+    )
+
+    assert response.status_code == 200
+    assert scheduled == []
+
+
+async def test_renaming_a_release_writes_nothing(
+    async_client, authenticated_client, db_session, confluence_settings, monkeypatch
+) -> None:
+    """The release's name is this application's title; the page is titled by its tag."""
+    scheduled = record_scheduled(monkeypatch)
+    note = await make_note(db_session)
+
+    response = await async_client.put(
+        f"/api/v1/release/notes/{note.id}", json={"name": "A better title"}
+    )
+
+    assert response.status_code == 200
+    assert scheduled == []
+
+
+async def test_publishing_a_draft_writes_its_first_page(
+    async_client, authenticated_client, db_session, confluence_settings, monkeypatch
+) -> None:
+    """A release with no page is a change in itself, notes or no notes."""
+    scheduled = record_scheduled(monkeypatch)
+    note = await make_note(db_session, status=ReleaseNoteStatus.DRAFT)
+
+    response = await async_client.put(
+        f"/api/v1/release/notes/{note.id}", json={"status": "published"}
+    )
+
+    assert response.status_code == 200
+    assert scheduled == [note.id]

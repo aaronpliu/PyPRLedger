@@ -140,12 +140,12 @@ environment and are never stored there.
 | Action | Syncs? |
 |---|---|
 | **Publishing a release** — `POST /release/notes`, or publishing a draft by updating it | Yes, when the integration is configured, the switch is on, the repository is not switched off, and the release ends up published |
-| **Editing a published release** — `PUT /release/notes/{id}`, any of title, notes, previous version, pre-release flag | Yes: the page is updated with what the release now says |
+| **Editing a published release** — `PUT /release/notes/{id}` | Yes, when the **notes** change: the page is written again with what the release now says. A save that leaves them as they are writes nothing, and so adds no version — the release's name, its pre-release flag and the version it compares to are not on the page |
 | **Writing a draft** — created as `draft`, or an edit that leaves it one | No. Publishing is what puts a release in front of people |
 | **Importing releases** — `POST /release/notes/import` | **No.** An import brings in a repository's history at once, and writing all of it to Confluence is not what an import is for. Each imported release is synced by hand when it is wanted |
 | **Pushing to the git provider** — `POST /release/notes/{id}/push` | No: it writes to the provider, not to the release's state |
 | **Changing a target** — space, parent page or switch, in System settings | No. What is already written stays where it is; the change applies to what is written from then on |
-| **The manual action** — release page → **Sync to Confluence** | Yes, always: see below |
+| **The manual action** — **Sync to Confluence** on the release, or in its ⋮ menu | Yes, always: see below |
 
 The automatic path runs as a background task after the response, so a release is
 never delayed by Confluence, and a failure is recorded on the release rather than
@@ -155,12 +155,23 @@ Confluence as well"**, shown only where the instance is configured.
 
 ### The manual sync
 
-`POST /api/v1/release/notes/{id}/confluence-sync`, offered on the release row as
-**Sync to Confluence** (requires `manage` on `release_note`). It is not a second
-copy of the automatic path: it is the answer to the cases that path cannot cover.
+`POST /api/v1/release/notes/{id}/confluence-sync` (requires `manage` on
+`release_note`), reached from the release itself. Where the release is decides which
+control offers it:
+
+- a release that is **not on a page yet** offers **Sync to Confluence** beside it;
+- a release that **is on one** offers it in the ⋮ menu instead, where it reads
+  **Retry sync to Confluence** after a failed attempt. The page link takes the place
+  the control had, and the menu is what remains of it — which is how a release whose
+  page exists is written again.
+
+It is not a second copy of the automatic path: it is the answer to the cases that
+path cannot cover.
 
 - the automatic path is off (`CONFLUENCE_SERVER_SYNC_ENABLED=False`), or was off when the
-  release was published;
+  release was published. With a page already written, that menu item is the only way
+  to write it again from the interface — a save would not reach Confluence either,
+  since the switch that schedules one is the same one;
 - the release failed, and the cause has been fixed — the retry is also what clears
   the recorded failure;
 - the release was published before its repository had a space configured, or before
@@ -188,7 +199,9 @@ On the release row:
 - **View on Confluence** — the page, once it exists.
 - **Confluence sync failed** — a badge with the reason on hover, so a failure is
   visible where the release is rather than only in a log.
-- **Sync to Confluence** — retry, which clears the recorded failure on success.
+- **Sync to Confluence** — beside the release while it has no page, and in its ⋮ menu
+  once it has one, where it reads **Retry sync to Confluence** after a failure. It
+  clears the recorded failure on success.
 
 Recorded on the release itself:
 

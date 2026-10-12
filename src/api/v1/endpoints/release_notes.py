@@ -28,6 +28,7 @@ manage them.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -168,6 +169,54 @@ def schedule_confluence_sync(background_tasks: BackgroundTasks, note: ReleaseNot
         return
 
     background_tasks.add_task(sync_release_note_to_confluence, note.id)
+
+
+@dataclass(frozen=True)
+class _PageState:
+    """What a Confluence page said before an update was applied.
+
+    A snapshot of the two fields that reach the page rather than the release
+    itself: the update mutates the row it loads, so a release read after it would
+    carry the new notes either way and every save would look like a change.
+    """
+
+    published: bool
+    content: tuple[str, str]
+
+
+def _page_content(note: ReleaseNote) -> tuple[str, str]:
+    """The parts of a release a Confluence page is made of.
+
+    Its notes, and the tag its title is built from. The rest of a release - its
+    name, whether it is a pre-release, the version it compares to - is not written
+    to the page at all, so a save that touches only those has nothing to write.
+    """
+    return (note.body or "", note.tag_name)
+
+
+def _page_state(note: ReleaseNote | None) -> _PageState:
+    """Take down what the page said, so an update can be compared against it."""
+    if note is None:
+        return _PageState(published=False, content=("", ""))
+
+    return _PageState(
+        published=note.status == ReleaseNoteStatus.PUBLISHED, content=_page_content(note)
+    )
+
+
+def page_needs_writing(before: _PageState, note: ReleaseNote) -> bool:
+    """Whether this update gives Confluence something to write.
+
+    A release that was not published before is a page that does not exist yet,
+    which is a change in itself - publishing a draft is how a page is first made.
+    After that, a save that leaves the notes and the tag as they were has nothing
+    to write, and scheduling one would only add a version to a page that already
+    says it.
+    """
+    if not before.published:
+        return True
+
+    return before.content != _page_content(note)
 
 
 @router.get(
@@ -480,6 +529,11 @@ async def update_release_note(
     """Update an existing release."""
     await ensure_permission(rbac_service, current_user, "manage")
 
+    # Taken down before the update rather than after it: the update mutates the row
+    # it loads, so what the page said has to be captured first to tell whether this
+    # save changes any of it.
+    before = _page_state(await service.get_note(note_id))
+
     note = await service.update_note(note_id, payload, author=current_user.username)
     if not note:
         raise HTTPException(
@@ -487,7 +541,9 @@ async def update_release_note(
             detail={"error": "NOT_FOUND", "message": f"Release {note_id} not found"},
         )
 
-    if payload.sync_to_confluence:
+    # A release that had no page gets one; a release that has one is written again
+    # only when something the page holds changed.
+    if payload.sync_to_confluence and page_needs_writing(before, note):
         schedule_confluence_sync(background_tasks, note)
 
     latest_id = await service.latest_published_id(

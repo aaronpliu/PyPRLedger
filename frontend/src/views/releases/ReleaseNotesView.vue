@@ -1774,7 +1774,7 @@ function startNewRelease(tag?: string) {
 }
 
 /** What one release's overflow menu can be asked to do. */
-type NoteCommand = 'provider' | 'edit' | 'publish' | 'push' | 'delete'
+type NoteCommand = 'provider' | 'sync' | 'edit' | 'publish' | 'push' | 'delete'
 
 interface NoteMenuItem {
   command: NoteCommand
@@ -1796,6 +1796,22 @@ function noteMenuItems(note: ReleaseNote): NoteMenuItem[] {
 
   if (note.external_url) {
     items.push({ command: 'provider', label: t('releaseNotes.view_on_provider') })
+  }
+  // Writing it again is only needed once a page exists: before that the control
+  // beside the release offers it, and that control gives way to the page link
+  // afterwards - which is when this becomes the only way back in.
+  if (
+    note.confluence_url &&
+    confluence.value.configured &&
+    canManage.value &&
+    note.status === 'published'
+  ) {
+    items.push({
+      command: 'sync',
+      label: note.confluence_sync_error
+        ? t('releaseNotes.sync_confluence_retry')
+        : t('releaseNotes.sync_to_confluence'),
+    })
   }
   if (canManage.value) {
     items.push({ command: 'edit', label: t('releaseNotes.edit_release') })
@@ -1828,6 +1844,9 @@ function handleNoteCommand(command: string, note: ReleaseNote) {
       if (note.external_url) {
         window.open(note.external_url, '_blank', 'noopener')
       }
+      break
+    case 'sync':
+      syncToConfluence(note)
       break
     case 'edit':
       editNote(note)

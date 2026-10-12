@@ -1208,6 +1208,7 @@
     "badge_confluence_failed": "Confluence 同步失败",
     "sync_confluence_ok": "已同步到 Confluence",
     "sync_confluence_failed": "同步到 Confluence 失败",
+    "sync_confluence_retry": "重试同步到 Confluence",
     "pushed_ok": "已发布到 GitHub：{url}",
     "pushed_ok_plain": "已发布到 GitHub",
     "push_failed": "发布到 GitHub 失败",

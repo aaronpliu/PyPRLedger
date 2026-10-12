@@ -2013,7 +2013,16 @@ describe('ReleaseNotesView export', () => {
       configured: false,
       auto_sync: false,
     })
+    // A page made while it was set up is still linked, but nothing anywhere offers
+    // to write to Confluence again.
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ confluence_url: 'https://confluence.local/spaces/DOC/pages/100' })],
+    })
     const wrapper = await mountAndSelect()
+
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('sync')).toBeUndefined()
 
     await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
     await flushPromises()
@@ -2038,8 +2047,13 @@ describe('ReleaseNotesView export', () => {
       .findAll('a')
       .find((anchor: AnyWrapper) => anchor.text() === enMessages.releaseNotes.view_on_confluence)
     expect(link?.attributes('href')).toBe('https://confluence.local/spaces/DOC/pages/100')
-    // Once it is on a page there is nothing left to sync
+    // The control beside the release gives way to the link - and writing it again
+    // moves into the menu rather than going away with it
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.sync_to_confluence)).toHaveLength(0)
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('sync')?.textContent?.trim()).toBe(
+      enMessages.releaseNotes.sync_to_confluence,
+    )
   })
 
   it('syncs a release to Confluence on request', async () => {
@@ -2082,5 +2096,57 @@ describe('ReleaseNotesView export', () => {
 
     expect(warning).toHaveBeenCalled()
     expect(wrapper.text()).toContain('v1.1.0')
+  })
+
+  it('writes a release that is already on a page again, from the menu', async () => {
+    // The automatic path is off: the menu is the only way back in.
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: false,
+    })
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({ id: 11, confluence_url: 'https://confluence.local/spaces/DOC/pages/100' }),
+      ],
+    })
+    vi.mocked(releaseNotesApi.syncToConfluence).mockResolvedValue({
+      synced: true,
+      page_url: 'https://confluence.local/spaces/DOC/pages/100',
+      message: 'Synced to Confluence',
+    })
+    const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as any)
+
+    const wrapper = await mountAndSelect()
+    await useNoteMenu(wrapper, 'sync')
+
+    expect(releaseNotesApi.syncToConfluence).toHaveBeenCalledWith(11)
+    expect(success).toHaveBeenCalled()
+  })
+
+  it('offers a retry when the last sync failed on a page that exists', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({
+          confluence_url: 'https://confluence.local/spaces/DOC/pages/100',
+          confluence_sync_error: 'Confluence returned 500: boom',
+        }),
+      ],
+    })
+
+    const wrapper = await mountAndSelect()
+
+    // The badge reports the failure, and the menu says what to do about it -
+    // which the badge on its own used to leave a reader guessing at.
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.badge_confluence_failed)
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('sync')?.textContent?.trim()).toBe(
+      enMessages.releaseNotes.sync_confluence_retry,
+    )
   })
 })

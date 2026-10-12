@@ -1208,6 +1208,7 @@
     "badge_confluence_failed": "Confluence sync failed",
     "sync_confluence_ok": "Synced to Confluence",
     "sync_confluence_failed": "Could not sync to Confluence",
+    "sync_confluence_retry": "Retry sync to Confluence",
     "pushed_ok": "Published on GitHub: {url}",
     "pushed_ok_plain": "Published on GitHub",
     "push_failed": "Failed to publish the release on GitHub",
