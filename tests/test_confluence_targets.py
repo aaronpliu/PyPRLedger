@@ -149,14 +149,70 @@ def test_one_repository_being_off_leaves_its_neighbours_alone(instance_defaults_
     assert resolve(config, "PROJ", "my-repo").space_key == "PROJSPACE"
 
 
-def test_a_repository_can_switch_the_sync_on_where_the_instance_is_off(monkeypatch) -> None:
-    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SYNC_ENABLED", False)
-    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SPACE_KEY", "DOC")
+def test_a_repository_can_turn_publishing_back_on_where_its_project_is_off() -> None:
+    """Publishing is a decision of its own, and the narrower level still wins."""
     config = normalize_targets(
-        {"repositories": [{"project_key": "PROJ", "repository_slug": "my-repo", "enabled": True}]}
+        {
+            "projects": [{"project_key": "PROJ", "space_key": "PROJSPACE", "enabled": False}],
+            "repositories": [
+                {"project_key": "PROJ", "repository_slug": "my-repo", "enabled": True}
+            ],
+        }
     )
 
     assert resolve(config, "PROJ", "my-repo").enabled is True
+    assert resolve(config, "PROJ", "other-repo").enabled is False
+
+
+def test_the_environment_switch_is_not_what_decides_publishing(monkeypatch) -> None:
+    """It is the default of the automatic path, and nothing else.
+
+    An instance that syncs nothing by itself is still an instance whose releases can
+    be written to Confluence deliberately.
+    """
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SYNC_ENABLED", False)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SPACE_KEY", "DOC")
+
+    resolution = resolve(empty_targets(), "PROJ", "my-repo")
+
+    assert (resolution.enabled, resolution.enabled_source) == (True, "instance")
+    assert (resolution.auto_sync, resolution.auto_sync_source) == (False, "instance")
+
+
+def test_a_repository_can_be_left_out_of_the_automatic_sync(instance_defaults_set) -> None:
+    """The other half of the split: published, but never by itself."""
+    config = normalize_targets(
+        {
+            "projects": [{"project_key": "PROJ", "space_key": "PROJSPACE"}],
+            "repositories": [
+                {"project_key": "PROJ", "repository_slug": "my-repo", "auto_sync": False}
+            ],
+        }
+    )
+
+    resolution = resolve(config, "PROJ", "my-repo")
+
+    assert resolution.enabled is True
+    assert (resolution.auto_sync, resolution.auto_sync_source) == (False, "repository")
+    # Its sibling is untouched: one repository opting out is its own decision.
+    assert resolve(config, "PROJ", "other-repo").auto_sync is True
+
+
+def test_the_environment_switch_is_a_ceiling_over_the_automatic_path(monkeypatch) -> None:
+    """A level below may switch the automatic path off, never on."""
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SYNC_ENABLED", False)
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SPACE_KEY", "DOC")
+    config = normalize_targets(
+        {"repositories": [{"project_key": "PROJ", "repository_slug": "my-repo", "auto_sync": True}]}
+    )
+
+    resolution = resolve(config, "PROJ", "my-repo")
+
+    assert resolution.auto_sync is False
+    # Reported as the instance's decision, because that is what answered it.
+    assert resolution.auto_sync_source == "instance"
+    # And publishing is unaffected by it.
+    assert resolution.enabled is True
 
 
 def test_a_repository_with_no_space_anywhere_has_none(monkeypatch) -> None:
@@ -180,6 +236,20 @@ def test_a_target_that_decides_nothing_is_refused() -> None:
     """Empty fields mean "not here", so a target empty in every field says nothing."""
     with pytest.raises(ValueError, match="space key, a parent page id, or switch"):
         normalize_targets({"projects": [{"project_key": "PROJ"}]})
+
+
+def test_a_target_may_say_only_that_it_does_not_sync_by_itself() -> None:
+    """Switching the automatic path off is deciding something, so it stands alone."""
+    config = normalize_targets(
+        {
+            "repositories": [
+                {"project_key": "PROJ", "repository_slug": "my-repo", "auto_sync": False}
+            ]
+        }
+    )
+
+    assert config["repositories"][0]["auto_sync"] is False
+    assert config["repositories"][0]["enabled"] is None
 
 
 @pytest.mark.parametrize(
@@ -377,8 +447,15 @@ async def test_the_settings_show_what_a_repository_resolves_to(
     assert body["instance"]["space_key"] == "DOC"
     assert body["instance"]["parent_page_id"] == "100"
     assert body["instance"]["enabled"] is True
+    assert body["instance"]["auto_sync"] is True
     assert body["projects"] == [
-        {"project_key": "PROJ", "space_key": "PROJSPACE", "parent_page_id": "", "enabled": None}
+        {
+            "project_key": "PROJ",
+            "space_key": "PROJSPACE",
+            "parent_page_id": "",
+            "enabled": None,
+            "auto_sync": None,
+        }
     ]
     assert len(body["resolved"]) == 1
     row = body["resolved"][0]
@@ -448,6 +525,37 @@ async def test_saving_stores_both_lists_and_answers_with_the_resolution(
     reloaded = (await targets_client.get(TARGETS_URL)).json()
     assert reloaded["repositories"] == body["repositories"]
     assert reloaded["resolved"] == body["resolved"]
+
+
+async def test_saving_remembers_which_repositories_stay_out_of_the_automatic_sync(
+    targets_client: AsyncClient, db_session: AsyncSession, instance_defaults_set
+) -> None:
+    await _register(db_session, "PROJ", "my-repo")
+
+    response = await targets_client.put(
+        TARGETS_URL,
+        json={
+            "projects": [{"project_key": "PROJ", "space_key": "PROJSPACE"}],
+            "repositories": [
+                {"project_key": "PROJ", "repository_slug": "my-repo", "auto_sync": False}
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    # Switching the automatic path off is a decision of the repository, and only of
+    # the repository: publishing is left to the project's space as before.
+    assert body["repositories"][0]["auto_sync"] is False
+    assert body["repositories"][0]["enabled"] is None
+    row = body["resolved"][0]
+    assert (row["auto_sync"], row["auto_sync_source"]) == (False, "repository")
+    assert (row["enabled"], row["enabled_source"]) == (True, "instance")
+
+    # Read back as it was written, with the levels that said nothing still empty.
+    reloaded = (await targets_client.get(TARGETS_URL)).json()
+    assert reloaded["repositories"] == body["repositories"]
+    assert reloaded["projects"][0]["auto_sync"] is None
 
 
 async def test_a_target_that_is_not_usable_is_refused_with_its_reason(

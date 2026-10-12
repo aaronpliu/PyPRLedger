@@ -57,7 +57,7 @@ these rather than a rename of them.
 | `CONFLUENCE_SERVER_USERNAME` / `CONFLUENCE_SERVER_PASSWORD` | *(unset)* | Basic authentication, for instances without tokens |
 | `CONFLUENCE_SERVER_SPACE_KEY` | *(unset)* | The **fallback** space: what a repository that names none of its own publishes to |
 | `CONFLUENCE_SERVER_PARENT_PAGE_ID` | *(unset)* | The **fallback** parent page. Without one, pages are created at the root of the space |
-| `CONFLUENCE_SERVER_SYNC_ENABLED` | `False` | Whether publishing writes to Confluence by itself |
+| `CONFLUENCE_SERVER_SYNC_ENABLED` | `False` | The instance default of the automatic path, and the ceiling over every repository's own switch |
 | `CONFLUENCE_SERVER_VERIFY_SSL` | `True` | Turn off for an instance behind an internal CA |
 | `CONFLUENCE_SERVER_TIMEOUT_SECONDS` | `15` | Timeout for a single Confluence request |
 
@@ -67,9 +67,13 @@ is set above is what every repository that names nothing of its own falls back t
 So `CONFLUENCE_SERVER_SPACE_KEY` may legitimately stay empty: a repository whose space is
 set on its project needs nothing at this level.
 
-`CONFLUENCE_SERVER_SYNC_ENABLED` is the master switch for the **automatic** path. While it
-is off, publishing does not schedule a sync at all; the manual sync on the release
-page still works, as long as the credentials above are set.
+`CONFLUENCE_SERVER_SYNC_ENABLED` is about the **automatic** path, and nothing else. It is
+the instance default of whether a repository syncs by itself, and a ceiling over that
+decision: while it is off, publishing schedules nothing, whatever a project or a
+repository says. What it does **not** decide is whether a release may be written to
+Confluence at all — that is the repository's own publishing switch, which is on unless
+a level switches it off — so an instance that syncs nothing by itself can still write
+a release to Confluence deliberately, from the release page or its menu.
 
 ---
 
@@ -80,8 +84,17 @@ Each field resolves on its own, from the most specific level that decides it:
 ```
 space key:       repository target  →  project target  →  instance default
 parent page id:  repository target  →  project target  →  instance default
-sync on/off:     repository target  →  project target  →  instance default
+publishing:      repository target  →  project target  →  on
+auto sync:       repository target  →  project target  →  CONFLUENCE_SERVER_SYNC_ENABLED,
+                                                          which is also a ceiling over the result
 ```
+
+Two switches are resolved rather than one, because they answer two questions that a
+single value cannot: whether the repository is written to Confluence at all, and
+whether publishing writes it by itself. Publishing is on unless something says
+otherwise; auto sync follows the switch in the environment, and can be switched off
+below it but never on: a repository can be left out of the automatic path, none can
+be let into it while the instance has it off.
 
 Resolving field by field is what makes the usual arrangement expressible: a space
 per project, and a page per repository. Resolved as a whole, the space would have
@@ -100,34 +113,38 @@ permission on `settings`). The page shows, top to bottom:
    be published.
 
 Add and edit happen in a dialog, one entry at a time, and each action is saved
-immediately. Every field has an **Inherit / Override** switch: inheriting means
-"not decided here", which is what lets the level below decide. The switch is
-**Inherit / Enabled / Disabled** — turning it off keeps that one repository out of
-Confluence without touching anything else.
+immediately. The space and the parent page have an **Inherit / Override** switch:
+inheriting means "not decided here", which is what lets the level below decide.
+**Publish** and **Auto sync** are **Inherit / Enabled / Disabled** each: switching
+publishing off keeps that one repository out of Confluence entirely — by hand and
+automatically — and switching auto sync off leaves it published only when someone
+asks for it.
 
 ### A worked example
 
 Four projects with several repositories each, one space per project, and a page per
 repository:
 
-| Level | Set for | Space | Parent page | Sync |
-|---|---|---|---|---|
-| Instance | every repository | `DOCS` | *(none)* | on |
-| Project | `PAY` | `PAYSPACE` | — | — |
-| Repository | `PAY/pay-api` | — | `123456` | — |
-| Repository | `TOOL/internal-lib` | — | — | off |
+| Level | Set for | Space | Parent page | Publish | Auto sync |
+|---|---|---|---|---|---|
+| Instance | every repository | `DOCS` | *(none)* | on | on |
+| Project | `PAY` | `PAYSPACE` | — | — | — |
+| Repository | `PAY/pay-api` | — | `123456` | — | — |
+| Repository | `PAY/pay-web` | — | — | — | off |
+| Repository | `TOOL/internal-lib` | — | — | off | — |
 
 What that resolves to:
 
-| Repository | Space (from) | Parent (from) | Sync (from) |
-|---|---|---|---|
-| `PAY/pay-api` | `PAYSPACE` (project) | `123456` (repository) | on (instance) |
-| `PAY/pay-web` | `PAYSPACE` (project) | none (instance) | on (instance) |
-| `ORD/order-api` | `DOCS` (instance) | none (instance) | on (instance) |
-| `TOOL/internal-lib` | `DOCS` (instance) | none (instance) | **off (repository)** |
+| Repository | Space (from) | Parent (from) | Publish (from) | Auto sync (from) |
+|---|---|---|---|---|
+| `PAY/pay-api` | `PAYSPACE` (project) | `123456` (repository) | on (default) | on (instance) |
+| `PAY/pay-web` | `PAYSPACE` (project) | none (instance) | on (default) | **off (repository)** |
+| `ORD/order-api` | `DOCS` (instance) | none (instance) | on (default) | on (instance) |
+| `TOOL/internal-lib` | `DOCS` (instance) | none (instance) | **off (repository)** | — (never published) |
 
-The space was set once per project, the parent page once per repository, and the
-internal library was taken out of the integration in one click.
+The space was set once per project, the parent page once per repository, the internal
+library was taken out of the integration in one click, and `pay-web` was left to be
+written by hand: it is published, but never by itself.
 
 The configuration is one row in `system_settings` (`confluence_targets`), which is
 what to copy between environments; the credentials and the base URL stay in the
@@ -139,7 +156,7 @@ environment and are never stored there.
 
 | Action | Syncs? |
 |---|---|
-| **Publishing a release** — `POST /release/notes`, or publishing a draft by updating it | Yes, when the integration is configured, the switch is on, the repository is not switched off, and the release ends up published |
+| **Publishing a release** — `POST /release/notes`, or publishing a draft by updating it | Yes, when the integration is configured, the switch is on, the repository is published and not left out of the automatic path, and the release ends up published |
 | **Editing a published release** — `PUT /release/notes/{id}` | Yes, when the **notes** change: the page is written again with what the release now says. A save that leaves them as they are writes nothing, and so adds no version — the release's name, its pre-release flag and the version it compares to are not on the page |
 | **Writing a draft** — created as `draft`, or an edit that leaves it one | No. Publishing is what puts a release in front of people |
 | **Importing releases** — `POST /release/notes/import` | **No.** An import brings in a repository's history at once, and writing all of it to Confluence is not what an import is for. Each imported release is synced by hand when it is wanted |
@@ -168,10 +185,11 @@ control offers it:
 It is not a second copy of the automatic path: it is the answer to the cases that
 path cannot cover.
 
-- the automatic path is off (`CONFLUENCE_SERVER_SYNC_ENABLED=False`), or was off when the
-  release was published. With a page already written, that menu item is the only way
-  to write it again from the interface — a save would not reach Confluence either,
-  since the switch that schedules one is the same one;
+- the automatic path is off (`CONFLUENCE_SERVER_SYNC_ENABLED=False`), or this
+  repository is left out of it (**Auto sync** off on the repository or its project),
+  or was so when the release was published. With a page already written, that menu
+  item is the only way to write it again from the interface — a save would not reach
+  Confluence either, while either of those is the case;
 - the release failed, and the cause has been fixed — the retry is also what clears
   the recorded failure;
 - the release was published before its repository had a space configured, or before
@@ -218,7 +236,7 @@ Recorded on the release itself:
 
 | Endpoint | Permission | Purpose |
 |---|---|---|
-| `GET /api/v1/release/notes/confluence` | `read` on `release_note` | `{configured, auto_sync}` — whether the controls are offered at all |
+| `GET /api/v1/release/notes/confluence` | `read` on `release_note` | `{configured, auto_sync}` — whether the integration is ready, and whether this instance syncs by itself |
 | `POST /api/v1/release/notes/{id}/confluence-sync` | `manage` on `release_note` | Sync one release; answers `{synced, page_url, message}`, or `409` for a draft |
 | `GET /api/v1/rbac/settings/confluence` | `manage` on `settings` | The configuration, the instance defaults, and what each repository resolves to |
 | `PUT /api/v1/rbac/settings/confluence` | `manage` on `settings` | Replace `{projects: [...], repositories: [...]}` wholesale |
@@ -234,7 +252,7 @@ or as the answer to a manual sync.
 |---|---|---|
 | `Not synced: Confluence is not configured` | `CONFLUENCE_SERVER_BASE_URL` or the credentials are unset | Set them and restart the backend |
 | `No Confluence space is configured for PROJ/repo` | No space at any of the three levels for that repository | Set one on the repository, on its project, or in the environment |
-| `Not synced: sync is switched off for PROJ/repo` | The resolved switch is off: an explicit off on the repository or its project, or the instance switch with nothing overriding it | Turn that repository back on in the Confluence card, or set `CONFLUENCE_SERVER_SYNC_ENABLED=True` |
+| `Not synced: sync is switched off for PROJ/repo` | Publishing is switched off for that repository: an explicit off on the repository or on its project | Turn **Publish** back on in the Confluence card |
 | `Confluence returned 401: ...` / `403: ...` | The credential is rejected, or that account may not write to the space | Check the token, and the account's rights in the space |
 | `Confluence returned 404: ...` | A space key that does not exist, or a parent page that is gone or not visible to that account | Check the space and parent page for that repository |
 | `Confluence returned 400: ...` | Confluence refused the payload — most often a parent page in another space, which is not a place a page can be created | Check the parent page id of that repository, and that it belongs to the same space |
@@ -244,6 +262,11 @@ or as the answer to a manual sync.
 
 A sync never fails a release: the release is published either way, and the failure
 waits on the release row for a retry.
+
+Two skips are deliberately not recorded, because they are decisions rather than
+failures: a repository whose publishing is off, and one left out of the automatic
+path (logged as `automatic sync is off for PROJ/repo`, which the manual sync never
+produced — asking for the write is what that decision was about).
 
 ---
 

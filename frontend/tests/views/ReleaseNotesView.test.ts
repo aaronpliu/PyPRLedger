@@ -2008,6 +2008,31 @@ describe('ReleaseNotesView export', () => {
     expect(wrapper.text()).toContain(enMessages.releaseNotes.sync_confluence_label)
   })
 
+  it('does not offer a sync the instance switched off for every repository', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: false,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    // Set up, but with the automatic path switched off: there is nothing to tick,
+    // because a release is written by hand from the release itself instead.
+    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.sync_confluence_label)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.save_draft)[0].trigger('click')
+    await flushPromises()
+
+    // And the write that is made does not ask for the sync that would not happen.
+    expect(releaseNotesApi.create).toHaveBeenCalledWith(
+      expect.objectContaining({ sync_to_confluence: false }),
+    )
+  })
+
   it('says nothing about Confluence where it is not set up', async () => {
     vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
       configured: false,

@@ -7,11 +7,26 @@ own:
 
     space_key        repository -> project -> instance default
     parent_page_id   repository -> project -> instance default
-    enabled          repository -> project -> instance default
+    enabled          repository -> project -> instance default (publishing is the default)
+    auto_sync        repository -> project -> instance default, with the environment as a ceiling
 
 Falling back field by field is what makes the usual arrangement expressible: a
 space per project, said once, and a page per repository, said per repository.
 Resolved as a whole, the space would have to be repeated on every repository.
+
+Two switches are resolved rather than one, because they answer two questions that
+used to be answered by the same value:
+
+    enabled      whether this repository is written to Confluence at all, by hand or
+                 automatically. Switching it off is how a repository is kept out.
+    auto_sync    whether publishing writes it by itself. Switching it off leaves the
+                 manual sync available, which is what "only when I ask" means.
+
+``CONFLUENCE_SERVER_SYNC_ENABLED`` supplies the instance default of ``auto_sync`` and
+is a ceiling over it: while it is off, nothing syncs automatically, whatever a
+project or a repository says. It is not the default of ``enabled`` - publishing by
+hand is not what that switch is about, and an instance that turns the automatic path
+off can still publish a release to Confluence deliberately.
 
 What is stored is one JSON setting rather than a table, because this is
 configuration read whole and written whole - the same shape the banners of the
@@ -49,6 +64,11 @@ INSTANCE_SOURCE = "instance"
 PROJECT_SOURCE = "project"
 REPOSITORY_SOURCE = "repository"
 
+# Publishing is what a repository does unless something says otherwise. That the
+# environment switch is not this default is the whole point of the split: with the
+# automatic path off, a release may still be published to Confluence by hand.
+INSTANCE_PUBLISH_DEFAULT = True
+
 
 @dataclass(frozen=True)
 class Resolution:
@@ -57,9 +77,11 @@ class Resolution:
     space_key: str
     parent_page_id: str
     enabled: bool
+    auto_sync: bool
     space_source: str
     parent_source: str
     enabled_source: str
+    auto_sync_source: str
     project_target: bool
     repository_target: bool
 
@@ -79,9 +101,11 @@ class Resolution:
             "space_key": self.space_key,
             "parent_page_id": self.parent_page_id,
             "enabled": self.enabled,
+            "auto_sync": self.auto_sync,
             "space_source": self.space_source,
             "parent_source": self.parent_source,
             "enabled_source": self.enabled_source,
+            "auto_sync_source": self.auto_sync_source,
             "configured": self.configured,
         }
 
@@ -101,6 +125,19 @@ def _coerced_flag(value: object) -> bool:
     if isinstance(value, str):
         return value.strip().lower() == "true"
     return bool(value)
+
+
+def _optional_flag(value: object) -> bool | None:
+    """A switch as it was written, where absent stays absent.
+
+    Absent and false are not the same: absent leaves the decision to the level above,
+    false is a decision taken here. That is what lets one repository be left out of
+    the automatic sync while its project publishes automatically.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+
+    return _coerced_flag(value)
 
 
 def _normalize_entry(raw: object, *, with_repository: bool) -> dict[str, Any]:
@@ -142,15 +179,16 @@ def _normalize_entry(raw: object, *, with_repository: bool) -> dict[str, Any]:
 
     # Absent and false are not the same here: absent leaves the decision to the
     # level above, false means this repository does not publish.
-    raw_enabled = raw.get("enabled")
-    if raw_enabled is None or (isinstance(raw_enabled, str) and not raw_enabled.strip()):
-        enabled: bool | None = None
-    else:
-        enabled = _coerced_flag(raw_enabled)
+    enabled = _optional_flag(raw.get("enabled"))
+    # The same for taking part in the automatic sync, which is decided separately: a
+    # repository can be published by hand and left out of the automatic path, or the
+    # other way round.
+    auto_sync = _optional_flag(raw.get("auto_sync"))
 
-    if not space_key and not parent_page_id and enabled is None:
+    if not space_key and not parent_page_id and enabled is None and auto_sync is None:
         raise ValueError(
-            "a target must set a space key, a parent page id, or switch the repository off"
+            "a target must set a space key, a parent page id, or switch publishing or "
+            "automatic syncing off"
         )
 
     entry: dict[str, Any] = {"project_key": project_key}
@@ -159,6 +197,7 @@ def _normalize_entry(raw: object, *, with_repository: bool) -> dict[str, Any]:
     entry["space_key"] = space_key
     entry["parent_page_id"] = parent_page_id
     entry["enabled"] = enabled
+    entry["auto_sync"] = auto_sync
 
     return entry
 
@@ -292,12 +331,13 @@ def _field(
 def _flag(
     repository: dict[str, Any] | None,
     project: dict[str, Any] | None,
+    key: str,
     default: bool,
 ) -> tuple[bool, str]:
-    """The same, for the switch, where an explicit false is a decision."""
+    """The same, for a switch, where an explicit false is a decision."""
     for entry, source in ((repository, REPOSITORY_SOURCE), (project, PROJECT_SOURCE)):
-        if entry and entry.get("enabled") is not None:
-            return bool(entry["enabled"]), source
+        if entry and entry.get(key) is not None:
+            return bool(entry[key]), source
 
     return bool(default), INSTANCE_SOURCE
 
@@ -315,15 +355,26 @@ def resolve(
     parent_page_id, parent_source = _field(
         repository, project, "parent_page_id", settings.CONFLUENCE_SERVER_PARENT_PAGE_ID or ""
     )
-    enabled, enabled_source = _flag(repository, project, settings.CONFLUENCE_SERVER_SYNC_ENABLED)
+    enabled, enabled_source = _flag(repository, project, "enabled", INSTANCE_PUBLISH_DEFAULT)
+
+    # Whether it syncs by itself, decided separately from whether it publishes:
+    # automatic syncing is the default wherever publishing is allowed, a narrower
+    # level can switch it off, and the environment can switch it off for all of them.
+    auto_sync_decided, auto_sync_chain_source = _flag(repository, project, "auto_sync", True)
+    auto_sync = auto_sync_decided and bool(settings.CONFLUENCE_SERVER_SYNC_ENABLED)
+    # Where the value came from: a level that switched it off, or the environment
+    # that did - which is also what answers "why is this off when nothing says so".
+    auto_sync_source = auto_sync_chain_source if not auto_sync_decided else INSTANCE_SOURCE
 
     return Resolution(
         space_key=space_key,
         parent_page_id=parent_page_id,
         enabled=enabled,
+        auto_sync=auto_sync,
         space_source=space_source,
         parent_source=parent_source,
         enabled_source=enabled_source,
+        auto_sync_source=auto_sync_source,
         project_target=project is not None,
         repository_target=repository is not None,
     )
@@ -334,7 +385,10 @@ def instance_defaults() -> dict[str, Any]:
     return {
         "space_key": settings.CONFLUENCE_SERVER_SPACE_KEY or "",
         "parent_page_id": settings.CONFLUENCE_SERVER_PARENT_PAGE_ID or "",
-        "enabled": bool(settings.CONFLUENCE_SERVER_SYNC_ENABLED),
+        "enabled": INSTANCE_PUBLISH_DEFAULT,
+        # The switch is the instance default of the automatic path, and the ceiling
+        # over it - so the page can say why an instance syncs nothing by itself.
+        "auto_sync": bool(settings.CONFLUENCE_SERVER_SYNC_ENABLED),
     }
 
 

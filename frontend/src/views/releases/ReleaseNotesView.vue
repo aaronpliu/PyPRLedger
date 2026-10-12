@@ -529,9 +529,12 @@
               </el-checkbox>
             </el-form-item>
 
-            <!-- Only offered where the server has Confluence set up, so an
-                 instance that does not use it shows nothing about it -->
-            <el-form-item v-if="confluence.configured">
+            <!-- Offered where the server has Confluence set up and syncs by
+                 itself: this is the automatic path, which setting up alone does not
+                 turn on. An instance that does not use Confluence, or does not sync
+                 by itself, shows nothing here — writing one by hand is offered on
+                 the release row instead. -->
+            <el-form-item v-if="confluence.configured && confluence.auto_sync">
               <el-checkbox v-model="form.sync_to_confluence">
                 {{ t('releaseNotes.sync_confluence_label') }}
               </el-checkbox>
@@ -1101,6 +1104,13 @@ const form = ref({
 // here, and the page only offers what a sync could actually do.
 const confluence = ref({ configured: false, auto_sync: false })
 const syncingNoteId = ref<number | null>(null)
+
+// Whether the form may ask for the automatic path: it is the switch in the
+// environment that turns that off for every repository at once, so where it is off
+// there is nothing to ask for - a release is written by hand from the release itself.
+const asksForConfluenceSync = computed(
+  () => form.value.sync_to_confluence && confluence.value.auto_sync
+)
 
 const editingId = ref<number | null>(null)
 const editingStatus = ref<'draft' | 'published'>('draft')
@@ -1942,7 +1952,7 @@ async function saveRelease(status: 'draft' | 'published') {
         previous_tag: form.value.previous_tag.trim() || null,
         is_prerelease: form.value.is_prerelease,
         status,
-        sync_to_confluence: form.value.sync_to_confluence,
+        sync_to_confluence: asksForConfluenceSync.value,
       })
     } else {
       saved = await releaseNotesApi.create({
@@ -1953,7 +1963,7 @@ async function saveRelease(status: 'draft' | 'published') {
         previous_tag: form.value.previous_tag.trim() || null,
         is_prerelease: form.value.is_prerelease,
         status,
-        sync_to_confluence: form.value.sync_to_confluence,
+        sync_to_confluence: asksForConfluenceSync.value,
       })
     }
 

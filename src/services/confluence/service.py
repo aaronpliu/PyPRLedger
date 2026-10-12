@@ -61,12 +61,17 @@ class SyncOutcome:
 
 
 def is_auto_sync_enabled() -> bool:
-    """Whether publishing should sync by itself.
+    """Whether anything on this instance syncs by itself.
 
-    Two gates, so the sync can be switched off without clearing the credentials:
-    the integration has to be configured, and the switch has to be on. The manual
-    retry is not gated by the switch - it is how a release is synced while the
-    automatic path is off.
+    Two gates, so the automatic path can be switched off without clearing the
+    credentials: the integration has to be configured, and the switch has to be on.
+    The switch is a ceiling as well as this instance default - a repository can be
+    kept out of the automatic path on its own (``auto_sync`` in its target), but none
+    can be let in while the switch is off.
+
+    Manual syncing is not gated by this: whether a release may be written by hand is
+    ``enabled`` of its repository, so publishing still happens deliberately on an
+    instance that syncs nothing by itself.
     """
     return settings.CONFLUENCE_SERVER_SYNC_ENABLED and has_credentials()
 
@@ -93,8 +98,13 @@ class ConfluenceSyncService:
         self.client = client or ConfluenceClient()
         self._session_factory = session_factory
 
-    async def sync_note(self, note_id: int) -> SyncOutcome:
-        """Sync one release by id, on a session of its own."""
+    async def sync_note(self, note_id: int, automatic: bool = False) -> SyncOutcome:
+        """Sync one release by id, on a session of its own.
+
+        ``automatic`` says which path asked. The two are not the same question: a
+        repository that is kept out of the automatic sync is still written when
+        someone asks for it, so only the automatic path consults ``auto_sync``.
+        """
         if not has_credentials():
             return SyncOutcome(attempted=False, skipped="Confluence is not configured")
 
@@ -116,9 +126,9 @@ class ConfluenceSyncService:
                     skipped=f"Release {note_id} is {note.status}, not published",
                 )
 
-            return await self._sync(note, session)
+            return await self._sync(note, session, automatic)
 
-    async def _sync(self, note: ReleaseNote, session) -> SyncOutcome:
+    async def _sync(self, note: ReleaseNote, session, automatic: bool = False) -> SyncOutcome:
         name = label(note.project_key, note.repository_slug)
 
         try:
@@ -132,6 +142,12 @@ class ConfluenceSyncService:
             # rather than a failure of the release.
             if not target.enabled:
                 return SyncOutcome(attempted=False, skipped=f"sync is switched off for {name}")
+
+            # Left out of the automatic path on purpose. Skipped rather than failed,
+            # and only when the automatic path is what asked: the manual sync is how
+            # such a repository is written.
+            if automatic and not target.auto_sync:
+                return SyncOutcome(attempted=False, skipped=f"automatic sync is off for {name}")
 
             # Nowhere to write it. Recorded on the release rather than skipped, so
             # the release page says so and offers the retry once a space is set.
@@ -228,6 +244,6 @@ async def sync_release_note_to_confluence(note_id: int) -> None:
         return
 
     try:
-        await ConfluenceSyncService().sync_note(note_id)
+        await ConfluenceSyncService().sync_note(note_id, automatic=True)
     except Exception:  # noqa: BLE001 - a background task has nobody to raise at
         logger.exception("Confluence sync task failed", extra={"note_id": note_id})

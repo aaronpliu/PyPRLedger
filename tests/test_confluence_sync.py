@@ -567,6 +567,99 @@ async def test_a_draft_is_not_written_anywhere(db_session, confluence_settings) 
     assert fake.requests == []
 
 
+async def test_the_switch_being_off_leaves_the_manual_sync_working(
+    db_session, confluence_settings, monkeypatch
+) -> None:
+    """The switch is about the automatic path, so asking for the write still works.
+
+    This is what the two switches are for: an instance that writes nothing by itself
+    is still one where a release can be published to Confluence deliberately.
+    """
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SYNC_ENABLED", False)
+    fake = FakeConfluence()
+    note = await make_note(db_session)
+
+    outcome = await build_sync(fake, db_session).sync_note(note.id)
+
+    assert outcome.synced is True
+    assert fake.calls("POST") == ["/rest/api/content"]
+
+
+async def test_the_automatic_path_leaves_out_a_repository_that_opted_out(
+    db_session, confluence_settings
+) -> None:
+    fake = FakeConfluence()
+    note = await make_note(db_session)
+    await set_targets(
+        db_session,
+        repositories=[{"project_key": "PROJ", "repository_slug": "my-repo", "auto_sync": False}],
+    )
+
+    automatic = await build_sync(fake, db_session).sync_note(note.id, automatic=True)
+
+    assert automatic.attempted is False
+    assert automatic.skipped == "automatic sync is off for PROJ/my-repo"
+    # Being left out is a decision, not a failure, so nothing is recorded on it.
+    assert note.confluence_sync_error is None
+    assert fake.requests == []
+
+    # And the same release written on request: what was switched off is the
+    # automatic path, not this repository.
+    manual = await build_sync(fake, db_session).sync_note(note.id)
+
+    assert manual.synced is True
+    assert fake.calls("POST") == ["/rest/api/content"]
+
+
+async def test_the_automatic_path_is_stopped_by_the_environment_even_where_a_repository_asks(
+    db_session, confluence_settings, monkeypatch
+) -> None:
+    """The switch is a ceiling, not a default a repository can override."""
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SYNC_ENABLED", False)
+    fake = FakeConfluence()
+    note = await make_note(db_session)
+    await set_targets(
+        db_session,
+        repositories=[{"project_key": "PROJ", "repository_slug": "my-repo", "auto_sync": True}],
+    )
+
+    outcome = await build_sync(fake, db_session).sync_note(note.id, automatic=True)
+
+    assert outcome.attempted is False
+    assert outcome.skipped == "automatic sync is off for PROJ/my-repo"
+    assert fake.requests == []
+
+
+async def test_a_repository_left_out_of_the_automatic_sync_still_needs_a_space(
+    db_session, confluence_settings, monkeypatch
+) -> None:
+    """Being left out of the automatic path is not a way of publishing nowhere.
+
+    The manual sync still reaches this repository, so it needs a target like any
+    other - and says so on the release when it has none.
+    """
+    monkeypatch.setattr(settings, "CONFLUENCE_SERVER_SPACE_KEY", None)
+    fake = FakeConfluence()
+    note = await make_note(db_session)
+    await set_targets(
+        db_session,
+        repositories=[
+            {
+                "project_key": "PROJ",
+                "repository_slug": "my-repo",
+                "auto_sync": False,
+                "parent_page_id": "9",
+            }
+        ],
+    )
+
+    outcome = await build_sync(fake, db_session).sync_note(note.id)
+
+    assert outcome.synced is False
+    assert outcome.error == "No Confluence space is configured for PROJ/my-repo"
+    assert fake.requests == []
+
+
 # --------------------------------------------------------------------------- #
 # Endpoints
 # --------------------------------------------------------------------------- #
@@ -632,8 +725,11 @@ async def test_the_manual_sync_reports_what_happened(
     note = await make_note(db_session)
 
     class StubSync:
-        async def sync_note(self, note_id: int) -> SyncOutcome:
+        async def sync_note(self, note_id: int, automatic: bool = False) -> SyncOutcome:
             assert note_id == note.id
+            # The endpoint is the manual path, which is what decides whether the
+            # automatic switch of a repository is consulted at all.
+            assert automatic is False
             return SyncOutcome(
                 attempted=True,
                 synced=True,
@@ -657,7 +753,7 @@ async def test_the_manual_sync_says_so_when_it_did_nothing(
     note = await make_note(db_session)
 
     class StubSync:
-        async def sync_note(self, note_id: int) -> SyncOutcome:
+        async def sync_note(self, note_id: int, automatic: bool = False) -> SyncOutcome:
             return SyncOutcome(attempted=False, skipped="Confluence is not configured")
 
     app.dependency_overrides[get_confluence_sync_service] = lambda: StubSync()

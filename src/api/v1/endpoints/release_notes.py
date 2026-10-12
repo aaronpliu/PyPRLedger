@@ -680,8 +680,10 @@ async def sync_release_note_now(
         )
 
     # The sync writes on a session of its own, so what happened is what it returns
-    # rather than anything re-read here.
-    outcome = await confluence.sync_note(note_id)
+    # rather than anything re-read here. It is not the automatic path: a repository
+    # left out of the automatic sync - or an instance that switched it off - is
+    # still written when someone asks for it here.
+    outcome = await confluence.sync_note(note_id, automatic=False)
 
     logger.info(
         "Confluence sync requested",

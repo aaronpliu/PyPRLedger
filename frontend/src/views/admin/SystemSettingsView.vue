@@ -308,7 +308,7 @@
         <el-descriptions-item :label="t('admin.systemSettings.confluenceParentPage')">
           {{ confluence.instance.parent_page_id || t('admin.systemSettings.confluenceUnset') }}
         </el-descriptions-item>
-        <el-descriptions-item :label="t('admin.systemSettings.confluenceSync')">
+        <el-descriptions-item :label="t('admin.systemSettings.confluencePublish')">
           <el-tag
             size="small"
             :type="confluence.instance.enabled ? 'success' : 'info'"
@@ -327,6 +327,21 @@
                 ? t('admin.systemSettings.confluenceCredentialsReady')
                 : t('admin.systemSettings.confluenceCredentialsMissing')
             }}
+          </el-tag>
+        </el-descriptions-item>
+        <!-- The switch is the automatic path only, and the floor of that decision:
+             the two levels below can take a repository out of it, none can put one
+             in while it is off. -->
+        <el-descriptions-item :label="t('admin.systemSettings.confluenceAutoSync')">
+          <el-tag
+            size="small"
+            :type="confluence.instance.auto_sync ? 'success' : 'info'"
+            effect="plain"
+          >
+            {{ confluence.instance.auto_sync ? t('common.enabled') : t('common.disabled') }}
+          </el-tag>
+          <el-tag class="source-tag" size="small" effect="plain">
+            {{ t('admin.systemSettings.confluenceAutoSyncCeiling') }}
           </el-tag>
         </el-descriptions-item>
       </el-descriptions>
@@ -379,8 +394,12 @@
             </template>
           </el-table-column>
 
-          <el-table-column :label="t('admin.systemSettings.confluenceSync')" width="130">
-            <template #default="{ row }">{{ syncLabel(row.enabled) }}</template>
+          <el-table-column :label="t('admin.systemSettings.confluencePublish')" width="110">
+            <template #default="{ row }">{{ switchLabel(row.enabled) }}</template>
+          </el-table-column>
+
+          <el-table-column :label="t('admin.systemSettings.confluenceAutoSync')" width="110">
+            <template #default="{ row }">{{ switchLabel(row.auto_sync) }}</template>
           </el-table-column>
 
           <el-table-column
@@ -490,7 +509,7 @@
             </template>
           </el-table-column>
 
-          <el-table-column :label="t('admin.systemSettings.confluenceSync')" width="170">
+          <el-table-column :label="t('admin.systemSettings.confluencePublish')" width="160">
             <template #default="{ row }">
               <el-tag size="small" :type="row.enabled ? 'success' : 'info'" effect="plain">
                 {{ row.enabled ? t('common.enabled') : t('common.disabled') }}
@@ -502,6 +521,22 @@
                 :type="sourceTagType(row.enabled_source)"
               >
                 {{ sourceLabel(row.enabled_source) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+
+          <el-table-column :label="t('admin.systemSettings.confluenceAutoSync')" width="160">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.auto_sync ? 'success' : 'info'" effect="plain">
+                {{ row.auto_sync ? t('common.enabled') : t('common.disabled') }}
+              </el-tag>
+              <el-tag
+                class="source-tag"
+                size="small"
+                effect="plain"
+                :type="sourceTagType(row.auto_sync_source)"
+              >
+                {{ sourceLabel(row.auto_sync_source) }}
               </el-tag>
             </template>
           </el-table-column>
@@ -622,8 +657,11 @@
             </div>
           </el-form-item>
 
-          <el-form-item :label="t('admin.systemSettings.confluenceSync')">
-            <el-radio-group v-model="editingTarget.sync" data-test="confluence-target-sync">
+          <!-- Two questions, two switches: whether this level's repositories are
+               written to Confluence at all, and whether publishing writes them by
+               itself. Each is inherited, switched on, or switched off on its own. -->
+          <el-form-item :label="t('admin.systemSettings.confluencePublish')">
+            <el-radio-group v-model="editingTarget.publish" data-test="confluence-target-publish">
               <el-radio value="inherit">
                 {{ t('admin.systemSettings.confluenceInherit') }}
               </el-radio>
@@ -631,7 +669,23 @@
               <el-radio value="off">{{ t('common.disabled') }}</el-radio>
             </el-radio-group>
             <div class="setting-description">
-              {{ t('admin.systemSettings.confluenceSyncDesc') }}
+              {{ t('admin.systemSettings.confluencePublishDesc') }}
+            </div>
+          </el-form-item>
+
+          <el-form-item :label="t('admin.systemSettings.confluenceAutoSync')">
+            <el-radio-group
+              v-model="editingTarget.autoSync"
+              data-test="confluence-target-auto-sync"
+            >
+              <el-radio value="inherit">
+                {{ t('admin.systemSettings.confluenceInherit') }}
+              </el-radio>
+              <el-radio value="on">{{ t('common.enabled') }}</el-radio>
+              <el-radio value="off">{{ t('common.disabled') }}</el-radio>
+            </el-radio-group>
+            <div class="setting-description">
+              {{ t('admin.systemSettings.confluenceAutoSyncDesc') }}
             </div>
           </el-form-item>
         </el-form>
@@ -808,21 +862,37 @@ async function confirmRemove(index: number) {
 // repositories of that project share, and the instance supplies what neither
 // says. The table shows the value each repository ends up with and which level
 // decided it, rather than the three levels that produce it.
+//
+// Two of those values are switches, and they answer different questions: whether
+// the repository is written to Confluence at all, and whether publishing writes it
+// by itself. They are edited, shown and inherited separately, because a repository
+// that is published by hand is exactly what the pair is for.
 
 const confluence = ref<ConfluenceSettings>(emptyConfluenceSettings())
 const confluenceSaving = ref(false)
 const repositorySearch = ref('')
 
-/** The sync choice as three states, rather than the null the endpoint takes. */
-type SyncChoice = 'inherit' | 'on' | 'off'
+/** A switch choice as three states, rather than the null the endpoint takes. */
+type SwitchChoice = 'inherit' | 'on' | 'off'
 
 interface TargetDraft {
   project_key: string
   repository_slug: string
   space_key: string
   parent_page_id: string
-  sync: SyncChoice
+  /** Whether this level's repositories are published at all. */
+  publish: SwitchChoice
+  /** Whether publishing writes them by itself. */
+  autoSync: SwitchChoice
 }
+
+/** A switch as the endpoint takes it: left to the level above, or a decision. */
+const asFlag = (choice: SwitchChoice): boolean | null =>
+  choice === 'inherit' ? null : choice === 'on'
+
+/** A switch as the dialog shows it. */
+const asChoice = (value: boolean | null): SwitchChoice =>
+  value === null ? 'inherit' : value ? 'on' : 'off'
 
 const targetEditorVisible = ref(false)
 const targetScope = ref<'project' | 'repository'>('project')
@@ -849,10 +919,10 @@ const sourceLabel = (source: ConfluenceSource) => t(SOURCE_LABEL_KEYS[source])
 const sourceTagType = (source: ConfluenceSource) => SOURCE_TAG_TYPES[source]
 
 /** What the list shows for a switch that may be settled at another level. */
-const syncLabel = (enabled: boolean | null) =>
-  enabled === null
+const switchLabel = (value: boolean | null) =>
+  value === null
     ? t('admin.systemSettings.confluenceInherit')
-    : enabled
+    : value
       ? t('common.enabled')
       : t('common.disabled')
 
@@ -901,7 +971,8 @@ function draftFrom(target: ConfluenceProjectTarget | ConfluenceRepositoryTarget)
     repository_slug: 'repository_slug' in target ? target.repository_slug : '',
     space_key: target.space_key,
     parent_page_id: target.parent_page_id,
-    sync: target.enabled === null ? 'inherit' : target.enabled ? 'on' : 'off',
+    publish: asChoice(target.enabled),
+    autoSync: asChoice(target.auto_sync),
   }
 }
 
@@ -971,10 +1042,11 @@ function buildTargets(): ConfluenceTargetsPayload | null {
     return null
   }
 
-  const enabled = draft.sync === 'inherit' ? null : draft.sync === 'on'
+  const enabled = asFlag(draft.publish)
+  const autoSync = asFlag(draft.autoSync)
   // A level that decides nothing is what its absence already says, so the
   // endpoint refuses it and the dialog says so rather than writing it.
-  if (!spaceKey && !parentPageId && enabled === null) {
+  if (!spaceKey && !parentPageId && enabled === null && autoSync === null) {
     ElMessage.warning(t('admin.systemSettings.confluenceTargetEmpty'))
     return null
   }
@@ -988,7 +1060,13 @@ function buildTargets(): ConfluenceTargetsPayload | null {
     return {
       projects: [
         ...kept,
-        { project_key: projectKey, space_key: spaceKey, parent_page_id: parentPageId, enabled },
+        {
+          project_key: projectKey,
+          space_key: spaceKey,
+          parent_page_id: parentPageId,
+          enabled,
+          auto_sync: autoSync,
+        },
       ],
       repositories: [...confluence.value.repositories],
     }
@@ -1008,6 +1086,7 @@ function buildTargets(): ConfluenceTargetsPayload | null {
         space_key: spaceKey,
         parent_page_id: parentPageId,
         enabled,
+        auto_sync: autoSync,
       },
     ],
   }

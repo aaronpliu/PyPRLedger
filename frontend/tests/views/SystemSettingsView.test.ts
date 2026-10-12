@@ -101,9 +101,11 @@ function resolvedRow(patch: Partial<ConfluenceResolvedTarget> = {}): ConfluenceR
     space_key: 'DOC',
     parent_page_id: '',
     enabled: true,
+    auto_sync: true,
     space_source: 'instance',
     parent_source: 'instance',
     enabled_source: 'instance',
+    auto_sync_source: 'instance',
     configured: false,
     ...patch,
   }
@@ -116,6 +118,7 @@ function noTargets(patch: Partial<ConfluenceSettings> = {}): ConfluenceSettings 
       space_key: 'DOC',
       parent_page_id: '',
       enabled: true,
+      auto_sync: true,
       base_url: 'https://confluence.local',
       has_credentials: true,
     },
@@ -284,7 +287,13 @@ describe('SystemSettingsView Confluence publishing targets', () => {
       [],
       noTargets({
         projects: [
-          { project_key: 'PROJ', space_key: 'PROJSPACE', parent_page_id: '', enabled: null },
+          {
+            project_key: 'PROJ',
+            space_key: 'PROJSPACE',
+            parent_page_id: '',
+            enabled: null,
+            auto_sync: false,
+          },
         ],
         repositories: [
           {
@@ -293,6 +302,7 @@ describe('SystemSettingsView Confluence publishing targets', () => {
             space_key: '',
             parent_page_id: '555',
             enabled: null,
+            auto_sync: null,
           },
         ],
         resolved: [
@@ -303,6 +313,9 @@ describe('SystemSettingsView Confluence publishing targets', () => {
             parent_page_id: '555',
             space_source: 'project',
             parent_source: 'repository',
+            // Published, but left out of the automatic path by its project.
+            auto_sync: false,
+            auto_sync_source: 'project',
             configured: true,
           }),
           resolvedRow({ repository_slug: 'web', app_name: 'Web' }),
@@ -319,6 +332,8 @@ describe('SystemSettingsView Confluence publishing targets', () => {
     // The instance defaults are on the page, so the fallback has a visible floor.
     expect(wrapper.text()).toContain('https://confluence.local')
     expect(wrapper.text()).toContain(messages.confluenceCredentialsReady)
+    // The switch is shown for what it is: the automatic path, and its ceiling.
+    expect(wrapper.text()).toContain(messages.confluenceAutoSyncCeiling)
 
     const rows = wrapper.findAll('[data-test="confluence-repositories"] .el-table__row')
     expect(rows).toHaveLength(3)
@@ -331,6 +346,16 @@ describe('SystemSettingsView Confluence publishing targets', () => {
     expect(rows[1].text()).toContain(messages.confluenceSourceInstance)
     // A repository with no space anywhere is called out rather than left blank.
     expect(rows[2].text()).toContain(messages.confluenceNoSpace)
+
+    // Published, but not by itself: the two switches are separate columns, and the
+    // one that decided each of them is named beside it.
+    const autoCell = rows[0].findAll('td')[4].text()
+    expect(autoCell).toContain(enMessages.common.disabled)
+    expect(autoCell).toContain(messages.confluenceSourceProject)
+    expect(rows[0].findAll('td')[3].text()).toContain(enMessages.common.enabled)
+    // The repository that says nothing of its own takes both from the instance.
+    expect(rows[1].findAll('td')[4].text()).toContain(enMessages.common.enabled)
+    expect(rows[1].findAll('td')[4].text()).toContain(messages.confluenceSourceInstance)
   })
 
   it('lists the project defaults and what each of them decides', async () => {
@@ -338,18 +363,31 @@ describe('SystemSettingsView Confluence publishing targets', () => {
       [],
       noTargets({
         projects: [
-          { project_key: 'PROJ', space_key: 'PROJSPACE', parent_page_id: '', enabled: null },
-          { project_key: 'OTHER', space_key: '', parent_page_id: '', enabled: false },
+          {
+            project_key: 'PROJ',
+            space_key: 'PROJSPACE',
+            parent_page_id: '',
+            enabled: null,
+            auto_sync: null,
+          },
+          { project_key: 'OTHER', space_key: '', parent_page_id: '', enabled: false, auto_sync: null },
+          { project_key: 'THIRD', space_key: '', parent_page_id: '', enabled: null, auto_sync: false },
         ],
       })
     )
 
     const rows = wrapper.findAll('[data-test="confluence-projects"] .el-table__row')
-    expect(rows).toHaveLength(2)
+    expect(rows).toHaveLength(3)
     expect(rows[0].text()).toContain('PROJSPACE')
     // A field the project says nothing about reads as inherited, not as empty.
     expect(rows[0].text()).toContain(messages.confluenceInherit)
     expect(rows[1].text()).toContain(enMessages.common.disabled)
+
+    // Listed apart, so "does not publish" and "publishes only when asked" are not
+    // read as the same thing.
+    const cells = rows[2].findAll('td').map((cell) => cell.text())
+    expect(cells[3]).toContain(messages.confluenceInherit)
+    expect(cells[4]).toContain(enMessages.common.disabled)
   })
 
   it('says so when no project has a default of its own', async () => {
@@ -368,10 +406,18 @@ describe('SystemSettingsView Confluence publishing targets', () => {
     await targetDialog().find('[data-test="confluence-target-save"]').trigger('click')
     await flushPromises()
 
-    // The parent page is left out of the entry entirely, which is exactly what
-    // makes it fall through to the instance.
+    // The parent page and both switches are left out of the entry entirely, which
+    // is exactly what makes them fall through to the level above.
     expect(lastTargets()).toEqual({
-      projects: [{ project_key: 'PROJ', space_key: 'PROJSPACE', parent_page_id: '', enabled: null }],
+      projects: [
+        {
+          project_key: 'PROJ',
+          space_key: 'PROJSPACE',
+          parent_page_id: '',
+          enabled: null,
+          auto_sync: null,
+        },
+      ],
       repositories: [],
     })
     expect(wrapper.findAll('[data-test="confluence-projects"] .el-table__row')).toHaveLength(1)
@@ -382,7 +428,13 @@ describe('SystemSettingsView Confluence publishing targets', () => {
       [],
       noTargets({
         projects: [
-          { project_key: 'PROJ', space_key: 'PROJSPACE', parent_page_id: '', enabled: null },
+          {
+            project_key: 'PROJ',
+            space_key: 'PROJSPACE',
+            parent_page_id: '',
+            enabled: null,
+            auto_sync: null,
+          },
         ],
         resolved: [resolvedRow({ space_key: 'PROJSPACE', space_source: 'project' })],
       })
@@ -398,7 +450,13 @@ describe('SystemSettingsView Confluence publishing targets', () => {
 
     expect(lastTargets()).toEqual({
       projects: [
-        { project_key: 'PROJ', space_key: 'PROJSPACE', parent_page_id: '', enabled: null },
+        {
+          project_key: 'PROJ',
+          space_key: 'PROJSPACE',
+          parent_page_id: '',
+          enabled: null,
+          auto_sync: null,
+        },
       ],
       repositories: [
         {
@@ -407,6 +465,7 @@ describe('SystemSettingsView Confluence publishing targets', () => {
           space_key: '',
           parent_page_id: '555',
           enabled: null,
+          auto_sync: null,
         },
       ],
     })
@@ -417,7 +476,13 @@ describe('SystemSettingsView Confluence publishing targets', () => {
       [],
       noTargets({
         projects: [
-          { project_key: 'PROJ', space_key: 'PROJSPACE', parent_page_id: '9', enabled: false },
+          {
+            project_key: 'PROJ',
+            space_key: 'PROJSPACE',
+            parent_page_id: '9',
+            enabled: false,
+            auto_sync: false,
+          },
         ],
       })
     )
@@ -430,6 +495,16 @@ describe('SystemSettingsView Confluence publishing targets', () => {
     const parent = targetDialog().find('[data-test="confluence-target-parent"]')
     expect((space.element as HTMLInputElement).value).toBe('PROJSPACE')
     expect((parent.element as HTMLInputElement).value).toBe('9')
+
+    // And both switches open on what they were left as, which is what makes an
+    // explicit "off" tellable from an inherited one.
+    const chosen = (test: string) =>
+      targetDialog()
+        .findAll(`[data-test="${test}"] input`)
+        .filter((input) => (input.element as HTMLInputElement).checked)
+        .map((input) => (input.element as HTMLInputElement).value)
+    expect(chosen('confluence-target-publish')).toEqual(['off'])
+    expect(chosen('confluence-target-auto-sync')).toEqual(['off'])
   })
 
   it('refuses a target that decides nothing', async () => {
@@ -468,7 +543,13 @@ describe('SystemSettingsView Confluence publishing targets', () => {
       [],
       noTargets({
         projects: [
-          { project_key: 'PROJ', space_key: 'PROJSPACE', parent_page_id: '', enabled: null },
+          {
+            project_key: 'PROJ',
+            space_key: 'PROJSPACE',
+            parent_page_id: '',
+            enabled: null,
+            auto_sync: null,
+          },
         ],
       })
     )
@@ -492,6 +573,7 @@ describe('SystemSettingsView Confluence publishing targets', () => {
             space_key: 'OWN',
             parent_page_id: '',
             enabled: null,
+            auto_sync: null,
           },
         ],
         resolved: [resolvedRow({ space_key: 'OWN', space_source: 'repository', configured: true })],
@@ -510,7 +592,13 @@ describe('SystemSettingsView Confluence publishing targets', () => {
       [],
       noTargets({
         projects: [
-          { project_key: 'PROJ', space_key: 'PROJSPACE', parent_page_id: '', enabled: null },
+          {
+            project_key: 'PROJ',
+            space_key: 'PROJSPACE',
+            parent_page_id: '',
+            enabled: null,
+            auto_sync: null,
+          },
         ],
       })
     )
@@ -538,5 +626,57 @@ describe('SystemSettingsView Confluence publishing targets', () => {
     const rows = wrapper.findAll('[data-test="confluence-repositories"] .el-table__row')
     expect(rows).toHaveLength(1)
     expect(rows[0].text()).toContain('web')
+  })
+
+  it('switches the automatic path off without touching publishing', async () => {
+    const { wrapper, targetDialog } = await mountView([], noTargets({ resolved: [resolvedRow()] }))
+
+    await wrapper.find('[data-test="confluence-project-add"]').trigger('click')
+    await targetDialog().findComponent({ name: 'ElSelect' }).setValue('PROJ')
+    await targetDialog()
+      .find('[data-test="confluence-target-auto-sync"] input[value="off"]')
+      .setValue()
+    await targetDialog().find('[data-test="confluence-target-save"]').trigger('click')
+    await flushPromises()
+
+    // Publishing is left inherited and the automatic path is off: the repository is
+    // written when asked, and never by itself.
+    expect(lastTargets()).toEqual({
+      projects: [
+        {
+          project_key: 'PROJ',
+          space_key: '',
+          parent_page_id: '',
+          enabled: null,
+          auto_sync: false,
+        },
+      ],
+      repositories: [],
+    })
+  })
+
+  it('stops publishing without deciding the automatic path', async () => {
+    const { wrapper, targetDialog } = await mountView([], noTargets({ resolved: [resolvedRow()] }))
+
+    await wrapper.find('[data-test="confluence-project-add"]').trigger('click')
+    await targetDialog().findComponent({ name: 'ElSelect' }).setValue('PROJ')
+    await targetDialog().find('[data-test="confluence-target-publish"] input[value="off"]').setValue()
+    await targetDialog().find('[data-test="confluence-target-save"]').trigger('click')
+    await flushPromises()
+
+    // The other way round: off means never written, so the automatic path is not
+    // decided here at all - it makes no difference to a repository that is out.
+    expect(lastTargets()).toEqual({
+      projects: [
+        {
+          project_key: 'PROJ',
+          space_key: '',
+          parent_page_id: '',
+          enabled: false,
+          auto_sync: null,
+        },
+      ],
+      repositories: [],
+    })
   })
 })
