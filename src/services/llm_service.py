@@ -25,8 +25,29 @@ logger = get_logger(__name__)
 
 # Every supported provider serves the same OpenAI shaped completions resource.
 COMPLETIONS_PATH = "chat/completions"
-REQUEST_TIMEOUT_SECONDS = 60.0
+
+# How long one provider call may take, from the deployment's own configuration. A
+# model served on site is slower than a hosted one - it is writing an answer about a
+# whole release - and the caller that waits for it does so inside a request a reader
+# is waiting on, so this number is the one their timeouts have to be longer than.
+REQUEST_TIMEOUT_SECONDS = float(settings.LLM_REQUEST_TIMEOUT_SECONDS)
+
+# Reaching a provider that is not there at all is a different failure from waiting for
+# one that is thinking, and it is the cheap one to report: the allowance above covers
+# the answer, while an unreachable host is said so quickly instead of being waited out.
+CONNECT_TIMEOUT_SECONDS = 15.0
+
 HTTP_ERROR_STATUS = 400
+
+
+def provider_timeout(answer_seconds: float = REQUEST_TIMEOUT_SECONDS) -> httpx.Timeout:
+    """The timeouts one call to the provider is made under.
+
+    Split because the two failures are not alike: connecting is quick or it is not
+    happening, writing a small request body is quick, and waiting for the answer is
+    what the deployment's own allowance is for.
+    """
+    return httpx.Timeout(answer_seconds, connect=CONNECT_TIMEOUT_SECONDS)
 
 # A provider message is carried into the log and into the reason a caller
 # reports, so it is cut to a readable length and the credential is taken out of
@@ -178,7 +199,7 @@ class LlmService:
             headers["Authorization"] = f"Bearer {self._config.api_key}"
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(timeout=provider_timeout(self._timeout)) as client:
                 response = await client.post(url, json=payload, headers=headers)
         except httpx.HTTPError as e:
             error = redact(f"{type(e).__name__}: {e}", self._config.api_key)

@@ -183,6 +183,19 @@ export interface ReleaseNoteConfluenceSyncResult {
   message: string
 }
 
+/**
+ * How long the preview request is allowed to take.
+ *
+ * It reads a whole release scope and, when asked, has the server summarize it with
+ * the configured LLM - a provider call made from the server, which a model served on
+ * site can take minutes over. The client's own timeout is what would cut that answer
+ * off: the request was aborted while the server was still writing, so the page
+ * reported a network error and fell back to the commit subjects, and the work was
+ * thrown away. This one request is therefore given as long as the gateway in front of
+ * the server allows, rather than the default the rest of the app uses.
+ */
+const PREVIEW_TIMEOUT_MS = 300_000
+
 export const releaseNotesApi = {
   /** List the version releases of a repository (drafts included), newest first. */
   async list(params: {
@@ -220,9 +233,16 @@ export const releaseNotesApi = {
     return response.data || response
   },
 
-  /** Draft release notes (markdown) from the commits of a release scope. */
+  /**
+   * Draft release notes (markdown) from the commits of a release scope.
+   *
+   * The one request that may be summarized by the LLM, so it carries a timeout of
+   * its own rather than the default every other call is held to.
+   */
   async preview(payload: ReleaseNotePreviewRequest): Promise<ReleaseNotePreviewResponse> {
-    const response = await request.post('/release/notes/preview', payload)
+    const response = await request.post('/release/notes/preview', payload, {
+      timeout: PREVIEW_TIMEOUT_MS,
+    })
     return response.data || response
   },
 

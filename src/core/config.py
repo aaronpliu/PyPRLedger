@@ -45,6 +45,16 @@ class Settings(BaseSettings):
     LLM_DEFAULT_MODEL: str = Field(default="")
     LLM_DEFAULT_BASE_URL: str = Field(default="")
     LLM_DEFAULT_API_KEY: str = Field(default="")
+    LLM_REQUEST_TIMEOUT_SECONDS: int = Field(
+        default=120,
+        description=(
+            "How long one call to the LLM provider may take. A model served on site "
+            "writes its answer for a whole release more slowly than a hosted one, and "
+            "the release note summarizer waits for that answer inside the request the "
+            "reader is waiting on - so this is the number the caller's own timeout has "
+            "to be longer than, and an operator knows their own model."
+        ),
+    )
 
     @property
     def database_url(self) -> str:
