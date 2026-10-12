@@ -527,17 +527,23 @@
 
           <el-table-column :label="t('admin.systemSettings.confluenceAutoSync')" width="160">
             <template #default="{ row }">
-              <el-tag size="small" :type="row.auto_sync ? 'success' : 'info'" effect="plain">
-                {{ row.auto_sync ? t('common.enabled') : t('common.disabled') }}
-              </el-tag>
-              <el-tag
-                class="source-tag"
-                size="small"
-                effect="plain"
-                :type="sourceTagType(row.auto_sync_source)"
-              >
-                {{ sourceLabel(row.auto_sync_source) }}
-              </el-tag>
+              <!-- A repository that is never written to Confluence has nothing to
+                   sync by itself, so the switch it resolves to is not shown as if it
+                   applied: publishing is the gate, and it is the cell beside this. -->
+              <span v-if="!row.enabled" class="target-inherited">—</span>
+              <template v-else>
+                <el-tag size="small" :type="row.auto_sync ? 'success' : 'info'" effect="plain">
+                  {{ row.auto_sync ? t('common.enabled') : t('common.disabled') }}
+                </el-tag>
+                <el-tag
+                  class="source-tag"
+                  size="small"
+                  effect="plain"
+                  :type="sourceTagType(row.auto_sync_source)"
+                >
+                  {{ sourceLabel(row.auto_sync_source) }}
+                </el-tag>
+              </template>
             </template>
           </el-table-column>
 

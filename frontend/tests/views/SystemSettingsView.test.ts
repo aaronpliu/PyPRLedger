@@ -358,6 +358,33 @@ describe('SystemSettingsView Confluence publishing targets', () => {
     expect(rows[1].findAll('td')[4].text()).toContain(messages.confluenceSourceInstance)
   })
 
+  it('does not report a switch for a repository that is never published', async () => {
+    const { wrapper } = await mountView(
+      [],
+      noTargets({
+        resolved: [
+          resolvedRow({
+            repository_slug: 'internal-lib',
+            // Taken out of Confluence entirely by its project.
+            enabled: false,
+            enabled_source: 'project',
+          }),
+        ],
+      })
+    )
+
+    const cells = wrapper
+      .find('[data-test="confluence-repositories"] .el-table__row')
+      .findAll('td')
+      .map((cell) => cell.text())
+
+    expect(cells[3]).toContain(enMessages.common.disabled)
+    expect(cells[3]).toContain(messages.confluenceSourceProject)
+    // Nothing syncs by itself where nothing is written at all, so the column beside
+    // it reports no switch rather than one that could not apply.
+    expect(cells[4]).toBe('—')
+  })
+
   it('lists the project defaults and what each of them decides', async () => {
     const { wrapper } = await mountView(
       [],
