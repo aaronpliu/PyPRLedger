@@ -119,7 +119,7 @@ async function openRepository(wrapper: View) {
  */
 async function openOn(wrapper: View, ref: string = 'v2.0.0') {
   await openRepository(wrapper)
-  await pick(wrapper, 3, ref)
+  await pick(wrapper, 2, ref)
 }
 
 function chartOption(wrapper: View): ReleaseDependencyGraphChartOption {
@@ -151,15 +151,21 @@ describe('ReleaseDependencyGraphView', () => {
     expect(wrapper.find('[data-test="release-dependency-graph-chart"]').exists()).toBe(false)
   })
 
-  it('auto selects the git provider of the chosen project', async () => {
+  it('carries the provider of the chosen project into what it reads', async () => {
     const wrapper = mountView()
     await flushPromises()
 
     const selects = wrapper.findAllComponents(ElSelect)
     await selects[0].vm.$emit('update:modelValue', 'GHE')
     await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'app')
+    await flushPromises()
 
-    expect(selects[2].props('modelValue')).toBe('github_enterprise')
+    // the provider is no longer a field of its own: it follows from the coordinates,
+    // and it is still what the repository is read with
+    expect(vi.mocked(releaseDiffApi.listRefs)).toHaveBeenCalledWith(
+      expect.objectContaining({ git_provider: 'github_enterprise' }),
+    )
   })
 
   it('waits for a ref to be picked before it reads anything', async () => {
@@ -171,7 +177,7 @@ describe('ReleaseDependencyGraphView', () => {
     expect(wrapper.find('[data-test="pick-ref"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="release-dependency-graph-chart"]').exists()).toBe(false)
 
-    await pick(wrapper, 3, 'v2.0.0')
+    await pick(wrapper, 2, 'v2.0.0')
 
     // v2.0.0, the whole closure: eight packages, seventeen edges - the cycle
     // among them, not only the app's own six edges
@@ -417,7 +423,7 @@ describe('ReleaseDependencyGraphView', () => {
 
     // The picker searches the repository's listing rather than accepting a typed
     // name: a tag that does not exist cannot be read, so it cannot be picked.
-    const refSelect = wrapper.findAllComponents(ElSelect)[3]
+    const refSelect = wrapper.findAllComponents(ElSelect)[2]
     expect(refSelect.props('allowCreate')).toBe(false)
     expect(refSelect.props('remote')).toBe(true)
     expect(refSelect.findAllComponents({ name: 'ElOption' }).map((option) => option.props('value')))

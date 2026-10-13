@@ -107,22 +107,29 @@ async def with_repository_provider[PayloadT: BaseModel](
 ) -> PayloadT:
     """The request with the coordinates of its repository filled in.
 
-    A caller that names a provider is taken at its word; otherwise the registry
-    answers, since a repository is registered under the provider it lives on and
-    the browser has no business knowing. The provider comes first because it
-    decides the shape of the rest: only a Cloud request carries a workspace, and
-    it is filled from the repository's own URL - left to itself, the request
-    would address Cloud with the project key as the workspace.
+    The registry answers, since a repository is registered under the provider it
+    lives on and the browser has no business knowing. A provider the caller named is
+    a belief - the browser forms it from the project - and a belief does not outrank
+    the registration: one project can hold repositories on different providers, so
+    what was sent stands only where nothing is registered, and the configured
+    default stands where nobody said anything at all.
+
+    The provider comes first because it decides the shape of the rest: only a Cloud
+    request carries a workspace, and it is filled from the repository's own URL -
+    left to itself, the request would address Cloud with the project key as the
+    workspace.
     """
     project_key = getattr(payload, "project_key", "")
     repository_slug = getattr(payload, "repository_slug", "")
 
-    provider = getattr(payload, "git_provider", None)
+    named = getattr(payload, "git_provider", None)
+    provider = named
     updates: dict[str, Any] = {}
-    if not provider:
-        provider = await registered_provider(project_key, repository_slug, db, registry)
-        if provider:
-            updates["git_provider"] = provider
+    registered = await registered_provider(project_key, repository_slug, db, registry)
+    if registered:
+        provider = registered
+        if registered != named:
+            updates["git_provider"] = registered
 
     workspace = getattr(payload, "workspace_slug", None)
     if not workspace and provider == GitProvider.BITBUCKET_CLOUD.value:

@@ -36,7 +36,7 @@
 
       <el-form class="coordinates" :model="repo" label-width="130px">
         <el-row :gutter="16">
-          <el-col :xs="24" :sm="12" :md="5">
+          <el-col :xs="24" :sm="12" :md="6">
             <el-form-item :label="t('releaseDiff.project_key')" required>
               <el-select
                 v-model="repo.project_key"
@@ -66,7 +66,7 @@
             </el-form-item>
           </el-col>
 
-          <el-col :xs="24" :sm="12" :md="5">
+          <el-col :xs="24" :sm="12" :md="6">
             <el-form-item :label="t('releaseDiff.repository_slug')" required>
               <el-select
                 v-model="repo.repository_slug"
@@ -97,24 +97,6 @@
             </el-form-item>
           </el-col>
 
-          <el-col :xs="24" :sm="12" :md="4">
-            <el-form-item :label="t('releaseDiff.git_provider')">
-              <el-select
-                v-model="repo.git_provider"
-                clearable
-                :placeholder="t('releaseDiff.git_provider_placeholder')"
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="option in GIT_PROVIDER_OPTIONS"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-
           <el-col v-if="isCloudProvider" :xs="24" :sm="12" :md="4">
             <el-form-item :label="t('releaseDiff.workspace_slug')">
               <el-select
@@ -137,7 +119,7 @@
             </el-form-item>
           </el-col>
 
-          <el-col :xs="24" :sm="12" :md="6">
+          <el-col :xs="24" :sm="12" :md="8">
             <el-form-item :label="t('releaseDependencyGraph.ref_label')">
               <el-select
                 v-model="selectedRef"
@@ -350,7 +332,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
-import { GIT_PROVIDER_OPTIONS } from '@/constants/gitProvider'
 import { useI18n } from 'vue-i18n'
 import ReleaseDependencyGraphChart from '@/components/charts/ReleaseDependencyGraphChart.vue'
 import ContentLoader from '@/components/common/ContentLoader.vue'
@@ -442,6 +423,8 @@ function coordinates() {
   return {
     project_key: selectedProjectKey.value,
     repository_slug: selectedRepositorySlug.value,
+    // derived rather than chosen: the registry decides where a repository lives, and
+    // this stands only for one it says nothing about
     git_provider: repo.value.git_provider || undefined,
     workspace_slug: selectedWorkspaceSlug.value || undefined,
   }

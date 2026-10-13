@@ -257,13 +257,17 @@ async def register_project_to_app(
         str, Query(min_length=1, max_length=128, description="Repository slug")
     ],
     git_provider: Annotated[
-        str,
+        str | None,
         Query(
             min_length=1,
             max_length=32,
-            description=f"Git provider ({', '.join(sorted(GitProvider.values()))})",
+            description=(
+                f"Git provider ({', '.join(sorted(GitProvider.values()))}). Left out, the "
+                "project the repository belongs to decides, and a registration naming "
+                "one is registered under exactly that"
+            ),
         ),
-    ] = GitProvider.default().value,
+    ] = None,
     description: Annotated[
         str | None, Query(max_length=255, description="Optional description")
     ] = None,

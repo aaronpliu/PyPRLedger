@@ -1022,7 +1022,6 @@
     "load_projects_failed": "Failed to load projects",
     "load_repositories_failed": "Failed to load repositories",
     "git_provider": "Git Provider",
-    "git_provider_placeholder": "Default (bitbucket_server)",
     "workspace_slug": "Cloud Workspace",
     "workspace_slug_placeholder": "Bitbucket Cloud workspace, e.g. aaronpliu",
     "workspace_slug_help": "Only used for Bitbucket Cloud: the workspace holding the repository. Leave empty to use the project key.",

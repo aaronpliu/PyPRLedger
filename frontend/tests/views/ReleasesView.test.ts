@@ -392,20 +392,6 @@ describe('ReleasesView', () => {
     expect(selects[1].props('modelValue')).toBe('')
   })
 
-  it('auto selects the git provider of the chosen project', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-
-    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
-    await selects[0].vm.$emit('update:modelValue', 'BETA')
-    await flushPromises()
-
-    expect(selects[2].props('modelValue')).toBe('github_enterprise')
-  })
-
-
-
-
 
   it('shows both tools at once instead of hiding them behind tabs', async () => {
     const wrapper = mountView()
@@ -766,22 +752,6 @@ describe('ReleasesView', () => {
     )
   })
 
-  it('loads the Cloud workspaces when the provider is picked by hand', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-
-    expect(projectsApi.getCloudWorkspaces).not.toHaveBeenCalled()
-
-    const providerSelect = wrapper
-      .findAllComponents({ name: 'ElSelect' })
-      .find((select: AnyWrapper) => select.props('placeholder') === enMessages.releaseDiff.git_provider_placeholder)
-    await providerSelect!.vm.$emit('update:modelValue', 'bitbucket_cloud')
-    await flushPromises()
-
-    expect(projectsApi.getCloudWorkspaces).toHaveBeenCalledTimes(1)
-    expect(workspaceSelect(wrapper)).toBeDefined()
-  })
-
   it('sends the Cloud workspace along with the business project key', async () => {
     vi.mocked(projectsApi.getAllProjects).mockResolvedValue([CLOUD_PROJECT])
     vi.mocked(releaseDiffApi.compare).mockResolvedValue({
@@ -812,8 +782,7 @@ describe('ReleasesView', () => {
     await selects[1].vm.$emit('update:modelValue', 'pylang')
     await flushPromises()
 
-    expect(selects[2].props('modelValue')).toBe('bitbucket_cloud')
-
+    // the Cloud project is what puts the workspace field on the page
     const cloudWorkspaceSelect = workspaceSelect(wrapper)
     expect(cloudWorkspaceSelect).toBeDefined()
     await cloudWorkspaceSelect.vm.$emit('update:modelValue', 'aaronpliu')

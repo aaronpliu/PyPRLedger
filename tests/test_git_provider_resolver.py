@@ -116,7 +116,12 @@ async def test_the_registry_answers_when_the_request_names_no_provider():
     assert payload.git_provider is None
 
 
-async def test_a_named_provider_is_taken_at_its_word():
+async def test_the_registry_outranks_the_provider_the_caller_named():
+    """What a repository is registered under is what an application must be asked for.
+
+    The caller's value is a belief the browser formed from the project, and a project
+    can hold repositories on different providers - so the registration decides.
+    """
     registry = FakeRegistry(GitProvider.BITBUCKET_CLOUD.value)
     payload = Coordinates(
         project_key="AI", repository_slug="pylang", git_provider="github_enterprise"
@@ -124,8 +129,19 @@ async def test_a_named_provider_is_taken_at_its_word():
 
     resolved = await with_repository_provider(payload, None, registry)
 
+    assert resolved.git_provider == GitProvider.BITBUCKET_CLOUD.value
+    assert registry.asked == [("AI", "pylang")]
+
+
+async def test_a_named_provider_stands_where_nothing_is_registered():
+    """A repository nobody has registered is still addressed by what the caller said."""
+    payload = Coordinates(
+        project_key="AI", repository_slug="ghost", git_provider="github_enterprise"
+    )
+
+    resolved = await with_repository_provider(payload, None, FakeRegistry(None))
+
     assert resolved.git_provider == "github_enterprise"
-    assert registry.asked == []
 
 
 async def test_an_unregistered_repository_keeps_the_configured_default():

@@ -75,8 +75,10 @@ class AppVersionDiffCoordinates(BaseModel):
     git_provider: str | None = Field(
         default=None,
         description=(
-            "Git provider override. Defaults to the provider the repository is registered "
-            "under, then to the configured default."
+            "The provider the caller believes the repository lives on. The project "
+            "registry decides: a registered repository is addressed by the provider it is "
+            "registered under, and this stands only where nothing is registered - then the "
+            "configured default applies."
         ),
     )
     workspace_slug: str | None = Field(
