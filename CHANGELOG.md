@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The Release Notes lists its tags the way the repository does. The tags tab - and the two tag pickers beside it - re-sorted the listing into version order, newest version first, which reads a release line top-down but contradicts what a tag itself is on the provider: Bitbucket lists tags most recently created first, and a tag that does not read as a version (a dated or named release tag) sank below every `vX.Y.Z` of the page, so the tag cut minutes ago was nowhere on the first page of the list. The page offers the listing in the order the provider answered in, which is the order every other ref picker of the application already uses: the newest tag is the first row, the search keeps that order for everything it matches, and the predecessor a release scope is inferred from is read off the same order
+
 ## [1.29.1] - 2026-10-13
 
 **Backend Version**: 1.29.1
