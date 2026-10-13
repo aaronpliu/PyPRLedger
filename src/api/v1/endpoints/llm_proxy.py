@@ -13,7 +13,7 @@ from starlette.responses import Response, StreamingResponse
 from src.core.database import get_db_session
 from src.core.permissions import get_current_user_with_token
 from src.models.auth_user import AuthUser
-from src.services.llm_service import load_llm_config
+from src.services.llm_service import load_llm_config, provider_timeout
 from src.utils.log import get_logger
 
 
@@ -94,7 +94,10 @@ async def llm_proxy(
             pass
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        # The same allowance as the summarizer makes its calls under: a model served
+        # on site answers in its own time, and this is the one place that number is
+        # configured.
+        async with httpx.AsyncClient(timeout=provider_timeout()) as client:
             if is_stream:
                 # Proxy as SSE streaming response
                 req = client.build_request("POST", target_url, headers=headers, content=body)

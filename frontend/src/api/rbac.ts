@@ -179,6 +179,20 @@ export const rbacApi = {
   updateBanner(data: BannersConfig): Promise<{ message: string; banners: BannerItem[] }> {
     return request.put('/rbac/settings/banner', data)
   },
+
+  // ===== Confluence Publishing Target APIs =====
+
+  /** Get where each project and repository publishes, and what each resolves to */
+  getConfluenceTargets(): Promise<ConfluenceSettings> {
+    return request.get('/rbac/settings/confluence')
+  },
+
+  /** Replace the publishing targets of every project and repository */
+  updateConfluenceTargets(
+    data: ConfluenceTargetsPayload
+  ): Promise<ConfluenceSettings & { message: string }> {
+    return request.put('/rbac/settings/confluence', data)
+  },
 }
 
 export type BannerLevel = 'info' | 'warning' | 'success'
@@ -220,5 +234,110 @@ export function createBanner(patch: Partial<BannerItem> = {}): BannerItem {
     link_label: '',
     priority: 0,
     ...patch,
+  }
+}
+
+/** Which level a resolved value came from, or where one is being set. */
+export type ConfluenceSource = 'instance' | 'project' | 'repository'
+
+/** Where a whole project publishes; its repositories inherit it. */
+export interface ConfluenceProjectTarget {
+  project_key: string
+  /** Empty means "not decided here", which is what lets the level below decide. */
+  space_key: string
+  parent_page_id: string
+  /**
+   * Whether this level's repositories are written to Confluence at all, by hand or
+   * automatically. `null` inherits, `true`/`false` is a decision taken here.
+   */
+  enabled: boolean | null
+  /**
+   * Whether publishing writes them by itself. Switching it off leaves the manual
+   * sync, and the backend's own switch is a ceiling over the result.
+   */
+  auto_sync: boolean | null
+}
+
+/** Where one repository publishes. */
+export interface ConfluenceRepositoryTarget extends ConfluenceProjectTarget {
+  repository_slug: string
+}
+
+/** The target one repository resolves to today, and where each part came from. */
+export interface ConfluenceResolvedTarget {
+  project_key: string
+  repository_slug: string
+  app_name: string | null
+  space_key: string
+  parent_page_id: string
+  enabled: boolean
+  auto_sync: boolean
+  space_source: ConfluenceSource
+  parent_source: ConfluenceSource
+  enabled_source: ConfluenceSource
+  auto_sync_source: ConfluenceSource
+  /** Whether either level says anything about this repository. */
+  configured: boolean
+}
+
+/** The instance-wide fallback, which comes from the backend's environment. */
+export interface ConfluenceInstanceDefaults {
+  space_key: string
+  parent_page_id: string
+  /** Whether repositories publish at all unless a level says otherwise. */
+  enabled: boolean
+  /** Whether anything syncs by itself, and the ceiling over the levels below. */
+  auto_sync: boolean
+  base_url: string
+  has_credentials: boolean
+}
+
+export interface ConfluenceSettings {
+  instance: ConfluenceInstanceDefaults
+  projects: ConfluenceProjectTarget[]
+  repositories: ConfluenceRepositoryTarget[]
+  resolved: ConfluenceResolvedTarget[]
+}
+
+export interface ConfluenceTargetsPayload {
+  projects: ConfluenceProjectTarget[]
+  repositories: ConfluenceRepositoryTarget[]
+}
+
+/** A project target with the fields a new one starts from. */
+export function createProjectTarget(
+  patch: Partial<ConfluenceProjectTarget> = {}
+): ConfluenceProjectTarget {
+  return {
+    project_key: '',
+    space_key: '',
+    parent_page_id: '',
+    enabled: null,
+    auto_sync: null,
+    ...patch,
+  }
+}
+
+/** A repository target with the fields a new one starts from. */
+export function createRepositoryTarget(
+  patch: Partial<ConfluenceRepositoryTarget> = {}
+): ConfluenceRepositoryTarget {
+  return { ...createProjectTarget(), repository_slug: '', ...patch }
+}
+
+/** An empty payload, for the state before the settings have been read. */
+export function emptyConfluenceSettings(): ConfluenceSettings {
+  return {
+    instance: {
+      space_key: '',
+      parent_page_id: '',
+      enabled: false,
+      auto_sync: false,
+      base_url: '',
+      has_credentials: false,
+    },
+    projects: [],
+    repositories: [],
+    resolved: [],
   }
 }

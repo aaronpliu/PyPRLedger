@@ -24,6 +24,26 @@ from src.schemas.rbac import (
     RoleResponse,
     RoleUpdate,
 )
+from src.services.confluence.client import has_credentials as has_confluence_credentials
+from src.services.confluence.targets import (
+    SETTING_DESCRIPTION as CONFLUENCE_SETTING_DESCRIPTION,
+)
+from src.services.confluence.targets import (
+    SETTING_KEY as CONFLUENCE_SETTING_KEY,
+)
+from src.services.confluence.targets import (
+    describe as describe_confluence_targets,
+)
+from src.services.confluence.targets import (
+    instance_defaults as confluence_instance_defaults,
+)
+from src.services.confluence.targets import (
+    normalize_targets as normalize_confluence_targets,
+)
+from src.services.confluence.targets import (
+    parse_stored_targets as parse_confluence_targets,
+)
+from src.services.project_registry_service import ProjectRegistryService
 from src.services.rbac_service import RBACService
 
 
@@ -630,6 +650,153 @@ async def update_banner_settings(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update banner settings: {str(e)}",
+        ) from e
+
+
+# ============================================================================
+# Confluence Publishing Target Endpoints
+# ============================================================================
+
+
+# ----------------------------------------------------------------------------
+# Where each repository publishes, per project and per repository.
+#
+# One instance holds several projects with several repositories each and the
+# releases are published per repository, so the space and the parent page are
+# configuration of a repository rather than of the instance. They are kept as one
+# JSON setting - the shape the banners use - and resolved in tiers: a repository
+# says what is particular to it, a project says what its repositories share, and
+# the environment supplies what neither says. Reading the settings answers with
+# the target each repository resolves to today, so the page shows the outcome
+# rather than making an administrator work the fallback out.
+# ----------------------------------------------------------------------------
+
+
+async def _registered_repositories(db: AsyncSession) -> list[tuple[str, str, str | None]]:
+    """Every registered repository, as the identity a target is keyed by."""
+    entries = await ProjectRegistryService().list_all_projects(db)
+
+    return [(entry.project_key, entry.repository_slug, entry.app_name) for entry in entries]
+
+
+def _confluence_identities(
+    config: dict, repositories: list[tuple[str, str, str | None]]
+) -> list[tuple[str, str, str | None]]:
+    """Every repository to report on: the registered ones, plus any that is not.
+
+    A target can be set for a repository that was never registered, and one that
+    is configured but not listed would look like it had done nothing at all.
+    """
+    identities = list(repositories)
+    known = {(project_key, slug) for project_key, slug, _ in identities}
+
+    for entry in config["repositories"]:
+        identity = (entry["project_key"], entry["repository_slug"])
+        if identity not in known:
+            known.add(identity)
+            identities.append((*identity, None))
+
+    return identities
+
+
+def _confluence_settings_payload(
+    config: dict, repositories: list[tuple[str, str, str | None]]
+) -> dict:
+    """The configuration, and what every repository publishes to right now."""
+    resolved = describe_confluence_targets(config, _confluence_identities(config, repositories))
+    resolved.sort(key=lambda row: (row["project_key"], row["repository_slug"]))
+
+    return {
+        "instance": {
+            **confluence_instance_defaults(),
+            "base_url": (settings.CONFLUENCE_SERVER_BASE_URL or "").rstrip("/"),
+            "has_credentials": has_confluence_credentials(),
+        },
+        "projects": config["projects"],
+        "repositories": config["repositories"],
+        "resolved": resolved,
+    }
+
+
+@router.get(
+    "/settings/confluence",
+    response_model=dict,
+    summary="Get Confluence publishing targets",
+    description=(
+        "The space and parent page each project and repository publishes to, "
+        "together with the target every repository resolves to. Requires manage "
+        "settings permission."
+    ),
+)
+async def get_confluence_settings(
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict:
+    """Get the Confluence publishing targets, as stored and as resolved"""
+    await rbac_service.require_permission(current_user.id, "manage", "settings")
+
+    try:
+        stored = await rbac_service.get_setting(CONFLUENCE_SETTING_KEY, default_value="")
+        config = parse_confluence_targets(stored)
+        return _confluence_settings_payload(config, await _registered_repositories(db))
+    except Exception as e:
+        logger.error(f"Failed to get Confluence settings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get Confluence settings: {str(e)}",
+        ) from e
+
+
+@router.put(
+    "/settings/confluence",
+    response_model=dict,
+    summary="Update Confluence publishing targets",
+    description=(
+        "Replace the publishing targets of every project and repository. Requires "
+        "manage settings permission."
+    ),
+)
+async def update_confluence_settings(
+    setting_data: dict,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> dict:
+    """Replace the Confluence publishing targets"""
+    await rbac_service.require_permission(current_user.id, "manage", "settings")
+
+    try:
+        # Both lists are written together, and every field is bounded here, so
+        # what a sync reads later is always something this validated.
+        config = normalize_confluence_targets(setting_data)
+
+        # The settings store only updates a row it already has, and reading one is
+        # how it comes into existence (`RBACService.get_setting` creates it on a
+        # miss). Without this, the first save on a fresh installation would fail.
+        await rbac_service.get_setting(CONFLUENCE_SETTING_KEY, default_value="")
+
+        await rbac_service.update_setting(
+            setting_key=CONFLUENCE_SETTING_KEY,
+            setting_value=json.dumps(config, ensure_ascii=False),
+            updated_by=current_user.id,
+            description=CONFLUENCE_SETTING_DESCRIPTION,
+        )
+
+        return {
+            "message": "Confluence settings updated successfully",
+            **_confluence_settings_payload(config, await _registered_repositories(db)),
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        logger.error(f"Failed to update Confluence settings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update Confluence settings: {str(e)}",
         ) from e
 
 

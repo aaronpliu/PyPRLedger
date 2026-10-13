@@ -24,6 +24,15 @@ export interface ReleaseNote {
   external_provider?: string | null
   external_id?: string | null
   external_url?: string | null
+  /**
+   * Confluence page (an optional integration, absent on most instances). Null
+   * until the release has been synced there; `confluence_sync_error` says why the
+   * last attempt did not manage it.
+   */
+  confluence_page_id?: string | null
+  confluence_url?: string | null
+  confluence_synced_date?: string | null
+  confluence_sync_error?: string | null
 }
 
 export interface ReleaseNoteListResponse {
@@ -45,6 +54,8 @@ export interface ReleaseNoteCreateRequest extends ReleaseNoteCoordinates {
   previous_tag?: string | null
   status?: ReleaseNoteStatus
   is_prerelease?: boolean
+  /** Write the release to Confluence too when publishing it (ignored if not set up) */
+  sync_to_confluence?: boolean
 }
 
 export interface ReleaseNoteUpdateRequest {
@@ -53,6 +64,8 @@ export interface ReleaseNoteUpdateRequest {
   previous_tag?: string | null
   status?: ReleaseNoteStatus
   is_prerelease?: boolean
+  /** Write the release to Confluence too when this update leaves it published */
+  sync_to_confluence?: boolean
 }
 
 export interface ReleaseNotePushRequest extends ReleaseNoteCoordinates {
@@ -155,6 +168,34 @@ export interface ReleaseNoteExportResponse {
   truncated: boolean
 }
 
+export interface ReleaseNoteConfluenceStatus {
+  /** Whether a sync can be attempted at all on this instance */
+  configured: boolean
+  /** Whether publishing syncs by itself; the manual retry works either way */
+  auto_sync: boolean
+}
+
+export interface ReleaseNoteConfluenceSyncResult {
+  synced: boolean
+  /** The page the release is on, once it is synced */
+  page_url?: string | null
+  /** One line describing what happened */
+  message: string
+}
+
+/**
+ * How long the preview request is allowed to take.
+ *
+ * It reads a whole release scope and, when asked, has the server summarize it with
+ * the configured LLM - a provider call made from the server, which a model served on
+ * site can take minutes over. The client's own timeout is what would cut that answer
+ * off: the request was aborted while the server was still writing, so the page
+ * reported a network error and fell back to the commit subjects, and the work was
+ * thrown away. This one request is therefore given as long as the gateway in front of
+ * the server allows, rather than the default the rest of the app uses.
+ */
+const PREVIEW_TIMEOUT_MS = 300_000
+
 export const releaseNotesApi = {
   /** List the version releases of a repository (drafts included), newest first. */
   async list(params: {
@@ -192,9 +233,16 @@ export const releaseNotesApi = {
     return response.data || response
   },
 
-  /** Draft release notes (markdown) from the commits of a release scope. */
+  /**
+   * Draft release notes (markdown) from the commits of a release scope.
+   *
+   * The one request that may be summarized by the LLM, so it carries a timeout of
+   * its own rather than the default every other call is held to.
+   */
   async preview(payload: ReleaseNotePreviewRequest): Promise<ReleaseNotePreviewResponse> {
-    const response = await request.post('/release/notes/preview', payload)
+    const response = await request.post('/release/notes/preview', payload, {
+      timeout: PREVIEW_TIMEOUT_MS,
+    })
     return response.data || response
   },
 
@@ -213,6 +261,23 @@ export const releaseNotesApi = {
   /** Export one or more releases as a single markdown document. */
   async exportNotes(payload: ReleaseNoteExportRequest): Promise<ReleaseNoteExportResponse> {
     const response = await request.post('/release/notes/export', payload)
+    return response.data || response
+  },
+
+  /**
+   * Whether this instance syncs releases to Confluence.
+   *
+   * Asked once by the page, which only offers the sync controls where a sync
+   * could actually happen.
+   */
+  async confluenceStatus(): Promise<ReleaseNoteConfluenceStatus> {
+    const response = await request.get('/release/notes/confluence')
+    return response.data || response
+  },
+
+  /** Write one release to Confluence (or try again after a failure). */
+  async syncToConfluence(noteId: number): Promise<ReleaseNoteConfluenceSyncResult> {
+    const response = await request.post(`/release/notes/${noteId}/confluence-sync`)
     return response.data || response
   },
 }

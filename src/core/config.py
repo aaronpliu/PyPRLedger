@@ -45,6 +45,16 @@ class Settings(BaseSettings):
     LLM_DEFAULT_MODEL: str = Field(default="")
     LLM_DEFAULT_BASE_URL: str = Field(default="")
     LLM_DEFAULT_API_KEY: str = Field(default="")
+    LLM_REQUEST_TIMEOUT_SECONDS: int = Field(
+        default=120,
+        description=(
+            "How long one call to the LLM provider may take. A model served on site "
+            "writes its answer for a whole release more slowly than a hosted one, and "
+            "the release note summarizer waits for that answer inside the request the "
+            "reader is waiting on - so this is the number the caller's own timeout has "
+            "to be longer than, and an operator knows their own model."
+        ),
+    )
 
     @property
     def database_url(self) -> str:
@@ -289,6 +299,67 @@ class Settings(BaseSettings):
     GITHUB_ENTERPRISE_TOKEN: str | None = Field(
         default=None,
         description="GitHub Enterprise personal access token or app token",
+    )
+
+    # Confluence sync configuration
+    #
+    # Publishing a release can also write it to Confluence as a page. The whole
+    # integration is an addition rather than a dependency: with the base URL or
+    # the credentials unset, nothing is configured and no code path reaches
+    # Confluence, so the release flow behaves exactly as it did before. The
+    # enabled flag is a second gate, so the sync can be switched off without
+    # clearing the credentials.
+    #
+    # The names carry the edition, as the Bitbucket ones do: this client speaks the
+    # Server/Data Center API, so everything it reads is CONFLUENCE_SERVER_*. A Cloud
+    # edition would be a CONFLUENCE_CLOUD_* sibling of these rather than a change
+    # to them.
+    CONFLUENCE_SERVER_BASE_URL: str | None = Field(
+        default=None,
+        description="Confluence Server/Data Center base URL (e.g., https://confluence.example.com)",
+    )
+    CONFLUENCE_SERVER_TOKEN: str | None = Field(
+        default=None,
+        description=(
+            "Confluence Server/Data Center Personal Access Token (7.9+). When set it is "
+            "preferred over CONFLUENCE_SERVER_USERNAME/CONFLUENCE_SERVER_PASSWORD and sent "
+            "as a Bearer token. PATs exist on Server/Data Center only, not on Cloud."
+        ),
+    )
+    CONFLUENCE_SERVER_USERNAME: str | None = Field(
+        default=None,
+        description="Confluence Server/Data Center username for Basic authentication",
+    )
+    CONFLUENCE_SERVER_PASSWORD: str | None = Field(
+        default=None,
+        description="Confluence Server/Data Center password for Basic authentication",
+    )
+    CONFLUENCE_SERVER_SPACE_KEY: str | None = Field(
+        default=None, description="Space key the release pages are written to"
+    )
+    CONFLUENCE_SERVER_PARENT_PAGE_ID: str | None = Field(
+        default=None,
+        description=(
+            "Optional id of the page the release pages are created under. Without it "
+            "they are created at the root of the space."
+        ),
+    )
+    CONFLUENCE_SERVER_SYNC_ENABLED: bool = Field(
+        default=False,
+        description=(
+            "Whether publishing a release also writes it to Confluence. Off by default: "
+            "the release flow must not depend on a third party system being reachable."
+        ),
+    )
+    CONFLUENCE_SERVER_VERIFY_SSL: bool = Field(
+        default=True,
+        description=(
+            "Whether to verify the Confluence TLS certificate. Enterprise instances "
+            "often sit behind an internal CA, which is why this can be turned off."
+        ),
+    )
+    CONFLUENCE_SERVER_TIMEOUT_SECONDS: float = Field(
+        default=15.0, description="Timeout for a single Confluence request"
     )
 
     # Review status constants

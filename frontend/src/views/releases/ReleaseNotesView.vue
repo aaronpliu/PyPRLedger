@@ -529,6 +529,18 @@
               </el-checkbox>
             </el-form-item>
 
+            <!-- Offered where the server has Confluence set up and syncs by
+                 itself: this is the automatic path, which setting up alone does not
+                 turn on. An instance that does not use Confluence, or does not sync
+                 by itself, shows nothing here — writing one by hand is offered on
+                 the release row instead. -->
+            <el-form-item v-if="confluence.configured && confluence.auto_sync">
+              <el-checkbox v-model="form.sync_to_confluence">
+                {{ t('releaseNotes.sync_confluence_label') }}
+              </el-checkbox>
+              <div class="field-hint">{{ t('releaseNotes.sync_confluence_help') }}</div>
+            </el-form-item>
+
             <template v-if="isGithubProvider">
               <el-form-item>
                 <el-checkbox v-model="form.push_to_provider">
@@ -627,66 +639,93 @@
                   <el-tag v-if="note.status === 'draft'" size="small" type="info" round>
                     {{ t('releaseNotes.badge_draft') }}
                   </el-tag>
+                  <!-- The sync is a side errand: when it fails the release is
+                       still published, and this is where that reads -->
+                  <el-tag
+                    v-if="note.confluence_sync_error"
+                    size="small"
+                    type="danger"
+                    effect="plain"
+                    round
+                    :title="note.confluence_sync_error"
+                  >
+                    {{ t('releaseNotes.badge_confluence_failed') }}
+                  </el-tag>
                 </div>
 
                 <!-- The actions belong to the entry they sit on, so a release can
-                     be acted on without selecting it first -->
+                     be acted on without selecting it first. Only what is reached
+                     for constantly stays outside the menu: the page the release is
+                     on - or the way to put it there - and copying its notes.
+                     Everything else is one menu, one row of icons wide, however
+                     many releases the page holds. -->
                 <div class="note-entry-actions">
+                  <!-- The page it is already on, or the way to put it there -->
                   <el-button
-                    v-if="note.external_url"
+                    v-if="note.confluence_url"
                     link
                     size="small"
                     tag="a"
-                    :href="note.external_url"
+                    :href="note.confluence_url"
                     target="_blank"
                     rel="noopener"
+                    data-test="note-confluence-view"
                   >
-                    {{ t('releaseNotes.view_on_provider') }}
+                    {{ t('releaseNotes.view_on_confluence') }}
                   </el-button>
                   <el-button
+                    v-else-if="confluence.configured && canManage && note.status === 'published'"
                     link
-                    type="primary"
                     size="small"
-                    :loading="exportingNotes"
-                    @click="exportNotes([note.id])"
+                    :type="note.confluence_sync_error ? 'warning' : 'primary'"
+                    :loading="syncingNoteId === note.id"
+                    data-test="note-confluence-sync"
+                    @click="syncToConfluence(note)"
                   >
-                    {{ t('releaseNotes.export_one') }}
+                    {{ t('releaseNotes.sync_to_confluence') }}
                   </el-button>
-                  <el-button
-                    link
-                    type="primary"
-                    size="small"
-                    :loading="copyingNote"
-                    @click="copyNote(note)"
+
+                  <el-tooltip :content="t('releaseNotes.copy_one')" placement="top">
+                    <el-button
+                      link
+                      size="small"
+                      :icon="CopyDocument"
+                      :loading="copyingNote"
+                      :aria-label="t('releaseNotes.copy_one')"
+                      data-test="note-copy"
+                      @click="copyNote(note)"
+                    />
+                  </el-tooltip>
+
+                  <!-- Nothing to offer, nothing to show: a control that opens an
+                       empty menu is worse than no control -->
+                  <el-dropdown
+                    v-if="noteMenuItems(note).length"
+                    trigger="click"
+                    @command="(command: string) => handleNoteCommand(command, note)"
                   >
-                    {{ t('releaseNotes.copy_one') }}
-                  </el-button>
-                  <template v-if="canManage">
-                    <el-button link type="primary" size="small" @click="editNote(note)">
-                      {{ t('releaseNotes.edit_release') }}
-                    </el-button>
                     <el-button
-                      v-if="note.status === 'draft'"
                       link
-                      type="success"
                       size="small"
-                      @click="publishNote(note)"
-                    >
-                      {{ t('releaseNotes.publish') }}
-                    </el-button>
-                    <el-button
-                      v-if="canImportFromProvider"
-                      link
-                      type="primary"
-                      size="small"
-                      @click="pushNote(note)"
-                    >
-                      {{ t('releaseNotes.push_to_provider') }}
-                    </el-button>
-                    <el-button link type="danger" size="small" @click="confirmDelete(note)">
-                      {{ t('releaseNotes.delete') }}
-                    </el-button>
-                  </template>
+                      :icon="MoreFilled"
+                      :aria-label="t('releaseNotes.more_actions')"
+                      data-test="note-menu"
+                    />
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item
+                          v-for="item in noteMenuItems(note)"
+                          :key="item.command"
+                          :command="item.command"
+                          :divided="item.divided"
+                          :class="{ 'note-menu-danger': item.danger }"
+                          :data-test="`note-menu-${item.command}`"
+                        >
+                          {{ item.label }}
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
                 </div>
               </header>
 
@@ -789,7 +828,16 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { GIT_PROVIDER_OPTIONS } from '@/constants/gitProvider'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Close, Document, InfoFilled, Refresh, Search } from '@element-plus/icons-vue'
+import {
+  ArrowDown,
+  Close,
+  CopyDocument,
+  Document,
+  InfoFilled,
+  MoreFilled,
+  Refresh,
+  Search,
+} from '@element-plus/icons-vue'
 import { MdEditor, MdPreview, type ToolbarNames } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 import { projectsApi } from '@/api/projects'
@@ -1049,7 +1097,20 @@ const form = ref({
   is_prerelease: false,
   push_to_provider: false,
   target_commitish: '',
+  sync_to_confluence: true,
 })
+
+// Confluence is an optional integration. The server says whether it is set up
+// here, and the page only offers what a sync could actually do.
+const confluence = ref({ configured: false, auto_sync: false })
+const syncingNoteId = ref<number | null>(null)
+
+// Whether the form may ask for the automatic path: it is the switch in the
+// environment that turns that off for every repository at once, so where it is off
+// there is nothing to ask for - a release is written by hand from the release itself.
+const asksForConfluenceSync = computed(
+  () => form.value.sync_to_confluence && confluence.value.auto_sync
+)
 
 const editingId = ref<number | null>(null)
 const editingStatus = ref<'draft' | 'published'>('draft')
@@ -1667,6 +1728,7 @@ function resetForm() {
     is_prerelease: false,
     push_to_provider: false,
     target_commitish: '',
+    sync_to_confluence: true,
   }
 }
 
@@ -1721,6 +1783,96 @@ function startNewRelease(tag?: string) {
   formCard.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
+/** What one release's overflow menu can be asked to do. */
+type NoteCommand = 'provider' | 'sync' | 'edit' | 'publish' | 'push' | 'delete'
+
+interface NoteMenuItem {
+  command: NoteCommand
+  label: string
+  divided?: boolean
+  danger?: boolean
+}
+
+/**
+ * The actions of one release, in the order they are shown; empty means no menu.
+ *
+ * What is left here is either rare or destructive - the entry keeps the page the
+ * release is on and copying its notes outside, and everything else inside, so a
+ * page full of releases reads as one row of controls each rather than a wall of
+ * text buttons repeated for every version.
+ */
+function noteMenuItems(note: ReleaseNote): NoteMenuItem[] {
+  const items: NoteMenuItem[] = []
+
+  if (note.external_url) {
+    items.push({ command: 'provider', label: t('releaseNotes.view_on_provider') })
+  }
+  // Writing it again is only needed once a page exists: before that the control
+  // beside the release offers it, and that control gives way to the page link
+  // afterwards - which is when this becomes the only way back in.
+  if (
+    note.confluence_url &&
+    confluence.value.configured &&
+    canManage.value &&
+    note.status === 'published'
+  ) {
+    items.push({
+      command: 'sync',
+      label: note.confluence_sync_error
+        ? t('releaseNotes.sync_confluence_retry')
+        : t('releaseNotes.sync_to_confluence'),
+    })
+  }
+  if (canManage.value) {
+    items.push({ command: 'edit', label: t('releaseNotes.edit_release') })
+  }
+  if (canManage.value && note.status === 'draft') {
+    items.push({ command: 'publish', label: t('releaseNotes.publish') })
+  }
+  if (canImportFromProvider.value) {
+    items.push({ command: 'push', label: t('releaseNotes.push_to_provider') })
+  }
+  if (canManage.value) {
+    // Set apart and last: it is the one action here that cannot be undone.
+    items.push({
+      command: 'delete',
+      label: t('releaseNotes.delete'),
+      divided: true,
+      danger: true,
+    })
+  }
+
+  return items
+}
+
+/** Carry out what the menu was asked to do, for the release it was opened on. */
+function handleNoteCommand(command: string, note: ReleaseNote) {
+  switch (command) {
+    case 'provider':
+      // A menu item is not a link, so the release is opened the way the link
+      // that used to sit here would have opened it.
+      if (note.external_url) {
+        window.open(note.external_url, '_blank', 'noopener')
+      }
+      break
+    case 'sync':
+      syncToConfluence(note)
+      break
+    case 'edit':
+      editNote(note)
+      break
+    case 'publish':
+      publishNote(note)
+      break
+    case 'push':
+      pushNote(note)
+      break
+    case 'delete':
+      confirmDelete(note)
+      break
+  }
+}
+
 function editNote(note: ReleaseNote) {
   selectedId.value = note.id
   selectedTag.value = null
@@ -1736,6 +1888,7 @@ function editNote(note: ReleaseNote) {
     is_prerelease: note.is_prerelease,
     push_to_provider: false,
     target_commitish: '',
+    sync_to_confluence: true,
   }
   formCard.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
@@ -1799,6 +1952,7 @@ async function saveRelease(status: 'draft' | 'published') {
         previous_tag: form.value.previous_tag.trim() || null,
         is_prerelease: form.value.is_prerelease,
         status,
+        sync_to_confluence: asksForConfluenceSync.value,
       })
     } else {
       saved = await releaseNotesApi.create({
@@ -1809,6 +1963,7 @@ async function saveRelease(status: 'draft' | 'published') {
         previous_tag: form.value.previous_tag.trim() || null,
         is_prerelease: form.value.is_prerelease,
         status,
+        sync_to_confluence: asksForConfluenceSync.value,
       })
     }
 
@@ -1830,6 +1985,42 @@ async function saveRelease(status: 'draft' | 'published') {
     ElMessage.error(t('releaseNotes.save_failed'))
   } finally {
     saving.value = false
+  }
+}
+
+/** Ask whether this instance syncs releases to Confluence. */
+async function loadConfluenceStatus() {
+  try {
+    // No answer means not available, which is also what an instance without the
+    // integration says - the controls that need it stay out of the way either way.
+    const status = await releaseNotesApi.confluenceStatus()
+    confluence.value = status ?? { configured: false, auto_sync: false }
+  } catch {
+    // Whatever went wrong, the controls that need it stay out of the way.
+  }
+}
+
+/**
+ * Write one release to Confluence, or try again after a failure.
+ *
+ * Failing here is not a failed release: the response says what happened, and the
+ * release keeps whatever it had.
+ */
+async function syncToConfluence(note: ReleaseNote) {
+  syncingNoteId.value = note.id
+  try {
+    const result = await releaseNotesApi.syncToConfluence(note.id)
+    if (result.synced) {
+      ElMessage.success(t('releaseNotes.sync_confluence_ok'))
+    } else {
+      ElMessage.warning(result.message)
+    }
+    // The page url or the reason it failed is on the release, so read it back
+    await loadNotes()
+  } catch {
+    ElMessage.error(t('releaseNotes.sync_confluence_failed'))
+  } finally {
+    syncingNoteId.value = null
   }
 }
 
@@ -2025,6 +2216,7 @@ onMounted(() => {
   void loadProjects()
   void loadJiraSettings()
   void loadLlmConfig()
+  void loadConfluenceStatus()
 })
 
 onBeforeUnmount(() => {
@@ -2323,7 +2515,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
+  /* Fewer controls than there used to be, and further apart: an icon needs more
+     room around it than a word does. */
+  gap: 6px;
+}
+
+/* The one action in a release menu that cannot be undone */
+.note-menu-danger {
+  color: var(--el-color-danger);
 }
 
 /* A long note is clamped with a fade; the expand control follows it */

@@ -6,7 +6,7 @@ Thank you for your interest in contributing! This document outlines the process 
 
 ```bash
 # Clone the repository
-git clone https://github.com/aaronliu00/PyPRLedger.git
+git clone https://github.com/aaronliu/PyPRLedger.git
 cd PyPRLedger
 
 # Install dependencies (requires uv)

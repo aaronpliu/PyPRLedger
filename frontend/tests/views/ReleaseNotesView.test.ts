@@ -61,6 +61,8 @@ vi.mock('@/api/releaseNotes', () => ({
     push: vi.fn(),
     importReleases: vi.fn(),
     exportNotes: vi.fn(),
+    confluenceStatus: vi.fn(),
+    syncToConfluence: vi.fn(),
   },
 }))
 
@@ -209,6 +211,37 @@ function buttonsByLabel(wrapper: AnyWrapper, label: string) {
   return wrapper.findAll('button').filter((button: AnyWrapper) => button.text() === label)
 }
 
+/**
+ * Open the overflow menu of one release entry.
+ *
+ * The control sits on the entry; the menu itself is teleported to the document,
+ * and only the menu that was opened is rendered - which is what makes reading it
+ * from there unambiguous.
+ */
+async function openNoteMenu(wrapper: AnyWrapper, index = 0) {
+  const menus = wrapper.findAll('[data-test="note-menu"]')
+  expect(menus.length, 'no release entry offers a menu').toBeGreaterThan(index)
+  await menus[index].trigger('click')
+  await flushPromises()
+  await nextTick()
+}
+
+/** One item of an open release menu, by the command it carries. */
+function noteMenuItem(command: string): HTMLElement | undefined {
+  const items = document.querySelectorAll<HTMLElement>(`[data-test="note-menu-${command}"]`)
+  return items.length ? items[items.length - 1] : undefined
+}
+
+/** Ask one release's menu to do something, the way a reader would. */
+async function useNoteMenu(wrapper: AnyWrapper, command: string, index = 0) {
+  await openNoteMenu(wrapper, index)
+  const item = noteMenuItem(command)
+  expect(item, `the menu offers no '${command}' item`).toBeTruthy()
+  item!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await flushPromises()
+  await nextTick()
+}
+
 function selectByPlaceholder(wrapper: AnyWrapper, placeholder: string) {
   return wrapper
     .findAllComponents({ name: 'ElSelect' })
@@ -281,6 +314,11 @@ describe('ReleaseNotesView', () => {
     vi.mocked(releaseNotesApi.remove).mockResolvedValue({ message: 'ok' })
     // JIRA is off unless a test asks for it
     vi.mocked(rbacApi.getJiraSettings).mockResolvedValue({ base_url: '', project_keys: [] })
+    // Confluence is absent unless a test asks for it
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: false,
+      auto_sync: false,
+    })
     // no LLM configured unless a test asks for one
     vi.mocked(llmApi.getConfig).mockResolvedValue({ enabled: false, model: '', base_url: '' })
     resetJiraSettings()
@@ -416,10 +454,24 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
-    await flushPromises()
+    // a draft is the one state that offers publishing, and it is in the menu
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('publish')?.textContent?.trim()).toBe(enMessages.releaseNotes.publish)
+
+    await useNoteMenu(wrapper, 'publish')
 
     expect(releaseNotesApi.update).toHaveBeenCalledWith(1, { status: 'published' })
+  })
+
+  it('leaves publishing out of the menu of a release that is already out', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await openNoteMenu(wrapper)
+
+    expect(noteMenuItem('publish')).toBeUndefined()
+    expect(noteMenuItem('edit')).toBeDefined()
   })
 
   it('generates the release notes from the commits of the release scope', async () => {
@@ -606,8 +658,20 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.delete)[0].trigger('click')
-    await flushPromises()
+    // the destructive one is set apart and marked, so it is not hit by accident,
+    // and the way in is a labelled control rather than a bare glyph
+    await openNoteMenu(wrapper)
+    const remove = noteMenuItem('delete')
+    expect(remove?.className).toContain('note-menu-danger')
+    // Element Plus draws `divided` as a rule before the item rather than a class
+    expect(remove?.previousElementSibling?.className).toContain(
+      'el-dropdown-menu__item--divided',
+    )
+    expect(wrapper.findAll('[data-test="note-menu"]')[0].attributes('aria-label')).toBe(
+      enMessages.releaseNotes.more_actions,
+    )
+
+    await useNoteMenu(wrapper, 'delete')
 
     expect(confirmSpy).toHaveBeenCalled()
     expect(releaseNotesApi.remove).toHaveBeenCalledWith(1)
@@ -623,8 +687,7 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.delete)[0].trigger('click')
-    await flushPromises()
+    await useNoteMenu(wrapper, 'delete')
 
     expect(confirmSpy).toHaveBeenCalled()
     expect(releaseNotesApi.remove).not.toHaveBeenCalled()
@@ -651,9 +714,41 @@ describe('ReleaseNotesView', () => {
     expect(readOnlyTooltip!.props('content')).toBe(enMessages.releaseNotes.read_only_help)
     // but no management affordances
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)).toHaveLength(0)
-    expect(buttonsByLabel(wrapper, enMessages.releaseNotes.edit_release)).toHaveLength(0)
-    expect(buttonsByLabel(wrapper, enMessages.releaseNotes.delete)).toHaveLength(0)
+    // nothing to manage and nowhere to go: the entry offers no menu at all
+    expect(wrapper.findAll('[data-test="note-menu"]')).toHaveLength(0)
+    expect(noteMenuItem('edit')).toBeUndefined()
+    expect(noteMenuItem('delete')).toBeUndefined()
     expect(wrapper.find('.md-editor-stub').exists()).toBe(false)
+  })
+
+  it('offers a reader the release page and nothing to manage', async () => {
+    signIn(['viewer'])
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ external_url: 'https://git.local/ALPHA/alpha-api/releases/v1.1.0' })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // The menu stays where it is, even holding a single item: a reader finds the
+    // release page in the same place whoever they are.
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('provider')?.textContent?.trim()).toBe(
+      enMessages.releaseNotes.view_on_provider,
+    )
+    expect(noteMenuItem('edit')).toBeUndefined()
+    expect(noteMenuItem('delete')).toBeUndefined()
+
+    await useNoteMenu(wrapper, 'provider')
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://git.local/ALPHA/alpha-api/releases/v1.1.0',
+      '_blank',
+      'noopener',
+    )
+    openSpy.mockRestore()
   })
 
   it('opens release note links in a new tab', async () => {
@@ -1473,7 +1568,9 @@ describe('ReleaseNotesView', () => {
     await selectRepository(wrapper)
 
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.import_from_provider)).toHaveLength(0)
-    expect(buttonsByLabel(wrapper, enMessages.releaseNotes.push_to_provider)).toHaveLength(0)
+    // the entry still has a menu (it can be edited), just not that item
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('push')).toBeUndefined()
   })
 
   it('pushes an existing release to GitHub from the list', async () => {
@@ -1493,11 +1590,12 @@ describe('ReleaseNotesView', () => {
     await selects[1].vm.$emit('update:modelValue', 'pyledger')
     await flushPromises()
 
-    const pushButton = buttonsByLabel(wrapper, enMessages.releaseNotes.push_to_provider)
-    expect(pushButton).toHaveLength(1)
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('push')?.textContent?.trim()).toBe(
+      enMessages.releaseNotes.push_to_provider,
+    )
 
-    await pushButton[0].trigger('click')
-    await flushPromises()
+    await useNoteMenu(wrapper, 'push')
 
     expect(releaseNotesApi.push).toHaveBeenCalledWith(
       1,
@@ -1563,8 +1661,7 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.edit_release)[0].trigger('click')
-    await flushPromises()
+    await useNoteMenu(wrapper, 'edit')
 
     const editor = wrapper.find('.md-editor-stub')
     expect((editor.element as HTMLTextAreaElement).value).toContain('add login page')
@@ -1627,12 +1724,8 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    const older = wrapper.findAll('.note-entry')[1]
-    const edit = older
-      .findAll('button')
-      .find((button) => button.text() === enMessages.releaseNotes.edit_release)!
-    await edit.trigger('click')
-    await flushPromises()
+    // the menu of the second entry: the command carries the release it belongs to
+    await useNoteMenu(wrapper, 'edit', 1)
 
     // the entry's own release is edited, not the one in focus
     const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
@@ -1732,12 +1825,7 @@ describe('ReleaseNotesView', () => {
       await flushPromises()
       expect(wrapper.findAll('.note-entry')).toHaveLength(1)
 
-      const remove = wrapper
-        .find('.note-entry')
-        .findAll('button')
-        .find((button) => button.text() === enMessages.releaseNotes.delete)!
-      await remove.trigger('click')
-      await flushPromises()
+      await useNoteMenu(wrapper, 'delete')
 
       // page 2 held nothing else: the reader steps back instead of facing an empty list
       expect(releaseNotesApi.list).toHaveBeenLastCalledWith(
@@ -1841,10 +1929,14 @@ describe('ReleaseNotesView export', () => {
     expect(button().disabled).toBe(false)
   })
 
-  it('exports the open release from the detail header', async () => {
+  it('exports one release through the selection the list already carries', async () => {
     const wrapper = await mountAndSelect()
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.export_one)[0].trigger('click')
+    // The entry no longer carries an export of its own: selecting it and using
+    // the export above is how one release is written out.
+    exportCheckboxes(wrapper)[1].vm.$emit('change', true)
+    await flushPromises()
+    await wrapper.find('[data-test="export-selected"]').trigger('click')
     await flushPromises()
 
     expect(releaseNotesApi.exportNotes).toHaveBeenCalledWith(
@@ -1874,7 +1966,11 @@ describe('ReleaseNotesView export', () => {
     const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as any)
     const wrapper = await mountAndSelect()
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.copy_one)[0].trigger('click')
+    // an icon now: it says what it copies to a screen reader, and to a pointer
+    const copy = wrapper.find('[data-test="note-copy"]')
+    expect(copy.attributes('aria-label')).toBe(enMessages.releaseNotes.copy_one)
+
+    await copy.trigger('click')
     await flushPromises()
 
     // the same document the download would use, and nothing downloaded
@@ -1888,11 +1984,194 @@ describe('ReleaseNotesView export', () => {
     const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
     const wrapper = await mountAndSelect()
 
-    await buttonsByLabel(wrapper, enMessages.releaseNotes.copy_one)[0].trigger('click')
+    await wrapper.find('[data-test="note-copy"]').trigger('click')
     await flushPromises()
 
     expect(
       warning.mock.calls.some((call) => String(call[0]).includes('clipboard')),
     ).toBe(true)
+  })
+
+  // ---------------------------------------------------------------- #
+  // Confluence (an optional integration: absent unless configured)
+
+  it('offers to write a release to Confluence where it is set up', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+    const wrapper = await mountAndSelect()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.sync_confluence_label)
+  })
+
+  it('does not offer a sync the instance switched off for every repository', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: false,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    // Set up, but with the automatic path switched off: there is nothing to tick,
+    // because a release is written by hand from the release itself instead.
+    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.sync_confluence_label)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.save_draft)[0].trigger('click')
+    await flushPromises()
+
+    // And the write that is made does not ask for the sync that would not happen.
+    expect(releaseNotesApi.create).toHaveBeenCalledWith(
+      expect.objectContaining({ sync_to_confluence: false }),
+    )
+  })
+
+  it('says nothing about Confluence where it is not set up', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: false,
+      auto_sync: false,
+    })
+    // A page made while it was set up is still linked, but nothing anywhere offers
+    // to write to Confluence again.
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ confluence_url: 'https://confluence.local/spaces/DOC/pages/100' })],
+    })
+    const wrapper = await mountAndSelect()
+
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('sync')).toBeUndefined()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.sync_confluence_label)
+    expect(buttonsByLabel(wrapper, enMessages.releaseNotes.sync_to_confluence)).toHaveLength(0)
+  })
+
+  it('links to the Confluence page a release is already on', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ confluence_url: 'https://confluence.local/spaces/DOC/pages/100' })],
+    })
+
+    const wrapper = await mountAndSelect()
+
+    const link = wrapper
+      .findAll('a')
+      .find((anchor: AnyWrapper) => anchor.text() === enMessages.releaseNotes.view_on_confluence)
+    expect(link?.attributes('href')).toBe('https://confluence.local/spaces/DOC/pages/100')
+    // The control beside the release gives way to the link - and writing it again
+    // moves into the menu rather than going away with it
+    expect(buttonsByLabel(wrapper, enMessages.releaseNotes.sync_to_confluence)).toHaveLength(0)
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('sync')?.textContent?.trim()).toBe(
+      enMessages.releaseNotes.sync_to_confluence,
+    )
+  })
+
+  it('syncs a release to Confluence on request', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+    vi.mocked(releaseNotesApi.syncToConfluence).mockResolvedValue({
+      synced: true,
+      page_url: 'https://confluence.local/spaces/DOC/pages/100',
+      message: 'Synced to Confluence',
+    })
+    const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as any)
+
+    const wrapper = await mountAndSelect()
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.sync_to_confluence)[0].trigger('click')
+    await flushPromises()
+
+    // The first release of the fixture list, which is the one clicked
+    expect(releaseNotesApi.syncToConfluence).toHaveBeenCalledWith(11)
+    expect(success).toHaveBeenCalled()
+    // The page url is on the release, so the list is read back for it
+    expect(releaseNotesApi.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports a sync that failed without hiding the release', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+    vi.mocked(releaseNotesApi.syncToConfluence).mockResolvedValue({
+      synced: false,
+      message: 'Confluence returned 500',
+    })
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+
+    const wrapper = await mountAndSelect()
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.sync_to_confluence)[0].trigger('click')
+    await flushPromises()
+
+    expect(warning).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('v1.1.0')
+  })
+
+  it('writes a release that is already on a page again, from the menu', async () => {
+    // The automatic path is off: the menu is the only way back in.
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: false,
+    })
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({ id: 11, confluence_url: 'https://confluence.local/spaces/DOC/pages/100' }),
+      ],
+    })
+    vi.mocked(releaseNotesApi.syncToConfluence).mockResolvedValue({
+      synced: true,
+      page_url: 'https://confluence.local/spaces/DOC/pages/100',
+      message: 'Synced to Confluence',
+    })
+    const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as any)
+
+    const wrapper = await mountAndSelect()
+    await useNoteMenu(wrapper, 'sync')
+
+    expect(releaseNotesApi.syncToConfluence).toHaveBeenCalledWith(11)
+    expect(success).toHaveBeenCalled()
+  })
+
+  it('offers a retry when the last sync failed on a page that exists', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({
+          confluence_url: 'https://confluence.local/spaces/DOC/pages/100',
+          confluence_sync_error: 'Confluence returned 500: boom',
+        }),
+      ],
+    })
+
+    const wrapper = await mountAndSelect()
+
+    // The badge reports the failure, and the menu says what to do about it -
+    // which the badge on its own used to leave a reader guessing at.
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.badge_confluence_failed)
+    await openNoteMenu(wrapper)
+    expect(noteMenuItem('sync')?.textContent?.trim()).toBe(
+      enMessages.releaseNotes.sync_confluence_retry,
+    )
   })
 })

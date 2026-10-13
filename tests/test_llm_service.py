@@ -13,7 +13,13 @@ import httpx
 import pytest
 
 from src.services import llm_service as llm_module
-from src.services.llm_service import LlmConfig, LlmService, redact
+from src.services.llm_service import (
+    CONNECT_TIMEOUT_SECONDS,
+    REQUEST_TIMEOUT_SECONDS,
+    LlmConfig,
+    LlmService,
+    redact,
+)
 
 
 def config(**overrides: Any) -> LlmConfig:
@@ -229,3 +235,31 @@ async def test_an_error_body_under_a_200_is_reported(monkeypatch: pytest.MonkeyP
 def test_redact_cuts_the_message_to_a_reportable_length() -> None:
     assert redact("bad key sk-secret\n\n", "sk-secret") == "bad key ***"
     assert len(redact("x" * 500, "sk-secret")) == llm_module.MAX_ERROR_CHARS
+
+
+async def test_the_call_waits_for_the_answer_as_long_as_the_deployment_allows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The allowance is the configured one, and connecting is not waited out as long.
+
+    A model served on site writes its answer in its own time, which is what the
+    configured number is for; a provider that is not there at all is a different
+    failure and is reported quickly instead of being waited out for two minutes.
+    """
+    seen: dict[str, Any] = {}
+
+    class Watching(httpx.AsyncClient):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            seen.update(kwargs)
+            super().__init__(transport=httpx.MockTransport(answer("{}")), **kwargs)
+
+    monkeypatch.setattr(llm_module.httpx, "AsyncClient", Watching)
+
+    completion = await LlmService(config()).complete([{"role": "user", "content": "hi"}])
+
+    assert completion.text == "{}"
+    timeout = seen["timeout"]
+    assert isinstance(timeout, httpx.Timeout)
+    assert timeout.read == REQUEST_TIMEOUT_SECONDS
+    assert timeout.connect == CONNECT_TIMEOUT_SECONDS
+    assert timeout.connect < timeout.read

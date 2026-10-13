@@ -92,6 +92,22 @@ class ReleaseNote(Base):
         String(512), nullable=True, comment="Provider side release url"
     )
 
+    # Confluence page (optional integration), set when the release is synced there.
+    # Kept apart from the external_* fields above, which the git provider release
+    # owns: one release can be published on both at once.
+    confluence_page_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="Confluence page id holding this release"
+    )
+    confluence_url: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, comment="Confluence page url"
+    )
+    confluence_synced_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="Set when the release was last synced"
+    )
+    confluence_sync_error: Mapped[str | None] = mapped_column(
+        String(512), nullable=True, comment="Why the last sync attempt failed, if it did"
+    )
+
     # Timestamps
     published_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, comment="Set when the release is published"

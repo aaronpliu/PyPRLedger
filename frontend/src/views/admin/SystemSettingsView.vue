@@ -283,15 +283,455 @@
         </template>
       </el-dialog>
     </el-card>
+
+    <el-card shadow="hover" style="margin-top: 20px;">
+      <template #header>
+        <div class="card-header">
+          <span>{{ t('admin.systemSettings.confluence') }}</span>
+        </div>
+      </template>
+
+      <!-- Releases are published per repository, so the target is settled the same
+           way: a repository, then its project, then the instance. The instance
+           values come from the backend's environment and are shown to make the
+           fallback visible rather than to be edited here. -->
+      <el-descriptions :column="2" border size="small">
+        <el-descriptions-item :label="t('admin.systemSettings.confluenceInstance')" :span="2">
+          {{ t('admin.systemSettings.confluenceInstanceDesc') }}
+        </el-descriptions-item>
+        <el-descriptions-item :label="t('admin.systemSettings.confluenceBaseUrl')">
+          {{ confluence.instance.base_url || t('admin.systemSettings.confluenceUnset') }}
+        </el-descriptions-item>
+        <el-descriptions-item :label="t('admin.systemSettings.confluenceSpaceKey')">
+          {{ confluence.instance.space_key || t('admin.systemSettings.confluenceUnset') }}
+        </el-descriptions-item>
+        <el-descriptions-item :label="t('admin.systemSettings.confluenceParentPage')">
+          {{ confluence.instance.parent_page_id || t('admin.systemSettings.confluenceUnset') }}
+        </el-descriptions-item>
+        <el-descriptions-item :label="t('admin.systemSettings.confluencePublish')">
+          <el-tag
+            size="small"
+            :type="confluence.instance.enabled ? 'success' : 'info'"
+            effect="plain"
+          >
+            {{ confluence.instance.enabled ? t('common.enabled') : t('common.disabled') }}
+          </el-tag>
+          <el-tag
+            class="source-tag"
+            size="small"
+            :type="confluence.instance.has_credentials ? 'success' : 'danger'"
+            effect="plain"
+          >
+            {{
+              confluence.instance.has_credentials
+                ? t('admin.systemSettings.confluenceCredentialsReady')
+                : t('admin.systemSettings.confluenceCredentialsMissing')
+            }}
+          </el-tag>
+        </el-descriptions-item>
+        <!-- The switch is the automatic path only, and the floor of that decision:
+             the two levels below can take a repository out of it, none can put one
+             in while it is off. -->
+        <el-descriptions-item :label="t('admin.systemSettings.confluenceAutoSync')">
+          <el-tag
+            size="small"
+            :type="confluence.instance.auto_sync ? 'success' : 'info'"
+            effect="plain"
+          >
+            {{ confluence.instance.auto_sync ? t('common.enabled') : t('common.disabled') }}
+          </el-tag>
+          <el-tag class="source-tag" size="small" effect="plain">
+            {{ t('admin.systemSettings.confluenceAutoSyncCeiling') }}
+          </el-tag>
+        </el-descriptions-item>
+      </el-descriptions>
+
+      <!-- Project defaults: what a project's repositories share -->
+      <div class="target-section">
+        <div class="target-section-head">
+          <span class="target-section-title">{{ t('admin.systemSettings.confluenceProjects') }}</span>
+          <el-button
+            size="small"
+            type="primary"
+            data-test="confluence-project-add"
+            @click="openProjectEditor()"
+          >
+            {{ t('admin.systemSettings.confluenceTargetAdd') }}
+          </el-button>
+        </div>
+        <div class="setting-description">
+          {{ t('admin.systemSettings.confluenceProjectsDesc') }}
+        </div>
+
+        <el-table
+          v-if="confluence.projects.length"
+          :data="confluence.projects"
+          size="small"
+          data-test="confluence-projects"
+        >
+          <el-table-column
+            :label="t('admin.systemSettings.confluenceTargetProjectKey')"
+            min-width="140"
+          >
+            <template #default="{ row }">{{ row.project_key }}</template>
+          </el-table-column>
+
+          <el-table-column :label="t('admin.systemSettings.confluenceSpaceKey')" min-width="140">
+            <template #default="{ row }">
+              <span v-if="row.space_key">{{ row.space_key }}</span>
+              <span v-else class="target-inherited">
+                {{ t('admin.systemSettings.confluenceInherit') }}
+              </span>
+            </template>
+          </el-table-column>
+
+          <el-table-column :label="t('admin.systemSettings.confluenceParentPage')" min-width="140">
+            <template #default="{ row }">
+              <span v-if="row.parent_page_id">{{ row.parent_page_id }}</span>
+              <span v-else class="target-inherited">
+                {{ t('admin.systemSettings.confluenceInherit') }}
+              </span>
+            </template>
+          </el-table-column>
+
+          <el-table-column :label="t('admin.systemSettings.confluencePublish')" width="110">
+            <template #default="{ row }">{{ switchLabel(row.enabled) }}</template>
+          </el-table-column>
+
+          <el-table-column :label="t('admin.systemSettings.confluenceAutoSync')" width="110">
+            <template #default="{ row }">{{ switchLabel(row.auto_sync) }}</template>
+          </el-table-column>
+
+          <el-table-column
+            :label="t('admin.systemSettings.confluenceActions')"
+            width="140"
+            align="right"
+          >
+            <template #default="{ row }">
+              <el-button
+                link
+                type="primary"
+                data-test="confluence-project-edit"
+                @click="openProjectEditor(row)"
+              >
+                {{ t('common.edit') }}
+              </el-button>
+              <el-button
+                link
+                type="danger"
+                data-test="confluence-project-remove"
+                @click="removeProjectTarget(row)"
+              >
+                {{ t('common.delete') }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty
+          v-else
+          :description="t('admin.systemSettings.confluenceProjectsEmpty')"
+          :image-size="48"
+        />
+      </div>
+
+      <!-- What each repository resolves to, and which level decided it -->
+      <div class="target-section">
+        <div class="target-section-head">
+          <span class="target-section-title">
+            {{ t('admin.systemSettings.confluenceRepositories') }}
+          </span>
+          <el-input
+            v-model="repositorySearch"
+            class="target-search"
+            size="small"
+            clearable
+            :placeholder="t('admin.systemSettings.confluenceSearch')"
+          />
+        </div>
+        <div class="setting-description">
+          {{ t('admin.systemSettings.confluenceRepositoriesDesc') }}
+        </div>
+
+        <el-table
+          :data="filteredRepositories"
+          size="small"
+          :row-key="repositoryRowKey"
+          data-test="confluence-repositories"
+        >
+          <el-table-column
+            :label="t('admin.systemSettings.confluenceRepository')"
+            min-width="200"
+          >
+            <template #default="{ row }">
+              <div class="target-repository">
+                <span>{{ row.project_key }} / {{ row.repository_slug }}</span>
+                <span v-if="row.app_name" class="target-app-name">{{ row.app_name }}</span>
+              </div>
+            </template>
+          </el-table-column>
+
+          <el-table-column
+            :label="t('admin.systemSettings.confluenceEffectiveSpace')"
+            min-width="170"
+          >
+            <template #default="{ row }">
+              <span v-if="row.space_key">{{ row.space_key }}</span>
+              <span v-else class="target-missing">
+                {{ t('admin.systemSettings.confluenceNoSpace') }}
+              </span>
+              <el-tag
+                class="source-tag"
+                size="small"
+                effect="plain"
+                :type="sourceTagType(row.space_source)"
+              >
+                {{ sourceLabel(row.space_source) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+
+          <el-table-column
+            :label="t('admin.systemSettings.confluenceEffectiveParent')"
+            min-width="170"
+          >
+            <template #default="{ row }">
+              <span v-if="row.parent_page_id">{{ row.parent_page_id }}</span>
+              <span v-else class="target-inherited">—</span>
+              <el-tag
+                v-if="row.parent_page_id"
+                class="source-tag"
+                size="small"
+                effect="plain"
+                :type="sourceTagType(row.parent_source)"
+              >
+                {{ sourceLabel(row.parent_source) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+
+          <el-table-column :label="t('admin.systemSettings.confluencePublish')" width="160">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.enabled ? 'success' : 'info'" effect="plain">
+                {{ row.enabled ? t('common.enabled') : t('common.disabled') }}
+              </el-tag>
+              <el-tag
+                class="source-tag"
+                size="small"
+                effect="plain"
+                :type="sourceTagType(row.enabled_source)"
+              >
+                {{ sourceLabel(row.enabled_source) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+
+          <el-table-column :label="t('admin.systemSettings.confluenceAutoSync')" width="160">
+            <template #default="{ row }">
+              <!-- A repository that is never written to Confluence has nothing to
+                   sync by itself, so the switch it resolves to is not shown as if it
+                   applied: publishing is the gate, and it is the cell beside this. -->
+              <span v-if="!row.enabled" class="target-inherited">—</span>
+              <template v-else>
+                <el-tag size="small" :type="row.auto_sync ? 'success' : 'info'" effect="plain">
+                  {{ row.auto_sync ? t('common.enabled') : t('common.disabled') }}
+                </el-tag>
+                <el-tag
+                  class="source-tag"
+                  size="small"
+                  effect="plain"
+                  :type="sourceTagType(row.auto_sync_source)"
+                >
+                  {{ sourceLabel(row.auto_sync_source) }}
+                </el-tag>
+              </template>
+            </template>
+          </el-table-column>
+
+          <el-table-column
+            :label="t('admin.systemSettings.confluenceActions')"
+            width="190"
+            align="right"
+          >
+            <template #default="{ row }">
+              <el-button
+                link
+                type="primary"
+                data-test="confluence-repository-edit"
+                @click="openRepositoryEditor(row)"
+              >
+                {{ t('admin.systemSettings.confluenceOverride') }}
+              </el-button>
+              <el-button
+                v-if="hasRepositoryTarget(row)"
+                link
+                type="danger"
+                data-test="confluence-repository-clear"
+                @click="clearRepositoryTarget(row)"
+              >
+                {{ t('admin.systemSettings.confluenceClearOverride') }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <!-- One dialog for both levels; which one it edits is what is open -->
+      <el-dialog
+        v-model="targetEditorVisible"
+        :title="
+          targetScope === 'project'
+            ? t('admin.systemSettings.confluenceProjectTarget')
+            : t('admin.systemSettings.confluenceRepositoryTarget')
+        "
+        width="580px"
+        :close-on-click-modal="false"
+      >
+        <el-form v-if="editingTarget" label-width="170px">
+          <el-form-item :label="t('admin.systemSettings.confluenceTargetProjectKey')" required>
+            <el-select
+              v-model="editingTarget.project_key"
+              :disabled="targetIdentityLocked"
+              filterable
+              allow-create
+              default-first-option
+              :placeholder="t('admin.systemSettings.confluenceTargetProjectKeyPlaceholder')"
+              data-test="confluence-target-project"
+            >
+              <el-option v-for="project in knownProjects" :key="project" :label="project" :value="project" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item
+            v-if="targetScope === 'repository'"
+            :label="t('admin.systemSettings.confluenceTargetRepositorySlug')"
+            required
+          >
+            <el-select
+              v-model="editingTarget.repository_slug"
+              :disabled="targetIdentityLocked"
+              filterable
+              allow-create
+              default-first-option
+              :placeholder="t('admin.systemSettings.confluenceTargetRepositoryPlaceholder')"
+              data-test="confluence-target-repository"
+            >
+              <el-option
+                v-for="repository in knownRepositories"
+                :key="repository"
+                :label="repository"
+                :value="repository"
+              />
+            </el-select>
+          </el-form-item>
+
+          <!-- Each field decides for itself whether it is settled here -->
+          <el-form-item :label="t('admin.systemSettings.confluenceSpaceKey')">
+            <el-switch
+              v-model="targetOverrides.space"
+              :active-text="t('admin.systemSettings.confluenceOverride')"
+              :inactive-text="t('admin.systemSettings.confluenceInherit')"
+              data-test="confluence-target-space-override"
+            />
+            <el-input
+              v-if="targetOverrides.space"
+              v-model="editingTarget.space_key"
+              class="target-override-input"
+              :placeholder="t('admin.systemSettings.confluenceSpaceKeyPlaceholder')"
+              data-test="confluence-target-space"
+            />
+            <div class="setting-description">
+              {{ t('admin.systemSettings.confluenceFieldInheritDesc') }}
+            </div>
+          </el-form-item>
+
+          <el-form-item :label="t('admin.systemSettings.confluenceParentPage')">
+            <el-switch
+              v-model="targetOverrides.parent"
+              :active-text="t('admin.systemSettings.confluenceOverride')"
+              :inactive-text="t('admin.systemSettings.confluenceInherit')"
+              data-test="confluence-target-parent-override"
+            />
+            <el-input
+              v-if="targetOverrides.parent"
+              v-model="editingTarget.parent_page_id"
+              class="target-override-input"
+              :placeholder="t('admin.systemSettings.confluenceParentPagePlaceholder')"
+              data-test="confluence-target-parent"
+            />
+            <div class="setting-description">
+              {{ t('admin.systemSettings.confluenceParentPageDesc') }}
+            </div>
+          </el-form-item>
+
+          <!-- Two questions, two switches: whether this level's repositories are
+               written to Confluence at all, and whether publishing writes them by
+               itself. Each is inherited, switched on, or switched off on its own. -->
+          <el-form-item :label="t('admin.systemSettings.confluencePublish')">
+            <el-radio-group v-model="editingTarget.publish" data-test="confluence-target-publish">
+              <el-radio value="inherit">
+                {{ t('admin.systemSettings.confluenceInherit') }}
+              </el-radio>
+              <el-radio value="on">{{ t('common.enabled') }}</el-radio>
+              <el-radio value="off">{{ t('common.disabled') }}</el-radio>
+            </el-radio-group>
+            <div class="setting-description">
+              {{ t('admin.systemSettings.confluencePublishDesc') }}
+            </div>
+          </el-form-item>
+
+          <el-form-item :label="t('admin.systemSettings.confluenceAutoSync')">
+            <el-radio-group
+              v-model="editingTarget.autoSync"
+              data-test="confluence-target-auto-sync"
+            >
+              <el-radio value="inherit">
+                {{ t('admin.systemSettings.confluenceInherit') }}
+              </el-radio>
+              <el-radio value="on">{{ t('common.enabled') }}</el-radio>
+              <el-radio value="off">{{ t('common.disabled') }}</el-radio>
+            </el-radio-group>
+            <div class="setting-description">
+              {{ t('admin.systemSettings.confluenceAutoSyncDesc') }}
+            </div>
+          </el-form-item>
+        </el-form>
+
+        <template #footer>
+          <el-button @click="targetEditorVisible = false">{{ t('common.cancel') }}</el-button>
+          <el-button
+            type="primary"
+            data-test="confluence-target-save"
+            :loading="confluenceSaving"
+            @click="saveTarget"
+          >
+            {{ t('common.save') }}
+          </el-button>
+        </template>
+      </el-dialog>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
-import { createBanner, rbacApi, type BannerItem, type BannerLevel } from '@/api/rbac'
+import {
+  createBanner,
+  createProjectTarget,
+  createRepositoryTarget,
+  emptyConfluenceSettings,
+  rbacApi,
+  type BannerItem,
+  type BannerLevel,
+  type ConfluenceProjectTarget,
+  type ConfluenceRepositoryTarget,
+  type ConfluenceResolvedTarget,
+  type ConfluenceSettings,
+  type ConfluenceSource,
+  type ConfluenceTargetsPayload,
+} from '@/api/rbac'
 
 const { t } = useI18n()
 
@@ -421,12 +861,332 @@ async function confirmRemove(index: number) {
   }
 }
 
+// ===== Confluence publishing targets =====
+//
+// A release is published per repository, so where it goes is settled the same
+// way: the repository says what is particular to it, its project says what the
+// repositories of that project share, and the instance supplies what neither
+// says. The table shows the value each repository ends up with and which level
+// decided it, rather than the three levels that produce it.
+//
+// Two of those values are switches, and they answer different questions: whether
+// the repository is written to Confluence at all, and whether publishing writes it
+// by itself. They are edited, shown and inherited separately, because a repository
+// that is published by hand is exactly what the pair is for.
+
+const confluence = ref<ConfluenceSettings>(emptyConfluenceSettings())
+const confluenceSaving = ref(false)
+const repositorySearch = ref('')
+
+/** A switch choice as three states, rather than the null the endpoint takes. */
+type SwitchChoice = 'inherit' | 'on' | 'off'
+
+interface TargetDraft {
+  project_key: string
+  repository_slug: string
+  space_key: string
+  parent_page_id: string
+  /** Whether this level's repositories are published at all. */
+  publish: SwitchChoice
+  /** Whether publishing writes them by itself. */
+  autoSync: SwitchChoice
+}
+
+/** A switch as the endpoint takes it: left to the level above, or a decision. */
+const asFlag = (choice: SwitchChoice): boolean | null =>
+  choice === 'inherit' ? null : choice === 'on'
+
+/** A switch as the dialog shows it. */
+const asChoice = (value: boolean | null): SwitchChoice =>
+  value === null ? 'inherit' : value ? 'on' : 'off'
+
+const targetEditorVisible = ref(false)
+const targetScope = ref<'project' | 'repository'>('project')
+/** The identity being replaced; empty while a new target has no identity yet. */
+const targetEditingKey = ref('')
+const editingTarget = ref<TargetDraft | null>(null)
+/** Whether the dialog settles each field here or leaves it to the level above. */
+const targetOverrides = ref({ space: false, parent: false })
+
+const SOURCE_LABEL_KEYS: Record<ConfluenceSource, string> = {
+  instance: 'admin.systemSettings.confluenceSourceInstance',
+  project: 'admin.systemSettings.confluenceSourceProject',
+  repository: 'admin.systemSettings.confluenceSourceRepository',
+}
+
+/** A colour per level, so which one decided a value is readable at a glance. */
+const SOURCE_TAG_TYPES: Record<ConfluenceSource, 'info' | 'warning' | 'success'> = {
+  instance: 'info',
+  project: 'warning',
+  repository: 'success',
+}
+
+const sourceLabel = (source: ConfluenceSource) => t(SOURCE_LABEL_KEYS[source])
+const sourceTagType = (source: ConfluenceSource) => SOURCE_TAG_TYPES[source]
+
+/** What the list shows for a switch that may be settled at another level. */
+const switchLabel = (value: boolean | null) =>
+  value === null
+    ? t('admin.systemSettings.confluenceInherit')
+    : value
+      ? t('common.enabled')
+      : t('common.disabled')
+
+/** Every project that is either registered or already has a target. */
+const knownProjects = computed(() => {
+  const projects = new Set(confluence.value.resolved.map((row) => row.project_key))
+  confluence.value.projects.forEach((target) => projects.add(target.project_key))
+  return [...projects].sort()
+})
+
+/** The repositories of the project the dialog is editing. */
+const knownRepositories = computed(() =>
+  confluence.value.resolved
+    .filter((row) => row.project_key === editingTarget.value?.project_key)
+    .map((row) => row.repository_slug)
+)
+
+const filteredRepositories = computed(() => {
+  const term = repositorySearch.value.trim().toLowerCase()
+  if (!term) {
+    return confluence.value.resolved
+  }
+  return confluence.value.resolved.filter((row) =>
+    `${row.project_key}/${row.repository_slug} ${row.app_name ?? ''}`.toLowerCase().includes(term)
+  )
+})
+
+/** Whether this repository has a target of its own rather than inheriting. */
+function hasRepositoryTarget(row: ConfluenceResolvedTarget): boolean {
+  return confluence.value.repositories.some(
+    (target) =>
+      target.project_key === row.project_key && target.repository_slug === row.repository_slug
+  )
+}
+
+/** A row is one repository of one project; the same slug can sit under several. */
+const repositoryRowKey = (row: ConfluenceResolvedTarget) =>
+  `${row.project_key}/${row.repository_slug}`
+
+/** Editing an existing target keeps its identity: the key is what it replaces. */
+const targetIdentityLocked = computed(() => targetEditingKey.value !== '')
+
+function draftFrom(target: ConfluenceProjectTarget | ConfluenceRepositoryTarget): TargetDraft {
+  return {
+    project_key: target.project_key,
+    repository_slug: 'repository_slug' in target ? target.repository_slug : '',
+    space_key: target.space_key,
+    parent_page_id: target.parent_page_id,
+    publish: asChoice(target.enabled),
+    autoSync: asChoice(target.auto_sync),
+  }
+}
+
+function openTargetEditor(
+  scope: 'project' | 'repository',
+  target: ConfluenceProjectTarget | ConfluenceRepositoryTarget
+) {
+  const identity =
+    'repository_slug' in target ? `${target.project_key}/${target.repository_slug}` : ''
+  targetScope.value = scope
+  targetEditingKey.value = scope === 'repository' ? identity : target.project_key
+  editingTarget.value = draftFrom(target)
+  // An empty field is one this level says nothing about, which is what the
+  // switch reports - so a stored target reopens with its switches where they were.
+  targetOverrides.value = {
+    space: Boolean(target.space_key),
+    parent: Boolean(target.parent_page_id),
+  }
+  targetEditorVisible.value = true
+}
+
+function openProjectEditor(target?: ConfluenceProjectTarget) {
+  openTargetEditor('project', target ?? createProjectTarget())
+}
+
+function openRepositoryEditor(row: ConfluenceResolvedTarget) {
+  const stored = confluence.value.repositories.find(
+    (target) =>
+      target.project_key === row.project_key && target.repository_slug === row.repository_slug
+  )
+  openTargetEditor(
+    'repository',
+    stored ??
+      createRepositoryTarget({
+        project_key: row.project_key,
+        repository_slug: row.repository_slug,
+      })
+  )
+}
+
+/** The draft as the whole collection to write, or null when it is not ready. */
+function buildTargets(): ConfluenceTargetsPayload | null {
+  const draft = editingTarget.value
+  if (!draft) {
+    return null
+  }
+
+  const projectKey = draft.project_key.trim()
+  if (!projectKey) {
+    ElMessage.warning(t('admin.systemSettings.confluenceProjectRequired'))
+    return null
+  }
+  const repositorySlug = draft.repository_slug.trim()
+  if (targetScope.value === 'repository' && !repositorySlug) {
+    ElMessage.warning(t('admin.systemSettings.confluenceRepositoryRequired'))
+    return null
+  }
+
+  const spaceKey = targetOverrides.value.space ? draft.space_key.trim() : ''
+  if (targetOverrides.value.space && !spaceKey) {
+    ElMessage.warning(t('admin.systemSettings.confluenceSpaceRequired'))
+    return null
+  }
+  const parentPageId = targetOverrides.value.parent ? draft.parent_page_id.trim() : ''
+  if (parentPageId && !/^\d+$/.test(parentPageId)) {
+    ElMessage.warning(t('admin.systemSettings.confluenceParentInvalid'))
+    return null
+  }
+
+  const enabled = asFlag(draft.publish)
+  const autoSync = asFlag(draft.autoSync)
+  // A level that decides nothing is what its absence already says, so the
+  // endpoint refuses it and the dialog says so rather than writing it.
+  if (!spaceKey && !parentPageId && enabled === null && autoSync === null) {
+    ElMessage.warning(t('admin.systemSettings.confluenceTargetEmpty'))
+    return null
+  }
+
+  const identity = `${projectKey}/${repositorySlug}`
+
+  if (targetScope.value === 'project') {
+    const kept = confluence.value.projects.filter(
+      (item) => item.project_key !== targetEditingKey.value && item.project_key !== projectKey
+    )
+    return {
+      projects: [
+        ...kept,
+        {
+          project_key: projectKey,
+          space_key: spaceKey,
+          parent_page_id: parentPageId,
+          enabled,
+          auto_sync: autoSync,
+        },
+      ],
+      repositories: [...confluence.value.repositories],
+    }
+  }
+
+  const kept = confluence.value.repositories.filter((item) => {
+    const itemIdentity = `${item.project_key}/${item.repository_slug}`
+    return itemIdentity !== targetEditingKey.value && itemIdentity !== identity
+  })
+  return {
+    projects: [...confluence.value.projects],
+    repositories: [
+      ...kept,
+      {
+        project_key: projectKey,
+        repository_slug: repositorySlug,
+        space_key: spaceKey,
+        parent_page_id: parentPageId,
+        enabled,
+        auto_sync: autoSync,
+      },
+    ],
+  }
+}
+
+/**
+ * Write the whole configuration, which is the shape the endpoint takes.
+ *
+ * What is on screen is replaced by what the endpoint answers with, so the table
+ * shows the targets as they now resolve rather than as they were asked for.
+ */
+async function persistConfluence(payload: ConfluenceTargetsPayload): Promise<boolean> {
+  confluenceSaving.value = true
+  try {
+    const response = await rbacApi.updateConfluenceTargets(payload)
+    confluence.value = {
+      instance: response.instance,
+      projects: response.projects,
+      repositories: response.repositories,
+      resolved: response.resolved,
+    }
+    return true
+  } catch (error: any) {
+    console.error('Failed to save Confluence targets:', error)
+    ElMessage.error(error.response?.data?.detail || t('admin.systemSettings.saveFailed'))
+    return false
+  } finally {
+    confluenceSaving.value = false
+  }
+}
+
+async function saveTarget() {
+  const payload = buildTargets()
+  if (!payload) {
+    return
+  }
+
+  if (await persistConfluence(payload)) {
+    targetEditorVisible.value = false
+    ElMessage.success(t('admin.systemSettings.saveSuccess'))
+  }
+}
+
+async function confirmRemoval(messageKey: string): Promise<boolean> {
+  try {
+    await ElMessageBox.confirm(t(messageKey), t('common.confirm'), {
+      type: 'warning',
+      confirmButtonText: t('common.confirm'),
+      cancelButtonText: t('common.cancel'),
+    })
+    return true
+  } catch {
+    return false // dismissed
+  }
+}
+
+async function removeProjectTarget(target: ConfluenceProjectTarget) {
+  if (!(await confirmRemoval('admin.systemSettings.confluenceProjectDeleteConfirm'))) {
+    return
+  }
+
+  const payload: ConfluenceTargetsPayload = {
+    projects: confluence.value.projects.filter((item) => item.project_key !== target.project_key),
+    repositories: [...confluence.value.repositories],
+  }
+  if (await persistConfluence(payload)) {
+    ElMessage.success(t('admin.systemSettings.saveSuccess'))
+  }
+}
+
+async function clearRepositoryTarget(row: ConfluenceResolvedTarget) {
+  if (!(await confirmRemoval('admin.systemSettings.confluenceRepositoryClearConfirm'))) {
+    return
+  }
+
+  const payload: ConfluenceTargetsPayload = {
+    projects: [...confluence.value.projects],
+    repositories: confluence.value.repositories.filter(
+      (item) =>
+        !(item.project_key === row.project_key && item.repository_slug === row.repository_slug)
+    ),
+  }
+  if (await persistConfluence(payload)) {
+    ElMessage.success(t('admin.systemSettings.saveSuccess'))
+  }
+}
+
 // Load settings on mount
 onMounted(async () => {
   await Promise.all([
     loadSettings(),
     loadLlmSettings(),
     loadBannerSettings(),
+    loadConfluenceSettings(),
   ])
 })
 
@@ -507,6 +1267,15 @@ const loadBannerSettings = async () => {
   }
 }
 
+const loadConfluenceSettings = async () => {
+  try {
+    confluence.value = await rbacApi.getConfluenceTargets()
+  } catch (error) {
+    console.error('Failed to load Confluence settings:', error)
+    ElMessage.error(t('admin.systemSettings.loadFailed'))
+  }
+}
+
 
 </script>
 
@@ -581,5 +1350,59 @@ const loadBannerSettings = async () => {
    piece, since a broken "Enab / led" is what it looks like when it does not. */
 :deep(.el-switch__label) {
   white-space: nowrap;
+}
+
+/* The three levels are read top to bottom: instance, then project, then what
+   each repository ends up with. */
+.target-section {
+  margin-top: 20px;
+}
+
+.target-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.target-section-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.target-search {
+  max-width: 240px;
+}
+
+.target-repository {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.target-app-name {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+/* A value decided elsewhere and a value decided nowhere are both absent from
+   the cell, and are not the same thing - hence two states, not one. */
+.target-inherited {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.target-missing {
+  color: var(--el-color-warning);
+  font-size: 13px;
+}
+
+.source-tag {
+  margin-left: 6px;
+}
+
+.target-override-input {
+  margin-top: 8px;
 }
 </style>

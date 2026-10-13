@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.29.1] - 2026-10-13
+
+**Backend Version**: 1.29.1
+**Frontend Version**: 1.24.1
+
+### Changed
+- Where a release is published to Confluence is now decided by **two switches rather than one**, because a single value was answering two questions. `CONFLUENCE_SERVER_SYNC_ENABLED` says only whether the **automatic** path runs: it is the instance default of that decision and a ceiling over it, so a project or a repository can be left out of the automatic path but none can be let into it while the switch is off. Whether a repository is written to Confluence **at all** - by hand or automatically - is its own **Publish** switch, on unless a project or a repository switches it off, with **Auto sync** beside it deciding whether publishing writes it by itself. The case this fixes is the one that was wrong before: with the switch off, the manual sync used to be blocked by the same value, so an instance that synced nothing by itself could not write anything at all; now releasing one by hand works while it is off. Both switches are inherited, decided, or left alone at each of the three levels, the settings page shows them as two columns with the level that decided each, and a stored configuration that says nothing about the automatic path keeps behaving exactly as it did
+
+## [1.29.0] - 2026-10-12
+
+**Backend Version**: 1.29.0
+**Frontend Version**: 1.24.0
+
+### Added
+- Publishing a release can also write it to Confluence. The integration is an addition to publishing rather than part of it: with nothing configured no code path reaches Confluence and publishing behaves exactly as it did, and a release is published whether or not Confluence answers - a failure is recorded on the release (`confluence_sync_error`, which the card shows as a badge with the reason and a way to try again) instead of being raised. **One page per release**: the first sync creates it and every sync after that updates the same one, looked up by its title `{app_name} — {tag_name}` (the application the project registry knows, or the repository slug where none is registered), which is what makes a repeat sync an update rather than a second page. The body is the release note itself - the Markdown the page shows, converted to Confluence storage format: headings, lists, tables, links, and fenced code blocks as a `code` macro. The client speaks the Server/Data Center v1 content API, takes a personal access token or a username and password for an instance without tokens, and `CONFLUENCE_SERVER_VERIFY_SSL` turns verification off for an instance behind an internal CA
+- Where a release is published is resolved **field by field**: the space key, the parent page and whether to sync each come from the most specific level that names one - a repository's own target, then its project's, then the instance default. Resolving it field by field is what makes the usual arrangement expressible: a space per project and a page per repository, without repeating the space on every repository. The two narrower levels are set on a new **System settings → Confluence Publishing** page, which requires `manage`; the instance level is read from the environment (`CONFLUENCE_SERVER_*`), and `CONFLUENCE_SERVER_SYNC_ENABLED` is the switch for the automatic path - a published release can still be written to Confluence by hand while it is off. Migration `034` adds the four columns to the release row, kept apart from the provider's own `external_*` fields because one release can be published on both at once
+
+### Changed
+- The release card keeps only what is reached for constantly beside it: the page the release is on - or the way to put it there, now that a release can be written to Confluence - and copying its notes. Everything else took a button each, so the row grew with every action a release can be given; they are one menu now, a single row of icons wide however many releases the page holds
+
+### Fixed
+- The AI summary of a release notes preview waits for the LLM it is waiting for. The preview holds the provider call inside the request the reader is waiting on, and the client gave up on every request after 30 seconds - so a model that took longer was cut off mid-answer: the page reported a network error, fell back to the commit subjects, and the summary the server was still writing was thrown away, which is why it failed often on a model served on site while PageAgent (which streams, and does not go through that client) was unaffected. The preview is now given the 300s the gateway in front of the server allows, and `LLM_REQUEST_TIMEOUT_SECONDS` (120s, previously a hardcoded 60) is how long one provider call may take - a setting rather than a number, because a model served on site answers in its own time. A provider that is not there at all is not waited out for that allowance: connecting has its own 15-second one, so an unreachable host is reported in seconds instead of minutes. The LLM proxy behind PageAgent makes its calls under the same allowance
+
 ## [1.28.0] - 2026-10-10
 
 **Backend Version**: 1.28.0
