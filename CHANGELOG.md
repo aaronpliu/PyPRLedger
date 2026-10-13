@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.29.1] - 2026-10-13
+
+**Backend Version**: 1.29.1
+**Frontend Version**: 1.24.1
+
 ### Changed
 - Where a release is published to Confluence is now decided by **two switches rather than one**, because a single value was answering two questions. `CONFLUENCE_SERVER_SYNC_ENABLED` says only whether the **automatic** path runs: it is the instance default of that decision and a ceiling over it, so a project or a repository can be left out of the automatic path but none can be let into it while the switch is off. Whether a repository is written to Confluence **at all** - by hand or automatically - is its own **Publish** switch, on unless a project or a repository switches it off, with **Auto sync** beside it deciding whether publishing writes it by itself. The case this fixes is the one that was wrong before: with the switch off, the manual sync used to be blocked by the same value, so an instance that synced nothing by itself could not write anything at all; now releasing one by hand works while it is off. Both switches are inherited, decided, or left alone at each of the three levels, the settings page shows them as two columns with the level that decided each, and a stored configuration that says nothing about the automatic path keeps behaving exactly as it did
 
