@@ -266,12 +266,17 @@
               </div>
 
               <!-- A repository can hold hundreds of tags: the search narrows the
-                   list before it is paged, so a tag is reachable by name -->
+                   list before it is paged, so a tag is reachable by name. It is the
+                   one control of this panel a reader types into, so it is given the
+                   large size - 40px with 14px text, the height the application's other
+                   search field uses - rather than the smallest the component offers,
+                   which is where it had been left: 24px with 12px text, under every
+                   field around it. -->
               <el-input
                 v-if="tags.length > 0"
                 v-model="tagSearch"
                 class="nav-search"
-                size="small"
+                size="large"
                 clearable
                 :prefix-icon="Search"
                 :placeholder="t('releaseNotes.tags_search_placeholder')"
@@ -2353,8 +2358,30 @@ onBeforeUnmount(() => {
   margin-right: 0;
 }
 
+/*
+ * The tag search, whose height is written out rather than left to the component's
+ * size.
+ *
+ * The size prop decides nothing here on its own: the height of an input comes from
+ * --el-input-inner-height, which the size class sets, and this field kept coming out
+ * small however that prop was set - the small size (24px, 12px text) and the large one
+ * (40px, 14px) were reported as reading the same. So the height is stated here, on the
+ * one control of this panel a reader types into, and it holds whatever the variable
+ * resolves to.
+ */
 .nav-search {
   margin-bottom: 8px;
+}
+
+.nav-search :deep(.el-input__wrapper) {
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.nav-search :deep(.el-input__inner) {
+  height: 38px;
+  line-height: 38px;
+  font-size: 14px;
 }
 
 /*

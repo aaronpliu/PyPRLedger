@@ -300,7 +300,12 @@ async function setTagSearch(wrapper: AnyWrapper, value: string) {
   await flushPromises()
 }
 
-describe('ReleaseNotesView', () => {
+// The page under test is the heaviest of the application: three columns, two paginated
+// lists, a markdown editor, and a tag index that walks the whole release list. The
+// tests that walk its pagination take two to three seconds where the rest take a
+// fraction of one, and the five seconds every test is given by default is what made
+// them flake on a loaded machine - so the file says what its own tests may take.
+describe('ReleaseNotesView', { timeout: 20_000 }, () => {
   beforeEach(() => {
     vi.clearAllMocks()
     signIn(['review_admin'])
@@ -917,6 +922,14 @@ describe('ReleaseNotesView', () => {
     await selectRepository(wrapper)
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
 
+    // The box a reader types a tag into is a full-sized field. Its height is written
+    // into the stylesheet, which jsdom does not apply, so what is pinned here is the
+    // other half: that it is not left at the small size (24px, 12px text) it used to
+    // be. The hook rides on the inner input, so the field itself is its wrapper.
+    const searchField = wrapper.find('[data-test="tags-search"]').element.closest('.el-input')
+    expect(searchField?.classList.contains('el-input--small')).toBe(false)
+    expect(searchField?.classList.contains('el-input--large')).toBe(true)
+
     // the listing is shown as it arrived, tag for tag
     expect(tagNames(wrapper)).toEqual(['v1.1.1', 'v2.0.0-rc1', 'v1.1.0', 'v1.0.0'])
 
@@ -1314,12 +1327,20 @@ describe('ReleaseNotesView', () => {
     )
   })
 
+  /**
+   * The index walks the whole release list to place every tag, so this test needs a
+   * list longer than two pages: the walk is asserted to ask for offsets 0, 200 and
+   * 400, and the tag it then jumps to sits at position 320 - inside the third page.
+   * 401 releases is the least that proves both, and the size of this fixture is not
+   * what costs - 450 of them take the same time - so shrinking it further would only
+   * weaken what is being proved.
+   */
   it('walks the capped pages of the release list when indexing the tags', async () => {
-    const allNotes = Array.from({ length: 450 }, (_, index) =>
+    const allNotes = Array.from({ length: 401 }, (_, index) =>
       release({
         id: index + 1,
-        tag_name: `v1.${450 - index}.0`,
-        name: `v1.${450 - index}.0`,
+        tag_name: `v1.${401 - index}.0`,
+        name: `v1.${401 - index}.0`,
         body: `## release ${index}`,
       }),
     )
@@ -1359,7 +1380,7 @@ describe('ReleaseNotesView', () => {
     )
     expect(wrapper.find('.nav-item.active').text()).toContain(wanted.tag_name)
     expect(wrapper.find('.md-preview-stub').text()).toContain(wanted.body)
-  })
+  }, 20_000)
 
   it('offers to draft a release from the selected tag', async () => {
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
