@@ -903,10 +903,13 @@ describe('ReleaseNotesView', () => {
     expect(panel.classes()).not.toContain('is-collapsed')
   })
 
-  it('searches the tag list by name', async () => {
+  it('lists the tags in the order the provider lists them, and searches them by name', async () => {
+    // the provider answers newest first, which is the order Bitbucket defines: a
+    // patch cut for an older line is newer than the release that follows it in
+    // version order, and a version sort is what used to bury the tag just cut
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
       ...REFS,
-      tags: ['v1.0.0', 'v1.1.0', 'v2.0.0-rc1'],
+      tags: ['v1.1.1', 'v2.0.0-rc1', 'v1.1.0', 'v1.0.0'],
     } as never)
 
     const wrapper = mountView()
@@ -914,12 +917,12 @@ describe('ReleaseNotesView', () => {
     await selectRepository(wrapper)
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
 
-    // newest first, as every other tag picker orders them
-    expect(tagNames(wrapper)).toEqual(['v2.0.0-rc1', 'v1.1.0', 'v1.0.0'])
+    // the listing is shown as it arrived, tag for tag
+    expect(tagNames(wrapper)).toEqual(['v1.1.1', 'v2.0.0-rc1', 'v1.1.0', 'v1.0.0'])
 
     await setTagSearch(wrapper, '1.1')
 
-    expect(tagNames(wrapper)).toEqual(['v1.1.0'])
+    expect(tagNames(wrapper)).toEqual(['v1.1.1', 'v1.1.0'])
 
     await setTagSearch(wrapper, 'rc')
 
@@ -933,7 +936,7 @@ describe('ReleaseNotesView', () => {
 
     // and clearing it brings the whole list back
     await setTagSearch(wrapper, '')
-    expect(tagNames(wrapper)).toEqual(['v2.0.0-rc1', 'v1.1.0', 'v1.0.0'])
+    expect(tagNames(wrapper)).toEqual(['v1.1.1', 'v2.0.0-rc1', 'v1.1.0', 'v1.0.0'])
   })
 
   it('badges the selected tag instead of the release of the other tab', async () => {
@@ -997,11 +1000,12 @@ describe('ReleaseNotesView', () => {
     expect(tagSelect.props('modelValue')).toBe('v0.2.0')
   })
 
-  it('drafts from the newest tag whatever order the provider returns', async () => {
-    // Bitbucket Cloud lists tags oldest first (alphabetically)
+  it('drafts from the newest tag, which is where the listing starts', async () => {
+    // the provider answers newest first, and that is the order every tag picker of
+    // this page offers them in
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
       ...REFS,
-      tags: ['v0.1.0', 'v0.2.0', 'v0.3.0'],
+      tags: ['v0.3.0', 'v0.2.0', 'v0.1.0'],
       branches: ['feature/Pylang'],
     } as never)
 
@@ -1014,7 +1018,7 @@ describe('ReleaseNotesView', () => {
     await flushPromises()
 
     const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
-    // the newest tag is preselected, not the first entry of the provider
+    // the newest tag - the first entry of the listing - is what a draft opens on
     expect(tagSelect.props('modelValue')).toBe('v0.3.0')
     expect(
       tagSelect
@@ -1026,7 +1030,7 @@ describe('ReleaseNotesView', () => {
   it('ignores repeated ref names coming from the provider', async () => {
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
       ...REFS,
-      tags: ['v0.1.0', 'v0.1.0', 'v0.2.0', 'v0.2.0'],
+      tags: ['v0.2.0', 'v0.2.0', 'v0.1.0', 'v0.1.0'],
       branches: ['main', 'main'],
     } as never)
     vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([]))
@@ -1037,6 +1041,7 @@ describe('ReleaseNotesView', () => {
 
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
 
+    // de-duplicated, and still in the order the provider answered in
     expect(wrapper.findAll('.tag-item').map((item: AnyWrapper) => item.text())).toEqual([
       'v0.2.0',
       'v0.1.0',

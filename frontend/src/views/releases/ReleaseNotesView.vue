@@ -41,7 +41,7 @@
       <div class="panel-body" :class="{ 'is-collapsed': !coordinatesOpen }">
       <el-form :model="repo" label-width="150px">
         <el-row :gutter="16">
-          <el-col :xs="24" :sm="12" :md="6">
+          <el-col :xs="24" :sm="12" :md="8">
             <el-form-item :label="t('releaseDiff.project_key')" required>
               <el-select
                 v-model="repo.project_key"
@@ -66,7 +66,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :md="6">
+          <el-col :xs="24" :sm="12" :md="8">
             <el-form-item :label="t('releaseDiff.repository_slug')" required>
               <el-select
                 v-model="repo.repository_slug"
@@ -87,24 +87,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :md="6">
-            <el-form-item :label="t('releaseDiff.git_provider')">
-              <el-select
-                v-model="repo.git_provider"
-                clearable
-                :placeholder="t('releaseDiff.git_provider_placeholder')"
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="option in GIT_PROVIDER_OPTIONS"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col v-if="isCloudProvider" :xs="24" :sm="12" :md="6">
+          <el-col v-if="isCloudProvider" :xs="24" :sm="12" :md="8">
             <el-form-item :label="t('releaseDiff.workspace_slug')">
               <el-select
                 v-model="repo.workspace_slug"
@@ -825,7 +808,6 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { GIT_PROVIDER_OPTIONS } from '@/constants/gitProvider'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -1152,19 +1134,18 @@ const canManage = computed(() =>
 const canImportFromProvider = computed(() => canManage.value && isGithubProvider.value)
 const canSave = computed(() => hasCoordinates.value && Boolean(form.value.tag_name.trim()))
 
-// Newest first: versions compare numerically so v1.10.0 sorts above v1.9.0.
-// The provider orders the tags by modification, which is not the order a release
-// line is read in (a patch on an old line is modified after a newer minor), so
-// this page's own tag list is put in version order instead.
-const sortedTags = computed(() =>
-  [...tags.value].sort((a, b) => b.localeCompare(a, undefined, { numeric: true })),
-)
-
-// What the two ref pickers offer: a version-ordered part of the whole listing,
-// narrowed by what the reader typed - the rest is still reachable by searching it.
-const candidateTags = computed(() => searchCandidates(sortedTags.value, refSearch.value))
+// The tags are shown in the order the provider lists them, which is the order
+// Bitbucket lists tags in: most recently created first. This page used to re-sort
+// them by version instead, so that a release line read top-down, and paid for it
+// with the tag that matters most: the one just cut. A version sort buries it - a tag
+// that does not read as a version at all, or a patch cut for an older line, falls
+// below everything, past the first page of the list.
+//
+// What the two ref pickers offer: the newest part of the whole listing, narrowed by
+// what the reader typed - the rest is still reachable by searching it.
+const candidateTags = computed(() => searchCandidates(tags.value, refSearch.value))
 const candidateRefs = computed(() =>
-  searchCandidates([...sortedTags.value, ...branches.value], refSearch.value),
+  searchCandidates([...tags.value, ...branches.value], refSearch.value),
 )
 
 /** Whether a tag survives the search box, by a plain substring of its name. */
@@ -1175,7 +1156,7 @@ function tagMatchesQuery(tag: string): boolean {
 
 // The search narrows the list before it is paged, so a match is on the first
 // page of the result rather than on whichever page its position falls on
-const filteredTags = computed(() => sortedTags.value.filter(tagMatchesQuery))
+const filteredTags = computed(() => tags.value.filter(tagMatchesQuery))
 const visibleTags = computed(() => {
   const start = (tagPage.value - 1) * tagPageSize.value
   return filteredTags.value.slice(start, start + tagPageSize.value)
@@ -1271,10 +1252,15 @@ function formatDate(value?: string | null): string {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
 }
 
-/** The tag released just before ``tag`` (the base of its release scope). */
+/**
+ * The tag released just before ``tag``, which is the base of its release scope.
+ *
+ * Read off the listing, which is in the order the tags were released in: the entry
+ * after a tag is the one that came before it.
+ */
 function previousTagFor(tag: string): string | null {
-  const index = sortedTags.value.indexOf(tag)
-  return index >= 0 ? (sortedTags.value[index + 1] ?? null) : null
+  const index = tags.value.indexOf(tag)
+  return index >= 0 ? (tags.value[index + 1] ?? null) : null
 }
 
 /**
@@ -1469,6 +1455,8 @@ function coordinates() {
   return {
     project_key: selectedProjectKey.value,
     repository_slug: selectedRepositorySlug.value,
+    // derived rather than chosen: the registry decides where a repository lives, and
+    // this stands only for one it says nothing about
     git_provider: repo.value.git_provider || undefined,
     workspace_slug: selectedWorkspaceSlug.value || undefined,
   }
@@ -1546,7 +1534,7 @@ async function loadRefs(force = false) {
     tagPage.value = 1
     // The tags tab always has a selection so the commits of a tag are visible
     if (tabIsTags.value && !selectedTag.value) {
-      const newest = sortedTags.value[0]
+      const newest = tags.value[0]
       if (newest) {
         selectTag(newest)
       }
@@ -1769,9 +1757,9 @@ function startNewRelease(tag?: string) {
   //   1. the tag that was clicked next to the draft button,
   //   2. the tag selected in the tags navigator (the draft button of the list
   //      header must not fall back to another version while a tag is active),
-  //   3. the newest tag - the provider order hands out the oldest one (v0.1.0)
+  //   3. the newest tag, which is where the listing starts
   const selected = tabIsTags.value ? selectedTag.value : null
-  const initial = tag ?? selected ?? sortedTags.value[0] ?? tags.value[0]
+  const initial = tag ?? selected ?? tags.value[0]
   if (initial) {
     form.value.tag_name = initial
     // The draft inherits the scope the server resolved for that tag, so the editor
@@ -2196,7 +2184,7 @@ watch(activeTab, (tab) => {
   }
   void loadReleaseTagIndex()
   if (!selectedTag.value) {
-    const newest = sortedTags.value[0]
+    const newest = tags.value[0]
     if (newest) {
       selectTag(newest)
     }

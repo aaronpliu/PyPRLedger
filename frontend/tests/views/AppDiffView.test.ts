@@ -117,7 +117,7 @@ async function openRepository(wrapper: View) {
  */
 async function openOn(wrapper: View, refs: string[] = ['v2.0.0', 'v1.1.0']) {
   await openRepository(wrapper)
-  await pick(wrapper, 3, refs)
+  await pick(wrapper, 2, refs)
 }
 
 /**
@@ -289,7 +289,7 @@ describe('AppDiffView', () => {
     await openRepository(wrapper)
 
     // one release is not a comparison, and the page says as much instead of comparing
-    await pick(wrapper, 3, [RELEASE_LATER])
+    await pick(wrapper, 2, [RELEASE_LATER])
 
     expect(wrapper.find('[data-test="need-two"]').exists()).toBe(true)
     expect(compare()).not.toHaveBeenCalled()

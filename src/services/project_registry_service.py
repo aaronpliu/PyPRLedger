@@ -5,6 +5,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.git_provider import GitProvider
+from src.models.project import Project
 from src.models.project_registry import ProjectRegistry
 
 
@@ -373,7 +374,7 @@ class ProjectRegistryService:
         repository_slug: str,
         description: str | None = None,
         db: AsyncSession = None,
-        git_provider: str = ProjectRegistry.DEFAULT_PROVIDER,
+        git_provider: str | None = None,
         app_alias: str | None = None,
         registry_kind: str | None = None,
     ) -> ProjectRegistry:
@@ -386,7 +387,11 @@ class ProjectRegistryService:
             repository_slug: Repository slug
             description: Optional description
             db: Database session
-            git_provider: Git provider (bitbucket_server, github_enterprise)
+            git_provider: Git provider (bitbucket_server, bitbucket_cloud,
+                github_enterprise). Left out, the project the repository belongs to
+                decides - the registry is what the release pages resolve a
+                repository's provider from, so a registration that guessed would
+                send every read of that repository to the wrong instance
             app_alias: Optional name the dependency database knows the app as
             registry_kind: Whether this is an application, whose releases the
                 dependency database holds, or a package that is only a dependency of
@@ -400,10 +405,16 @@ class ProjectRegistryService:
             ValueError: If project-repo pair already registered to different app,
                 or invalid git_provider, or an unknown registry_kind
         """
-        # Validate git_provider
-        if not GitProvider.is_valid(git_provider):
+        # The provider that was named, or the one the project of this repository is
+        # on. Named is a decision and is applied as it stands - the default included,
+        # since naming it is what asking for it means; left out, the project answers,
+        # because the column cannot be empty and the default it would otherwise fall
+        # back to is a fact about the deployment rather than about this repository.
+        named = (git_provider or "").strip()
+        provider = named or await self._project_provider(project_key, db)
+        if not GitProvider.is_valid(provider):
             raise ValueError(
-                f"Invalid git_provider '{git_provider}'. "
+                f"Invalid git_provider '{provider}'. "
                 f"Must be one of: {', '.join(sorted(GitProvider.values()))}"
             )
 
@@ -429,11 +440,8 @@ class ProjectRegistryService:
             if description:
                 existing.description = description
                 updated = True
-            if (
-                git_provider != ProjectRegistry.DEFAULT_PROVIDER
-                and existing.git_provider != git_provider
-            ):
-                existing.git_provider = git_provider
+            if named and existing.git_provider != provider:
+                existing.git_provider = provider
                 updated = True
             alias = (app_alias or "").strip() or None
             if alias is not None and existing.app_alias != alias:
@@ -452,7 +460,7 @@ class ProjectRegistryService:
             app_name=app_name,
             project_key=project_key,
             repository_slug=repository_slug,
-            git_provider=git_provider,
+            git_provider=provider,
             app_alias=(app_alias or "").strip() or None,
             registry_kind=kind,
             description=description or f"Registered to {app_name}",
@@ -463,7 +471,7 @@ class ProjectRegistryService:
         await db.refresh(registry)
 
         logger.info(
-            f"Registered {project_key}/{repository_slug} to app '{app_name}' (provider: {git_provider})"
+            f"Registered {project_key}/{repository_slug} to app '{app_name}' (provider: {provider})"
         )
         return registry
 
@@ -605,11 +613,37 @@ class ProjectRegistryService:
         result = await db.execute(query)
         return result.scalar_one_or_none()
 
+    async def _project_provider(self, project_key: str, db: AsyncSession) -> str:
+        """The provider of the project a repository belongs to.
+
+        A repository that registers itself belongs to a project, and that project is
+        what says where it lives. Read rather than assumed: the registry's own column
+        cannot be left empty, so leaving it to its default would have every
+        auto-registered repository claim the same provider whichever one it is
+        actually on. A project nobody stored names nothing, and the configured default
+        stands for it.
+        """
+        try:
+            stored = (
+                await db.execute(
+                    select(Project.git_provider).where(Project.project_key == project_key)
+                )
+            ).scalar_one_or_none()
+        except Exception as e:
+            logger.warning(f"Could not read the provider of project {project_key}: {str(e)}")
+            return ProjectRegistry.DEFAULT_PROVIDER
+        return stored or ProjectRegistry.DEFAULT_PROVIDER
+
     async def auto_register_project(
         self, project_key: str, repository_slug: str, app_name: str, db: AsyncSession
     ) -> ProjectRegistry:
         """
         Auto-register a project-repo pair (internal use)
+
+        Registered under the project's own provider, because this is the registration
+        the release pages resolve a repository's provider from - a registration that
+        claimed the wrong one would address every read of that repository to the wrong
+        instance, and nothing else on the page could tell.
 
         Args:
             project_key: Project key
@@ -620,12 +654,14 @@ class ProjectRegistryService:
         Returns:
             Created ProjectRegistry entry
         """
+        provider = await self._project_provider(project_key, db)
         try:
             registry = ProjectRegistry(
                 app_name=app_name,
                 project_key=project_key,
                 repository_slug=repository_slug,
                 description=f"Auto-registered to {app_name}",
+                git_provider=provider,
             )
             db.add(registry)
             await db.commit()
@@ -640,4 +676,5 @@ class ProjectRegistryService:
                 project_key=project_key,
                 repository_slug=repository_slug,
                 description="Auto-registered (pending)",
+                git_provider=provider,
             )
