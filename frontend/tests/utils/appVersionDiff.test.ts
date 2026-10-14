@@ -10,6 +10,7 @@ import {
   moveLabelKey,
   moveSymbol,
   moveTone,
+  ragTone,
   rebuiltWithUnchangedDependencies,
   shortCommitId,
   summaryEntries,
@@ -210,6 +211,32 @@ describe('commitTotal', () => {
   it('counts nothing for an axis that could not be read', () => {
     expect(commitTotal(codeOf(['v1.1.0', 'v4.0.0']))).toBe(0)
     expect(commitTotal(null)).toBe(0)
+  })
+})
+
+describe('ragTone', () => {
+  it('reads missing commits as red, above everything else', () => {
+    expect(ragTone({ ...codeOf()!, missing_count: 2, added_count: 3 })).toBe('red')
+  })
+
+  it('reads a missing verdict as red even where the count is empty', () => {
+    // the verdict is the authoritative statement that commits are missing
+    expect(ragTone({ ...codeOf()!, verdict: 'missing', missing_count: 0 })).toBe('red')
+  })
+
+  it('reads new commits as green', () => {
+    expect(ragTone(codeOf())).toBe('green')
+  })
+
+  it('reads anything else as amber', () => {
+    expect(ragTone({ ...codeOf()!, added_count: 0, missing_count: 0 })).toBe('amber')
+    // a comparison that could not be run is "other", not green or red
+    expect(ragTone(codeOf(['v1.1.0', 'v4.0.0']))).toBe('amber')
+  })
+
+  it('has no tone for a comparison that does not exist', () => {
+    expect(ragTone(null)).toBeNull()
+    expect(ragTone(undefined)).toBeNull()
   })
 })
 
