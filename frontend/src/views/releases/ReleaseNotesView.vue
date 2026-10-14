@@ -521,21 +521,32 @@
             </el-form-item>
 
             <el-form-item>
-              <el-checkbox v-model="form.is_prerelease">
-                {{ t('releaseNotes.prerelease') }}
-              </el-checkbox>
-            </el-form-item>
-
-            <!-- Offered where the server has Confluence set up and syncs by
-                 itself: this is the automatic path, which setting up alone does not
-                 turn on. An instance that does not use Confluence, or does not sync
-                 by itself, shows nothing here — writing one by hand is offered on
-                 the release row instead. -->
-            <el-form-item v-if="confluence.configured && confluence.auto_sync">
-              <el-checkbox v-model="form.sync_to_confluence">
-                {{ t('releaseNotes.sync_confluence_label') }}
-              </el-checkbox>
-              <div class="field-hint">{{ t('releaseNotes.sync_confluence_help') }}</div>
+              <!-- One line: what the release is, and whether it is also written to
+                   Confluence. The write is the automatic path, so it is offered only
+                   where the instance syncs by itself - and it is disabled while the
+                   release is a pre-release, which is never written by itself. Writing
+                   one by hand stays available on the release row. -->
+              <div class="release-toggles">
+                <el-checkbox v-model="form.is_prerelease" data-test="is-prerelease">
+                  {{ t('releaseNotes.prerelease') }}
+                </el-checkbox>
+                <el-checkbox
+                  v-if="confluence.configured && confluence.auto_sync"
+                  v-model="form.sync_to_confluence"
+                  :disabled="form.is_prerelease"
+                  data-test="sync-to-confluence"
+                >
+                  {{ t('releaseNotes.sync_confluence_label') }}
+                </el-checkbox>
+              </div>
+              <!-- Only the disabled state needs a word: why the switch beside it
+                   cannot be turned on while the release is a pre-release. -->
+              <div
+                v-if="confluence.configured && confluence.auto_sync && form.is_prerelease"
+                class="field-hint"
+              >
+                {{ t('releaseNotes.sync_confluence_prerelease') }}
+              </div>
             </el-form-item>
 
             <template v-if="isGithubProvider">
@@ -632,9 +643,6 @@
                       {{ note.name }}
                     </a>
                   </h4>
-                  <!-- the tag is the version's identity: it reads at the same
-                       weight as the title, while the status badges stay small -->
-                  <el-tag effect="plain">{{ note.tag_name }}</el-tag>
                   <el-tag v-if="note.is_latest" size="small" type="success" round>
                     {{ t('releaseNotes.badge_latest') }}
                   </el-tag>
@@ -1123,8 +1131,11 @@ const syncingNoteId = ref<number | null>(null)
 // Whether the form may ask for the automatic path: it is the switch in the
 // environment that turns that off for every repository at once, so where it is off
 // there is nothing to ask for - a release is written by hand from the release itself.
+// A pre-release is the same kind of nothing-to-ask-for, which is what the disabled
+// switch beside it says.
 const asksForConfluenceSync = computed(
-  () => form.value.sync_to_confluence && confluence.value.auto_sync
+  () =>
+    form.value.sync_to_confluence && confluence.value.auto_sync && !form.value.is_prerelease
 )
 
 const editingId = ref<number | null>(null)
@@ -1963,9 +1974,11 @@ async function saveRelease(status: 'draft' | 'published') {
     return
   }
 
+  // Read before the form is reset: whether this save asked to write to Confluence.
+  const willSyncToConfluence = asksForConfluenceSync.value
   saving.value = true
+  let saved: ReleaseNote
   try {
-    let saved: ReleaseNote
     if (editingId.value) {
       saved = await releaseNotesApi.update(editingId.value, {
         name: form.value.name.trim() || form.value.tag_name.trim(),
@@ -2004,8 +2017,28 @@ async function saveRelease(status: 'draft' | 'published') {
     refreshReleaseTagIndex()
   } catch {
     ElMessage.error(t('releaseNotes.save_failed'))
+    return
   } finally {
     saving.value = false
+  }
+
+  // The Confluence write runs in the background after this response, so the list
+  // has not seen it yet. Poll the release until it shows its page (or its failure)
+  // and refresh, instead of leaving "Sync to Confluence" on the screen.
+  if (status === 'published' && willSyncToConfluence) {
+    void pollForConfluenceSync(saved.id)
+  }
+}
+
+/** Re-read one release until its background Confluence write has landed. */
+async function pollForConfluenceSync(noteId: number) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 750))
+    const note = await releaseNotesApi.get(noteId).catch(() => null)
+    if (note?.confluence_url || note?.confluence_sync_error) {
+      await loadNotes()
+      return
+    }
   }
 }
 
@@ -2556,7 +2589,7 @@ onBeforeUnmount(() => {
    several of them, so nothing inside the notes may compete with it. */
 .note-entry-name {
   margin: 0;
-  font-size: 20px;
+  font-size: 28px;
   font-weight: 700;
   line-height: 1.3;
   color: var(--el-text-color-primary);
@@ -2643,7 +2676,7 @@ onBeforeUnmount(() => {
   margin-top: 12px;
 }
 
-/* The rendered notes must not outrank the release name (20px).
+/* The rendered notes must not outrank the release name (28px).
    md-editor's github theme renders a level-2 heading - which is what a generated
    body opens with ("## What's Changed") - at 1.5em with 24px/16px block margins,
    and inherits its base size from the page. The scale is therefore pinned here
@@ -2738,9 +2771,20 @@ onBeforeUnmount(() => {
 }
 
 .field-hint {
+  /* The form item content is a flex row; forcing the hint to its own line keeps it
+     from crowding a checkbox it explains (the checkbox is narrower than the row). */
+  flex-basis: 100%;
   margin-top: 4px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+/* What the release is, and whether it is written to Confluence: one line. */
+.release-toggles {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .ref-empty {

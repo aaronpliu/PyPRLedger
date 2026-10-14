@@ -162,8 +162,14 @@ def schedule_confluence_sync(background_tasks: BackgroundTasks, note: ReleaseNot
     neither delayed by Confluence nor affected by whether it answers. Nothing is
     queued at all unless the integration is configured and switched on, which is
     what keeps it optional.
+
+    A pre-release is never written by itself: it is a version being tried out, and
+    what a reader of the space should see is the release. Writing one by hand is
+    still offered on the release row.
     """
     if note.status != ReleaseNoteStatus.PUBLISHED:
+        return
+    if note.is_prerelease:
         return
     if not is_auto_sync_enabled():
         return

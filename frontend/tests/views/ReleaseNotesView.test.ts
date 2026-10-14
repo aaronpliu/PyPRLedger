@@ -450,6 +450,96 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     )
   })
 
+  it('polls a Confluence-synced release into view after publishing', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+        configured: true,
+        auto_sync: true,
+      })
+      vi.mocked(releaseNotesApi.create).mockResolvedValue(release({ status: 'published' }) as any)
+      vi.mocked(releaseNotesApi.get).mockResolvedValue(
+        release({ confluence_url: 'https://confluence.local/spaces/DOC/pages/1' }) as any,
+      )
+
+      const wrapper = mountView()
+      await flushPromises()
+      await selectRepository(wrapper)
+
+      await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+      await flushPromises()
+
+      await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
+      await flushPromises()
+
+      // The publish asked for the write to Confluence...
+      expect(releaseNotesApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sync_to_confluence: true }),
+      )
+      // ...which runs after the response, so the page re-reads the release and
+      // refreshes the list once it lands rather than leaving "Sync to Confluence".
+      const listCallsBefore = vi.mocked(releaseNotesApi.list).mock.calls.length
+      await vi.advanceTimersByTimeAsync(750)
+      await flushPromises()
+
+      expect(releaseNotesApi.get).toHaveBeenCalled()
+      expect(vi.mocked(releaseNotesApi.list).mock.calls.length).toBeGreaterThan(listCallsBefore)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('disables the Confluence switch while the release is a pre-release', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const syncSwitch = wrapper.findComponent('[data-test="sync-to-confluence"]') as AnyWrapper
+    expect(syncSwitch.props('disabled')).toBe(false)
+
+    const preRelease = wrapper.findComponent('[data-test="is-prerelease"]') as AnyWrapper
+    preRelease.vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    // A pre-release is never written by itself, so the switch that would ask for it
+    // is disabled rather than left offering something that will not happen.
+    expect(syncSwitch.props('disabled')).toBe(true)
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.sync_confluence_prerelease)
+  })
+
+  it('does not ask for a Confluence sync when publishing a pre-release', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const preRelease = wrapper.findComponent('[data-test="is-prerelease"]') as AnyWrapper
+    preRelease.vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.create).toHaveBeenCalledWith(
+      expect.objectContaining({ is_prerelease: true, sync_to_confluence: false }),
+    )
+  })
+
   it('publishes a draft from the list', async () => {
     vi.mocked(releaseNotesApi.list).mockResolvedValue({
       total: 1,
@@ -2057,7 +2147,11 @@ describe('ReleaseNotesView export', () => {
     await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain(enMessages.releaseNotes.sync_confluence_label)
+    // Read off the switch itself: the release row carries the same words for the
+    // manual write, so the page's text alone would not say which one is offered.
+    const check = wrapper.find('[data-test="sync-to-confluence"]')
+    expect(check.exists()).toBe(true)
+    expect(check.text()).toBe(enMessages.releaseNotes.sync_confluence_label)
   })
 
   it('does not offer a sync the instance switched off for every repository', async () => {
@@ -2074,7 +2168,7 @@ describe('ReleaseNotesView export', () => {
 
     // Set up, but with the automatic path switched off: there is nothing to tick,
     // because a release is written by hand from the release itself instead.
-    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.sync_confluence_label)
+    expect(wrapper.find('[data-test="sync-to-confluence"]').exists()).toBe(false)
 
     await buttonsByLabel(wrapper, enMessages.releaseNotes.save_draft)[0].trigger('click')
     await flushPromises()
@@ -2104,7 +2198,7 @@ describe('ReleaseNotesView export', () => {
     await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.sync_confluence_label)
+    expect(wrapper.find('[data-test="sync-to-confluence"]').exists()).toBe(false)
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.sync_to_confluence)).toHaveLength(0)
   })
 

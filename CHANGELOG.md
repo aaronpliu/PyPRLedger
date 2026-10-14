@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- A **pre-release is no longer written to Confluence by itself**. It is a version being tried out, so what a reader of the space should see is the release: publishing one still schedules nothing, and the publish form says so by disabling "Write to Confluence as well" while "Set as a pre-release" is ticked. The manual action is unaffected - a pre-release can still be written by hand from its row, which is now the only way it reaches the space
+
+### Changed
 - The Release Notes' tag search is a full-sized field. It was the one input in the application left at the small size - 24px with 12px text, under every field around it - because it was never moved off the smallest the component offers, while the rest of the page stood at the default. A box a reader types a tag into now has the height the application's other search field uses - 40px, with 14px text - and that height is stated on the field itself as well as in the page's stylesheet, so it holds whatever the component's size variable resolves to
 - The Release Notes' commit table of a tag is read in the panel, not in a box of a fixed size. The table was capped at 420px, so the rows of a page scrolled inside it while the card around it stood half empty. It is now as tall as the rows the page holds - every row of the page is read at once, and nothing scrolls inside the table - and the panel it sits in is filled at least, with the page controls resting at its foot and the card growing past that height when a page needs more than the panel has. Every other commit table is unchanged: a list shown beside something else still reads better bounded
 
