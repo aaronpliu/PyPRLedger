@@ -4,6 +4,7 @@ import { nextTick } from 'vue'
 import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ReleaseNotesView from '@/views/releases/ReleaseNotesView.vue'
+import CommitTable from '@/components/release/CommitTable.vue'
 import { projectsApi } from '@/api/projects'
 import { rbacApi } from '@/api/rbac'
 import { releaseDiffApi } from '@/api/releaseDiff'
@@ -1064,6 +1065,26 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
       'v0.2.0',
       'v0.1.0',
     ])
+  })
+
+  it('gives the commit table the height of the panel it fills', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([PREVIEW_COMMIT]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    // The commits are the panel here, not a list beside something else: the card hands
+    // its height down to the table, and the table asks for that height instead of
+    // capping itself at 420px - which is what left a page of rows scrolling inside a
+    // small box while the panel around it stood half empty.
+    expect(wrapper.find('.detail-card').classes()).toContain('detail-card--fills')
+    expect(wrapper.findComponent(CommitTable).props('fillHeight')).toBe(true)
   })
 
   it('maps a tag of the tags tab to the commits it released', async () => {

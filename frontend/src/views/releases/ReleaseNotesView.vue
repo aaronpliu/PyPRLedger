@@ -356,7 +356,14 @@
       <!-- ============ Column 2: notes of the selection (or the editor) ============ -->
       <el-col :xs="24" :lg="16">
         <div ref="formCard" class="form-anchor">
-        <el-card shadow="never" class="detail-card">
+        <!-- The commits panel fills the card: the modifier hands the card's height down
+             to the table, which is a box of a fixed size otherwise (see
+             .detail-card--fills). -->
+        <el-card
+          shadow="never"
+          class="detail-card"
+          :class="{ 'detail-card--fills': tabIsTags && !!selectedTag && !editorOpen }"
+        >
           <template #header>
             <div class="section-header">
               <div class="section-title">
@@ -592,7 +599,15 @@
               :label="t('releaseNotes.commits_loading')"
             />
 
-            <commit-table v-else :commits="tagCommits" :empty-text="t('releaseNotes.commits_empty')" />
+            <!-- The commits of the tag are the panel here, not a list beside something:
+                 the table is given the height the card has, so a page of rows is read
+                 in it instead of scrolling inside a box of a fixed size -->
+            <commit-table
+              v-else
+              fill-height
+              :commits="tagCommits"
+              :empty-text="t('releaseNotes.commits_empty')"
+            />
           </template>
 
           <!-- Every release of the current page, one entry each -->
@@ -2322,6 +2337,28 @@ onBeforeUnmount(() => {
 .form-anchor,
 .detail-card {
   height: 100%;
+}
+
+/*
+ * The commits panel holds a table that is as tall as the rows of the page it shows.
+ *
+ * So the card is at least the height the row gives it - the panel is filled, not a box
+ * drawn around the table - and as tall as the table when the page needs more, which is
+ * what keeps every row of the page in the page instead of behind a scrollbar inside a
+ * box of a fixed size. Nothing here may cap the body: a body told to take only the
+ * card's height would clip the rows past it.
+ */
+.detail-card--fills {
+  height: auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-card--fills :deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .loading-block {
