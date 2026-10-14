@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- The Release Notes' tag search is a full-sized field. It was the one input in the application left at the small size - 24px with 12px text, under every field around it - because it was never moved off the smallest the component offers, while the rest of the page stood at the default. A box a reader types a tag into now has the height the application's other search field uses - 40px, with 14px text - stated in the page's own stylesheet rather than left to the component's size variable, which this field was not visibly following
+- The Release Notes' tag search is a full-sized field. It was the one input in the application left at the small size - 24px with 12px text, under every field around it - because it was never moved off the smallest the component offers, while the rest of the page stood at the default. A box a reader types a tag into now has the height the application's other search field uses - 40px, with 14px text - and that height is stated on the field itself as well as in the page's stylesheet, so it holds whatever the component's size variable resolves to
 
 ## [1.29.2] - 2026-10-13
 

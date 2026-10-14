@@ -922,11 +922,16 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await selectRepository(wrapper)
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
 
-    // The box a reader types a tag into is a full-sized field. Its height is written
-    // into the stylesheet, which jsdom does not apply, so what is pinned here is the
-    // other half: that it is not left at the small size (24px, 12px text) it used to
-    // be. The hook rides on the inner input, so the field itself is its wrapper.
-    const searchField = wrapper.find('[data-test="tags-search"]').element.closest('.el-input')
+    // The box a reader types a tag into is a full-sized field: 40px with 14px text,
+    // where the small size it had been left at is 24px with 12px text. Its height is
+    // written on the input itself, which is what the test environment can see - the
+    // stylesheet beside it is not applied by jsdom, a style on the element is - and
+    // the field it belongs to is the input's wrapper, the hook riding on the inner one.
+    const searchInput = wrapper.find('[data-test="tags-search"]')
+    expect(searchInput.attributes('style')).toContain('height: 38px')
+    expect(searchInput.attributes('style')).toContain('font-size: 14px')
+
+    const searchField = searchInput.element.closest('.el-input')
     expect(searchField?.classList.contains('el-input--small')).toBe(false)
     expect(searchField?.classList.contains('el-input--large')).toBe(true)
 

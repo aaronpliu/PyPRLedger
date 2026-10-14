@@ -267,11 +267,12 @@
 
               <!-- A repository can hold hundreds of tags: the search narrows the
                    list before it is paged, so a tag is reachable by name. It is the
-                   one control of this panel a reader types into, so it is given the
-                   large size - 40px with 14px text, the height the application's other
+                   one control of this panel a reader types into, so it is a full-sized
+                   field - 40px with 14px text, the height the application's other
                    search field uses - rather than the smallest the component offers,
                    which is where it had been left: 24px with 12px text, under every
-                   field around it. -->
+                   field around it. The height rides on the input itself, not only in
+                   the stylesheet below: see TAG_SEARCH_STYLE. -->
               <el-input
                 v-if="tags.length > 0"
                 v-model="tagSearch"
@@ -279,6 +280,7 @@
                 size="large"
                 clearable
                 :prefix-icon="Search"
+                :input-style="TAG_SEARCH_STYLE"
                 :placeholder="t('releaseNotes.tags_search_placeholder')"
                 data-test="tags-search"
               />
@@ -862,6 +864,17 @@ const PREVIEW_MAX_COMMITS = 500
 const NOTE_LOOKUP_PAGE_SIZE = 200
 // Safety bound when indexing the released tags of a repository
 const NOTE_LOOKUP_MAX = 2000
+
+/**
+ * The height of the tag search, written on the input itself.
+ *
+ * The size prop alone sets this - an input's height comes from the size variable the
+ * class carries (40px and 14px text for the large one) - and this field was reported
+ * as staying at the small size (24px, 12px text) however it was set. A style on the
+ * element is the one thing that cannot be lost on the way to the browser, so the
+ * height of this field is stated here and not only in the stylesheet.
+ */
+const TAG_SEARCH_STYLE = 'height: 38px; line-height: 38px; font-size: 14px'
 
 const toolbars: ToolbarNames[] = [
   'bold',
