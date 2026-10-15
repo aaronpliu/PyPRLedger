@@ -217,7 +217,7 @@
 
         <el-form :model="compareForm" label-width="180px">
           <el-row :gutter="16">
-            <el-col :xs="24" :md="12">
+            <el-col :xs="24" :md="11">
               <el-form-item :label="t('releaseDiff.missing_source_ref')" required>
                 <el-autocomplete
                   v-model="compareForm.source_ref"
@@ -238,7 +238,20 @@
                 </el-autocomplete>
               </el-form-item>
             </el-col>
-            <el-col :xs="24" :md="12">
+            <!-- The two refs are one comparison read in two directions, so the button
+                 that turns it around sits between them: on their line, and between the
+                 two fields when a narrow window stacks them. -->
+            <el-col :xs="24" :md="2" class="swap-col">
+              <el-button
+                circle
+                class="swap-refs"
+                data-test="swap-refs"
+                :icon="Switch"
+                :disabled="!canSwapRefs"
+                @click="swapRefs"
+              />
+            </el-col>
+            <el-col :xs="24" :md="11">
               <el-form-item :label="t('releaseDiff.missing_target_ref')" required>
                 <el-autocomplete
                   v-model="compareForm.target_ref"
@@ -705,6 +718,7 @@ import {
   CircleCheck,
   Download,
   QuestionFilled,
+  Switch,
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
@@ -1277,6 +1291,24 @@ async function captureReport(
   }
 }
 
+/** There is a comparison to turn around only once both refs name one. */
+const canSwapRefs = computed(() =>
+  Boolean(compareForm.value.source_ref.trim() && compareForm.value.target_ref.trim()),
+)
+
+/**
+ * Read the comparison the other way: what was the target becomes the source, and the
+ * source becomes the target. An answer already on the page was read in the direction
+ * that has just been turned around, so it is asked for again rather than left standing
+ * for a comparison nobody made.
+ */
+function swapRefs() {
+  const { source_ref, target_ref } = compareForm.value
+  compareForm.value.source_ref = target_ref
+  compareForm.value.target_ref = source_ref
+  if (compareResult.value) void runCompare()
+}
+
 async function runCompare() {
   if (
     !selectedProjectKey.value ||
@@ -1571,6 +1603,18 @@ async function copySha(value: string) {
   flex: 0 0 auto;
   width: 400px;
   max-width: 100%;
+}
+
+/*
+ * The button between the two refs. It is centred on the line the two fields share,
+ * and it is given the same footing as a form item so a form that adds one below them
+ * does not leave it floating above the fields it turns around.
+ */
+.swap-col {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 18px;
 }
 
 /* Explanatory text, not a label: same weight as the hints above the form */

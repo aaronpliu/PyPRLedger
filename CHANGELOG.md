@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The Release Diff can be read the other way round from the page itself. Its two refs are one comparison in two directions, and turning it around meant typing both of them again in the other fields; a button now sits between Source Release and Target Release and exchanges them, and a comparison already on the page is asked for again rather than left standing for the direction that has just been exchanged. It is the round icon button the page's other controls look like, disabled until both refs name one, and it carries no words
+
+
 ## [1.30.1] - 2026-10-15
 
 **Backend Version**: 1.30.1
