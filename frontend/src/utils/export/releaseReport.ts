@@ -147,13 +147,6 @@ function metaTable(rows: string[]): string {
   return `<table class="meta">\n      ${body}\n    </table>`
 }
 
-/** The URL column is a short link, not the address itself: a commit URL is long
- * enough to wrap the table around it, and the SHA beside it already names the commit. */
-function commitUrlCell(url?: string | null): string {
-  if (!url) return '-'
-  return link(url, t('releaseDiff.report_commit_link'))
-}
-
 /** Commit subject with its JIRA ticket keys linked (everything escaped). */
 function messageCell(message: string | null | undefined, jira?: JiraSettings | null): string {
   return jiraTicketSegments(firstLine(message), jira)
@@ -204,7 +197,6 @@ function commitTable(
         <td>${authorCell(commit)}</td>
         <td class="nowrap">${escapeHtml(formatTimestamp(commit.author_timestamp))}</td>
         <td title="${fullMessage}">${message}</td>
-        <td class="url">${commitUrlCell(commit.url)}</td>
       </tr>`
     })
     .join('')
@@ -215,7 +207,6 @@ function commitTable(
       <th>${escapeHtml(t('releaseDiff.col_author'))}</th>
       <th>${escapeHtml(t('releaseDiff.col_date'))}</th>
       <th>${escapeHtml(t('releaseDiff.col_message'))}</th>
-      <th>${escapeHtml(t('releaseDiff.col_url'))}</th>
     </tr></thead>
     <tbody>${body}</tbody>
   </table>`
@@ -343,7 +334,6 @@ export function buildCheckSectionHtml(
           row.commit_info?.message,
           context.jira,
         )}</td>
-        <td class="url">${commitUrlCell(commitUrl)}</td>
       </tr>`
     })
     .join('')
@@ -358,7 +348,6 @@ export function buildCheckSectionHtml(
       <th>${escapeHtml(t('releaseDiff.col_author'))}</th>
       <th>${escapeHtml(t('releaseDiff.col_date'))}</th>
       <th>${escapeHtml(t('releaseDiff.col_message'))}</th>
-      <th>${escapeHtml(t('releaseDiff.col_url'))}</th>
     </tr></thead>
     <tbody>${body}</tbody>
   </table>`
@@ -437,8 +426,6 @@ const buildReportStyle = (): string => `
   a:hover { text-decoration: underline; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   .nowrap { white-space: nowrap; }
-  .url { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-         font-size: 12px; color: #475569; word-break: break-all; }
   .muted { color: #9ca3af; font-size: 13px; }
   .status { display: inline-block; margin: 0 0 12px; padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; }
   .status-ok { background: #dcfce7; color: #166534; }

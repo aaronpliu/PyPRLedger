@@ -156,10 +156,11 @@ describe('buildCompareSectionHtml', () => {
     expect(html).toContain('v0.9.0')
     // scope row names the compared pair
     expect(html).toContain('v1.0.0 → v1.1.0')
-    // the URL column is a short link, not the address: a commit URL is long enough to
-    // wrap the table around it, and the SHA beside it already names the commit
+    // no URL column: the SHA is the link to the commit, so the address never had to be
+    // printed - let alone wrapped - beside it
+    expect(html).not.toContain('class="url"')
     expect(html).toContain(
-      `<td class="url"><a href="https://bitbucket.org/aaronpliu/pylang/commits/1111111" target="_blank" rel="noopener">${enMessages.releaseDiff.report_commit_link}</a></td>`,
+      '<td class="mono"><a href="https://bitbucket.org/aaronpliu/pylang/commits/1111111" target="_blank" rel="noopener">1111111</a></td>',
     )
   })
 
@@ -208,10 +209,10 @@ describe('buildCheckSectionHtml', () => {
     expect(html.match(/class="cell-missing"/g)).toHaveLength(1)
     expect(html).not.toContain('cell-warn')
     expect(html).toContain('class="status status-missing"')
-    expect(html.match(/class="url"/g)).toBeTruthy()
-    // the URL column is a short link, not the address itself
+    // no URL column: the SHA carries the link to the commit
+    expect(html).not.toContain('class="url"')
     expect(html).toContain(
-      `<td class="url"><a href="https://bitbucket.org/aaronpliu/pylang/commits/1111111" target="_blank" rel="noopener">${enMessages.releaseDiff.report_commit_link}</a></td>`,
+      `<td class="mono"><a href="https://bitbucket.org/aaronpliu/pylang/commits/1111111" target="_blank" rel="noopener">${C1}</a></td>`,
     )
   })
 

@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- The Release Diff export links its commits with a word, not an address. The URL column of the report's commit tables rendered the commit's complete URL - long enough to wrap the table around it and stretch its row - where the SHA beside it already links to the same commit. The column now reads "Link" in the reader's language and carries the commit's address as its target, so the table keeps its shape and the click still lands on the commit
+- The Release Diff export no longer carries a URL column. It printed each commit's complete address beside a SHA that already links to the same commit - long enough to wrap the table around it and stretch its row - so the column is gone, and the SHA remains the link to the commit. Both commit tables of the report - the compare and the check - are a column narrower for it
 
 ## [1.30.0] - 2026-10-15
 
