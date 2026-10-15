@@ -216,8 +216,8 @@
         </template>
 
         <el-form :model="compareForm" label-width="180px">
-          <el-row :gutter="16">
-            <el-col :xs="24" :md="11">
+          <el-row :gutter="16" class="refs-row">
+            <el-col :xs="24" :md="12">
               <el-form-item :label="t('releaseDiff.missing_source_ref')" required>
                 <el-autocomplete
                   v-model="compareForm.source_ref"
@@ -239,9 +239,11 @@
               </el-form-item>
             </el-col>
             <!-- The two refs are one comparison read in two directions, so the button
-                 that turns it around sits between them: on their line, and between the
-                 two fields when a narrow window stacks them. -->
-            <el-col :xs="24" :md="2" class="swap-col">
+                 that turns it around sits between them: out of the layout on the line
+                 they share, and in the flow when a narrow window stacks the fields. It
+                 takes no width from either, so both keep the width the rest of the card
+                 is built on. -->
+            <div class="swap-anchor">
               <el-button
                 circle
                 class="swap-refs"
@@ -250,8 +252,8 @@
                 :disabled="!canSwapRefs"
                 @click="swapRefs"
               />
-            </el-col>
-            <el-col :xs="24" :md="11">
+            </div>
+            <el-col :xs="24" :md="12">
               <el-form-item :label="t('releaseDiff.missing_target_ref')" required>
                 <el-autocomplete
                   v-model="compareForm.target_ref"
@@ -1606,15 +1608,36 @@ async function copySha(value: string) {
 }
 
 /*
- * The button between the two refs. It is centred on the line the two fields share,
- * and it is given the same footing as a form item so a form that adds one below them
- * does not leave it floating above the fields it turns around.
+ * The button that turns the comparison around. It takes no width from the two fields
+ * it sits between, so both keep the width the rest of the card is built on. On the line
+ * they share it is lifted out of the layout and set down just right of the divider, in
+ * the empty lead-in the target label leaves in its own 180px box (form labels are
+ * right-aligned against their input), clear of the source input on one side and of the
+ * label text on the other. When a narrow window stacks the fields it returns to the
+ * flow between them, centred.
  */
-.swap-col {
+.refs-row {
+  position: relative;
+}
+
+.swap-anchor {
+  flex: 0 0 100%;
   display: flex;
-  align-items: center;
   justify-content: center;
-  padding-bottom: 18px;
+  padding: 4px 0 12px;
+}
+
+@media (min-width: 992px) {
+  .swap-anchor {
+    position: absolute;
+    /* the divider plus the target column's gutter padding: the button starts where
+       that column's content does, and the 180px label box it opens onto is empty
+       there because its text is pushed to the right */
+    top: 0;
+    left: calc(50% + 8px);
+    flex: none;
+    padding: 0;
+  }
 }
 
 /* Explanatory text, not a label: same weight as the hints above the form */
