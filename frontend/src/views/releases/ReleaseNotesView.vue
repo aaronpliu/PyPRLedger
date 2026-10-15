@@ -266,14 +266,21 @@
               </div>
 
               <!-- A repository can hold hundreds of tags: the search narrows the
-                   list before it is paged, so a tag is reachable by name -->
+                   list before it is paged, so a tag is reachable by name. It is the
+                   one control of this panel a reader types into, so it is a full-sized
+                   field - 40px with 14px text, the height the application's other
+                   search field uses - rather than the smallest the component offers,
+                   which is where it had been left: 24px with 12px text, under every
+                   field around it. The height rides on the input itself, not only in
+                   the stylesheet below: see TAG_SEARCH_STYLE. -->
               <el-input
                 v-if="tags.length > 0"
                 v-model="tagSearch"
                 class="nav-search"
-                size="small"
+                size="large"
                 clearable
                 :prefix-icon="Search"
+                :input-style="TAG_SEARCH_STYLE"
                 :placeholder="t('releaseNotes.tags_search_placeholder')"
                 data-test="tags-search"
               />
@@ -349,7 +356,14 @@
       <!-- ============ Column 2: notes of the selection (or the editor) ============ -->
       <el-col :xs="24" :lg="16">
         <div ref="formCard" class="form-anchor">
-        <el-card shadow="never" class="detail-card">
+        <!-- The commits panel fills the card: the modifier hands the card's height down
+             to the table, which is a box of a fixed size otherwise (see
+             .detail-card--fills). -->
+        <el-card
+          shadow="never"
+          class="detail-card"
+          :class="{ 'detail-card--fills': tabIsTags && !!selectedTag && !editorOpen }"
+        >
           <template #header>
             <div class="section-header">
               <div class="section-title">
@@ -507,21 +521,32 @@
             </el-form-item>
 
             <el-form-item>
-              <el-checkbox v-model="form.is_prerelease">
-                {{ t('releaseNotes.prerelease') }}
-              </el-checkbox>
-            </el-form-item>
-
-            <!-- Offered where the server has Confluence set up and syncs by
-                 itself: this is the automatic path, which setting up alone does not
-                 turn on. An instance that does not use Confluence, or does not sync
-                 by itself, shows nothing here — writing one by hand is offered on
-                 the release row instead. -->
-            <el-form-item v-if="confluence.configured && confluence.auto_sync">
-              <el-checkbox v-model="form.sync_to_confluence">
-                {{ t('releaseNotes.sync_confluence_label') }}
-              </el-checkbox>
-              <div class="field-hint">{{ t('releaseNotes.sync_confluence_help') }}</div>
+              <!-- One line: what the release is, and whether it is also written to
+                   Confluence. The write is the automatic path, so it is offered only
+                   where the instance syncs by itself - and it is disabled while the
+                   release is a pre-release, which is never written by itself. Writing
+                   one by hand stays available on the release row. -->
+              <div class="release-toggles">
+                <el-checkbox v-model="form.is_prerelease" data-test="is-prerelease">
+                  {{ t('releaseNotes.prerelease') }}
+                </el-checkbox>
+                <el-checkbox
+                  v-if="confluence.configured && confluence.auto_sync"
+                  v-model="form.sync_to_confluence"
+                  :disabled="form.is_prerelease"
+                  data-test="sync-to-confluence"
+                >
+                  {{ t('releaseNotes.sync_confluence_label') }}
+                </el-checkbox>
+              </div>
+              <!-- Only the disabled state needs a word: why the switch beside it
+                   cannot be turned on while the release is a pre-release. -->
+              <div
+                v-if="confluence.configured && confluence.auto_sync && form.is_prerelease"
+                class="field-hint"
+              >
+                {{ t('releaseNotes.sync_confluence_prerelease') }}
+              </div>
             </el-form-item>
 
             <template v-if="isGithubProvider">
@@ -585,7 +610,15 @@
               :label="t('releaseNotes.commits_loading')"
             />
 
-            <commit-table v-else :commits="tagCommits" :empty-text="t('releaseNotes.commits_empty')" />
+            <!-- The commits of the tag are the panel here, not a list beside something:
+                 the table is given the height the card has, so a page of rows is read
+                 in it instead of scrolling inside a box of a fixed size -->
+            <commit-table
+              v-else
+              fill-height
+              :commits="tagCommits"
+              :empty-text="t('releaseNotes.commits_empty')"
+            />
           </template>
 
           <!-- Every release of the current page, one entry each -->
@@ -610,9 +643,6 @@
                       {{ note.name }}
                     </a>
                   </h4>
-                  <!-- the tag is the version's identity: it reads at the same
-                       weight as the title, while the status badges stay small -->
-                  <el-tag effect="plain">{{ note.tag_name }}</el-tag>
                   <el-tag v-if="note.is_latest" size="small" type="success" round>
                     {{ t('releaseNotes.badge_latest') }}
                   </el-tag>
@@ -858,6 +888,17 @@ const NOTE_LOOKUP_PAGE_SIZE = 200
 // Safety bound when indexing the released tags of a repository
 const NOTE_LOOKUP_MAX = 2000
 
+/**
+ * The height of the tag search, written on the input itself.
+ *
+ * The size prop alone sets this - an input's height comes from the size variable the
+ * class carries (40px and 14px text for the large one) - and this field was reported
+ * as staying at the small size (24px, 12px text) however it was set. A style on the
+ * element is the one thing that cannot be lost on the way to the browser, so the
+ * height of this field is stated here and not only in the stylesheet.
+ */
+const TAG_SEARCH_STYLE = 'height: 38px; line-height: 38px; font-size: 14px'
+
 const toolbars: ToolbarNames[] = [
   'bold',
   'italic',
@@ -1090,8 +1131,11 @@ const syncingNoteId = ref<number | null>(null)
 // Whether the form may ask for the automatic path: it is the switch in the
 // environment that turns that off for every repository at once, so where it is off
 // there is nothing to ask for - a release is written by hand from the release itself.
+// A pre-release is the same kind of nothing-to-ask-for, which is what the disabled
+// switch beside it says.
 const asksForConfluenceSync = computed(
-  () => form.value.sync_to_confluence && confluence.value.auto_sync
+  () =>
+    form.value.sync_to_confluence && confluence.value.auto_sync && !form.value.is_prerelease
 )
 
 const editingId = ref<number | null>(null)
@@ -1930,9 +1974,11 @@ async function saveRelease(status: 'draft' | 'published') {
     return
   }
 
+  // Read before the form is reset: whether this save asked to write to Confluence.
+  const willSyncToConfluence = asksForConfluenceSync.value
   saving.value = true
+  let saved: ReleaseNote
   try {
-    let saved: ReleaseNote
     if (editingId.value) {
       saved = await releaseNotesApi.update(editingId.value, {
         name: form.value.name.trim() || form.value.tag_name.trim(),
@@ -1971,8 +2017,28 @@ async function saveRelease(status: 'draft' | 'published') {
     refreshReleaseTagIndex()
   } catch {
     ElMessage.error(t('releaseNotes.save_failed'))
+    return
   } finally {
     saving.value = false
+  }
+
+  // The Confluence write runs in the background after this response, so the list
+  // has not seen it yet. Poll the release until it shows its page (or its failure)
+  // and refresh, instead of leaving "Sync to Confluence" on the screen.
+  if (status === 'published' && willSyncToConfluence) {
+    void pollForConfluenceSync(saved.id)
+  }
+}
+
+/** Re-read one release until its background Confluence write has landed. */
+async function pollForConfluenceSync(noteId: number) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 750))
+    const note = await releaseNotesApi.get(noteId).catch(() => null)
+    if (note?.confluence_url || note?.confluence_sync_error) {
+      await loadNotes()
+      return
+    }
   }
 }
 
@@ -2306,6 +2372,28 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
+/*
+ * The commits panel holds a table that is as tall as the rows of the page it shows.
+ *
+ * So the card is at least the height the row gives it - the panel is filled, not a box
+ * drawn around the table - and as tall as the table when the page needs more, which is
+ * what keeps every row of the page in the page instead of behind a scrollbar inside a
+ * box of a fixed size. Nothing here may cap the body: a body told to take only the
+ * card's height would clip the rows past it.
+ */
+.detail-card--fills {
+  height: auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-card--fills :deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
 .loading-block {
   padding: 8px 0;
 }
@@ -2353,8 +2441,30 @@ onBeforeUnmount(() => {
   margin-right: 0;
 }
 
+/*
+ * The tag search, whose height is written out rather than left to the component's
+ * size.
+ *
+ * The size prop decides nothing here on its own: the height of an input comes from
+ * --el-input-inner-height, which the size class sets, and this field kept coming out
+ * small however that prop was set - the small size (24px, 12px text) and the large one
+ * (40px, 14px) were reported as reading the same. So the height is stated here, on the
+ * one control of this panel a reader types into, and it holds whatever the variable
+ * resolves to.
+ */
 .nav-search {
   margin-bottom: 8px;
+}
+
+.nav-search :deep(.el-input__wrapper) {
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.nav-search :deep(.el-input__inner) {
+  height: 38px;
+  line-height: 38px;
+  font-size: 14px;
 }
 
 /*
@@ -2479,7 +2589,7 @@ onBeforeUnmount(() => {
    several of them, so nothing inside the notes may compete with it. */
 .note-entry-name {
   margin: 0;
-  font-size: 20px;
+  font-size: 28px;
   font-weight: 700;
   line-height: 1.3;
   color: var(--el-text-color-primary);
@@ -2566,7 +2676,7 @@ onBeforeUnmount(() => {
   margin-top: 12px;
 }
 
-/* The rendered notes must not outrank the release name (20px).
+/* The rendered notes must not outrank the release name (28px).
    md-editor's github theme renders a level-2 heading - which is what a generated
    body opens with ("## What's Changed") - at 1.5em with 24px/16px block margins,
    and inherits its base size from the page. The scale is therefore pinned here
@@ -2661,9 +2771,20 @@ onBeforeUnmount(() => {
 }
 
 .field-hint {
+  /* The form item content is a flex row; forcing the hint to its own line keeps it
+     from crowding a checkbox it explains (the checkbox is narrower than the row). */
+  flex-basis: 100%;
   margin-top: 4px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+/* What the release is, and whether it is written to Confluence: one line. */
+.release-toggles {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .ref-empty {

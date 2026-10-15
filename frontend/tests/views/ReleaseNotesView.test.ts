@@ -4,6 +4,7 @@ import { nextTick } from 'vue'
 import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import ReleaseNotesView from '@/views/releases/ReleaseNotesView.vue'
+import CommitTable from '@/components/release/CommitTable.vue'
 import { projectsApi } from '@/api/projects'
 import { rbacApi } from '@/api/rbac'
 import { releaseDiffApi } from '@/api/releaseDiff'
@@ -300,7 +301,12 @@ async function setTagSearch(wrapper: AnyWrapper, value: string) {
   await flushPromises()
 }
 
-describe('ReleaseNotesView', () => {
+// The page under test is the heaviest of the application: three columns, two paginated
+// lists, a markdown editor, and a tag index that walks the whole release list. The
+// tests that walk its pagination take two to three seconds where the rest take a
+// fraction of one, and the five seconds every test is given by default is what made
+// them flake on a loaded machine - so the file says what its own tests may take.
+describe('ReleaseNotesView', { timeout: 20_000 }, () => {
   beforeEach(() => {
     vi.clearAllMocks()
     signIn(['review_admin'])
@@ -441,6 +447,96 @@ describe('ReleaseNotesView', () => {
         status: 'draft',
         is_prerelease: false,
       }),
+    )
+  })
+
+  it('polls a Confluence-synced release into view after publishing', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+        configured: true,
+        auto_sync: true,
+      })
+      vi.mocked(releaseNotesApi.create).mockResolvedValue(release({ status: 'published' }) as any)
+      vi.mocked(releaseNotesApi.get).mockResolvedValue(
+        release({ confluence_url: 'https://confluence.local/spaces/DOC/pages/1' }) as any,
+      )
+
+      const wrapper = mountView()
+      await flushPromises()
+      await selectRepository(wrapper)
+
+      await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+      await flushPromises()
+
+      await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
+      await flushPromises()
+
+      // The publish asked for the write to Confluence...
+      expect(releaseNotesApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sync_to_confluence: true }),
+      )
+      // ...which runs after the response, so the page re-reads the release and
+      // refreshes the list once it lands rather than leaving "Sync to Confluence".
+      const listCallsBefore = vi.mocked(releaseNotesApi.list).mock.calls.length
+      await vi.advanceTimersByTimeAsync(750)
+      await flushPromises()
+
+      expect(releaseNotesApi.get).toHaveBeenCalled()
+      expect(vi.mocked(releaseNotesApi.list).mock.calls.length).toBeGreaterThan(listCallsBefore)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('disables the Confluence switch while the release is a pre-release', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const syncSwitch = wrapper.findComponent('[data-test="sync-to-confluence"]') as AnyWrapper
+    expect(syncSwitch.props('disabled')).toBe(false)
+
+    const preRelease = wrapper.findComponent('[data-test="is-prerelease"]') as AnyWrapper
+    preRelease.vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    // A pre-release is never written by itself, so the switch that would ask for it
+    // is disabled rather than left offering something that will not happen.
+    expect(syncSwitch.props('disabled')).toBe(true)
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.sync_confluence_prerelease)
+  })
+
+  it('does not ask for a Confluence sync when publishing a pre-release', async () => {
+    vi.mocked(releaseNotesApi.confluenceStatus).mockResolvedValue({
+      configured: true,
+      auto_sync: true,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const preRelease = wrapper.findComponent('[data-test="is-prerelease"]') as AnyWrapper
+    preRelease.vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.create).toHaveBeenCalledWith(
+      expect.objectContaining({ is_prerelease: true, sync_to_confluence: false }),
     )
   })
 
@@ -917,6 +1013,19 @@ describe('ReleaseNotesView', () => {
     await selectRepository(wrapper)
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
 
+    // The box a reader types a tag into is a full-sized field: 40px with 14px text,
+    // where the small size it had been left at is 24px with 12px text. Its height is
+    // written on the input itself, which is what the test environment can see - the
+    // stylesheet beside it is not applied by jsdom, a style on the element is - and
+    // the field it belongs to is the input's wrapper, the hook riding on the inner one.
+    const searchInput = wrapper.find('[data-test="tags-search"]')
+    expect(searchInput.attributes('style')).toContain('height: 38px')
+    expect(searchInput.attributes('style')).toContain('font-size: 14px')
+
+    const searchField = searchInput.element.closest('.el-input')
+    expect(searchField?.classList.contains('el-input--small')).toBe(false)
+    expect(searchField?.classList.contains('el-input--large')).toBe(true)
+
     // the listing is shown as it arrived, tag for tag
     expect(tagNames(wrapper)).toEqual(['v1.1.1', 'v2.0.0-rc1', 'v1.1.0', 'v1.0.0'])
 
@@ -1046,6 +1155,26 @@ describe('ReleaseNotesView', () => {
       'v0.2.0',
       'v0.1.0',
     ])
+  })
+
+  it('gives the commit table the height of the panel it fills', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([PREVIEW_COMMIT]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+
+    // The commits are the panel here, not a list beside something else: the card hands
+    // its height down to the table, and the table asks for that height instead of
+    // capping itself at 420px - which is what left a page of rows scrolling inside a
+    // small box while the panel around it stood half empty.
+    expect(wrapper.find('.detail-card').classes()).toContain('detail-card--fills')
+    expect(wrapper.findComponent(CommitTable).props('fillHeight')).toBe(true)
   })
 
   it('maps a tag of the tags tab to the commits it released', async () => {
@@ -1314,12 +1443,20 @@ describe('ReleaseNotesView', () => {
     )
   })
 
+  /**
+   * The index walks the whole release list to place every tag, so this test needs a
+   * list longer than two pages: the walk is asserted to ask for offsets 0, 200 and
+   * 400, and the tag it then jumps to sits at position 320 - inside the third page.
+   * 401 releases is the least that proves both, and the size of this fixture is not
+   * what costs - 450 of them take the same time - so shrinking it further would only
+   * weaken what is being proved.
+   */
   it('walks the capped pages of the release list when indexing the tags', async () => {
-    const allNotes = Array.from({ length: 450 }, (_, index) =>
+    const allNotes = Array.from({ length: 401 }, (_, index) =>
       release({
         id: index + 1,
-        tag_name: `v1.${450 - index}.0`,
-        name: `v1.${450 - index}.0`,
+        tag_name: `v1.${401 - index}.0`,
+        name: `v1.${401 - index}.0`,
         body: `## release ${index}`,
       }),
     )
@@ -1359,7 +1496,7 @@ describe('ReleaseNotesView', () => {
     )
     expect(wrapper.find('.nav-item.active').text()).toContain(wanted.tag_name)
     expect(wrapper.find('.md-preview-stub').text()).toContain(wanted.body)
-  })
+  }, 20_000)
 
   it('offers to draft a release from the selected tag', async () => {
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
@@ -2010,7 +2147,11 @@ describe('ReleaseNotesView export', () => {
     await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain(enMessages.releaseNotes.sync_confluence_label)
+    // Read off the switch itself: the release row carries the same words for the
+    // manual write, so the page's text alone would not say which one is offered.
+    const check = wrapper.find('[data-test="sync-to-confluence"]')
+    expect(check.exists()).toBe(true)
+    expect(check.text()).toBe(enMessages.releaseNotes.sync_confluence_label)
   })
 
   it('does not offer a sync the instance switched off for every repository', async () => {
@@ -2027,7 +2168,7 @@ describe('ReleaseNotesView export', () => {
 
     // Set up, but with the automatic path switched off: there is nothing to tick,
     // because a release is written by hand from the release itself instead.
-    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.sync_confluence_label)
+    expect(wrapper.find('[data-test="sync-to-confluence"]').exists()).toBe(false)
 
     await buttonsByLabel(wrapper, enMessages.releaseNotes.save_draft)[0].trigger('click')
     await flushPromises()
@@ -2057,7 +2198,7 @@ describe('ReleaseNotesView export', () => {
     await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.sync_confluence_label)
+    expect(wrapper.find('[data-test="sync-to-confluence"]').exists()).toBe(false)
     expect(buttonsByLabel(wrapper, enMessages.releaseNotes.sync_to_confluence)).toHaveLength(0)
   })
 

@@ -273,47 +273,85 @@
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="row in rows"
-              :key="`${row.kind}:${row.name}`"
-              :class="{ 'row-application': row.kind === 'application' }"
-              :data-test="`row-${row.kind}`"
-            >
-              <th class="package-col" scope="row">
-                <span>{{ row.name }}</span>
-                <!-- the application's own version is a row like the others, and
-                     is marked so it does not read as one of its dependencies -->
-                <el-tag
-                  v-if="row.kind === 'application'"
-                  class="kind"
-                  size="small"
-                  type="primary"
-                  data-test="application-row"
-                >
-                  {{ t('appDiff.application') }}
-                </el-tag>
-              </th>
-              <td
-                v-for="(cell, index) in row.cells"
-                :key="`${row.name}:${cell.ref}`"
-                :class="cellClass(cell)"
-                :data-test="`cell-${row.name}-${index}`"
+            <!-- A row is a package (the application's own version first). The whole
+                 row carries the RAG status of its commits, and opening it reveals the
+                 commit comparison in place - the diff info is the row's, not a list
+                 of its own below the table. -->
+            <template v-for="row in rows" :key="`${row.kind}:${row.name}`">
+              <tr
+                :class="[
+                  'matrix-row',
+                  rowRagClass(row),
+                  { 'row-application': row.kind === 'application', toggleable: rowCodes(row).length > 0 },
+                ]"
+                :data-test="`matrix-row-${row.name}`"
+                @click="toggleRow(rowKey(row))"
               >
-                <span
-                  v-if="isMarked(cell.move)"
-                  class="move"
-                  :class="`move-${moveTone(cell.move)}`"
-                  :title="t(moveLabelKey(moveTone(cell.move)))"
-                  data-test="move"
+                <th class="package-col" scope="row">
+                  <span
+                    v-if="rowCodes(row).length > 0"
+                    class="row-chevron"
+                    :class="{ open: isRowExpanded(rowKey(row)) }"
+                    aria-hidden="true"
+                    >▸</span
+                  >
+                  <span class="package-name">{{ row.name }}</span>
+                  <!-- the application's own version is a row like the others, and
+                       is marked so it does not read as one of its dependencies -->
+                  <el-tag
+                    v-if="row.kind === 'application'"
+                    class="kind"
+                    size="small"
+                    type="primary"
+                    data-test="application-row"
+                  >
+                    {{ t('appDiff.application') }}
+                  </el-tag>
+                </th>
+                <td
+                  v-for="(cell, index) in row.cells"
+                  :key="`${row.name}:${cell.ref}`"
+                  :class="cellClass(cell)"
+                  :data-test="`cell-${row.name}-${index}`"
                 >
-                  {{ moveSymbol(moveTone(cell.move)) }}
-                </span>
-                <span class="version" :class="versionClass(cell)">{{ cellText(cell) }}</span>
-                <span v-if="isRisk(cell.move)" class="risk" data-test="risk">
-                  {{ t('appDiff.risk') }}
-                </span>
-              </td>
-            </tr>
+                  <span
+                    v-if="isMarked(cell.move)"
+                    class="move"
+                    :class="`move-${moveTone(cell.move)}`"
+                    :title="t(moveLabelKey(moveTone(cell.move)))"
+                    data-test="move"
+                  >
+                    {{ moveSymbol(moveTone(cell.move)) }}
+                  </span>
+                  <span class="version" :class="versionClass(cell)">{{ cellText(cell) }}</span>
+                  <span v-if="isRisk(cell.move)" class="risk" data-test="risk">
+                    {{ t('appDiff.risk') }}
+                  </span>
+                </td>
+              </tr>
+
+              <!-- The diff info for this row, one comparison per pair it moved in. -->
+              <tr
+                v-if="isRowExpanded(rowKey(row)) && rowCodes(row).length"
+                class="row-detail"
+                :data-test="`matrix-detail-${row.name}`"
+              >
+                <td :colspan="releases.length + 1">
+                  <CommitComparison
+                    v-for="entry in rowCodes(row)"
+                    :key="entry.key"
+                    :code="entry.code"
+                    :scope="`matrix-${row.name}`"
+                    :expanded="isExpanded(commitKey(row, entry.key))"
+                    @toggle="toggleCommits(commitKey(row, entry.key))"
+                  >
+                    <template #note>
+                      <p class="detail-pair">{{ entry.label }}</p>
+                    </template>
+                  </CommitComparison>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -342,185 +380,6 @@
         {{ t('appDiff.packages_read_rest', { count: pendingPackages }) }}
       </el-button>
 
-      <!-- One pair at a time. A comparison of several releases has a pair per adjacent
-           step, and stacking them all is what made the page unreadable: the reader
-           picks the step they are reading, and the matrix above carries what changed
-           across all of them. A single pair needs no selector. -->
-      <div v-if="intervals.length > 1" class="pairs" data-test="pair-tabs">
-        <el-radio-group v-model="activePair" size="small">
-          <el-radio-button
-            v-for="interval in intervals"
-            :key="intervalKey(interval)"
-            :value="intervalKey(interval)"
-            data-test="pair-tab"
-          >
-            <span class="pair-label">
-              <span class="pair-refs">{{ interval.source_ref }} → {{ interval.target_ref }}</span>
-              <el-tag
-                v-if="!interval.complete"
-                size="small"
-                type="info"
-                data-test="pair-incomplete"
-              >
-                {{ t('appDiff.no_record') }}
-              </el-tag>
-              <el-tag
-                v-else-if="pendingOf(interval)"
-                size="small"
-                type="warning"
-                data-test="pair-pending"
-              >
-                {{ pendingOf(interval) }}
-              </el-tag>
-            </span>
-          </el-radio-button>
-        </el-radio-group>
-      </div>
-
-      <section v-if="intervals.length" class="intervals" data-test="intervals">
-        <article
-          v-for="interval in intervals"
-          v-show="showsPair(interval)"
-          :key="intervalKey(interval)"
-          class="interval"
-          :class="{ 'interval-incomplete': !interval.complete }"
-        >
-          <header class="interval-head">
-            <span class="ref">{{ interval.source_ref }}</span>
-            <span class="arrow" aria-hidden="true">→</span>
-            <span class="ref">{{ interval.target_ref }}</span>
-          </header>
-
-          <p v-if="!interval.complete" class="interval-unknown" data-test="interval-incomplete">
-            {{ t('appDiff.interval_incomplete') }}
-          </p>
-
-          <div v-else class="chips">
-            <span
-              v-for="entry in summaryEntries(interval.summary)"
-              :key="entry.state"
-              class="chip"
-              :class="`chip-${entry.state}`"
-            >
-              {{ entry.count }} {{ t(`appDiff.state_${entry.state}`) }}
-            </span>
-            <span
-              v-if="!summaryEntries(interval.summary).length"
-              class="chip chip-none"
-              data-test="interval-unchanged"
-            >
-              {{ t('appDiff.no_changes') }}
-            </span>
-            <span
-              v-if="downgradeCount(interval.summary)"
-              class="chip chip-downgrade"
-              data-test="interval-risk"
-            >
-              {{ t('appDiff.risk_downgrade', { count: downgradeCount(interval.summary) }) }}
-            </span>
-          </div>
-
-          <!-- The application's own change, and the commits it brought, read the way
-               a package's are and shown in the same place: under its name. They used
-               to sit below the packages, where the one comparison the page is mostly
-               about read as an appendix to the ones it carried. -->
-          <div
-            v-if="interval.complete && interval.code"
-            class="change-item application-change"
-            :class="applicationTone(interval)"
-            :data-test="`change-${appName}`"
-          >
-            <div class="change">
-              <span
-                v-if="applicationChange(interval)"
-                class="move"
-                :class="`move-${moveTone(applicationChange(interval)!)}`"
-                aria-hidden="true"
-              >
-                {{ moveSymbol(moveTone(applicationChange(interval)!)) }}
-              </span>
-              <span class="change-name">{{ appName }}</span>
-              <el-tag class="kind" size="small" type="primary" data-test="change-application">
-                {{ t('appDiff.application') }}
-              </el-tag>
-              <!-- a release whose version did not move still carries commits, and
-                   those are all it has to say about itself -->
-              <template v-if="applicationChange(interval)">
-                <span class="change-versions">
-                  {{ moveVersions(applicationChange(interval)!) }}
-                </span>
-                <span class="change-state">
-                  {{ t(moveLabelKey(moveTone(applicationChange(interval)!))) }}
-                </span>
-              </template>
-            </div>
-
-            <!-- The commits between the two releases. A pair whose commits could
-                 not be read says so: an empty list would read as "none". -->
-            <CommitComparison
-              :code="interval.code"
-              :expanded="isExpanded(intervalKey(interval))"
-              @toggle="toggleCommits(intervalKey(interval))"
-            >
-              <template #note>
-                <p
-                  v-if="rebuiltWithUnchangedDependencies(interval, interval.code)"
-                  class="rebuilt"
-                  data-test="rebuilt"
-                >
-                  {{ t('appDiff.rebuilt') }}
-                </p>
-              </template>
-            </CommitComparison>
-          </div>
-
-          <!-- The counts say how many moved; this says which one moved where, which
-               is what one app release is read for. -->
-          <h4
-            v-if="interval.complete && dependencyChanges(interval).length"
-            class="changes-heading"
-            data-test="changes-heading"
-          >
-            {{ t('appDiff.changes_heading') }}
-          </h4>
-          <ul
-            v-if="interval.complete && dependencyChanges(interval).length"
-            class="changes"
-            data-test="changes"
-          >
-            <li
-              v-for="change in dependencyChanges(interval)"
-              :key="`${change.kind}:${change.name}`"
-              class="change-item"
-              :class="`change-${moveTone(change)}`"
-              :data-test="`change-${change.name}`"
-            >
-              <div class="change">
-                <span class="move" :class="`move-${moveTone(change)}`" aria-hidden="true">
-                  {{ moveSymbol(moveTone(change)) }}
-                </span>
-                <span class="change-name">{{ change.name }}</span>
-                <span class="change-versions">{{ moveVersions(change) }}</span>
-                <span class="change-state">{{ t(moveLabelKey(moveTone(change))) }}</span>
-                <!-- the repository a package was compared in, when the registry named one -->
-                <span v-if="packageRepository(packageOf(interval, change))" class="change-repository">
-                  {{ packageRepository(packageOf(interval, change)) }}
-                </span>
-              </div>
-
-              <!-- What came with that version: the commits between the package's own
-                   two versions, read the way the application's pair is read -->
-              <CommitComparison
-                v-if="packageOf(interval, change)"
-                :code="packageOf(interval, change)!.code"
-                :scope="`package-${change.name}`"
-                :expanded="isExpanded(packageKey(interval, change.name))"
-                @toggle="toggleCommits(packageKey(interval, change.name))"
-              />
-            </li>
-          </ul>
-        </article>
-      </section>
     </template>
 
     <el-empty v-else :description="t('appDiff.no_result')" />
@@ -543,8 +402,8 @@ import type {
 import { releaseDiffApi } from '@/api/releaseDiff'
 import { appVersionDiffApi } from '@/api/appVersionDiff'
 import type {
+  AppVersionDiffCode,
   AppVersionDiffInterval,
-  AppVersionDiffMove,
   AppVersionDiffPackageComparison,
   AppVersionDiffResponse,
 } from '@/api/appVersionDiff'
@@ -552,19 +411,12 @@ import { useRefCandidates } from '@/composables/useRefCandidates'
 import { DEPTHS, depthNumbers, useAppDiffDepth } from '@/composables/useAppDiffDepth'
 import {
   buildRows,
-  codeTone,
-  commitSubject,
-  commitTotal,
-  downgradeCount,
   isMarked,
   isRisk,
   moveLabelKey,
   moveSymbol,
   moveTone,
-  moveVersions,
-  rebuiltWithUnchangedDependencies,
-  shortCommitId,
-  summaryEntries,
+  ragTone,
 } from '@/utils/appVersionDiff'
 import type { AppDiffCell, AppDiffRow } from '@/utils/appVersionDiff'
 
@@ -776,8 +628,6 @@ async function compare(refresh = false) {
     })
     if (run !== compareRun) return
     result.value = response
-    // a comparison opens on its first pair, which is where a reader starts reading
-    activePair.value = response.intervals.length ? intervalKey(response.intervals[0]) : ''
     deferredTotal.value = countDeferred(response.intervals)
     if (deferredTotal.value) void readDeferredPackages(run)
   } catch {
@@ -803,16 +653,6 @@ function pendingOf(interval: AppVersionDiffInterval): number {
 /** How many package comparisons a set of pairs is leaving for later. */
 function countDeferred(list: AppVersionDiffInterval[]): number {
   return list.reduce((count, interval) => count + pendingOf(interval), 0)
-}
-
-// The pair a reader is looking at, when a comparison has more than one. Held by the
-// pair's own identity rather than by its position, so re-reading the same releases
-// leaves the reader where they were.
-const activePair = ref('')
-
-/** Whether one pair's detail is the one on screen. A single pair is always shown. */
-function showsPair(interval: AppVersionDiffInterval): boolean {
-  return intervals.value.length === 1 || activePair.value === intervalKey(interval)
 }
 
 /** How many package comparisons are still waiting to be read. */
@@ -923,49 +763,58 @@ function intervalKey(interval: { source_ref: string; target_ref: string }): stri
   return `${interval.source_ref}->${interval.target_ref}`
 }
 
-/** The key one package's commit list is expanded under. */
-function packageKey(interval: AppVersionDiffInterval, name: string): string {
-  return `${intervalKey(interval)}:${name}`
+/** The comparison of one matrix row within one pair, or nothing where there is none. */
+function rowCode(row: AppDiffRow, interval: AppVersionDiffInterval): AppVersionDiffCode | null {
+  if (row.kind === 'application') return interval.code
+  return interval.packages.find((entry) => entry.name === row.name)?.code ?? null
+}
+
+/** Every pair's comparison for one row, labelled by the pair it sits between. */
+function rowCodes(row: AppDiffRow): { key: string; label: string; code: AppVersionDiffCode }[] {
+  return (result.value?.intervals ?? []).flatMap((interval) => {
+    const code = rowCode(row, interval)
+    if (!code) return []
+    return [
+      {
+        key: intervalKey(interval),
+        label: `${interval.source_ref} → ${interval.target_ref}`,
+        code,
+      },
+    ]
+  })
+}
+
+/** The identity a row's own detail is held under. */
+function rowKey(row: AppDiffRow): string {
+  return `${row.kind}:${row.name}`
+}
+
+const expandedRows = ref<string[]>([])
+
+function isRowExpanded(key: string): boolean {
+  return expandedRows.value.includes(key)
+}
+
+function toggleRow(key: string) {
+  expandedRows.value = isRowExpanded(key)
+    ? expandedRows.value.filter((item) => item !== key)
+    : [...expandedRows.value, key]
+}
+
+/** The key one commit list of a row's detail is expanded under. */
+function commitKey(row: AppDiffRow, intervalKeyValue: string): string {
+  return `${row.name}@${intervalKeyValue}`
 }
 
 /**
- * The comparison of one changed package, when the pair carries one.
- *
- * The list holds every package that moved, including the ones there was nothing
- * to compare for - they say so in their own comparison entry, which is what keeps
- * an unchecked package visible next to a checked one.
+ * The RAG highlight of a whole row, the worst of every pair it appears in: missing
+ * commits anywhere read as red, added commits as green, and anything else as amber.
  */
-/** The application's own move in a pair, when its version moved between the two. */
-function applicationChange(interval: AppVersionDiffInterval): AppVersionDiffMove | undefined {
-  return interval.changes.find((change) => change.kind === 'application')
-}
-
-/** The tone the application's own block is shown in: empty when it did not move. */
-function applicationTone(interval: AppVersionDiffInterval): string {
-  const change = applicationChange(interval)
-  return change ? `change-${moveTone(change)}` : ''
-}
-
-/**
- * The pair's moves among its dependencies.
- *
- * The application's own move is not among them: it is read as the release's own
- * change, shown above them with the commits it brought.
- */
-function dependencyChanges(interval: AppVersionDiffInterval): AppVersionDiffMove[] {
-  return interval.changes.filter((change) => change.kind !== 'application')
-}
-
-function packageOf(
-  interval: AppVersionDiffInterval,
-  change: AppVersionDiffMove,
-): AppVersionDiffPackageComparison | undefined {
-  return interval.packages.find((entry) => entry.name === change.name)
-}
-
-/** The repository a package was compared in, or nothing when none was resolved. */
-function packageRepository(entry: AppVersionDiffPackageComparison | undefined): string {
-  return entry?.repository_slug ? `${entry.project_key}/${entry.repository_slug}` : ''
+function rowRagClass(row: AppDiffRow): string {
+  const tones = rowCodes(row).map((entry) => ragTone(entry.code))
+  if (tones.includes('red')) return 'rag-red'
+  if (tones.includes('green')) return 'rag-green'
+  return tones.length ? 'rag-amber' : ''
 }
 
 const expandedCommits = ref<string[]>([])
@@ -1173,144 +1022,6 @@ watch(depth, () => {
   color: var(--el-text-color-secondary);
 }
 
-/* The pair the reader is looking at, when a comparison has more than one. The
-   selector names the pair, so a pair's own header would say the same thing twice. */
-.pairs {
-  margin: 0 0 12px;
-}
-
-.pairs :deep(.el-radio-group) {
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.pair-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.pairs + .intervals .interval-head {
-  display: none;
-}
-
-.intervals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.interval {
-  flex: 1 1 260px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-
-.interval-incomplete {
-  border-style: dashed;
-  border-color: var(--el-color-warning);
-  background: var(--el-color-warning-light-9);
-}
-
-.interval-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.interval-head .arrow {
-  color: var(--el-text-color-secondary);
-}
-
-.interval-unknown {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--el-color-warning-dark-2);
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.chip {
-  font-size: 12px;
-  padding: 1px 8px;
-  border-radius: 10px;
-  background: var(--el-fill-color-light);
-}
-
-.chip-added {
-  color: var(--el-color-success);
-}
-
-.chip-removed {
-  color: var(--el-color-info);
-}
-
-.chip-downgrade {
-  color: #fff;
-  background: var(--el-color-danger);
-}
-
-/* What moved in one pair, one line per package */
-.changes-heading {
-  margin: 12px 0 2px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--el-text-color-regular);
-}
-
-.changes {
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.change {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 2px 0;
-  font-size: 13px;
-}
-
-.change-name {
-  overflow-wrap: anywhere;
-}
-
-.change-versions {
-  font-family: var(--el-font-family-mono, monospace);
-  font-size: 12px;
-  color: var(--el-text-color-regular);
-}
-
-.change-state {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.change-change .change-state,
-.change-upgrade .change-state,
-.change-added .change-state {
-  color: var(--el-color-success);
-}
-
-.change-downgrade .change-state {
-  color: var(--el-color-danger);
-}
-
-.change-removed .change-state {
-  color: var(--el-color-info);
-}
-
 .matrix-wrap {
   overflow-x: auto;
 }
@@ -1418,28 +1129,68 @@ watch(depth, () => {
   color: var(--el-text-color-placeholder);
 }
 
-/* One moved package, with the two versions it moved between below it */
-.change-item {
-  padding: 2px 0;
+/* The RAG status is a whole-row tint, so a package that lost commits is spotted
+   without reading it: red = missing commits, green = new commits, amber = neither. */
+/* The RAG status is a whole-row tint that has to stay readable in light and dark
+   themes alike, so the fill is mixed from the theme's own colour onto the page
+   background, and the package column carries the full-strength colour as a bar. */
+.matrix-row.rag-red {
+  background: color-mix(in srgb, var(--el-color-danger) 15%, var(--el-bg-color));
 }
 
-/* The release's own move and commits, above the dependencies it carried */
-.application-change {
-  margin-top: 12px;
+.matrix-row.rag-green {
+  background: color-mix(in srgb, var(--el-color-success) 15%, var(--el-bg-color));
 }
 
-/* The repository a package was compared in, when the registry named one */
-.change-repository {
-  font-family: var(--el-font-family-mono, monospace);
+.matrix-row.rag-amber {
+  background: color-mix(in srgb, var(--el-color-warning) 18%, var(--el-bg-color));
+}
+
+/* The package column is sticky, so it paints its own background - carry the row's
+   tint onto it and mark it with the full-strength colour, so a red row never
+   leaves its name cell white and the status reads at a glance. */
+.matrix-row.rag-red .package-col {
+  background: color-mix(in srgb, var(--el-color-danger) 15%, var(--el-bg-color));
+  box-shadow: inset 3px 0 0 var(--el-color-danger);
+}
+
+.matrix-row.rag-green .package-col {
+  background: color-mix(in srgb, var(--el-color-success) 15%, var(--el-bg-color));
+  box-shadow: inset 3px 0 0 var(--el-color-success);
+}
+
+.matrix-row.rag-amber .package-col {
+  background: color-mix(in srgb, var(--el-color-warning) 18%, var(--el-bg-color));
+  box-shadow: inset 3px 0 0 var(--el-color-warning);
+}
+
+/* A row whose commits can be read is the toggle for its own diff detail, and the
+   chevron says which way it is folded. */
+.matrix-row.toggleable {
+  cursor: pointer;
+}
+
+.row-chevron {
+  display: inline-block;
+  width: 0.8em;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  transition: transform 0.15s ease;
+}
+
+.row-chevron.open {
+  transform: rotate(90deg);
+}
+
+/* The diff detail unfolds in place under its row, one comparison per pair. */
+.row-detail td {
+  padding: 8px 10px 12px;
+  background: var(--el-fill-color-lighter);
+}
+
+.detail-pair {
+  margin: 2px 0 0;
   font-size: 11px;
   color: var(--el-text-color-secondary);
-}
-
-/* A pair that was rebuilt under the same versions: the view's own reading, since
-   only it knows whether the dependencies moved */
-.rebuilt {
-  margin: 6px 0 0;
-  color: var(--el-color-warning-dark-2);
-  font-weight: 600;
 }
 </style>

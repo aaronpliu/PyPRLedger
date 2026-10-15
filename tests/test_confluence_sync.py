@@ -585,6 +585,18 @@ async def test_the_switch_being_off_leaves_the_manual_sync_working(
     assert fake.calls("POST") == ["/rest/api/content"]
 
 
+async def test_a_prerelease_can_still_be_written_by_hand(db_session, confluence_settings) -> None:
+    """The pre-release rule is about the automatic path: asking for the write works."""
+    fake = FakeConfluence()
+    note = await make_note(db_session, tag="v1.0.0-rc.1")
+    note.is_prerelease = True
+
+    outcome = await build_sync(fake, db_session).sync_note(note.id)
+
+    assert outcome.synced is True
+    assert fake.calls("POST") == ["/rest/api/content"]
+
+
 async def test_the_automatic_path_leaves_out_a_repository_that_opted_out(
     db_session, confluence_settings
 ) -> None:
@@ -847,6 +859,36 @@ async def test_publishing_schedules_a_sync_when_it_is_on(
 
     assert response.status_code == 201
     assert scheduled == [response.json()["id"]]
+
+
+async def test_a_prerelease_is_not_synced_by_itself(
+    async_client, authenticated_client, confluence_settings, monkeypatch
+) -> None:
+    """A version being tried out is published, but not written to Confluence on its own."""
+    scheduled: list[int] = []
+
+    async def _record(note_id: int) -> None:
+        scheduled.append(note_id)
+
+    monkeypatch.setattr(
+        "src.api.v1.endpoints.release_notes.sync_release_note_to_confluence", _record
+    )
+
+    response = await async_client.post(
+        "/api/v1/release/notes",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "tag_name": "v2.1.0-rc.1",
+            "status": "published",
+            "is_prerelease": True,
+        },
+    )
+
+    assert response.status_code == 201
+    # Published, and left to be written by hand: nothing was queued.
+    assert response.json()["status"] == "published"
+    assert scheduled == []
 
 
 async def test_a_draft_is_not_synced(

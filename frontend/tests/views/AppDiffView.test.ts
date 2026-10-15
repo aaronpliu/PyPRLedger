@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus, { ElRadioButton, ElRadioGroup, ElSelect } from 'element-plus'
+import ElementPlus, { ElSelect } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import AppDiffView from '@/views/releases/AppDiffView.vue'
@@ -245,18 +245,6 @@ describe('AppDiffView', () => {
     expect(cell.find('[data-test="risk"]').exists()).toBe(false)
   })
 
-  it('summarizes each adjacent pair', async () => {
-    const wrapper = await mountView()
-    await openOn(wrapper)
-
-    const intervals = wrapper.find('[data-test="intervals"]')
-    // four changed: three dependencies and the application's own version
-    expect(intervals.text()).toContain('4 changed')
-    expect(intervals.text()).toContain('1 added')
-    expect(intervals.text()).toContain('1 removed')
-    expect(intervals.text()).toContain('1 downgraded')
-  })
-
   it("shows the application's own version as the first row of the matrix", async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
@@ -305,80 +293,41 @@ describe('AppDiffView', () => {
     expect(unknown.text()).toContain('?')
   })
 
-  it('leaves the pairs that touch a release with no record open', async () => {
+  it('leaves a release with no record as incomplete', async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER, RELEASE_MISSING)
 
     expect(wrapper.find('[data-test="verdict"]').text()).toBe('Incomplete')
     expect(wrapper.find('[data-test="incomplete"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="interval-incomplete"]').exists()).toBe(true)
   })
 
-  it('lists which package moved where between two releases', async () => {
+  it("shows the application's own commits when its row is opened", async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
-    expect(wrapper.find('[data-test="changes-heading"]').text()).toBe('What moved')
-    const changes = wrapper.find('[data-test="changes"]')
-    expect(changes.exists()).toBe(true)
+    // tucked into the row: nothing is shown until the row is opened
+    expect(wrapper.find('[data-test="matrix-mylang-counts"]').exists()).toBe(false)
 
-    // the two versions the move is about, and what kind of move it was
-    const dependency = changes.find('[data-test="change-packageA"]')
-    expect(dependency.text()).toContain('1.0.0 → 1.0.1')
-    expect(dependency.text()).toContain('Upgrade')
-  })
+    await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
 
-  it("shows the application's own version above the dependencies it carried", async () => {
-    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
-
-    const application = wrapper.find(`[data-test="change-${APP_NAME}"]`)
-    expect(application.find('[data-test="change-application"]').exists()).toBe(true)
-    expect(application.text()).toContain('1.0.0_10000 → 1.1.0_10000')
-
-    // the release's own move is read before the moves it carried
-    const dependencies = wrapper.find('[data-test="changes"]').element
-    expect(
-      application.element.compareDocumentPosition(dependencies) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-  })
-
-  it("shows the application's own commits under its name", async () => {
-    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
-
-    // the one comparison the page is most about is not an appendix to the packages:
-    // it sits with the application, where a package's sits with it
-    const application = wrapper.find(`[data-test="change-${APP_NAME}"]`)
-    expect(application.find('[data-test="code-counts"]').text()).toContain('5 commits added')
-    expect(application.find('[data-test="code-axis"]').exists()).toBe(true)
-  })
-
-  it('leaves no commit list at the bottom of the pair', async () => {
-    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
-
-    // every comparison on the page belongs to something: the application's to the
-    // application, each package's to its own entry
-    const axes = wrapper.findAll('[data-test="code-axis"]')
-    expect(axes).toHaveLength(1)
-    expect(wrapper.find(`[data-test="change-${APP_NAME}"]`).element.contains(axes[0].element)).toBe(
-      true,
-    )
+    expect(wrapper.find('[data-test="matrix-mylang-counts"]').text()).toContain('5 commits added')
+    expect(wrapper.find('[data-test="matrix-mylang-axis"]').exists()).toBe(true)
   })
 
   it('reads a version a package did not have as a dash', async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
     // an added package has no earlier version, which reads as a dash, not a gap
-    expect(wrapper.find('[data-test="changes"] [data-test="change-packageD"]').text()).toContain(
-      '— → 0.9.0',
-    )
+    expect(wrapper.find('[data-test="cell-packageD-0"]').text()).toContain('—')
+    expect(wrapper.find('[data-test="cell-packageD-1"]').text()).toContain('0.9.0')
   })
 
-  it('compares a moved package in the repository the registry names', async () => {
+  it("reads a moved package's comparison in its row", async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
-    // compared in its own repository, and the verdict says what the counts suggest
-    const packageA = wrapper.find('[data-test="change-packageA"]')
-    expect(packageA.text()).toContain('CORE/pkg-a')
-    expect(packageA.find('[data-test="package-packageA-verdict"]').text()).toBe('Contained')
-    expect(packageA.find('[data-test="package-packageA-counts"]').text()).toContain(
+    await wrapper.find('[data-test="matrix-row-packageA"]').trigger('click')
+
+    // the verdict says what the counts suggest
+    expect(wrapper.find('[data-test="matrix-packageA-verdict"]').text()).toBe('Contained')
+    expect(wrapper.find('[data-test="matrix-packageA-counts"]').text()).toContain(
       '4 commits added',
     )
   })
@@ -386,9 +335,10 @@ describe('AppDiffView', () => {
   it('says so when no repository is registered for a package', async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
+    await wrapper.find('[data-test="matrix-row-packageE"]').trigger('click')
+
     // a package the registry does not know says so, instead of reading as compared
-    const packageE = wrapper.find('[data-test="change-packageE"]')
-    expect(packageE.find('[data-test="package-packageE-unavailable"]').text()).toContain(
+    expect(wrapper.find('[data-test="matrix-packageE-unavailable"]').text()).toContain(
       "no repository is registered as 'packageE'",
     )
   })
@@ -396,29 +346,51 @@ describe('AppDiffView', () => {
   it('says so when a package has only one version to compare', async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
+    await wrapper.find('[data-test="matrix-row-packageC"]').trigger('click')
+
     // a package with one version has no pair of refs to compare
-    const packageC = wrapper.find('[data-test="change-packageC"]')
-    expect(packageC.find('[data-test="package-packageC-unavailable"]').text()).toContain(
+    expect(wrapper.find('[data-test="matrix-packageC-unavailable"]').text()).toContain(
       'only one version is recorded',
     )
   })
 
-  it("opens a package's own commits on demand", async () => {
+  it("opens a package's commits on demand", async () => {
     const wrapper = await mountView()
     await openOn(wrapper)
 
-    expect(wrapper.find('[data-test="package-packageA-commits"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="matrix-packageA-commits"]').exists()).toBe(false)
 
-    await wrapper.find('[data-test="package-packageA-toggle"]').trigger('click')
+    await wrapper.find('[data-test="matrix-row-packageA"]').trigger('click')
+    await wrapper.find('[data-test="matrix-packageA-toggle"]').trigger('click')
 
-    expect(wrapper.find('[data-test="package-packageA-commits"]').text()).toContain('a1b2c3d')
+    expect(wrapper.find('[data-test="matrix-packageA-commits"]').text()).toContain('a1b2c3d')
   })
 
-  it('lists nothing for a pair whose releases could not be compared', async () => {
-    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER, RELEASE_MISSING)
+  it("opens a package's diff by clicking its row", async () => {
+    const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_LATER)
 
-    // the pair that can be compared carries its list; the one that cannot carries none
-    expect(wrapper.findAll('[data-test="changes"]')).toHaveLength(1)
+    expect(wrapper.find('[data-test="matrix-packageA-axis"]').exists()).toBe(false)
+
+    await wrapper.find('[data-test="matrix-row-packageA"]').trigger('click')
+
+    expect(wrapper.find('[data-test="matrix-packageA-axis"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="matrix-packageA-counts"]').text()).toContain('4 commits added')
+  })
+
+  it('tints each row by what its commits say', async () => {
+    const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_LATER)
+
+    // green: commits were added with the move, for the application and packageA
+    expect(wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).classes()).toContain('rag-green')
+    expect(wrapper.find('[data-test="matrix-row-packageA"]').classes()).toContain('rag-green')
+    // red: packageF is missing one of the earlier commits
+    expect(wrapper.find('[data-test="matrix-row-packageF"]').classes()).toContain('rag-red')
+    // amber: packageE and packageC could not be compared
+    expect(wrapper.find('[data-test="matrix-row-packageE"]').classes()).toContain('rag-amber')
+    expect(wrapper.find('[data-test="matrix-row-packageC"]').classes()).toContain('rag-amber')
+    // a moved package nobody compared is not tinted at all
+    const packageD = wrapper.find('[data-test="matrix-row-packageD"]')
+    expect(packageD.classes().some((name) => name.startsWith('rag-'))).toBe(false)
   })
 
   it('refreshes past the cache on demand', async () => {
@@ -446,47 +418,42 @@ describe('AppDiffView', () => {
     const wrapper = await mountView()
     await openOn(wrapper)
 
-    expect(wrapper.find('[data-test="code-counts"]').text()).toContain('5 commits added')
-    expect(wrapper.find('[data-test="code-unavailable"]').exists()).toBe(false)
+    await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+
+    expect(wrapper.find('[data-test="matrix-mylang-counts"]').text()).toContain('5 commits added')
+    expect(wrapper.find('[data-test="matrix-mylang-unavailable"]').exists()).toBe(false)
   })
 
   it('opens the commit list on demand', async () => {
     const wrapper = await mountView()
     await openOn(wrapper)
 
-    expect(wrapper.find('[data-test="code-commits"]').exists()).toBe(false)
+    await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+    expect(wrapper.find('[data-test="matrix-mylang-commits"]').exists()).toBe(false)
 
-    await wrapper.find('[data-test="code-toggle"]').trigger('click')
+    await wrapper.find('[data-test="matrix-mylang-toggle"]').trigger('click')
 
-    const commits = wrapper.find('[data-test="code-commits"]')
+    const commits = wrapper.find('[data-test="matrix-mylang-commits"]')
     expect(commits.text()).toContain('a1b2c3d')
     expect(commits.text()).toContain('Add the new module')
-  })
-
-  it('says a release was rebuilt when only its commits moved', async () => {
-    const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_REBUILT)
-
-    // the dependency axis has nothing to report ...
-    expect(wrapper.find('[data-test="interval-unchanged"]').exists()).toBe(true)
-    // ... and the page does not leave it at that
-    expect(wrapper.find('[data-test="rebuilt"]').exists()).toBe(true)
   })
 
   it('reads the commits of a release whose own version did not move', async () => {
     const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_REBUILT)
 
-    // nothing moved, so nothing is marked as having moved - but the release still has
-    // commits, and they are still read under its name
-    const application = wrapper.find(`[data-test="change-${APP_NAME}"]`)
-    expect(application.find('[data-test="code-counts"]').text()).toContain('3 commits added')
-    expect(application.find('[data-test="rebuilt"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="changes"]').exists()).toBe(false)
+    await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+
+    // nothing moved, so nothing is marked as having moved - but the release still
+    // has commits, and they are read under its name
+    expect(wrapper.find('[data-test="matrix-mylang-counts"]').text()).toContain('3 commits added')
   })
 
   it('says the commits could not be read instead of showing none', async () => {
     const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_UNAVAILABLE)
 
-    expect(wrapper.find('[data-test="code-unavailable"]').text()).toContain(
+    await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+
+    expect(wrapper.find('[data-test="matrix-mylang-unavailable"]').text()).toContain(
       'provider unreachable',
     )
   })
@@ -494,9 +461,11 @@ describe('AppDiffView', () => {
   it('shows no counts or toggle for commits it could not read', async () => {
     const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_UNAVAILABLE)
 
+    await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+
     // nothing reads as a pair without commits
-    expect(wrapper.find('[data-test="code-counts"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="code-toggle"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="matrix-mylang-counts"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="matrix-mylang-toggle"]').exists()).toBe(false)
   })
 
   it('shows the releases as columns in timeline order, not the order they were asked for', async () => {
@@ -509,25 +478,6 @@ describe('AppDiffView', () => {
     expect(headers[1].text()).toContain(RELEASE_EARLIER)
     expect(headers[2].text()).toContain(RELEASE_LATER)
     expect(headers[3].text()).toContain(RELEASE_MISSING)
-  })
-
-  it('compares three releases as two adjacent pairs', async () => {
-    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER, RELEASE_MISSING)
-
-    // three releases are two pairs: 1.0.0 -> 1.1.0, and 1.1.0 -> 1.2.0
-    const intervals = wrapper.findAll('[data-test="intervals"] article')
-    expect(intervals).toHaveLength(2)
-    expect(intervals[0].text()).toContain(RELEASE_EARLIER)
-    expect(intervals[0].text()).toContain(RELEASE_LATER)
-    expect(intervals[1].text()).toContain(RELEASE_LATER)
-    expect(intervals[1].text()).toContain(RELEASE_MISSING)
-  })
-
-  it('shows no code axis for a pair it could not compare', async () => {
-    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER, RELEASE_MISSING)
-
-    // the incomplete pair carries no code axis at all
-    expect(wrapper.findAll('[data-test="code-axis"]')).toHaveLength(1)
   })
 
   it('restores the comparison a link carries', async () => {
@@ -556,11 +506,13 @@ describe('AppDiffView', () => {
     const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_DEFERRED)
     await flushPromises()
 
+    await wrapper.find('[data-test="matrix-row-packageF"]').trigger('click')
+
     // the response deferred it: there is a pair and a repository, so it is waiting
     // its turn - which is not the same as a package that was checked
-    expect(wrapper.find('[data-test="package-packageF-deferred"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="package-packageF-unavailable"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="package-packageF-counts"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="matrix-packageF-deferred"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="matrix-packageF-unavailable"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="matrix-packageF-counts"]').exists()).toBe(false)
   })
 
   it('reads the packages the response deferred, without being asked', async () => {
@@ -581,10 +533,12 @@ describe('AppDiffView', () => {
     const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_DEFERRED)
     await flushPromises()
 
-    expect(wrapper.find('[data-test="package-packageE-counts"]').text()).toContain(
+    await wrapper.find('[data-test="matrix-row-packageE"]').trigger('click')
+
+    expect(wrapper.find('[data-test="matrix-packageE-counts"]').text()).toContain(
       '2 commits added',
     )
-    expect(wrapper.find('[data-test="package-packageE-deferred"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="matrix-packageE-deferred"]').exists()).toBe(false)
   })
 
   it('stops at the allowance the response carries and says what is left', async () => {
@@ -592,10 +546,12 @@ describe('AppDiffView', () => {
     await flushPromises()
 
     // the allowance was one, so what is left says so rather than reading as checked
-    expect(wrapper.find('[data-test="package-packageF-deferred"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="packages-pending"]').text()).toContain('were not read')
     // and the reader has a way to ask for it
     expect(wrapper.find('[data-test="packages-read-rest"]').exists()).toBe(true)
+
+    await wrapper.find('[data-test="matrix-row-packageF"]').trigger('click')
+    expect(wrapper.find('[data-test="matrix-packageF-deferred"]').exists()).toBe(true)
   })
 
   it('reads the rest when the reader asks, past the allowance', async () => {
@@ -608,7 +564,9 @@ describe('AppDiffView', () => {
     await flushPromises()
 
     expect(comparePackages()).toHaveBeenCalledTimes(2)
-    expect(wrapper.find('[data-test="package-packageF-counts"]').text()).toContain(
+
+    await wrapper.find('[data-test="matrix-row-packageF"]').trigger('click')
+    expect(wrapper.find('[data-test="matrix-packageF-counts"]').text()).toContain(
       '2 commits added',
     )
   })
@@ -631,10 +589,11 @@ describe('AppDiffView', () => {
     await flushPromises()
 
     // a batch that failed must not read as a comparison that found nothing
-    expect(wrapper.find('[data-test="package-packageE-deferred"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="package-packageE-counts"]').exists()).toBe(false)
-    // and the reader can ask again
     expect(wrapper.find('[data-test="packages-read-rest"]').exists()).toBe(true)
+
+    await wrapper.find('[data-test="matrix-row-packageE"]').trigger('click')
+    expect(wrapper.find('[data-test="matrix-packageE-deferred"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="matrix-packageE-counts"]').exists()).toBe(false)
   })
 
   it('asks for the deferred packages in the batches the answer names', async () => {
@@ -710,52 +669,6 @@ describe('AppDiffView', () => {
         max_total_package_comparisons: 200,
       }),
     )
-  })
-
-  it('puts the matrix above the pair details', async () => {
-    const wrapper = await mountView()
-    await openOn(wrapper)
-
-    const matrix = wrapper.find('[data-test="matrix"]').element
-    const details = wrapper.find('[data-test="intervals"]').element
-
-    // the matrix is the whole comparison at a glance; a page of pair details above it
-    // is what used to push it off the screen
-    expect(matrix.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-
-  it('shows one pair at a time when a comparison has several', async () => {
-    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER, RELEASE_MISSING)
-
-    const articles = wrapper.findAll('[data-test="intervals"] article')
-    expect(articles).toHaveLength(2)
-    // two pairs, one on screen: a stack of them is what made the page unreadable
-    expect(articles[0].attributes('style') ?? '').not.toContain('display: none')
-    expect(articles[1].attributes('style')).toContain('display: none')
-
-    expect(wrapper.findAll('[data-test="pair-tab"]')).toHaveLength(2)
-  })
-
-  it('shows the pair the reader picks', async () => {
-    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER, RELEASE_MISSING)
-
-    // choosing the second pair shows it, and takes the first out of the page
-    const second = wrapper.findAllComponents(ElRadioButton)[1].props('value')
-    wrapper.findComponent(ElRadioGroup).vm.$emit('update:modelValue', second)
-    await flushPromises()
-
-    const after = wrapper.findAll('[data-test="intervals"] article')
-    expect(after[1].attributes('style') ?? '').not.toContain('display: none')
-    expect(after[0].attributes('style')).toContain('display: none')
-  })
-
-  it('shows no pair selector for a single pair', async () => {
-    const wrapper = await mountView()
-    await openOn(wrapper)
-
-    // the common case says nothing about pairs, because there is only one
-    expect(wrapper.find('[data-test="pair-tabs"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="intervals"] article').isVisible()).toBe(true)
   })
 
   it('says the repository is being read while its refs are in flight', async () => {

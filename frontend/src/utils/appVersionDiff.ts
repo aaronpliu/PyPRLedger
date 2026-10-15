@@ -144,6 +144,23 @@ export function commitTotal(code: AppVersionDiffCode | null | undefined): number
   return code.added_count + code.missing_count
 }
 
+/** The RAG status of a comparison's commits, for the row highlight. */
+export type RagTone = 'red' | 'green' | 'amber'
+
+/**
+ * What a row's commit comparison has to say, in the colour the page highlights it
+ * with. Missing commits are the thing to act on, so they take precedence - whether
+ * the count says so or the verdict alone does; new commits are the good news; and
+ * everything else - unchanged, unreadable, or still waiting its turn - is neither,
+ * and reads as amber.
+ */
+export function ragTone(code: AppVersionDiffCode | null | undefined): RagTone | null {
+  if (!code) return null
+  if (code.missing_count > 0 || code.verdict === 'missing') return 'red'
+  if (code.added_count > 0) return 'green'
+  return 'amber'
+}
+
 /**
  * Whether a pair's dependencies did not move while its commits did.
  *

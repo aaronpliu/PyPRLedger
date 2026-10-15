@@ -156,7 +156,8 @@ environment and are never stored there.
 
 | Action | Syncs? |
 |---|---|
-| **Publishing a release** — `POST /release/notes`, or publishing a draft by updating it | Yes, when the integration is configured, the switch is on, the repository is published and not left out of the automatic path, and the release ends up published |
+| **Publishing a release** — `POST /release/notes`, or publishing a draft by updating it | Yes, when the integration is configured, the switch is on, the repository is published and not left out of the automatic path, the release ends up published, and it is not a pre-release |
+| **Publishing a pre-release** — `is_prerelease` set | **No.** A version being tried out is not written to the space by itself; **Sync to Confluence** on the release writes it by hand |
 | **Editing a published release** — `PUT /release/notes/{id}` | Yes, when the **notes** change: the page is written again with what the release now says. A save that leaves them as they are writes nothing, and so adds no version — the release's name, its pre-release flag and the version it compares to are not on the page |
 | **Writing a draft** — created as `draft`, or an edit that leaves it one | No. Publishing is what puts a release in front of people |
 | **Importing releases** — `POST /release/notes/import` | **No.** An import brings in a repository's history at once, and writing all of it to Confluence is not what an import is for. Each imported release is synced by hand when it is wanted |

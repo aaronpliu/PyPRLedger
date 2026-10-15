@@ -1,6 +1,11 @@
 <template>
-  <div class="commit-table">
-    <el-table :data="visibleCommits" stripe style="width: 100%" max-height="420px">
+  <div class="commit-table" :class="{ 'is-filling': fillHeight }">
+    <el-table
+      :data="visibleCommits"
+      stripe
+      style="width: 100%"
+      :max-height="fillHeight ? undefined : '420px'"
+    >
     <template #empty>
       <el-empty :description="emptyText" :image-size="60" />
     </template>
@@ -92,10 +97,22 @@ const props = withDefaults(
     commits: CommitInfo[]
     emptyText?: string
     pageSize?: number
+    /**
+     * Show the rows of the page in the panel, instead of in a box of a fixed 420px.
+     *
+     * A list shown beside something else reads better bounded, which is what the
+     * default does. Where the table *is* the panel - the commits of a tag - that cap is
+     * what made a page of rows scroll inside a small box while the panel around it
+     * stood half empty. In this mode the table is as tall as the rows its page holds,
+     * so the page is read at once and nothing scrolls inside the table; the panel it
+     * sits in is filled at least, with the pagination resting at its foot.
+     */
+    fillHeight?: boolean
   }>(),
   {
     emptyText: 'No commits',
     pageSize: 20,
+    fillHeight: false,
   },
 )
 
@@ -148,6 +165,30 @@ async function copy(value: string) {
 </script>
 
 <style scoped>
+/*
+ * Showing the rows of the page in the panel it was given.
+ *
+ * The table is as tall as the rows on the page - no cap, no fixed box - so every one
+ * of them is read at once and nothing scrolls inside the table itself. The panel is
+ * filled at least, with the page controls resting at its foot: a page of five rows
+ * leaves the panel at the height it was given rather than a box drawn around five rows.
+ */
+.commit-table.is-filling {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 8px;
+}
+
+.commit-table.is-filling :deep(.el-table) {
+  flex: none;
+}
+
+.commit-table.is-filling .commit-pagination {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
 .commit-pagination {
   margin-top: 8px;
   justify-content: flex-end;

@@ -26,10 +26,10 @@ function commits(count: number): CommitInfo[] {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type AnyWrapper = any
 
-function mountTable(list: CommitInfo[]) {
+function mountTable(list: CommitInfo[], props: Record<string, unknown> = {}) {
   const i18n = createI18n({ legacy: false, locale: 'en', messages: { en: enMessages } })
   return mount(CommitTable, {
-    props: { commits: list },
+    props: { commits: list, ...props },
     global: { plugins: [ElementPlus, i18n] },
   })
 }
@@ -80,6 +80,37 @@ describe('CommitTable', () => {
     // last page holds the remaining five commits
     expect(tableData(wrapper)).toHaveLength(5)
     expect(tableData(wrapper)[0].display_id).toBe('0000041')
+  })
+
+  it('caps a list it shows beside something else at a fixed height', () => {
+    const wrapper = mountTable(commits(45))
+
+    // the default: a bounded box, which is what a list beside other content wants
+    const table = wrapper.findComponent({ name: 'ElTable' })
+    expect(table.props('maxHeight')).toBe('420px')
+    expect(table.props('height')).toBeUndefined()
+    expect(wrapper.find('.commit-table').classes()).not.toContain('is-filling')
+  })
+
+  it('shows the rows of the page itself when the table is the panel', () => {
+    const wrapper = mountTable(commits(45), { fillHeight: true })
+
+    // no cap and no height of its own: the table is as tall as the rows on the page, so
+    // the page is read at once rather than through a scrollbar in a box of a fixed size
+    const table = wrapper.findComponent({ name: 'ElTable' })
+    expect(table.props('maxHeight')).toBeUndefined()
+    expect(table.props('height')).toBeUndefined()
+    expect(wrapper.find('.commit-table').classes()).toContain('is-filling')
+  })
+
+  it('keeps the pagination outside the rows that scroll', () => {
+    const wrapper = mountTable(commits(45), { fillHeight: true })
+
+    // the rows scroll inside the table; where the reader is in the list stays in its
+    // own place at the bottom of the panel
+    const pagination = wrapper.findComponent({ name: 'ElPagination' })
+    expect(pagination.exists()).toBe(true)
+    expect(pagination.element.closest('.el-table')).toBeNull()
   })
 
   it('links the provider account of a commit author to its profile', () => {
