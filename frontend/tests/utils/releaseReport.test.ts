@@ -156,8 +156,11 @@ describe('buildCompareSectionHtml', () => {
     expect(html).toContain('v0.9.0')
     // scope row names the compared pair
     expect(html).toContain('v1.0.0 → v1.1.0')
-    // commit url column
-    expect(html).toContain('https://bitbucket.org/aaronpliu/pylang/commits/1111111')
+    // the URL column is a short link, not the address: a commit URL is long enough to
+    // wrap the table around it, and the SHA beside it already names the commit
+    expect(html).toContain(
+      `<td class="url"><a href="https://bitbucket.org/aaronpliu/pylang/commits/1111111" target="_blank" rel="noopener">${enMessages.releaseDiff.report_commit_link}</a></td>`,
+    )
   })
 
   it('highlights missing commits in red instead of amber', () => {
@@ -206,6 +209,10 @@ describe('buildCheckSectionHtml', () => {
     expect(html).not.toContain('cell-warn')
     expect(html).toContain('class="status status-missing"')
     expect(html.match(/class="url"/g)).toBeTruthy()
+    // the URL column is a short link, not the address itself
+    expect(html).toContain(
+      `<td class="url"><a href="https://bitbucket.org/aaronpliu/pylang/commits/1111111" target="_blank" rel="noopener">${enMessages.releaseDiff.report_commit_link}</a></td>`,
+    )
   })
 
   it('warns in the report when the commit listing was capped', () => {

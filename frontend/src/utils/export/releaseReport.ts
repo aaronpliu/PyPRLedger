@@ -147,9 +147,11 @@ function metaTable(rows: string[]): string {
   return `<table class="meta">\n      ${body}\n    </table>`
 }
 
+/** The URL column is a short link, not the address itself: a commit URL is long
+ * enough to wrap the table around it, and the SHA beside it already names the commit. */
 function commitUrlCell(url?: string | null): string {
   if (!url) return '-'
-  return link(url)
+  return link(url, t('releaseDiff.report_commit_link'))
 }
 
 /** Commit subject with its JIRA ticket keys linked (everything escaped). */

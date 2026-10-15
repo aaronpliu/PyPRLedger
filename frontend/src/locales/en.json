@@ -1105,6 +1105,7 @@
     "screenshot_shared": "Screenshot shared",
     "screenshot_failed": "Failed to capture the screenshot",
     "col_url": "URL",
+    "report_commit_link": "Link",
     "report_scope": "Scope",
     "report_project_url": "Project URL",
     "report_repository_url": "Repository URL"

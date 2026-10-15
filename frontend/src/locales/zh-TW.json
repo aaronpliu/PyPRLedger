@@ -1105,6 +1105,7 @@
     "screenshot_shared": "截圖已分享",
     "screenshot_failed": "截圖失敗",
     "col_url": "連結",
+    "report_commit_link": "連結",
     "report_scope": "範圍",
     "report_project_url": "專案 URL",
     "report_repository_url": "倉庫 URL"
