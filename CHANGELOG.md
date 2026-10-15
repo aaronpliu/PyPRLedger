@@ -7,10 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- A **pre-release is no longer written to Confluence by itself**. It is a version being tried out, so what a reader of the space should see is the release: publishing one still schedules nothing, and the publish form says so by disabling "Write to Confluence as well" while "Set as a pre-release" is ticked. The manual action is unaffected - a pre-release can still be written by hand from its row, which is now the only way it reaches the space
+## [1.30.0] - 2026-10-15
+
+**Backend Version**: 1.30.0
+**Frontend Version**: 1.25.0
 
 ### Changed
+- A **pre-release is no longer written to Confluence by itself**. It is a version being tried out, so what a reader of the space should see is the release: publishing one still schedules nothing, and the publish form says so by disabling "Write to Confluence as well" while "Set as a pre-release" is ticked. The manual action is unaffected - a pre-release can still be written by hand from its row, which is now the only way it reaches the space
+- The App Diff is read as one matrix instead of a stack of pair-by-pair sections. Every package the application declares stands as a row - the application itself first - against a column for each release chosen, so the whole comparison is on the page at once and a cell says in one place what a package did between two releases: upgraded, downgraded, added, removed, or left not comparable where a release has no dependency record, with the row carrying the red, green or amber of its comparisons. Opening a row spreads that package's own comparison and commits beneath it. The pair tabs and per-pair sections that used to sit above the comparison are gone: with more than two releases chosen they pushed the matrix off the screen, and everything they said is said by the matrix and the rows. A release with no dependency record is reported as a warning above the comparison instead of being read as unchanged, and a source that could not be read is reported rather than shown as an empty matrix
 - The Release Notes' tag search is a full-sized field. It was the one input in the application left at the small size - 24px with 12px text, under every field around it - because it was never moved off the smallest the component offers, while the rest of the page stood at the default. A box a reader types a tag into now has the height the application's other search field uses - 40px, with 14px text - and that height is stated on the field itself as well as in the page's stylesheet, so it holds whatever the component's size variable resolves to
 - The Release Notes' commit table of a tag is read in the panel, not in a box of a fixed size. The table was capped at 420px, so the rows of a page scrolled inside it while the card around it stood half empty. It is now as tall as the rows the page holds - every row of the page is read at once, and nothing scrolls inside the table - and the panel it sits in is filled at least, with the page controls resting at its foot and the card growing past that height when a page needs more than the panel has. Every other commit table is unchanged: a list shown beside something else still reads better bounded
 
