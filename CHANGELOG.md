@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- The Release Notes list keeps the way back to its own head, and says how far down the page the reader has come. A page of releases stacks up past the screen, and scrolling back through it was the only way to reach the top: an up arrow now appears once the list has been scrolled past, carrying a ring that fills as the page is read and empties on the way back up, and returning to the top of the list rather than to the top of the document, since the filters above it are not what the reader came back for. It is the round button the application's other controls look like, a real button so a keyboard reaches it as well, and it carries no words - an arrow is what it says
+
 - The Release Diff export no longer carries a URL column. It printed each commit's complete address beside a SHA that already links to the same commit - long enough to wrap the table around it and stretch its row - so the column is gone, and the SHA remains the link to the commit. Both commit tables of the report - the compare and the check - are a column narrower for it
 
 ## [1.30.0] - 2026-10-15

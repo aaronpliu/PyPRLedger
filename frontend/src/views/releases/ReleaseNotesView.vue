@@ -116,7 +116,7 @@
     <el-row :gutter="16" class="notes-row">
       <!-- ============ Column 1: releases and tags ============ -->
       <el-col :xs="24" :lg="8">
-        <el-card shadow="never" class="notes-card">
+        <el-card ref="notesCard" shadow="never" class="notes-card">
           <template #header>
             <div class="section-header">
               <div class="section-title">
@@ -833,15 +833,50 @@
         </div>
       </el-col>
     </el-row>
+
+    <!-- A page of releases stacks up past the screen, so the list keeps the way back to
+         its own head: the arrow appears once the reader has scrolled past it, and it is
+         a button, so a keyboard reaches it too. The ring around it is how much of the
+         page has been read, so the reader can see where they are without a scrollbar. -->
+    <button
+      v-if="showBackToTop"
+      type="button"
+      class="notes-backtop"
+      data-test="notes-backtop"
+      @click="scrollNotesToTop"
+    >
+      <svg class="notes-backtop-ring" viewBox="0 0 40 40" aria-hidden="true">
+        <circle class="notes-backtop-track" cx="20" cy="20" :r="RING_RADIUS" />
+        <circle
+          class="notes-backtop-progress"
+          data-test="notes-backtop-progress"
+          cx="20"
+          cy="20"
+          :r="RING_RADIUS"
+          :stroke-dasharray="RING_LENGTH"
+          :stroke-dashoffset="RING_LENGTH * (1 - scrollProgress)"
+        />
+      </svg>
+      <el-icon><ArrowUp /></el-icon>
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+  type ComponentPublicInstance,
+} from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
+  ArrowUp,
   Close,
   CopyDocument,
   Document,
@@ -1104,6 +1139,43 @@ const aiFallbackMessage = computed(() => {
   }
 })
 const formCard = ref<HTMLElement | null>(null)
+
+/**
+ * The head of the list of releases, which the arrow over a long page returns to.
+ *
+ * The list, not the document: a page of releases is read as a list, so the way back
+ * should land on the list itself rather than on the filters above it. The card is a
+ * component, so its element is read from the instance.
+ */
+const notesCard = ref<ComponentPublicInstance | null>(null)
+
+/** Whether the head of the list has been scrolled past, which is when the way back is
+ *  offered. Measured from the card itself, so it holds whatever the page above it does. */
+const showBackToTop = ref(false)
+
+/** How much of the page has been read, from 0 to 1: the ring drawn around the arrow.
+ *  The page is measured rather than the list, so the ring keeps moving wherever the
+ *  reader is on it, and empties again on the way back up. */
+const scrollProgress = ref(0)
+
+/** The ring as the geometry of a 40px button: its circumference is what the dash of the
+ *  progress arc covers, so a share of the page is a share of that length. */
+const RING_RADIUS = 18
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS
+
+function trackScroll() {
+  const top = (notesCard.value?.$el as HTMLElement | undefined)?.getBoundingClientRect().top
+  showBackToTop.value = typeof top === 'number' && top < 16
+
+  const scrollable = document.documentElement.scrollHeight - window.innerHeight
+  scrollProgress.value =
+    scrollable > 0 ? Math.min(1, Math.max(0, window.scrollY / scrollable)) : 0
+}
+
+function scrollNotesToTop() {
+  const element = notesCard.value?.$el as HTMLElement | undefined
+  element?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+}
 
 const repo = ref({
   project_key: '',
@@ -2271,11 +2343,15 @@ onMounted(() => {
   void loadJiraSettings()
   void loadLlmConfig()
   void loadConfluenceStatus()
+  // Where the head of the list sits is only known once the card is on the page
+  window.addEventListener('scroll', trackScroll, { passive: true })
+  trackScroll()
 })
 
 onBeforeUnmount(() => {
   themeObserver?.disconnect()
   themeObserver = null
+  window.removeEventListener('scroll', trackScroll)
 })
 </script>
 
@@ -2370,6 +2446,62 @@ onBeforeUnmount(() => {
 .form-anchor,
 .detail-card {
   height: 100%;
+}
+
+/*
+ * The way back to the head of a long page of releases: the round button Element Plus
+ * draws for its own back-to-top, so it reads as part of the application, and a button
+ * rather than a clickable div so a keyboard reaches it. The ring is the page's own
+ * progress - the track it runs along, and the arc that fills as the reader goes down.
+ */
+.notes-backtop {
+  position: fixed;
+  right: 32px;
+  bottom: 32px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  box-shadow: var(--el-box-shadow-light);
+  cursor: pointer;
+}
+
+.notes-backtop-ring {
+  position: absolute;
+  inset: 0;
+  /* The arc starts at the top of the button and runs clockwise, as a progress ring does */
+  transform: rotate(-90deg);
+}
+
+.notes-backtop-track,
+.notes-backtop-progress {
+  fill: none;
+  stroke-width: 2;
+}
+
+.notes-backtop-track {
+  stroke: var(--el-border-color-lighter);
+}
+
+.notes-backtop-progress {
+  stroke: var(--el-color-primary);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.1s linear;
+}
+
+.notes-backtop:hover {
+  background: var(--el-fill-color-light);
+  color: var(--el-color-primary);
+}
+
+.notes-backtop:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
 }
 
 /*

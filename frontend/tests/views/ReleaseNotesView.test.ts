@@ -330,6 +330,56 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     resetJiraSettings()
   })
 
+  it('offers the way back to the head of a long page of releases', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    // a page of releases stacks up past the screen, so the list keeps an arrow back to
+    // its own head - a button, so a keyboard reaches it too, and no words on it
+    const button = wrapper.find('[data-test="notes-backtop"]')
+    expect(button.exists()).toBe(true)
+    expect(button.attributes('title')).toBeUndefined()
+
+    // and it returns to the list, not to the top of the document
+    const card = wrapper.find('.notes-card').element as HTMLElement
+    const scrollIntoView = vi.fn()
+    card.scrollIntoView = scrollIntoView
+    await button.trigger('click')
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+  })
+
+  it('draws how much of the page has been read around that arrow', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ring = wrapper.find('[data-test="notes-backtop-progress"]')
+    const length = Number(ring.attributes('stroke-dasharray'))
+    // nothing read yet: the arc is empty, its whole circumference still ahead of it
+    expect(length).toBeGreaterThan(100)
+    expect(Number(ring.attributes('stroke-dashoffset'))).toBeCloseTo(length)
+
+    // halfway down the page, half of the ring is drawn
+    const stub = (target: object, key: string, value: number) =>
+      Object.defineProperty(target, key, { value, configurable: true })
+    stub(window, 'scrollY', 500)
+    stub(window, 'innerHeight', 500)
+    stub(document.documentElement, 'scrollHeight', 1500)
+    try {
+      window.dispatchEvent(new Event('scroll'))
+      await flushPromises()
+      expect(Number(ring.attributes('stroke-dashoffset'))).toBeCloseTo(length / 2)
+    } finally {
+      // the stubs shadow jsdom's own values, so dropping them hands the page back
+      for (const [target, key] of [
+        [window, 'scrollY'],
+        [window, 'innerHeight'],
+        [document.documentElement, 'scrollHeight'],
+      ] as const) {
+        delete (target as unknown as Record<string, unknown>)[key]
+      }
+    }
+  })
+
   it('asks for a repository before showing releases', async () => {
     const wrapper = mountView()
     await flushPromises()
