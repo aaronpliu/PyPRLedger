@@ -217,7 +217,10 @@
 
         <el-form :model="compareForm" label-width="180px">
           <el-row :gutter="16" class="refs-row">
-            <el-col :xs="24" :md="12">
+            <!-- Half the card each, at every width: the two refs are one comparison
+                 read in two directions, so giving each of them a line of its own
+                 would split one comparison into two unrelated fields. -->
+            <el-col :span="12">
               <el-form-item :label="t('releaseDiff.missing_source_ref')" required>
                 <el-autocomplete
                   v-model="compareForm.source_ref"
@@ -238,11 +241,10 @@
                 </el-autocomplete>
               </el-form-item>
             </el-col>
-            <!-- The two refs are one comparison read in two directions, so the button
-                 that turns it around sits between them: out of the layout on the line
-                 they share, and in the flow when a narrow window stacks the fields. It
-                 takes no width from either, so both keep the width the rest of the card
-                 is built on. -->
+            <!-- The button that turns the comparison around sits between the two refs
+                 without taking a column of its own: it is lifted out of the layout and
+                 set down in the empty lead-in the target label leaves inside its own
+                 180px box, so neither field is pushed aside. -->
             <div class="swap-anchor">
               <el-button
                 circle
@@ -253,7 +255,7 @@
                 @click="swapRefs"
               />
             </div>
-            <el-col :xs="24" :md="12">
+            <el-col :span="12">
               <el-form-item :label="t('releaseDiff.missing_target_ref')" required>
                 <el-autocomplete
                   v-model="compareForm.target_ref"
@@ -1608,36 +1610,24 @@ async function copySha(value: string) {
 }
 
 /*
- * The button that turns the comparison around. It takes no width from the two fields
- * it sits between, so both keep the width the rest of the card is built on. On the line
- * they share it is lifted out of the layout and set down just right of the divider, in
- * the empty lead-in the target label leaves in its own 180px box (form labels are
- * right-aligned against their input), clear of the source input on one side and of the
- * label text on the other. When a narrow window stacks the fields it returns to the
- * flow between them, centred.
+ * The button that turns the comparison around. The two refs always share one line - they
+ * are one comparison read in two directions - so the button takes no column of its own:
+ * it is out of the layout and set down just right of the divider, in the empty lead-in
+ * the target label leaves inside its own 180px box (form labels are right-aligned against
+ * their input). That keeps it clear of the source input on one side and of the label text
+ * on the other, while both fields keep exactly half of the card.
  */
 .refs-row {
   position: relative;
 }
 
 .swap-anchor {
-  flex: 0 0 100%;
-  display: flex;
-  justify-content: center;
-  padding: 4px 0 12px;
-}
-
-@media (min-width: 992px) {
-  .swap-anchor {
-    position: absolute;
-    /* the divider plus the target column's gutter padding: the button starts where
-       that column's content does, and the 180px label box it opens onto is empty
-       there because its text is pushed to the right */
-    top: 0;
-    left: calc(50% + 8px);
-    flex: none;
-    padding: 0;
-  }
+  position: absolute;
+  /* the divider plus the target column's gutter padding: the button starts where that
+     column's content does, and the 180px label box it opens onto is empty there because
+     its text is pushed to the right */
+  top: 0;
+  left: calc(50% + 8px);
 }
 
 /* Explanatory text, not a label: same weight as the hints above the form */
