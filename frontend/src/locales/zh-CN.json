@@ -1319,6 +1319,11 @@
     "dependents": "被依赖",
     "no_dependencies": "无",
     "no_dependents": "没有被任何包依赖",
-    "circular_warning": "该包处于循环依赖中。"
+    "circular_warning": "该包处于循环依赖中。",
+    "zoom_in": "放大",
+    "zoom_out": "缩小",
+    "zoom_fit": "适配视图",
+    "maximize": "全屏查看",
+    "restore": "还原"
   }
 }

@@ -1319,6 +1319,11 @@
     "dependents": "Dependents",
     "no_dependencies": "None",
     "no_dependents": "Nothing depends on it",
-    "circular_warning": "This package sits on a circular dependency."
+    "circular_warning": "This package sits on a circular dependency.",
+    "zoom_in": "Zoom in",
+    "zoom_out": "Zoom out",
+    "zoom_fit": "Fit to view",
+    "maximize": "Maximize",
+    "restore": "Restore"
   }
 }

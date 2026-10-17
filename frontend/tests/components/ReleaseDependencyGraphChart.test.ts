@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import ElementPlus from 'element-plus'
 import ReleaseDependencyGraphChart from '@/components/charts/ReleaseDependencyGraphChart.vue'
 import type { ReleaseDependencyGraphLink, ReleaseDependencyGraphNode } from '@/utils/releaseDependencyGraph'
 
@@ -72,6 +73,8 @@ vi.mock('vue-echarts', async () => {
 function mountChart() {
   return mount(ReleaseDependencyGraphChart, {
     props: { nodes, links },
+    // The canvas is stubbed above; the toolbar around it is Element Plus.
+    global: { plugins: [ElementPlus] },
   })
 }
 
@@ -222,6 +225,73 @@ describe('ReleaseDependencyGraphChart', () => {
 
     const roams = dispatchAction.mock.calls.map((call) => call[0]).filter((action) => action?.type === 'graphRoam')
     expect(roams).toHaveLength(0)
+    wrapper.unmount()
+  })
+
+  it('lends the graph the window and gives the page it back', async () => {
+    const wrapper = mountChart()
+    await flushPromises()
+
+    await wrapper.find('[data-test="graph-maximize"]').trigger('click')
+    // the frame is the window now, not the card the page had given it
+    expect(wrapper.find('.chart').classes()).toContain('maximized')
+
+    await wrapper.find('[data-test="graph-maximize"]').trigger('click')
+    expect(wrapper.find('.chart').classes()).not.toContain('maximized')
+
+    wrapper.unmount()
+  })
+
+  it('leaves the window-sized frame on Escape as well', async () => {
+    const wrapper = mountChart()
+    await flushPromises()
+
+    await wrapper.find('[data-test="graph-maximize"]').trigger('click')
+    expect(wrapper.find('.chart').classes()).toContain('maximized')
+
+    // a frame that covers the page needs a way out that is not a small button
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.find('.chart').classes()).not.toContain('maximized')
+    wrapper.unmount()
+  })
+
+  it('zooms the picture from the toolbar, around the middle of the canvas', async () => {
+    dispatchAction.mockClear()
+    const wrapper = mountChart()
+    await flushPromises()
+
+    await wrapper.find('[data-test="graph-zoom-in"]').trigger('click')
+    await wrapper.find('[data-test="graph-zoom-out"]').trigger('click')
+
+    const roams = dispatchAction.mock.calls
+      .map((call) => call[0])
+      .filter((action) => action?.type === 'graphRoam')
+    // One press scales one step from the middle: a press has no pointer to zoom on.
+    expect(roams[0]).toEqual({ type: 'graphRoam', zoom: 1.25, originX: 500, originY: 250 })
+    expect(roams[1]).toEqual({ type: 'graphRoam', zoom: 0.8, originX: 500, originY: 250 })
+    wrapper.unmount()
+  })
+
+  it('puts the picture back in frame when the fit is asked for', async () => {
+    dispatchAction.mockClear()
+    const wrapper = mountChart()
+    await flushPromises()
+
+    // the reader takes the view by hand: the fit stops following the picture
+    roamHandlers[roamHandlers.length - 1]?.()
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    dispatchAction.mockClear()
+
+    await wrapper.find('[data-test="graph-fit"]').trigger('click')
+    await new Promise((resolve) => setTimeout(resolve, 700))
+
+    const roams = dispatchAction.mock.calls
+      .map((call) => call[0])
+      .filter((action) => action?.type === 'graphRoam')
+    // handing the view back is what the button is for: the picture fits again
+    expect(roams.some((action) => action.zoom > 1)).toBe(true)
     wrapper.unmount()
   })
 })

@@ -1,7 +1,7 @@
 <template>
   <!-- Force layout: a dependency closure is a graph with cycles, not a dag, and
        the reader pans and pins nodes by hand until it reads the way they think -->
-  <div class="chart">
+  <div ref="rootRef" class="chart" :class="{ maximized }">
     <v-chart
       class="canvas"
       ref="chartRef"
@@ -25,11 +25,59 @@
         >@{{ label.text }}</span
       >
     </div>
+    <!-- The canvas only reads as well as the frame it is given, so the frame is
+         the reader's: zoom it, put it back in frame, or lend it the window. -->
+    <div class="chart-toolbar">
+      <el-tooltip :content="toolbarLabels.zoomOut" placement="bottom">
+        <el-button
+          size="small"
+          circle
+          :icon="ZoomOut"
+          :aria-label="toolbarLabels.zoomOut"
+          data-test="graph-zoom-out"
+          @click="zoomBy(1 / ZOOM_STEP)"
+        />
+      </el-tooltip>
+      <el-tooltip :content="toolbarLabels.zoomIn" placement="bottom">
+        <el-button
+          size="small"
+          circle
+          :icon="ZoomIn"
+          :aria-label="toolbarLabels.zoomIn"
+          data-test="graph-zoom-in"
+          @click="zoomBy(ZOOM_STEP)"
+        />
+      </el-tooltip>
+      <el-tooltip :content="toolbarLabels.fit" placement="bottom">
+        <el-button
+          size="small"
+          circle
+          :icon="Aim"
+          :aria-label="toolbarLabels.fit"
+          data-test="graph-fit"
+          @click="fitToView"
+        />
+      </el-tooltip>
+      <el-tooltip
+        :content="maximized ? toolbarLabels.restore : toolbarLabels.maximize"
+        placement="bottom-end"
+      >
+        <el-button
+          size="small"
+          circle
+          :icon="maximized ? Close : FullScreen"
+          :aria-label="maximized ? toolbarLabels.restore : toolbarLabels.maximize"
+          data-test="graph-maximize"
+          @click="toggleMaximize"
+        />
+      </el-tooltip>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, unref, watch } from 'vue'
+import { Aim, Close, FullScreen, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import type { ECharts } from 'echarts/core'
@@ -55,6 +103,14 @@ interface Props {
   transitive?: boolean
   /** Legend names for categories 0, 1 and 2 - the page localises them. */
   categoryNames?: string[]
+  /** The toolbar's wordings - localised by the page, like the category names. */
+  toolbarLabels?: {
+    zoomIn: string
+    zoomOut: string
+    fit: string
+    maximize: string
+    restore: string
+  }
   height?: string
 }
 
@@ -64,6 +120,13 @@ const props = withDefaults(defineProps<Props>(), {
   // Indexed by category as the file numbers them: 0 project, 1 dependency,
   // 2 the packages the application ships.
   categoryNames: () => ['Project', 'Dependency', 'Workspace package'],
+  toolbarLabels: () => ({
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    fit: 'Fit to view',
+    maximize: 'Maximize',
+    restore: 'Restore',
+  }),
   height: '600px',
 })
 
@@ -72,6 +135,10 @@ const emit = defineEmits<{
 }>()
 
 const chartRef = ref<InstanceType<typeof VChart> | null>(null)
+/** The frame the canvas lives in: what a resize is measured on, and what grows. */
+const rootRef = ref<HTMLElement | null>(null)
+/** Whether the graph has taken the window instead of the card it was given. */
+const maximized = ref(false)
 
 /** The ECharts instance behind the canvas, once vue-echarts has mounted it. */
 function chartInstance(): ECharts | null {
@@ -93,6 +160,8 @@ let fitGeneration = 0
 // Which node the pointer is down on: zrender drags speak only of elements, the
 // mouse event is what names the package under it.
 let pressedNodeId: string | null = null
+// The canvas follows its container; this is what tells the fit that it moved.
+let resizeObserver: ResizeObserver | null = null
 
 interface ContentBox {
   minX: number
@@ -360,8 +429,56 @@ function refitView(newPictures: boolean) {
   window.setTimeout(step, 250)
 }
 
-// A taller window asks for a taller picture, unless the reader moved it.
-const onWindowResize = () => refitView(false)
+// ---------------------------------------------------------------------------
+// The frame is the reader's
+// ---------------------------------------------------------------------------
+
+/** How much one press of the zoom buttons scales the picture. */
+const ZOOM_STEP = 1.25
+/** autoresize hands the canvas its new size a beat after the class lands. */
+const MAXIMIZE_SETTLE_MS = 100
+
+/** Scale the picture around the middle: a press has no pointer to zoom on. */
+function zoomBy(factor: number) {
+  const chart = chartInstance()
+  if (!chart) return
+  const width = chart.getWidth()
+  const height = chart.getHeight()
+  if (!width || !height) return
+  chart.dispatchAction({
+    type: 'graphRoam',
+    zoom: factor,
+    originX: width / 2,
+    originY: height / 2,
+  })
+}
+
+/** Put the picture back in frame, handing the view back to the layout. */
+function fitToView() {
+  roamedByHand = false
+  refitView(true)
+}
+
+/**
+ * Give the graph the window, or the window back. A window-sized canvas is a new
+ * frame to fit into, and asking for it is not the reader's own roam: the picture
+ * is fitted to the size they asked for, once the canvas has taken that size.
+ */
+function setMaximized(next: boolean) {
+  if (maximized.value === next) return
+  maximized.value = next
+  roamedByHand = false
+  window.setTimeout(() => refitView(true), MAXIMIZE_SETTLE_MS)
+}
+
+const toggleMaximize = () => setMaximized(!maximized.value)
+
+/** Escape is the second way out of a frame that covers the page. */
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && maximized.value) {
+    setMaximized(false)
+  }
+}
 
 onMounted(() => {
   const chart = chartInstance()
@@ -382,11 +499,21 @@ onMounted(() => {
   chart.on('rendered', syncEdgeLabels)
   syncEdgeLabels()
   refitView(false)
-  window.addEventListener('resize', onWindowResize)
+  // A taller frame asks for a taller picture, unless the reader moved it. The
+  // canvas follows its container (autoresize), and the container is what changes:
+  // on a window resize, but also when the graph takes the window, which the
+  // window's own resize event never sees.
+  if (typeof ResizeObserver !== 'undefined' && rootRef.value) {
+    resizeObserver = new ResizeObserver(() => refitView(false))
+    resizeObserver.observe(rootRef.value)
+  }
+  window.addEventListener('keydown', onKeydown)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', onWindowResize)
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  window.removeEventListener('keydown', onKeydown)
 })
 
 // A node the reader dropped by hand stays where it was left: the force layout
@@ -471,7 +598,9 @@ const chartOption = computed(() => ({
       layout: 'force' as const,
       roam: true,
       draggable: true,
-      scaleLimit: { min: 0.3, max: 3 },
+      // A maximized canvas asks for more than the card ever did: the ceiling has
+      // to leave room to magnify a corner of the picture, not just to read it.
+      scaleLimit: { min: 0.3, max: 6 },
       edgeSymbol: ['none', 'arrow'],
       edgeSymbolSize: [0, 6],
       cursor: 'pointer',
@@ -565,6 +694,34 @@ watch(chartOption, () => {
   position: relative;
   width: 100%;
   height: v-bind(height);
+}
+/* The graph given the window: its own frame above the page, at the size the
+   canvas would never get inside a card. */
+.chart.maximized {
+  position: fixed;
+  inset: 0;
+  /* Above the page, below Element Plus poppers (2000+): the toolbar's tooltips
+     are poppers too, and would open behind a frame that outranked them. */
+  z-index: 1990;
+  height: auto;
+  background: var(--el-bg-color);
+}
+/* The buttons sit on the picture: the surface under them keeps them legible
+   whatever the nodes behind them happen to be. */
+.chart-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+}
+.chart-toolbar :deep(.el-button) {
+  background: var(--el-bg-color);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+}
+.chart-toolbar :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 .canvas {
   width: 100%;

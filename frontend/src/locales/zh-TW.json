@@ -1319,6 +1319,11 @@
     "dependents": "被相依",
     "no_dependencies": "無",
     "no_dependents": "沒有被任何套件相依",
-    "circular_warning": "該套件處於循環相依中。"
+    "circular_warning": "該套件處於循環相依中。",
+    "zoom_in": "放大",
+    "zoom_out": "縮小",
+    "zoom_fit": "適配檢視",
+    "maximize": "全螢幕檢視",
+    "restore": "還原"
   }
 }

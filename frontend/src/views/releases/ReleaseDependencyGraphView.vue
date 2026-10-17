@@ -231,6 +231,13 @@
               t('releaseDependencyGraph.category_dependency'),
               t('releaseDependencyGraph.category_workspace'),
             ]"
+            :toolbar-labels="{
+              zoomIn: t('releaseDependencyGraph.zoom_in'),
+              zoomOut: t('releaseDependencyGraph.zoom_out'),
+              fit: t('releaseDependencyGraph.zoom_fit'),
+              maximize: t('releaseDependencyGraph.maximize'),
+              restore: t('releaseDependencyGraph.restore'),
+            }"
             height="max(560px, calc(100vh - 380px))"
             data-test="release-dependency-graph-chart"
             @node-click="onNodeClick"
