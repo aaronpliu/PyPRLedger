@@ -1324,6 +1324,8 @@
     "zoom_out": "縮小",
     "zoom_fit": "適配檢視",
     "maximize": "全螢幕檢視",
-    "restore": "還原"
+    "restore": "還原",
+    "reset_layout": "重設佈局",
+    "layered": "分層佈局"
   }
 }

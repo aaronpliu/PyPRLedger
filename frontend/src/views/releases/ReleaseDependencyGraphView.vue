@@ -237,7 +237,10 @@
               fit: t('releaseDependencyGraph.zoom_fit'),
               maximize: t('releaseDependencyGraph.maximize'),
               restore: t('releaseDependencyGraph.restore'),
+              resetLayout: t('releaseDependencyGraph.reset_layout'),
+              layered: t('releaseDependencyGraph.layered'),
             }"
+            :view-key="`${selectedProjectKey}/${selectedRepositorySlug}`"
             height="max(560px, calc(100vh - 380px))"
             data-test="release-dependency-graph-chart"
             @node-click="onNodeClick"

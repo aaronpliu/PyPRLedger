@@ -1324,6 +1324,8 @@
     "zoom_out": "Zoom out",
     "zoom_fit": "Fit to view",
     "maximize": "Maximize",
-    "restore": "Restore"
+    "restore": "Restore",
+    "reset_layout": "Reset layout",
+    "layered": "Layered layout"
   }
 }

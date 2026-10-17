@@ -1324,6 +1324,8 @@
     "zoom_out": "缩小",
     "zoom_fit": "适配视图",
     "maximize": "全屏查看",
-    "restore": "还原"
+    "restore": "还原",
+    "reset_layout": "重置布局",
+    "layered": "分层布局"
   }
 }
