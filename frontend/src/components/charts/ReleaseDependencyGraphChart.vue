@@ -879,7 +879,10 @@ watch(chartOption, () => {
   background: var(--el-bg-color);
 }
 /* The buttons sit on the picture: the surface under them keeps them legible
-   whatever the nodes behind them happen to be. */
+   whatever the nodes behind them happen to be. They answer the pointer, though,
+   and stay out of the picture until it arrives - the graph is what the page is
+   for, not its controls. Hidden also means gone for the pointer: a button nobody
+   can see must not take the click that was aimed at a node under it. */
 .chart-toolbar {
   position: absolute;
   top: 8px;
@@ -887,6 +890,35 @@ watch(chartOption, () => {
   z-index: 2;
   display: flex;
   gap: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.chart:hover .chart-toolbar,
+.chart:has(:focus-visible) .chart-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* Reaching the toolbar from the keyboard has to reveal it too. A browser that
+   cannot tell a keyboard focus from a click keeps it while anything inside is
+   focused, which is the honest fallback: a focused control must be visible. */
+@supports not selector(:has(*)) {
+  .chart:focus-within .chart-toolbar {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+/* A touch screen has no pointer to move onto the canvas: the buttons stay. */
+@media (hover: none) {
+  .chart-toolbar {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-toolbar {
+    transition: none;
+  }
 }
 .chart-toolbar :deep(.el-button) {
   background: var(--el-bg-color);
