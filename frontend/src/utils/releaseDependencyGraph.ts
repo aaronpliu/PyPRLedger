@@ -221,6 +221,114 @@ export function withinDepth(
   }
 }
 
+/** Distance between two rows of the layered drawing, and between two of a row. */
+const LAYER_ROW_GAP = 140
+const LAYER_COLUMN_GAP = 220
+
+export interface LayeredPosition {
+  x: number
+  y: number
+}
+
+/**
+ * Positions for a layered drawing of the same graph: the projects on the top row,
+ * every package on the row of the shallowest one that pulls it in, and each row
+ * spread across and centred. A layering is what a large closure can still be read
+ * in - a force layout of several hundred packages settles into a hairball, and
+ * takes seconds to do it.
+ *
+ * The rows are ordered by where their parents sit, one row at a time, which keeps
+ * a drawing from crossing itself where the names alone would shuffle it. A package
+ * nothing reaches gets a row of its own below the rest, so an orphan stays visible
+ * instead of landing on top of the roots.
+ */
+export function layeredPositions(
+  data: ReleaseDependencyGraphData,
+): Map<string, LayeredPosition> {
+  const outgoing = new Map<string, string[]>()
+  for (const link of data.links) {
+    const bucket = outgoing.get(link.source)
+    if (bucket) bucket.push(link.target)
+    else outgoing.set(link.source, [link.target])
+  }
+
+  // The shortest walk from a project is the row a package belongs on. Without a
+  // project the whole graph is its own starting line.
+  const roots = data.nodes.filter((node) => node.category === 0).map((node) => node.id)
+  const starts = roots.length > 0 ? roots : data.nodes.map((node) => node.id)
+
+  const depthById = new Map<string, number>()
+  const queue: string[] = []
+  for (const root of starts) {
+    if (!depthById.has(root)) {
+      depthById.set(root, 0)
+      queue.push(root)
+    }
+  }
+  while (queue.length > 0) {
+    const current = queue.shift() as string
+    const next = (depthById.get(current) as number) + 1
+    for (const target of outgoing.get(current) ?? []) {
+      if (!depthById.has(target)) {
+        depthById.set(target, next)
+        queue.push(target)
+      }
+    }
+  }
+
+  const reachable = Math.max(0, ...depthById.values())
+  for (const node of data.nodes) {
+    if (!depthById.has(node.id)) depthById.set(node.id, reachable + 1)
+  }
+
+  const parents = new Map<string, string[]>()
+  for (const link of data.links) {
+    const bucket = parents.get(link.target)
+    if (bucket) bucket.push(link.source)
+    else parents.set(link.target, [link.source])
+  }
+
+  const rows = new Map<number, string[]>()
+  for (const node of data.nodes) {
+    const level = depthById.get(node.id) ?? 0
+    const bucket = rows.get(level)
+    if (bucket) bucket.push(node.id)
+    else rows.set(level, [node.id])
+  }
+
+  const orderById = new Map<string, number>()
+  const levels = [...rows.keys()].sort((a, b) => a - b)
+  for (const level of levels) {
+    const members = rows.get(level) ?? []
+    // Where a package's parents sit in the row above is the crossing-free place
+    // for it to stand; the name only settles ties and the unreachable.
+    const rank = (id: string): number => {
+      if (level === 0) return 0
+      const above = (parents.get(id) ?? [])
+        .filter((parent) => (depthById.get(parent) ?? -1) === level - 1)
+        .map((parent) => orderById.get(parent) ?? 0)
+      if (above.length === 0) return Number.MAX_SAFE_INTEGER
+      return above.reduce((sum, value) => sum + value, 0) / above.length
+    }
+    members.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+    members.forEach((id, index) => orderById.set(id, index))
+    rows.set(level, members)
+  }
+
+  const positions = new Map<string, LayeredPosition>()
+  for (const level of levels) {
+    const members = rows.get(level) ?? []
+    const middle = (members.length - 1) / 2
+    members.forEach((id, index) => {
+      positions.set(id, {
+        x: (index - middle) * LAYER_COLUMN_GAP,
+        y: level * LAYER_ROW_GAP,
+      })
+    })
+  }
+  return positions
+}
+
 /**
  * Mark the edges that close a cycle: the back edges of a depth-first walk over
  * the whole graph. Only the back edge is marked - one per simple cycle found -

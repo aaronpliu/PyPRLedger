@@ -10,6 +10,14 @@ caller, a verified ancestor (one provider call per candidate), the previous tag
 in version-aware name order, or nothing at all - and the result carries how it was
 obtained, so the UI can state the scope instead of guessing it from a page-sized
 list of tags.
+
+The version a tag names leads that order: a release follows the version below it, not
+another build of itself, so an irregular tag such as ``3.14.0-Build23004`` is measured
+against ``3.13.0-Build23003`` rather than the ``3.14.0-Build23003`` that happens to be
+more recent - whose commits are the ones its last build added, not the ones the release
+carried. The releases of the repository are then asked about before the tags that name
+no version, which are cut from the same history and would otherwise answer for a release
+they merely sit beside.
 """
 
 from __future__ import annotations
@@ -82,6 +90,69 @@ def version_sort_key(name: str) -> tuple[tuple[int, Any], ...]:
     return tuple((1, int(chunk)) if chunk.isdigit() else (0, chunk) for chunk in chunks if chunk)
 
 
+# A tag that releases a version leads with it: ``3.14.0-Build23004`` releases 3.14.0.
+# What follows is the build of that release, so it orders within the version rather
+# than deciding which version the tag belongs to.
+VERSION_PATTERN = re.compile(r"^[vV]?(\d+(?:\.\d+)*)")
+
+
+def version_of(name: str) -> tuple[int, ...] | None:
+    """The version a tag name leads with, or ``None`` when it does not read as one.
+
+    ``3.14.0-Build23004`` reads as ``(3, 14, 0)``. A name like ``Test-Build23000``
+    reads as nothing at all: it takes no part in version ordering and is left to the
+    name order, which is what keeps the tags a repository keeps beside its releases
+    from being read as releases of their own.
+    """
+    match = VERSION_PATTERN.match((name or "").strip())
+    if not match:
+        return None
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
+def previous_by_version(version: str, tags: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The tag a released version follows: the highest tag of the version below it.
+
+    A tag that names a version *is* that release, so another tag of the same version is
+    that release built again - the build before it, or another line's build of it - and
+    not the release that came before it. Reading the predecessor off those builds cuts a
+    release's commits down to the ones its own last build happened to add, which is what
+    an irregular tag like ``3.14.0-Build23004`` used to be measured by.
+
+    Within the version that does precede it the highest tag wins, read by name and then
+    by date, so ``3.13.0-Build23003`` is taken over ``3.13.0-Build23002``.
+
+    Returns ``None`` when the tag names no version, and when no lower version is known:
+    the caller falls back to the name order in the first case and to the remaining
+    candidates in the second.
+    """
+    current = version_of(version)
+    if current is None:
+        return None
+
+    lower: list[tuple[tuple[int, ...], dict[str, Any]]] = []
+    for candidate in tags:
+        if str(candidate.get("name") or "") == version:
+            continue
+        candidate_version = version_of(str(candidate.get("name") or ""))
+        if candidate_version is not None and candidate_version < current:
+            lower.append((candidate_version, candidate))
+    if not lower:
+        return None
+
+    best = max(candidate_version for candidate_version, _ in lower)
+    same_version = [
+        candidate for candidate_version, candidate in lower if candidate_version == best
+    ]
+    return max(
+        same_version,
+        key=lambda tag: (
+            version_sort_key(str(tag.get("name") or "")),
+            tag.get("date") or 0,
+        ),
+    )
+
+
 def order_candidates(tags: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Order tag candidates newest first, for the ancestry walk.
 
@@ -98,6 +169,34 @@ def order_candidates(tags: list[dict[str, Any]]) -> list[dict[str, Any]]:
         ),
         reverse=True,
     )
+
+
+def predecessor_candidates(version: str, tags: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The tags worth asking about, in the order they are worth asking about.
+
+    Three groups, the provider being asked about the first group before the next:
+
+    1. the version below the released one, when the tag names a version at all;
+    2. the other tags that name a version, newest first;
+    3. the tags that name no version, newest first.
+
+    That order is what keeps a repository's debug and test tags from answering for its
+    releases. Those tags are cut from the same history as the release beside them, so by
+    ancestry alone a ``DEBUG-`` tag newer than the last release *is* an ancestor of the
+    released tag and is accepted as its predecessor - and the notes then carry only what
+    was committed after that debug tag. A tag that names a version is a release, so the
+    releases are asked about first, and the tags that name none are asked about when no
+    release precedes the tag at all: a repository whose releases are named irregularly
+    keeps resolving by ancestry exactly as it did.
+    """
+    released_below = previous_by_version(version, tags)
+    others = order_candidates([tag for tag in tags if str(tag.get("name") or "") != version])
+    if released_below is not None:
+        others = [tag for tag in others if tag is not released_below]
+
+    named = [tag for tag in others if version_of(str(tag.get("name") or "")) is not None]
+    unnamed = [tag for tag in others if version_of(str(tag.get("name") or "")) is None]
+    return ([released_below] if released_below is not None else []) + named + unnamed
 
 
 def previous_by_name(version: str, tags: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -276,11 +375,14 @@ class ReleaseNoteScopeService:
         # keeps a tag that is moved between calls from changing the answer.
         pinned_ref = version_sha or version
 
+        # Releases are asked about before the debug and test tags that share their
+        # history, and the version below the released one before either.
+        released_below = previous_by_version(version, tags)
+        candidates = predecessor_candidates(version, tags)
+
         budget = probe_budget(len(tags))
         probes = 0
-        for candidate in order_candidates(
-            [tag for tag in tags if str(tag.get("name") or "") != version]
-        ):
+        for candidate in candidates:
             if probes >= budget:
                 logger.info(
                     "Release note scope probe budget reached",
@@ -331,7 +433,9 @@ class ReleaseNoteScopeService:
                     reason=REASON_RESOLVED,
                 )
 
-        neighbour = previous_by_name(version, tags)
+        # Nothing could be verified: the version below is still the likelier answer than
+        # the name order, which knows nothing of versions at all.
+        neighbour = released_below or previous_by_name(version, tags)
         if neighbour is not None:
             # a legitimate answer, just not a proven one - the UI warns about it
             return ReleaseScope(

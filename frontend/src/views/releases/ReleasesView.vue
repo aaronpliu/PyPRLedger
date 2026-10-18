@@ -216,8 +216,11 @@
         </template>
 
         <el-form :model="compareForm" label-width="180px">
-          <el-row :gutter="16">
-            <el-col :xs="24" :md="12">
+          <el-row :gutter="16" class="refs-row">
+            <!-- Half the card each, at every width: the two refs are one comparison
+                 read in two directions, so giving each of them a line of its own
+                 would split one comparison into two unrelated fields. -->
+            <el-col :span="12">
               <el-form-item :label="t('releaseDiff.missing_source_ref')" required>
                 <el-autocomplete
                   v-model="compareForm.source_ref"
@@ -238,7 +241,21 @@
                 </el-autocomplete>
               </el-form-item>
             </el-col>
-            <el-col :xs="24" :md="12">
+            <!-- The button that turns the comparison around sits between the two refs
+                 without taking a column of its own: it is lifted out of the layout and
+                 set down in the empty lead-in the target label leaves inside its own
+                 180px box, so neither field is pushed aside. -->
+            <div class="swap-anchor">
+              <el-button
+                circle
+                class="swap-refs"
+                data-test="swap-refs"
+                :icon="Switch"
+                :disabled="!canSwapRefs"
+                @click="swapRefs"
+              />
+            </div>
+            <el-col :span="12">
               <el-form-item :label="t('releaseDiff.missing_target_ref')" required>
                 <el-autocomplete
                   v-model="compareForm.target_ref"
@@ -705,6 +722,7 @@ import {
   CircleCheck,
   Download,
   QuestionFilled,
+  Switch,
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import CommitTable from '@/components/release/CommitTable.vue'
@@ -1277,6 +1295,24 @@ async function captureReport(
   }
 }
 
+/** There is a comparison to turn around only once both refs name one. */
+const canSwapRefs = computed(() =>
+  Boolean(compareForm.value.source_ref.trim() && compareForm.value.target_ref.trim()),
+)
+
+/**
+ * Read the comparison the other way: what was the target becomes the source, and the
+ * source becomes the target. An answer already on the page was read in the direction
+ * that has just been turned around, so it is asked for again rather than left standing
+ * for a comparison nobody made.
+ */
+function swapRefs() {
+  const { source_ref, target_ref } = compareForm.value
+  compareForm.value.source_ref = target_ref
+  compareForm.value.target_ref = source_ref
+  if (compareResult.value) void runCompare()
+}
+
 async function runCompare() {
   if (
     !selectedProjectKey.value ||
@@ -1571,6 +1607,27 @@ async function copySha(value: string) {
   flex: 0 0 auto;
   width: 400px;
   max-width: 100%;
+}
+
+/*
+ * The button that turns the comparison around. The two refs always share one line - they
+ * are one comparison read in two directions - so the button takes no column of its own:
+ * it is out of the layout and set down just right of the divider, in the empty lead-in
+ * the target label leaves inside its own 180px box (form labels are right-aligned against
+ * their input). That keeps it clear of the source input on one side and of the label text
+ * on the other, while both fields keep exactly half of the card.
+ */
+.refs-row {
+  position: relative;
+}
+
+.swap-anchor {
+  position: absolute;
+  /* the divider plus the target column's gutter padding: the button starts where that
+     column's content does, and the 180px label box it opens onto is empty there because
+     its text is pushed to the right */
+  top: 0;
+  left: calc(50% + 8px);
 }
 
 /* Explanatory text, not a label: same weight as the hints above the form */

@@ -1104,7 +1104,6 @@
     "screenshot_copied": "Screenshot copied to clipboard",
     "screenshot_shared": "Screenshot shared",
     "screenshot_failed": "Failed to capture the screenshot",
-    "col_url": "URL",
     "report_scope": "Scope",
     "report_project_url": "Project URL",
     "report_repository_url": "Repository URL"
@@ -1190,6 +1189,10 @@
     "select_title": "Release notes",
     "select_hint": "Select a release or a tag on the left to read its notes",
     "tag_commits_title": "Commits of {tag}",
+    "editor_commits_help": "The notes should account for these commits - check them once the notes are generated",
+    "commits_refresh": "Read the commits of this release again",
+    "show_commits": "Commits of this release",
+    "hide_commits": "Hide commits",
     "full_history": "full history of {tag}",
     "scope_first_release": "No earlier tag - showing every commit reachable from {tag}",
     "scope_unresolved": "The previous tag could not be determined - showing every commit reachable from {tag}",
@@ -1320,6 +1323,13 @@
     "dependents": "Dependents",
     "no_dependencies": "None",
     "no_dependents": "Nothing depends on it",
-    "circular_warning": "This package sits on a circular dependency."
+    "circular_warning": "This package sits on a circular dependency.",
+    "zoom_in": "Zoom in",
+    "zoom_out": "Zoom out",
+    "zoom_fit": "Fit to view",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "reset_layout": "Reset layout",
+    "layered": "Layered layout"
   }
 }

@@ -243,6 +243,14 @@ async function useNoteMenu(wrapper: AnyWrapper, command: string, index = 0) {
   await nextTick()
 }
 
+/** The commits of a draft are folded away until the info label beside the tag asks. */
+async function toggleEditorCommits(wrapper: AnyWrapper) {
+  const toggle = wrapper.find('[data-test="editor-commits-toggle"]')
+  expect(toggle.exists(), 'the editor offers no commits label').toBe(true)
+  await toggle.trigger('click')
+  await flushPromises()
+}
+
 function selectByPlaceholder(wrapper: AnyWrapper, placeholder: string) {
   return wrapper
     .findAllComponents({ name: 'ElSelect' })
@@ -328,6 +336,56 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     // no LLM configured unless a test asks for one
     vi.mocked(llmApi.getConfig).mockResolvedValue({ enabled: false, model: '', base_url: '' })
     resetJiraSettings()
+  })
+
+  it('offers the way back to the head of a long page of releases', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    // a page of releases stacks up past the screen, so the list keeps an arrow back to
+    // its own head - a button, so a keyboard reaches it too, and no words on it
+    const button = wrapper.find('[data-test="notes-backtop"]')
+    expect(button.exists()).toBe(true)
+    expect(button.attributes('title')).toBeUndefined()
+
+    // and it returns to the list, not to the top of the document
+    const card = wrapper.find('.notes-card').element as HTMLElement
+    const scrollIntoView = vi.fn()
+    card.scrollIntoView = scrollIntoView
+    await button.trigger('click')
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+  })
+
+  it('draws how much of the page has been read around that arrow', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ring = wrapper.find('[data-test="notes-backtop-progress"]')
+    const length = Number(ring.attributes('stroke-dasharray'))
+    // nothing read yet: the arc is empty, its whole circumference still ahead of it
+    expect(length).toBeGreaterThan(100)
+    expect(Number(ring.attributes('stroke-dashoffset'))).toBeCloseTo(length)
+
+    // halfway down the page, half of the ring is drawn
+    const stub = (target: object, key: string, value: number) =>
+      Object.defineProperty(target, key, { value, configurable: true })
+    stub(window, 'scrollY', 500)
+    stub(window, 'innerHeight', 500)
+    stub(document.documentElement, 'scrollHeight', 1500)
+    try {
+      window.dispatchEvent(new Event('scroll'))
+      await flushPromises()
+      expect(Number(ring.attributes('stroke-dashoffset'))).toBeCloseTo(length / 2)
+    } finally {
+      // the stubs shadow jsdom's own values, so dropping them hands the page back
+      for (const [target, key] of [
+        [window, 'scrollY'],
+        [window, 'innerHeight'],
+        [document.documentElement, 'scrollHeight'],
+      ] as const) {
+        delete (target as unknown as Record<string, unknown>)[key]
+      }
+    }
   })
 
   it('asks for a repository before showing releases', async () => {
@@ -1107,6 +1165,236 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
 
     const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
     expect(tagSelect.props('modelValue')).toBe('v0.2.0')
+  })
+
+  it('carries the commits of the chosen tag into the draft it opens', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([PREVIEW_COMMIT]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    // selecting the tag is what reads its commits in the tags panel
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+    await flushPromises()
+    expect(releaseNotesApi.preview).toHaveBeenCalledTimes(1)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    // the commits were already in hand: drafting shows them instead of asking again
+    expect(releaseNotesApi.preview).toHaveBeenCalledTimes(1)
+    // folded away by default, with the size on the label that opens it
+    expect(wrapper.find('[data-test="editor-commits"]').exists()).toBe(false)
+    const toggle = wrapper.find('[data-test="editor-commits-toggle"]')
+    expect(toggle.text()).toContain(enMessages.releaseNotes.show_commits)
+    expect(wrapper.find('.editor-commits-trigger').text()).toContain(
+      enMessages.releaseNotes.commit_count.replace('{count}', '1'),
+    )
+
+    await toggleEditorCommits(wrapper)
+    expect(releaseNotesApi.preview).toHaveBeenCalledTimes(1)
+
+    const panel = wrapper.find('[data-test="editor-commits"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain(
+      enMessages.releaseNotes.range.replace('{from}', 'v1.1.0').replace('{to}', 'v1.2.0'),
+    )
+    expect(panel.text()).toContain('abc1234')
+    expect(panel.text()).toContain(enMessages.releaseNotes.editor_commits_help)
+    // the list opens between the tag and its predecessor, where the scope is decided
+    const items = wrapper.findAll('.editor-form .el-form-item')
+    const tagIndex = items.findIndex((item: AnyWrapper) =>
+      item.text().includes(enMessages.releaseNotes.tag),
+    )
+    expect(items[tagIndex + 1].find('[data-test="editor-commits"]').exists()).toBe(true)
+  })
+
+  it('opens and closes the commits of a draft from the same label', async () => {
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([PREVIEW_COMMIT]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="editor-commits"]').exists()).toBe(false)
+
+    await toggleEditorCommits(wrapper)
+    expect(wrapper.find('[data-test="editor-commits"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="editor-commits-toggle"]').text()).toContain(
+      enMessages.releaseNotes.hide_commits,
+    )
+
+    await toggleEditorCommits(wrapper)
+    expect(wrapper.find('[data-test="editor-commits"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="editor-commits-toggle"]').text()).toContain(
+      enMessages.releaseNotes.show_commits,
+    )
+  })
+
+  it('pages a long scope inside the panel instead of growing it', async () => {
+    const longScope = Array.from({ length: 25 }, (_, index) => ({
+      ...PREVIEW_COMMIT,
+      id: `sha${index}`,
+      display_id: `sha${String(index).padStart(4, '0')}`,
+    }))
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview(longScope))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+    await toggleEditorCommits(wrapper)
+
+    const panel = wrapper.find('[data-test="editor-commits"]')
+    // a page of rows in the form, the rest behind the pager it already carries
+    expect(panel.findAll('.el-table__row').length).toBe(10)
+    expect(panel.find('.commit-pagination').text()).toContain('25')
+    // the scope is not a capped scan: all 25 commits belong to the release
+    expect(panel.find('.el-alert').exists()).toBe(false)
+  })
+
+  it('reads the commits of the tag a draft is switched to', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0', 'v1.0.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([PREVIEW_COMMIT]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+    await flushPromises()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    // the writer narrows the draft to another tag: its scope is read again
+    const tagSelect = selectByPlaceholder(wrapper, enMessages.releaseNotes.tag_placeholder)
+    tagSelect.vm.$emit('update:modelValue', 'v1.0.0')
+    tagSelect.vm.$emit('change', 'v1.0.0')
+    await flushPromises()
+
+    expect(releaseNotesApi.preview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ version: 'v1.0.0' }),
+    )
+    await toggleEditorCommits(wrapper)
+    expect(wrapper.find('[data-test="editor-commits"]').text()).toContain('abc1234')
+  })
+
+  it('keeps the range when the previous tag is chosen in the form', async () => {
+    // a predecessor supplied by the writer comes back as 'provided', not 'resolved':
+    // it is still a range, and the panel must not fall back to the full history
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([PREVIEW_COMMIT], {
+        previous_version: 'v1.0.0',
+        previous_source: 'explicit',
+        previous_verified: true,
+        scope_reason: 'provided',
+      }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+    await toggleEditorCommits(wrapper)
+
+    const previousTagSelect = selectByPlaceholder(
+      wrapper,
+      enMessages.releaseNotes.previous_tag_placeholder,
+    )
+    previousTagSelect.vm.$emit('update:modelValue', 'v0.9.0')
+    previousTagSelect.vm.$emit('change', 'v0.9.0')
+    await flushPromises()
+
+    expect(releaseNotesApi.preview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ previous_version: 'v0.9.0' }),
+    )
+    const panel = wrapper.find('[data-test="editor-commits"]')
+    expect(panel.text()).toContain(
+      enMessages.releaseNotes.range.replace('{from}', 'v1.0.0').replace('{to}', 'v1.1.0'),
+    )
+    expect(panel.text()).not.toContain(
+      enMessages.releaseNotes.full_history.replace('{tag}', 'v1.1.0'),
+    )
+  })
+
+  it('shows the commits the generated notes were built from', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.1.0', 'v1.0.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue({
+      ...preview([PREVIEW_COMMIT], { version: 'v1.1.0', commit_count: 1 }),
+      body: '## What\u2019s Changed\n\n- add login page in [abc1234](https://git.local/commits/abc1234)',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.generate_notes)[0].trigger('click')
+    await flushPromises()
+
+    // one answer carries both: the body and the commits it was written from
+    await toggleEditorCommits(wrapper)
+    const panel = wrapper.find('[data-test="editor-commits"]')
+    expect(panel.text()).toContain('abc1234')
+    expect(panel.text()).toContain(enMessages.releaseNotes.commit_count.replace('{count}', '1'))
+  })
+
+  it('shows the commits of a release being edited', async () => {
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([PREVIEW_COMMIT]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await useNoteMenu(wrapper, 'edit')
+
+    expect(releaseNotesApi.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ version: 'v1.1.0', previous_version: 'v1.0.0' }),
+    )
+    await toggleEditorCommits(wrapper)
+    expect(wrapper.find('[data-test="editor-commits"]').text()).toContain('abc1234')
+  })
+
+  it('warns beside the notes when their scope was only inferred', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([PREVIEW_COMMIT], { previous_source: 'name_order', previous_verified: false }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+    await flushPromises()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    await toggleEditorCommits(wrapper)
+    const panel = wrapper.find('[data-test="editor-commits"]')
+    expect(panel.find('.el-alert').text()).toContain(
+      enMessages.releaseNotes.scope_inferred.replace('{from}', 'v1.1.0'),
+    )
   })
 
   it('drafts from the newest tag, which is where the listing starts', async () => {

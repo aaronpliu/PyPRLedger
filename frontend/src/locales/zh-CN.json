@@ -1104,7 +1104,6 @@
     "screenshot_copied": "截图已复制到剪贴板",
     "screenshot_shared": "截图已分享",
     "screenshot_failed": "截图失败",
-    "col_url": "链接",
     "report_scope": "范围",
     "report_project_url": "项目 URL",
     "report_repository_url": "仓库 URL"
@@ -1190,6 +1189,10 @@
     "select_title": "版本说明",
     "select_hint": "在左侧选择版本或标签以查看说明",
     "tag_commits_title": "{tag} 的提交",
+    "editor_commits_help": "发布说明应覆盖这些提交 —— 生成后请核对是否遗漏",
+    "commits_refresh": "重新读取本次发布的提交",
+    "show_commits": "本次发布的提交",
+    "hide_commits": "收起提交",
     "full_history": "{tag} 的全部历史",
     "scope_first_release": "没有更早的标签 —— 列出 {tag} 可达的全部提交",
     "scope_unresolved": "无法确定上一个标签 —— 列出 {tag} 可达的全部提交",
@@ -1320,6 +1323,13 @@
     "dependents": "被依赖",
     "no_dependencies": "无",
     "no_dependents": "没有被任何包依赖",
-    "circular_warning": "该包处于循环依赖中。"
+    "circular_warning": "该包处于循环依赖中。",
+    "zoom_in": "放大",
+    "zoom_out": "缩小",
+    "zoom_fit": "适配视图",
+    "maximize": "全屏查看",
+    "restore": "还原",
+    "reset_layout": "重置布局",
+    "layered": "分层布局"
   }
 }

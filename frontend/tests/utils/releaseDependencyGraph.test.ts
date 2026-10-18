@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   isExactVersion,
+  layeredPositions,
   markCircularLinks,
   pinnedEdgeLabels,
   releaseToGraph,
@@ -122,6 +123,48 @@ describe('withinDepth', () => {
     expect(view.links.some((link) => link.source === 'packageA')).toBe(true)
     expect(view.links.map((link) => link.target)).toContain('packageD')
     expect(view.links.some((link) => link.source === 'packageD')).toBe(false)
+  })
+})
+
+describe('layeredPositions', () => {
+  it('puts every package on the row of the shortest walk from a project', () => {
+    const positions = layeredPositions(fixture())
+
+    expect(positions.size).toBe(fixture().nodes.length)
+    expect(positions.get('projectA')!.y).toBe(0)
+    expect(positions.get('packageA')!.y).toBe(positions.get('packageB')!.y)
+    expect(positions.get('packageE')!.y).toBe(positions.get('packageJ')!.y)
+    // each step away from the project is a row further down
+    expect(positions.get('packageA')!.y).toBeGreaterThan(positions.get('projectA')!.y)
+    expect(positions.get('packageE')!.y).toBeGreaterThan(positions.get('packageA')!.y)
+  })
+
+  it('centres each row, so nothing hangs off one side', () => {
+    const positions = layeredPositions(fixture())
+
+    // one project on the first row, two packages on the second, three on the third
+    expect(positions.get('projectA')!.x).toBe(0)
+    expect(positions.get('packageA')!.x).toBe(-positions.get('packageB')!.x)
+    const last = ['packageE', 'packageF', 'packageJ'].map((id) => positions.get(id)!.x)
+    expect(last[0] + last[1] + last[2]).toBeCloseTo(0)
+    // left to right in the order their parents sit, not in name order
+    expect(last[0]).toBeLessThan(last[1])
+    expect(last[1]).toBeLessThan(last[2])
+  })
+
+  it('keeps a package nothing reaches on a row of its own, below the rest', () => {
+    const data = fixture()
+    data.nodes.push({ id: 'lonely', category: 1 })
+
+    const positions = layeredPositions(data)
+
+    expect(positions.get('lonely')!.y).toBeGreaterThan(positions.get('packageE')!.y)
+  })
+
+  it('answers the same way for the same graph', () => {
+    expect([...layeredPositions(fixture()).entries()]).toEqual([
+      ...layeredPositions(fixture()).entries(),
+    ])
   })
 })
 

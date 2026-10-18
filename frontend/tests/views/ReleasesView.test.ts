@@ -420,6 +420,76 @@ describe('ReleasesView', () => {
     expect(columns[1].classes()).toContain('el-col-lg-12')
   })
 
+  it('turns the two refs around from the button between them', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const [source, target] = compareRefInputs(wrapper)
+    await source.find('input').setValue('v1.2.0')
+    await target.find('input').setValue('v1.3.0')
+    await flushPromises()
+
+    // nothing has been compared yet: turning it around only exchanges the two refs
+    const swap = wrapper.find('[data-test="swap-refs"]')
+    expect(swap.exists()).toBe(true)
+    await swap.trigger('click')
+    await flushPromises()
+
+    expect((source.find('input').element as HTMLInputElement).value).toBe('v1.3.0')
+    expect((target.find('input').element as HTMLInputElement).value).toBe('v1.2.0')
+    expect(releaseDiffApi.compare).not.toHaveBeenCalled()
+  })
+
+  it('compares again when the refs are turned around after a comparison', async () => {
+    vi.mocked(releaseDiffApi.compare).mockResolvedValue({
+      project_key: 'ALPHA',
+      repository_slug: 'alpha-api',
+      git_provider: 'bitbucket_server',
+      source_ref: 'v1.2.0',
+      target_ref: 'v1.3.0',
+      verdict: 'missing',
+      scan_complete: true,
+      scan_limit: 2000,
+      filtered_by_baseline_count: 0,
+      narrowed: false,
+      missing_count: 1,
+      missing_commits: [{ id: 'aaa1111', display_id: 'aaa111' }],
+      added_count: 0,
+      added_commits: [],
+      added_complete: true,
+      rendered_truncated: false,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    await selects[0].vm.$emit('update:modelValue', 'ALPHA')
+    await flushPromises()
+    await selects[1].vm.$emit('update:modelValue', 'alpha-api')
+    await flushPromises()
+
+    const [source, target] = compareRefInputs(wrapper)
+    await source.find('input').setValue('v1.2.0')
+    await target.find('input').setValue('v1.3.0')
+    const compareButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === enMessages.releaseDiff.run_compare)
+    await compareButton!.trigger('click')
+    await flushPromises()
+    expect(releaseDiffApi.compare).toHaveBeenCalledTimes(1)
+
+    // the answer on the page was read the way round that has just been exchanged, so
+    // the comparison is asked for again rather than left standing for the other way
+    await wrapper.find('[data-test="swap-refs"]').trigger('click')
+    await flushPromises()
+
+    expect(releaseDiffApi.compare).toHaveBeenCalledTimes(2)
+    const second = vi.mocked(releaseDiffApi.compare).mock.calls[1][0]
+    expect(second.source_ref).toBe('v1.3.0')
+    expect(second.target_ref).toBe('v1.2.0')
+  })
+
   it('sends the missing SHAs of a comparison to the commit check', async () => {
     vi.mocked(releaseDiffApi.compare).mockResolvedValue({
       project_key: 'ALPHA',

@@ -116,7 +116,7 @@
     <el-row :gutter="16" class="notes-row">
       <!-- ============ Column 1: releases and tags ============ -->
       <el-col :xs="24" :lg="8">
-        <el-card shadow="never" class="notes-card">
+        <el-card ref="notesCard" shadow="never" class="notes-card">
           <template #header>
             <div class="section-header">
               <div class="section-title">
@@ -420,6 +420,7 @@
                 :disabled="Boolean(editingId)"
                 :placeholder="t('releaseNotes.tag_placeholder')"
                 style="width: 100%"
+                @change="onEditorScopeChange"
               >
                 <el-option v-for="tag in candidateTags" :key="tag" :label="tag" :value="tag" />
                 <!-- Only a tag the repository reports can carry a note: a name typed
@@ -440,6 +441,84 @@
                   @click="loadRefs(true)"
                 />
               </el-tooltip>
+
+              <!-- What the notes are supposed to account for, folded away until it is
+                   asked for: a writer reads it while writing, but it must not push the
+                   form apart for someone who does not. -->
+              <div v-if="hasCoordinates && form.tag_name" class="editor-commits-trigger">
+                <el-button
+                  link
+                  type="primary"
+                  size="small"
+                  :icon="InfoFilled"
+                  data-test="editor-commits-toggle"
+                  :aria-expanded="editorCommitsOpen"
+                  @click="editorCommitsOpen = !editorCommitsOpen"
+                >
+                  {{ editorCommitsOpen ? t('releaseNotes.hide_commits') : t('releaseNotes.show_commits') }}
+                </el-button>
+                <span v-if="!editorCommitsOpen && !editorCommitsLoading && editorCommitCount > 0" class="generated-hint">
+                  {{ t('releaseNotes.commit_count', { count: editorCommitCount }) }}
+                </span>
+              </div>
+            </el-form-item>
+
+            <!-- The list opens where the scope is decided - between the tag and its
+                 predecessor - and stays open while the notes below are written. -->
+            <el-form-item v-if="editorCommitsOpen && form.tag_name">
+              <div class="editor-commits" data-test="editor-commits">
+                <div class="editor-commits-head">
+                  <span class="editor-commits-scope">{{ editorScopeHint }}</span>
+                  <span v-if="!editorCommitsLoading" class="generated-hint">
+                    · {{ t('releaseNotes.commit_count', { count: editorCommitCount }) }}
+                  </span>
+                  <el-tooltip :content="t('releaseNotes.commits_refresh')" placement="top">
+                    <el-button
+                      link
+                      type="primary"
+                      size="small"
+                      :icon="Refresh"
+                      :loading="editorCommitsLoading"
+                      :aria-label="t('releaseNotes.commits_refresh')"
+                      data-test="editor-commits-refresh"
+                      @click="loadEditorCommits(true)"
+                    />
+                  </el-tooltip>
+                </div>
+                <div class="field-hint">{{ t('releaseNotes.editor_commits_help') }}</div>
+
+                <el-alert
+                  v-if="editorScopeInferred"
+                  class="status-alert"
+                  type="warning"
+                  :closable="false"
+                  :title="t('releaseNotes.scope_inferred', { from: editorScope?.previous ?? '' })"
+                />
+                <el-alert
+                  v-if="editorScopeTrimmed"
+                  class="status-alert"
+                  type="warning"
+                  :closable="false"
+                  :title="editorTrimNotice"
+                />
+
+                <ContentLoader
+                  v-if="editorCommitsLoading"
+                  :rows="3"
+                  :label="t('releaseNotes.commits_loading')"
+                />
+                <!-- No cap inside the panel: a page of rows is read whole, so the pager
+                     is the only thing that moves the list (see fill-height). Ten rows is
+                     what keeps one page about the height of the notes editor beside it;
+                     the pager still offers larger pages for a deliberate read-through. -->
+                <commit-table
+                  v-else
+                  fill-height
+                  :page-size="10"
+                  :commits="editorCommits"
+                  :empty-text="t('releaseNotes.commits_empty')"
+                />
+              </div>
             </el-form-item>
 
             <el-form-item :label="t('releaseNotes.previous_tag')">
@@ -452,6 +531,7 @@
                 :disabled="Boolean(editingId)"
                 :placeholder="t('releaseNotes.previous_tag_placeholder')"
                 style="width: 100%"
+                @change="onEditorScopeChange"
               >
                 <el-option v-for="ref in candidateRefs" :key="ref" :label="ref" :value="ref" />
                 <template #empty>
@@ -833,15 +913,50 @@
         </div>
       </el-col>
     </el-row>
+
+    <!-- A page of releases stacks up past the screen, so the list keeps the way back to
+         its own head: the arrow appears once the reader has scrolled past it, and it is
+         a button, so a keyboard reaches it too. The ring around it is how much of the
+         page has been read, so the reader can see where they are without a scrollbar. -->
+    <button
+      v-if="showBackToTop"
+      type="button"
+      class="notes-backtop"
+      data-test="notes-backtop"
+      @click="scrollNotesToTop"
+    >
+      <svg class="notes-backtop-ring" viewBox="0 0 40 40" aria-hidden="true">
+        <circle class="notes-backtop-track" cx="20" cy="20" :r="RING_RADIUS" />
+        <circle
+          class="notes-backtop-progress"
+          data-test="notes-backtop-progress"
+          cx="20"
+          cy="20"
+          :r="RING_RADIUS"
+          :stroke-dasharray="RING_LENGTH"
+          :stroke-dashoffset="RING_LENGTH * (1 - scrollProgress)"
+        />
+      </svg>
+      <el-icon><ArrowUp /></el-icon>
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+  type ComponentPublicInstance,
+} from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
+  ArrowUp,
   Close,
   CopyDocument,
   Document,
@@ -865,6 +980,7 @@ import { linkifyJiraMarkdown } from '@/utils/jira'
 import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
 import type {
   ReleaseNoteExportRequest,
+  ReleaseNotePreviewResponse,
   ReleaseScopeReason,
   ReleaseScopeSource,
 } from '@/api/releaseNotes'
@@ -1046,22 +1162,36 @@ const tagListRef = ref<HTMLElement | null>(null)
 const selectedId = ref<number | null>(null)
 const selectedTag = ref<string | null>(null)
 const selectedNote = computed(() => notes.value.find((note) => note.id === selectedId.value) ?? null)
-// Commits covered by the selected tag (the tag -> commits mapping)
-const tagCommits = ref<CommitInfo[]>([])
-const tagCommitCount = ref(0)
-const tagCommitsLoading = ref(false)
-const tagTruncated = ref(false)
-// Release scope of the selected tag as the server resolved it: the predecessor it
-// found, the revisions the comparison was pinned to, and whether the answer was
-// proven (an ancestor) or inferred from the tag order
-const tagScope = ref<{
+/**
+ * A release scope as the server resolved it: the predecessor it found, the
+ * revisions the comparison was pinned to, and whether the answer was proven (an
+ * ancestor) or inferred from the tag order.
+ */
+interface ScopeState {
   previous: string | null
   previousSha: string | null
   versionSha: string | null
   source: ReleaseScopeSource
   verified: boolean
   reason: ReleaseScopeReason
-} | null>(null)
+}
+
+// Commits covered by the selected tag (the tag -> commits mapping)
+const tagCommits = ref<CommitInfo[]>([])
+const tagCommitCount = ref(0)
+const tagCommitsLoading = ref(false)
+const tagTruncated = ref(false)
+const tagScope = ref<ScopeState | null>(null)
+
+// The same scope, for the release being written: the notes are meant to account for
+// these commits, and the writer can see them while doing it. Folded away until it is
+// asked for, and kept open once it has been - it is read, not passed through.
+const editorCommitsOpen = ref(false)
+const editorCommits = ref<CommitInfo[]>([])
+const editorCommitCount = ref(0)
+const editorCommitsLoading = ref(false)
+const editorTruncated = ref(false)
+const editorScope = ref<ScopeState | null>(null)
 // tag name -> release (id + position in the full list), loaded for the tags tab
 const releaseTagIndex = ref<Map<string, { id: number; position: number }>>(new Map())
 const releaseTagIndexLoaded = ref(false)
@@ -1104,6 +1234,43 @@ const aiFallbackMessage = computed(() => {
   }
 })
 const formCard = ref<HTMLElement | null>(null)
+
+/**
+ * The head of the list of releases, which the arrow over a long page returns to.
+ *
+ * The list, not the document: a page of releases is read as a list, so the way back
+ * should land on the list itself rather than on the filters above it. The card is a
+ * component, so its element is read from the instance.
+ */
+const notesCard = ref<ComponentPublicInstance | null>(null)
+
+/** Whether the head of the list has been scrolled past, which is when the way back is
+ *  offered. Measured from the card itself, so it holds whatever the page above it does. */
+const showBackToTop = ref(false)
+
+/** How much of the page has been read, from 0 to 1: the ring drawn around the arrow.
+ *  The page is measured rather than the list, so the ring keeps moving wherever the
+ *  reader is on it, and empties again on the way back up. */
+const scrollProgress = ref(0)
+
+/** The ring as the geometry of a 40px button: its circumference is what the dash of the
+ *  progress arc covers, so a share of the page is a share of that length. */
+const RING_RADIUS = 18
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS
+
+function trackScroll() {
+  const top = (notesCard.value?.$el as HTMLElement | undefined)?.getBoundingClientRect().top
+  showBackToTop.value = typeof top === 'number' && top < 16
+
+  const scrollable = document.documentElement.scrollHeight - window.innerHeight
+  scrollProgress.value =
+    scrollable > 0 ? Math.min(1, Math.max(0, window.scrollY / scrollable)) : 0
+}
+
+function scrollNotesToTop() {
+  const element = notesCard.value?.$el as HTMLElement | undefined
+  element?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+}
 
 const repo = ref({
   project_key: '',
@@ -1219,40 +1386,48 @@ function labelWithRevision(ref: string, sha?: string | null): string {
 // The release scope of a tag is resolved by the server: the browser only holds a
 // page of tags, so guessing the predecessor here used to lose the scope of every
 // tag beyond that page and list the whole history instead.
-const tagScopeResolved = computed(() => tagScope.value?.reason === 'resolved')
 
-const tagScopeRange = computed(() => {
-  const scope = tagScope.value
-  if (!scope || !scope.previous || !tagScopeResolved.value) return null
+/**
+ * The range a scope covers, with the revisions it was pinned to.
+ *
+ * A predecessor is a predecessor however it was arrived at: supplied by the reader
+ * (a previous version picked in the form), proven by ancestry, or inferred from the
+ * tag order. All of them read as a range - only a scope without one has nothing to
+ * show, and those are labelled by reason before this is reached.
+ */
+function scopeRangeLabel(scope: ScopeState | null, tag: string): string | null {
+  if (!scope?.previous) return null
   return t('releaseNotes.range', {
     from: labelWithRevision(scope.previous, scope.previousSha),
-    to: labelWithRevision(selectedTag.value ?? '', scope.versionSha),
+    to: labelWithRevision(tag, scope.versionSha),
   })
-})
+}
 
 // A scope inferred from the tag order is a legitimate answer, just not a proven one
-const tagScopeInferred = computed(
-  () => Boolean(tagScope.value) && tagScopeResolved.value && !tagScope.value?.verified,
-)
+function scopeIsInferred(scope: ScopeState | null): boolean {
+  return Boolean(scope?.previous) && !scope?.verified
+}
 
-// A capped listing borrows its meaning from the scope: for a resolved scope it is
+// A capped listing borrows its meaning from the scope: for a scoped release it is
 // a display limit, and the panel must not present it as a repository limit
-const tagScopeTrimmed = computed(() => tagTruncated.value && tagScopeResolved.value)
+function scopeIsTrimmed(scope: ScopeState | null, truncated: boolean): boolean {
+  return truncated && Boolean(scope?.previous)
+}
 
-const tagTrimNotice = computed(() =>
-  tagCommits.value.length < tagCommitCount.value
-    ? t('releaseNotes.commits_trimmed', {
-        shown: tagCommits.value.length,
-        count: tagCommitCount.value,
-      })
-    : t('releaseNotes.commits_scan_capped'),
-)
+/** What a capped listing means: a display limit, or a capped scan that cut nothing. */
+function trimNotice(shown: number, count: number): string {
+  return shown < count
+    ? t('releaseNotes.commits_trimmed', { shown, count })
+    : t('releaseNotes.commits_scan_capped')
+}
 
-/** Scope line of the tags panel: the range when resolved, why otherwise. */
-const tagScopeHint = computed(() => {
-  const tag = selectedTag.value ?? ''
-  const scope = tagScope.value
-
+/**
+ * Scope line of a commits panel: the range when resolved, why otherwise.
+ *
+ * `guess` is only a placeholder for the moment before the server answers - the
+ * local tag order cannot know what lies beyond the page of tags the browser holds.
+ */
+function scopeHint(scope: ScopeState | null, tag: string, guess: string | null): string {
   if (scope?.reason === 'first_release') {
     return t('releaseNotes.scope_first_release', { tag })
   }
@@ -1260,14 +1435,34 @@ const tagScopeHint = computed(() => {
     return t('releaseNotes.scope_unresolved', { tag })
   }
   if (scope) {
-    return tagScopeRange.value ?? t('releaseNotes.full_history', { tag })
+    return scopeRangeLabel(scope, tag) ?? t('releaseNotes.full_history', { tag })
   }
-  // no answer yet: the local tag order is only a placeholder for the label
-  const guess = previousTagFor(tag)
   return guess
     ? t('releaseNotes.range', { from: guess, to: tag })
     : t('releaseNotes.full_history', { tag })
-})
+}
+
+const tagScopeInferred = computed(() => scopeIsInferred(tagScope.value))
+const tagScopeTrimmed = computed(() => scopeIsTrimmed(tagScope.value, tagTruncated.value))
+const tagTrimNotice = computed(() =>
+  trimNotice(tagCommits.value.length, tagCommitCount.value),
+)
+const tagScopeHint = computed(() =>
+  scopeHint(tagScope.value, selectedTag.value ?? '', previousTagFor(selectedTag.value ?? '')),
+)
+
+const editorScopeInferred = computed(() => scopeIsInferred(editorScope.value))
+const editorScopeTrimmed = computed(() => scopeIsTrimmed(editorScope.value, editorTruncated.value))
+const editorTrimNotice = computed(() =>
+  trimNotice(editorCommits.value.length, editorCommitCount.value),
+)
+const editorScopeHint = computed(() =>
+  scopeHint(
+    editorScope.value,
+    form.value.tag_name.trim(),
+    form.value.previous_tag.trim() || previousTagFor(form.value.tag_name.trim()),
+  ),
+)
 
 // Header of the right column: the editor, the selected release or the tag commits
 const detailTitle = computed(() => {
@@ -1656,19 +1851,79 @@ async function loadTagCommits(tag: string, refresh = false) {
     tagCommits.value = (response.commits ?? []) as CommitInfo[]
     tagCommitCount.value = response.commit_count ?? tagCommits.value.length
     tagTruncated.value = Boolean(response.truncated)
-    tagScope.value = {
-      previous: response.previous_version ?? null,
-      previousSha: response.previous_sha ?? null,
-      versionSha: response.version_sha ?? null,
-      source: response.previous_source ?? 'none',
-      verified: Boolean(response.previous_verified),
-      reason: response.scope_reason ?? 'unresolved',
-    }
+    tagScope.value = toScope(response)
   } catch {
     ElMessage.error(t('releaseNotes.commits_load_failed'))
   } finally {
     tagCommitsLoading.value = false
   }
+}
+
+/** Read the scope fields of a preview answer into the shape both panels render. */
+function toScope(response: ReleaseNotePreviewResponse): ScopeState {
+  return {
+    previous: response.previous_version ?? null,
+    previousSha: response.previous_sha ?? null,
+    versionSha: response.version_sha ?? null,
+    source: response.previous_source ?? 'none',
+    verified: Boolean(response.previous_verified),
+    reason: response.scope_reason ?? 'unresolved',
+  }
+}
+
+/** Drop what the editor panel holds, so a closed form cannot show a stale scope. */
+function clearEditorScope() {
+  editorCommits.value = []
+  editorCommitCount.value = 0
+  editorTruncated.value = false
+  editorScope.value = null
+}
+
+/**
+ * Load the commits of the release the editor is writing.
+ *
+ * The notes are meant to account for the commits of the scope, so the writer is
+ * given the same list the tags panel shows - resolved by the same server call, with
+ * the predecessor the form holds (or the one the server resolves when it is empty).
+ * Nothing new is asked of the backend: the preview answer already carries the
+ * commits it built the notes from.
+ */
+async function loadEditorCommits(refresh = false) {
+  const tag = form.value.tag_name.trim()
+  if (!editorOpen.value || !hasCoordinates.value || !tag) {
+    clearEditorScope()
+    return
+  }
+
+  const previous = form.value.previous_tag.trim() || undefined
+  editorCommitsLoading.value = true
+  try {
+    const response = await releaseNotesApi.preview({
+      ...coordinates(),
+      version: tag,
+      previous_version: previous,
+      max_commits: PREVIEW_MAX_COMMITS,
+      refresh,
+    })
+    // the form may have moved on while this was in flight
+    if (!editorOpen.value || form.value.tag_name.trim() !== tag) return
+    applyEditorScope(response.commits, response)
+  } catch {
+    ElMessage.error(t('releaseNotes.commits_load_failed'))
+  } finally {
+    editorCommitsLoading.value = false
+  }
+}
+
+/** Show a preview answer (its commits and its scope) in the editor panel. */
+function applyEditorScope(
+  commits: CommitInfo[] | undefined,
+  response: ReleaseNotePreviewResponse,
+) {
+  editorCommits.value = commits ?? []
+  editorCommitCount.value = response.commit_count ?? editorCommits.value.length
+  editorTruncated.value = Boolean(response.truncated)
+  editorScope.value = toScope(response)
 }
 
 // ------------------------------------------------------------------ #
@@ -1752,6 +2007,7 @@ function resetForm() {
   editingId.value = null
   editingStatus.value = 'draft'
   generatedCount.value = null
+  clearEditorScope()
   form.value = {
     tag_name: '',
     previous_tag: '',
@@ -1811,8 +2067,24 @@ function startNewRelease(tag?: string) {
     // only a fallback for a tag the resolver has not looked at.
     const scope = initial === selectedTag.value ? tagScope.value : null
     form.value.previous_tag = (scope ? scope.previous : previousTagFor(initial)) ?? ''
+    // The commits of that scope are usually already on screen - the draft is opened
+    // from the tag they belong to - so they are carried over rather than asked for
+    // again. Anything else (another tag, a page just opened) is read from the server.
+    if (scope && tagCommits.value.length > 0) {
+      editorCommits.value = [...tagCommits.value]
+      editorCommitCount.value = tagCommitCount.value
+      editorTruncated.value = tagTruncated.value
+      editorScope.value = scope
+    } else {
+      void loadEditorCommits()
+    }
   }
   formCard.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+}
+
+/** The tag or the predecessor of a draft changed: its commits changed with it. */
+function onEditorScopeChange() {
+  void loadEditorCommits()
 }
 
 /** What one release's overflow menu can be asked to do. */
@@ -1922,6 +2194,9 @@ function editNote(note: ReleaseNote) {
     target_commitish: '',
     sync_to_confluence: true,
   }
+  // What the notes of this release are supposed to cover, so an edit can check that
+  // nothing the release brought is missing from them
+  void loadEditorCommits()
   formCard.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
@@ -1953,6 +2228,10 @@ async function generateNotes() {
       form.value.name = preview.suggested_name
     }
     generatedCount.value = preview.commit_count
+    // The notes and the commits they were built from come out of the same answer, so
+    // the panel beside them is what the body was made of - not a second reading of
+    // the repository that could disagree with it.
+    applyEditorScope(preview.commits as CommitInfo[], preview)
     // The server falls back to the deterministic notes when the LLM call fails,
     // so the answer says which one is on screen rather than assuming the switch
     summarizedByAi.value = preview.summary_source === 'llm'
@@ -2271,11 +2550,15 @@ onMounted(() => {
   void loadJiraSettings()
   void loadLlmConfig()
   void loadConfluenceStatus()
+  // Where the head of the list sits is only known once the card is on the page
+  window.addEventListener('scroll', trackScroll, { passive: true })
+  trackScroll()
 })
 
 onBeforeUnmount(() => {
   themeObserver?.disconnect()
   themeObserver = null
+  window.removeEventListener('scroll', trackScroll)
 })
 </script>
 
@@ -2370,6 +2653,62 @@ onBeforeUnmount(() => {
 .form-anchor,
 .detail-card {
   height: 100%;
+}
+
+/*
+ * The way back to the head of a long page of releases: the round button Element Plus
+ * draws for its own back-to-top, so it reads as part of the application, and a button
+ * rather than a clickable div so a keyboard reaches it. The ring is the page's own
+ * progress - the track it runs along, and the arc that fills as the reader goes down.
+ */
+.notes-backtop {
+  position: fixed;
+  right: 32px;
+  bottom: 32px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  box-shadow: var(--el-box-shadow-light);
+  cursor: pointer;
+}
+
+.notes-backtop-ring {
+  position: absolute;
+  inset: 0;
+  /* The arc starts at the top of the button and runs clockwise, as a progress ring does */
+  transform: rotate(-90deg);
+}
+
+.notes-backtop-track,
+.notes-backtop-progress {
+  fill: none;
+  stroke-width: 2;
+}
+
+.notes-backtop-track {
+  stroke: var(--el-border-color-lighter);
+}
+
+.notes-backtop-progress {
+  stroke: var(--el-color-primary);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.1s linear;
+}
+
+.notes-backtop:hover {
+  background: var(--el-fill-color-light);
+  color: var(--el-color-primary);
+}
+
+.notes-backtop:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
 }
 
 /*
@@ -2763,6 +3102,35 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+/* The commits of the release being written, folded away until they are asked for */
+.editor-commits-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-basis: 100%;
+  margin-top: 2px;
+}
+
+.editor-commits {
+  width: 100%;
+}
+
+.editor-commits-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.editor-commits-scope {
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+}
+
+.editor-commits-head .el-button {
+  margin-left: auto;
 }
 
 .generated-hint {
