@@ -618,9 +618,9 @@
     "analytics": {
       "page_title": "Task Assignment Analytics",
       "summary": {
-        "total_prs": "PRs Reviewed",
-        "active_prs": "Active PRs",
-        "active_prs_hint": "Pull requests with work still outstanding: a reviewer assignment is not completed yet, or nobody has been assigned.",
+        "total_reviews": "Total Reviews",
+        "pending_reviews": "Pending Reviews",
+        "pending_reviews_hint": "Reviews that are not finished yet: at least one reviewer has not completed the review, or no reviewer has been assigned.",
         "avg_assignments": "Avg Assignments / PR",
         "scoring_rate": "Scoring Rate"
       },
