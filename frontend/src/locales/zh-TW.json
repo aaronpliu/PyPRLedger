@@ -859,7 +859,11 @@
     "not_found_desc": "您尋找的頁面不存在",
     "network_error": "網路錯誤，請檢查您的連線。",
     "server_error": "伺服器錯誤，請稍後重試。",
-    "permission_denied": "您沒有執行此操作的權限。"
+    "permission_denied": "您沒有執行此操作的權限。",
+    "service_unavailable": "服務不可用",
+    "service_unavailable_desc": "伺服器目前沒有回應，可能正在重新啟動或維護，請稍後再試。",
+    "service_unavailable_retry_failed": "服務仍不可用，請稍後再試。",
+    "retry": "重試"
   },
   "notifications": {
     "title": "通知",

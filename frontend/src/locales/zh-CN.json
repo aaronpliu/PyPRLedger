@@ -859,7 +859,11 @@
     "not_found_desc": "您查找的页面不存在",
     "network_error": "网络错误，请检查您的连接。",
     "server_error": "服务器错误，请稍后重试。",
-    "permission_denied": "您没有执行此操作的权限。"
+    "permission_denied": "您没有执行此操作的权限。",
+    "service_unavailable": "服务不可用",
+    "service_unavailable_desc": "服务器当前没有响应，可能正在重启或维护，请稍后重试。",
+    "service_unavailable_retry_failed": "服务仍不可用，请稍后再试。",
+    "retry": "重试"
   },
   "notifications": {
     "title": "通知",

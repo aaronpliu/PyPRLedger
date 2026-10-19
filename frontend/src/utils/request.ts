@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
 import { beginProgress, endProgress } from '@/composables/useProgress'
+import { confirmBackendDown } from '@/composables/useBackendAvailability'
 import { CLIENT_DEVICE_HEADER, getClientDeviceHeader } from '@/utils/deviceInfo'
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & {
@@ -218,9 +219,30 @@ request.interceptors.response.use(
           break
 
         case 500:
-          // Only show generic server error for non-auth endpoints
-          if (!originalRequest?._suppressGlobalError && !originalRequest?.url?.includes('/auth/')) {
+          // A 500 can be a real server error or - behind a dev proxy - a backend
+          // that is gone. The health probe tells them apart before any page shows.
+          void confirmBackendDown()
+          if (
+            !originalRequest?._suppressGlobalError &&
+            !isSilentRequest(originalRequest?.url) &&
+            !originalRequest?.url?.includes('/auth/')
+          ) {
             ElMessage.error('Server error. Please try again later.')
+          }
+          break
+
+        case 502:
+        case 503:
+        case 504:
+          // The gateway answered for a backend that is not there: confirm against
+          // the health endpoint (which fails the same way) before showing the page.
+          void confirmBackendDown()
+          if (
+            !originalRequest?._suppressGlobalError &&
+            !isSilentRequest(originalRequest?.url) &&
+            !originalRequest?.url?.includes('/auth/')
+          ) {
+            ElMessage.error('The service is temporarily unavailable. Please try again later.')
           }
           break
 
@@ -232,8 +254,13 @@ request.interceptors.response.use(
           }
       }
     } else {
-      // Network errors - only show if request didn't opt out
-      if (!originalRequest?._suppressGlobalError) {
+      // Network-level failure: the server could not be reached at all. That can be
+      // the service down, or just the reader's connection - the health probe tells
+      // them apart before any page shows. Background traffic is included: a
+      // heartbeat is how an idle reader notices the service went away, and the
+      // probe keeps one flaky poll from putting the page up.
+      void confirmBackendDown()
+      if (!originalRequest?._suppressGlobalError && !isSilentRequest(originalRequest?.url)) {
         ElMessage.error('Network error. Please check your connection.')
       }
     }
