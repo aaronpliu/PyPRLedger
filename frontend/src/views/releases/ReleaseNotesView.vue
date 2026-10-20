@@ -2355,7 +2355,12 @@ async function pollForConfluenceSync(noteId: number) {
     await new Promise((resolve) => setTimeout(resolve, 750))
     const note = await releaseNotesApi.get(noteId).catch(() => null)
     if (note?.confluence_url || note?.confluence_sync_error) {
-      await loadNotes()
+      // The release that was just written from here is the row on screen, so it is
+      // put back in place - reading the list again would blank the panel for a change
+      // to one row. Only a release older than the page on screen needs the list.
+      if (!replaceNoteInList(note)) {
+        await loadNotes()
+      }
       return
     }
   }
@@ -2374,6 +2379,20 @@ async function loadConfluenceStatus() {
 }
 
 /**
+ * Put one release back in the list where it already sits.
+ *
+ * Reading the whole list again for a single row is what this page used to do, and it
+ * is a flash: the panel empties, the scroll is lost and the notes that were open fold
+ * away. The row that changed is all the reader needs, so it is swapped in place.
+ */
+function replaceNoteInList(updated: ReleaseNote): boolean {
+  const index = notes.value.findIndex((note) => note.id === updated.id)
+  if (index === -1) return false
+  notes.value[index] = updated
+  return true
+}
+
+/**
  * Write one release to Confluence, or try again after a failure.
  *
  * Failing here is not a failed release: the response says what happened, and the
@@ -2388,8 +2407,15 @@ async function syncToConfluence(note: ReleaseNote) {
     } else {
       ElMessage.warning(result.message)
     }
-    // The page url or the reason it failed is on the release, so read it back
-    await loadNotes()
+    // The page url, or the reason it failed, is on the release: that one release is
+    // read back so the row can answer - the page link replaces the button, or the
+    // failure shows - without the list being read again around it.
+    try {
+      replaceNoteInList(await releaseNotesApi.get(note.id))
+    } catch {
+      // The toast already said what happened. A row that could not be read back keeps
+      // the state it had rather than taking the page down with it.
+    }
   } catch {
     ElMessage.error(t('releaseNotes.sync_confluence_failed'))
   } finally {

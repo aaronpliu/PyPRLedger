@@ -524,7 +524,8 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
     await flushPromises()
 
-    const publish = () => wrapper.findComponent('[data-test="publish-release"]')
+    const publish = () =>
+      wrapper.findComponent('[data-test="publish-release"]') as unknown as AnyWrapper
     // A tag and a repository are not a release on their own: with nothing written
     // there is nothing to publish, so the button waits - and says why.
     expect(publish().props('disabled')).toBe(true)
@@ -551,7 +552,8 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await flushPromises()
     await writeNotes(wrapper, '   \n\n  ')
 
-    expect(wrapper.findComponent('[data-test="publish-release"]').props('disabled')).toBe(true)
+    const publish = wrapper.findComponent('[data-test="publish-release"]') as unknown as AnyWrapper
+    expect(publish.props('disabled')).toBe(true)
   })
 
   it('polls a Confluence-synced release into view after publishing', async () => {
@@ -581,14 +583,16 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
       expect(releaseNotesApi.create).toHaveBeenCalledWith(
         expect.objectContaining({ sync_to_confluence: true }),
       )
-      // ...which runs after the response, so the page re-reads the release and
-      // refreshes the list once it lands rather than leaving "Sync to Confluence".
+      // ...which runs after the response, so the page re-reads that one release and
+      // puts it back where it stands: reading the list again would blank the panel
+      // for a change to a single row.
       const listCallsBefore = vi.mocked(releaseNotesApi.list).mock.calls.length
       await vi.advanceTimersByTimeAsync(750)
       await flushPromises()
 
       expect(releaseNotesApi.get).toHaveBeenCalled()
-      expect(vi.mocked(releaseNotesApi.list).mock.calls.length).toBeGreaterThan(listCallsBefore)
+      expect(vi.mocked(releaseNotesApi.list).mock.calls.length).toBe(listCallsBefore)
+      expect(wrapper.find('[data-test="note-confluence-view"]').exists()).toBe(true)
     } finally {
       vi.useRealTimers()
     }
@@ -2617,6 +2621,9 @@ describe('ReleaseNotesView export', () => {
       page_url: 'https://confluence.local/spaces/DOC/pages/100',
       message: 'Synced to Confluence',
     })
+    vi.mocked(releaseNotesApi.get).mockResolvedValue(
+      release({ id: 11, confluence_url: 'https://confluence.local/spaces/DOC/pages/100' }) as any,
+    )
     const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as any)
 
     const wrapper = await mountAndSelect()
@@ -2626,8 +2633,12 @@ describe('ReleaseNotesView export', () => {
     // The first release of the fixture list, which is the one clicked
     expect(releaseNotesApi.syncToConfluence).toHaveBeenCalledWith(11)
     expect(success).toHaveBeenCalled()
-    // The page url is on the release, so the list is read back for it
-    expect(releaseNotesApi.list).toHaveBeenCalledTimes(2)
+    // The page url is on the release, so that one release is read back and the row
+    // answers in place: the list is not read again, which is what used to flash the
+    // whole panel and fold away whatever was open.
+    expect(releaseNotesApi.get).toHaveBeenCalledWith(11)
+    expect(releaseNotesApi.list).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-test="note-confluence-view"]').exists()).toBe(true)
   })
 
   it('reports a sync that failed without hiding the release', async () => {
