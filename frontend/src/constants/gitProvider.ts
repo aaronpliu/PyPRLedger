@@ -35,12 +35,17 @@ export function getGitProviderLabel(provider: string): string {
 }
 
 /**
- * Get Element Plus tag type for a git provider
+ * Get Element Plus tag type for a git provider.
+ *
+ * The default provider keeps the tag's own default styling, which Element Plus
+ * spells as no `type` at all - an empty string fails its prop validator.
  */
-export function getGitProviderTagType(provider: string): '' | 'success' | 'warning' | 'info' | 'danger' {
+export function getGitProviderTagType(
+  provider: string,
+): 'success' | 'warning' | 'info' | 'danger' | undefined {
   switch (provider) {
     case GitProvider.BITBUCKET_SERVER:
-      return ''
+      return undefined
     case GitProvider.BITBUCKET_CLOUD:
       return 'warning'
     case GitProvider.GITHUB_ENTERPRISE:

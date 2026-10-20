@@ -1,4 +1,5 @@
 import { createI18n } from 'vue-i18n'
+import { applyDayjsLocale } from './utils/dayjsLocale'
 import en from './locales/en.json'
 import zhCN from './locales/zh-CN.json'
 import zhTW from './locales/zh-TW.json'
@@ -9,22 +10,32 @@ const messages = {
   'zh-TW': zhTW,
 }
 
+export const SUPPORTED_LOCALES = ['en', 'zh-CN', 'zh-TW'] as const
+export type AppLocale = (typeof SUPPORTED_LOCALES)[number]
+
 // Get browser language or default to English
-const getBrowserLanguage = (): string => {
-  const lang = navigator.language
+const getBrowserLanguage = (): AppLocale => {
+  const lang = navigator.language.toLowerCase()
   if (lang.startsWith('zh')) {
-    return lang === 'zh-TW' || lang === 'zh-HK' ? 'zh-TW' : 'zh-CN'
+    return lang === 'zh-tw' || lang === 'zh-hk' ? 'zh-TW' : 'zh-CN'
   }
   return 'en'
 }
 
-// Get saved language or use browser language
-const savedLanguage = localStorage.getItem('language')
-const defaultLocale = savedLanguage || getBrowserLanguage()
+// The reader's choice wins over the browser's guess
+export const resolveLocale = (): AppLocale => {
+  const saved = localStorage.getItem('language')
+  if (saved && (SUPPORTED_LOCALES as readonly string[]).includes(saved)) {
+    return saved as AppLocale
+  }
+  return getBrowserLanguage()
+}
+
+applyDayjsLocale(resolveLocale())
 
 const i18n = createI18n({
   legacy: false, // Use Composition API
-  locale: defaultLocale,
+  locale: resolveLocale(),
   fallbackLocale: 'en',
   messages,
 })

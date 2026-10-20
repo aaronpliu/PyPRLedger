@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
@@ -101,7 +101,7 @@ import AuthBackground from '@/components/auth/AuthBackground.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -125,7 +125,8 @@ const form = reactive({
   password: '',
 })
 
-const rules: FormRules = {
+// Computed so validation messages follow a language change made on this page
+const rules = computed<FormRules>(() => ({
   username: [
     { required: true, message: t('auth.username_required'), trigger: 'blur' },
   ],
@@ -133,7 +134,13 @@ const rules: FormRules = {
     { required: true, message: t('auth.password_required'), trigger: 'blur' },
     { min: 6, message: t('auth.password_min_length'), trigger: 'blur' },
   ],
-}
+}))
+
+// A message already on screen was written in the previous language
+watch(locale, () => {
+  loginError.value = ''
+  formRef.value?.clearValidate()
+})
 
 const handleLogin = async () => {
   if (!formRef.value) return

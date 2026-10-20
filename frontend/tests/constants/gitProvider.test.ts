@@ -25,7 +25,9 @@ describe('git provider presentation', () => {
   })
 
   it('distinguishes the providers it knows', () => {
-    expect(getGitProviderTagType(GitProvider.BITBUCKET_SERVER)).toBe('')
+    // The default provider keeps the tag's own styling: Element Plus spells that as
+    // no type at all - an empty string fails the prop validator and logs a warning.
+    expect(getGitProviderTagType(GitProvider.BITBUCKET_SERVER)).toBeUndefined()
     expect(getGitProviderTagType(GitProvider.BITBUCKET_CLOUD)).toBe('warning')
     expect(getGitProviderTagType(GitProvider.GITHUB_ENTERPRISE)).toBe('success')
   })

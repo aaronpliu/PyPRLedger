@@ -157,7 +157,7 @@ onMounted(() => {
   if (!localStorage.getItem('shortcuts_hint_shown')) {
     setTimeout(() => {
       ElMessage({
-        message: 'Press ? to view keyboard shortcuts',
+        message: t('shortcuts.hint'),
         type: 'info',
         duration: 3000,
       })

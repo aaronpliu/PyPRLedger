@@ -2,6 +2,7 @@ import axios from 'axios'
 import type { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
+import i18n from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 import { beginProgress, endProgress } from '@/composables/useProgress'
 import { confirmBackendDown, markBackendAvailable } from '@/composables/useBackendAvailability'
@@ -16,6 +17,13 @@ type RetryableRequestConfig = InternalAxiosRequestConfig & {
   _progressId?: string
 }
 
+/** The envelope the backend answers errors with. */
+type ErrorPayload = {
+  error?: unknown
+  message?: unknown
+  detail?: unknown
+}
+
 const AUTH_EXCLUDED_PATHS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout']
 
 // The requests the app makes on its own, with no reader waiting for an answer: a
@@ -25,6 +33,42 @@ const SILENT_REQUEST_PATHS = ['/auth/heartbeat', '/auth/refresh', '/notification
 function isSilentRequest(url?: string): boolean {
   return Boolean(url && SILENT_REQUEST_PATHS.some((path) => url.includes(path)))
 }
+
+// The backend localises its error messages from Accept-Language, so it has to be told
+// the language the reader picked in the UI rather than the browser's own preference.
+function currentLocale(): string {
+  const { locale } = i18n.global as unknown as { locale: string | { value: string } }
+  return typeof locale === 'string' ? locale : locale.value
+}
+
+function translate(key: string): string {
+  const { t } = i18n.global as unknown as { t: (key: string) => string }
+  return t(key)
+}
+
+/** What the backend said, in the language it was asked for, else a local fallback. */
+function backendMessage(data: ErrorPayload | undefined, fallbackKey: string): string {
+  if (data) {
+    if (typeof data.message === 'string' && data.message.trim()) {
+      return data.message
+    }
+    if (typeof data.detail === 'string' && data.detail.trim()) {
+      return data.detail
+    }
+    // FastAPI validation errors arrive as [{ loc, msg, type }]
+    if (Array.isArray(data.detail)) {
+      const described = data.detail.find(
+        (item): item is { msg: string } =>
+          typeof item === 'object' && item !== null && typeof (item as { msg?: unknown }).msg === 'string',
+      )
+      if (described) {
+        return described.msg
+      }
+    }
+  }
+  return translate(fallbackKey)
+}
+
 let refreshPromise: Promise<string> | null = null
 let lastAuthFailureTimestamp = 0
 let isRedirectingToLogin = false
@@ -83,7 +127,7 @@ async function redirectToLogin() {
   if (now - lastAuthFailureTimestamp > 5000) {
     ElMessage.closeAll()
     ElMessage.warning({
-      message: 'Your session has expired. Please log in again.',
+      message: translate('errors.session_expired'),
       duration: 3000,
       showClose: true,
     })
@@ -118,6 +162,8 @@ async function refreshAccessToken(): Promise<string> {
 request.interceptors.request.use(
   async (config) => {
     const tracked = config as RetryableRequestConfig
+
+    config.headers['Accept-Language'] = currentLocale()
 
     // Announce the request, unless it is background traffic. The id travels with
     // the config so that whichever interceptor sees the request settle closes it.
@@ -177,7 +223,7 @@ request.interceptors.response.use(
     const originalRequest = error.config as RetryableRequestConfig | undefined
     // close the progress slot whatever the outcome - the retry below opens its own
     endProgress(originalRequest?._progressId)
-    const responseData = response?.data as { detail?: string; message?: string; error?: string } | undefined
+    const responseData = response?.data as ErrorPayload | undefined
 
     if (response) {
       switch (response.status) {
@@ -200,14 +246,14 @@ request.interceptors.response.use(
         case 403:
           // Only show error if not handled by the calling component
           if (!originalRequest?.url?.includes('/auth/')) {
-            ElMessage.error('You do not have permission to perform this action.')
+            ElMessage.error(backendMessage(responseData, 'errors.permission_denied'))
           }
           break
 
         case 404:
           // Only show error if not handled by the calling component
           if (!originalRequest?._suppressGlobalError && !originalRequest?.url?.includes('/auth/')) {
-            ElMessage.error('Resource not found.')
+            ElMessage.error(backendMessage(responseData, 'errors.resource_not_found'))
           }
           break
 
@@ -217,8 +263,7 @@ request.interceptors.response.use(
           // For validation errors on auth endpoints, let the view handle it
           // Don't show duplicate messages
           if (!originalRequest?._suppressGlobalError && !originalRequest?.url?.includes('/auth/')) {
-            const errorMessage = responseData?.detail || responseData?.message || 'Validation error.'
-            ElMessage.error(errorMessage)
+            ElMessage.error(backendMessage(responseData, 'errors.validation_error'))
           }
           break
 
@@ -231,7 +276,7 @@ request.interceptors.response.use(
             !isSilentRequest(originalRequest?.url) &&
             !originalRequest?.url?.includes('/auth/')
           ) {
-            ElMessage.error('Server error. Please try again later.')
+            ElMessage.error(translate('errors.server_error'))
           }
           break
 
@@ -246,15 +291,14 @@ request.interceptors.response.use(
             !isSilentRequest(originalRequest?.url) &&
             !originalRequest?.url?.includes('/auth/')
           ) {
-            ElMessage.error('The service is temporarily unavailable. Please try again later.')
+            ElMessage.error(translate('errors.service_temporarily_unavailable'))
           }
           break
 
         default:
           // For other errors, only show if not an auth endpoint
           if (!originalRequest?._suppressGlobalError && !originalRequest?.url?.includes('/auth/')) {
-            const errorMessage = responseData?.detail || responseData?.message || 'An error occurred.'
-            ElMessage.error(errorMessage)
+            ElMessage.error(backendMessage(responseData, 'errors.generic'))
           }
       }
     } else {
@@ -265,7 +309,7 @@ request.interceptors.response.use(
       // probe keeps one flaky poll from putting the page up.
       void confirmBackendDown()
       if (!originalRequest?._suppressGlobalError && !isSilentRequest(originalRequest?.url)) {
-        ElMessage.error('Network error. Please check your connection.')
+        ElMessage.error(translate('errors.network_error'))
       }
     }
 
