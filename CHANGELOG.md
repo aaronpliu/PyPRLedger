@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.31.1] - 2026-10-20
+
+**Backend Version**: 1.31.1
+**Frontend Version**: 1.26.1
+
+### Added
+- The application says when the backend it talks to is gone, instead of letting every panel fail on its own. A request that gets no answer asks ``/api/health`` - the one endpoint above the versioned API, unauthenticated, so it answers for a logged-out reader as well, on a timeout of its own - and only a service that still cannot be reached raises the outage page. A browser that reports itself offline is the reader's own connection and is left alone, and so is a single dropped request: concurrent failures share one probe, so a wifi hiccup does not put the page up over a service that is fine. The page asks again by itself and takes itself away as soon as the service answers, which makes a restart something to wait out rather than something to reload for
+
+### Changed
+- "Generate notes" is the action of the Release Notes toolbar rather than one of its trimmings: full size, filled, and carrying the icon that says what it makes. While it runs it says so - "Generating…" beside the spinner - so progress is read from the button instead of inferred from a spinner, and the button holds its width in either state so it does not move out from under the pointer that has just pressed it
+- The commits of the release being written are drawn as a panel of their own once they are open - a bordered block inside the form rather than another row of it - and they carry the fold that closes them in their own head. The label that opened them stays above the panel, which is a scroll away once the list is open, and a panel whose way out cannot be found is one that stays open
+- Publishing waits for the notes. The button that publishes a release is disabled while the editor is empty, since a version published with nothing written says nothing to whoever reads it, and it says why for as long as it waits; whitespace counts as empty. Saving a draft is not that case - a draft is where the notes are still being written - so it is not held back
+- The analytics summary leads with reviews rather than pull requests. Its first card counts the reviews in the range and its second the ones still waiting, and both were labelled and hinted in the words of the pull requests they are counted from; the labels now say what the numbers are, and "Active PRs", which described neither, is gone
+
+### Fixed
+- Publishing with "Sync to Confluence" ticked now writes the page. The write is a background task reading the release through a session of its own, and background tasks run before the dependency that commits the request: a release that had just been created was not there at all for that session, and one being published still carried the draft status it was published from - so the write was skipped in silence, no page and no recorded failure, and the release went on offering "Sync to Confluence" by hand. The request now commits before the write is queued, and a sync that is skipped is logged rather than lost
+- "Sync to Confluence" on a release row no longer takes the page with it. Answering it meant reading the whole list again to pick up the page address, which empties the panel, loses the scroll and folds away the notes that were open - one write, and a page that flashed. That release alone is read back now and put where it stands: its button becomes the page, or carries the failure and the way to try again, and everything around it stays where the reader left it. The poll that follows a publish does the same, reading the list only for a release that is not on the page on screen
+
+---
+
 ## [1.31.0] - 2026-10-18
 
 **Backend Version**: 1.31.0
