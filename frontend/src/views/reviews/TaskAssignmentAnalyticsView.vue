@@ -95,12 +95,12 @@
               <el-icon :size="32"><Document /></el-icon>
             </div>
             <div class="stat-card__value animated-counter">{{ animatedTotalPRs.toLocaleString() }}</div>
-            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.total_prs') }}</div>
+            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.total_reviews') }}</div>
           </div>
         </div>
       </el-col>
 
-      <!-- Card 2: Active PRs -->
+      <!-- Card 2: Pending Reviews -->
       <el-col :xs="24" :sm="12" :md="6">
         <div class="stat-card stat-card--success">
           <div class="stat-card__content">
@@ -109,14 +109,14 @@
                 <el-icon :size="32"><TrendCharts /></el-icon>
               </div>
               <el-tooltip
-                :content="t('task_assignment.analytics.summary.active_prs_hint')"
+                :content="t('task_assignment.analytics.summary.pending_reviews_hint')"
                 placement="top"
               >
                 <el-icon class="stat-card__hint" :size="16"><QuestionFilled /></el-icon>
               </el-tooltip>
             </div>
             <div class="stat-card__value">{{ animatedActivePRs.toLocaleString() }}</div>
-            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.active_prs') }}</div>
+            <div class="stat-card__label">{{ t('task_assignment.analytics.summary.pending_reviews') }}</div>
           </div>
         </div>
       </el-col>
@@ -1029,7 +1029,7 @@ onMounted(() => {
   color: var(--el-color-primary);
 }
 
-/* ===== Card 2: Success Style (Active Reviews) ===== */
+/* ===== Card 2: Success Style (Pending Reviews) ===== */
 .stat-card--success {
   background: var(--el-bg-color);
   border: 2px solid #67c23a;

@@ -30,6 +30,13 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             secure: false,
           },
+          // The health check lives above the versioned API (/api/health), so the
+          // same backend is reached for it too.
+          '/api': {
+            target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:9097',
+            changeOrigin: true,
+            secure: false,
+          },
         },
       }),
     },

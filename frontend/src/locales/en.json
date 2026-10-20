@@ -618,9 +618,9 @@
     "analytics": {
       "page_title": "Task Assignment Analytics",
       "summary": {
-        "total_prs": "PRs Reviewed",
-        "active_prs": "Active PRs",
-        "active_prs_hint": "Pull requests with work still outstanding: a reviewer assignment is not completed yet, or nobody has been assigned.",
+        "total_reviews": "Total Reviews",
+        "pending_reviews": "Pending Reviews",
+        "pending_reviews_hint": "Reviews that are not finished yet: at least one reviewer has not completed the review, or no reviewer has been assigned.",
         "avg_assignments": "Avg Assignments / PR",
         "scoring_rate": "Scoring Rate"
       },
@@ -859,7 +859,11 @@
     "not_found_desc": "The page you're looking for doesn't exist",
     "network_error": "Network error. Please check your connection.",
     "server_error": "Server error. Please try again later.",
-    "permission_denied": "You do not have permission to perform this action."
+    "permission_denied": "You do not have permission to perform this action.",
+    "service_unavailable": "Service Unavailable",
+    "service_unavailable_desc": "The server is not responding right now. It may be restarting or under maintenance - please try again in a moment.",
+    "service_unavailable_retry_failed": "The service is still unavailable. Please try again later.",
+    "retry": "Retry"
   },
   "notifications": {
     "title": "Notifications",
@@ -1148,9 +1152,11 @@
     "notes": "Release notes",
     "notes_placeholder": "Write the release notes in markdown, or generate them from the commits",
     "notes_empty": "No notes yet",
+    "notes_required": "Write the release notes before publishing",
     "show_more": "Show more",
     "show_less": "Show less",
     "generate_notes": "Generate notes",
+    "generating_notes": "Generating…",
     "generated": "{count} commit(s) in this release scope",
     "ai_summary": "AI summary",
     "ai_summary_help": "Adds a summary paragraph and re-groups the commits whose subjects carry no conventional prefix. Commit messages are sent to the configured LLM.",

@@ -484,6 +484,19 @@
                       @click="loadEditorCommits(true)"
                     />
                   </el-tooltip>
+                  <!-- The fold that opened this is above it, which is a scroll away once
+                       the panel is tall: this is the same fold, where a reader who has
+                       read enough will be looking for it. -->
+                  <el-tooltip :content="t('releaseNotes.hide_commits')" placement="top">
+                    <el-button
+                      link
+                      size="small"
+                      :icon="ArrowUp"
+                      :aria-label="t('releaseNotes.hide_commits')"
+                      data-test="editor-commits-hide"
+                      @click="editorCommitsOpen = false"
+                    />
+                  </el-tooltip>
                 </div>
                 <div class="field-hint">{{ t('releaseNotes.editor_commits_help') }}</div>
 
@@ -552,13 +565,24 @@
             <el-form-item :label="t('releaseNotes.notes')">
               <div class="notes-editor">
                 <div class="notes-toolbar">
+                  <!-- The one action that fills the editor, so it is the button of the
+                       toolbar rather than one of its trimmings: full size, filled, with
+                       the icon that says what it makes - and while it runs it says so in
+                       words next to the spinner instead of only spinning. -->
                   <el-button
-                    size="small"
+                    class="generate-notes"
+                    type="primary"
+                    :icon="MagicStick"
                     :loading="generating"
                     :disabled="!hasCoordinates || !form.tag_name"
+                    data-test="generate-notes"
                     @click="generateNotes"
                   >
-                    {{ t('releaseNotes.generate_notes') }}
+                    {{
+                      generating
+                        ? t('releaseNotes.generating_notes')
+                        : t('releaseNotes.generate_notes')
+                    }}
                   </el-button>
                   <el-checkbox
                     v-if="llmEnabled"
@@ -597,6 +621,11 @@
                   :style="{ height: '420px' }"
                   :placeholder="t('releaseNotes.notes_placeholder')"
                 />
+                <!-- Publishing writes the notes out, so the button that does it waits
+                     for the editor to hold something: this is the word that says why -->
+                <div v-if="canSave && !hasNotes" class="field-hint" data-test="notes-required">
+                  {{ t('releaseNotes.notes_required') }}
+                </div>
               </div>
             </el-form-item>
 
@@ -649,7 +678,8 @@
               <el-button
                 type="primary"
                 :loading="saving"
-                :disabled="!canSave"
+                :disabled="!canPublish"
+                data-test="publish-release"
                 @click="saveRelease('published')"
               >
                 {{ editingId && editingStatus === 'published' ? t('releaseNotes.save') : t('releaseNotes.publish') }}
@@ -961,6 +991,7 @@ import {
   CopyDocument,
   Document,
   InfoFilled,
+  MagicStick,
   MoreFilled,
   Refresh,
   Search,
@@ -1344,6 +1375,11 @@ const canManage = computed(() =>
 // Importing / pushing only works for providers with a release API
 const canImportFromProvider = computed(() => canManage.value && isGithubProvider.value)
 const canSave = computed(() => hasCoordinates.value && Boolean(form.value.tag_name.trim()))
+// A release is published with its notes, so an empty body would publish a version
+// that says nothing. A draft is not that case: it is where the notes are still
+// being written, which is why only publishing waits for them.
+const hasNotes = computed(() => Boolean(form.value.body.trim()))
+const canPublish = computed(() => canSave.value && hasNotes.value)
 
 // The tags are shown in the order the provider lists them, which is the order
 // Bitbucket lists tags in: most recently created first. This page used to re-sort
@@ -2252,6 +2288,10 @@ async function saveRelease(status: 'draft' | 'published') {
     ElMessage.warning(t('releaseNotes.tag_required'))
     return
   }
+  if (status === 'published' && !hasNotes.value) {
+    ElMessage.warning(t('releaseNotes.notes_required'))
+    return
+  }
 
   // Read before the form is reset: whether this save asked to write to Confluence.
   const willSyncToConfluence = asksForConfluenceSync.value
@@ -2315,7 +2355,12 @@ async function pollForConfluenceSync(noteId: number) {
     await new Promise((resolve) => setTimeout(resolve, 750))
     const note = await releaseNotesApi.get(noteId).catch(() => null)
     if (note?.confluence_url || note?.confluence_sync_error) {
-      await loadNotes()
+      // The release that was just written from here is the row on screen, so it is
+      // put back in place - reading the list again would blank the panel for a change
+      // to one row. Only a release older than the page on screen needs the list.
+      if (!replaceNoteInList(note)) {
+        await loadNotes()
+      }
       return
     }
   }
@@ -2334,6 +2379,20 @@ async function loadConfluenceStatus() {
 }
 
 /**
+ * Put one release back in the list where it already sits.
+ *
+ * Reading the whole list again for a single row is what this page used to do, and it
+ * is a flash: the panel empties, the scroll is lost and the notes that were open fold
+ * away. The row that changed is all the reader needs, so it is swapped in place.
+ */
+function replaceNoteInList(updated: ReleaseNote): boolean {
+  const index = notes.value.findIndex((note) => note.id === updated.id)
+  if (index === -1) return false
+  notes.value[index] = updated
+  return true
+}
+
+/**
  * Write one release to Confluence, or try again after a failure.
  *
  * Failing here is not a failed release: the response says what happened, and the
@@ -2348,8 +2407,15 @@ async function syncToConfluence(note: ReleaseNote) {
     } else {
       ElMessage.warning(result.message)
     }
-    // The page url or the reason it failed is on the release, so read it back
-    await loadNotes()
+    // The page url, or the reason it failed, is on the release: that one release is
+    // read back so the row can answer - the page link replaces the button, or the
+    // failure shows - without the list being read again around it.
+    try {
+      replaceNoteInList(await releaseNotesApi.get(note.id))
+    } catch {
+      // The toast already said what happened. A row that could not be read back keeps
+      // the state it had rather than taking the page down with it.
+    }
   } catch {
     ElMessage.error(t('releaseNotes.sync_confluence_failed'))
   } finally {
@@ -3104,6 +3170,12 @@ onBeforeUnmount(() => {
   margin-bottom: 8px;
 }
 
+/* Wide enough for the label it carries while it works, so generating does not
+   resize the button under the pointer that just pressed it */
+.generate-notes {
+  min-width: 152px;
+}
+
 /* The commits of the release being written, folded away until they are asked for */
 .editor-commits-trigger {
   display: flex;
@@ -3113,8 +3185,15 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 
+/* A panel of its own, because it is one: the commits are read while the notes are
+   written, and a block drawn like the rest of the form is one a reader takes for a
+   piece of it and forgets is open. The border is what says it folds away again. */
 .editor-commits {
   width: 100%;
+  padding: 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter);
 }
 
 .editor-commits-head {

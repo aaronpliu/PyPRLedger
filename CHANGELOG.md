@@ -7,9 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- The Release Diff can be read the other way round from the page itself. Its two refs are one comparison in two directions, and turning it around meant typing both of them again in the other fields; a button now sits between Source Release and Target Release and exchanges them, and a comparison already on the page is asked for again rather than left standing for the direction that has just been exchanged. It is the round icon button the page's other controls look like, disabled until both refs name one, and it carries no words
+## [1.31.1] - 2026-10-20
 
+**Backend Version**: 1.31.1
+**Frontend Version**: 1.26.1
+
+### Added
+- The application says when the backend it talks to is gone, instead of letting every panel fail on its own. A request that gets no answer asks ``/api/health`` - the one endpoint above the versioned API, unauthenticated, so it answers for a logged-out reader as well, on a timeout of its own - and only a service that still cannot be reached raises the outage page. A browser that reports itself offline is the reader's own connection and is left alone, and so is a single dropped request: concurrent failures share one probe, so a wifi hiccup does not put the page up over a service that is fine. The page asks again by itself and takes itself away as soon as the service answers, which makes a restart something to wait out rather than something to reload for
+
+### Changed
+- "Generate notes" is the action of the Release Notes toolbar rather than one of its trimmings: full size, filled, and carrying the icon that says what it makes. While it runs it says so - "Generating…" beside the spinner - so progress is read from the button instead of inferred from a spinner, and the button holds its width in either state so it does not move out from under the pointer that has just pressed it
+- The commits of the release being written are drawn as a panel of their own once they are open - a bordered block inside the form rather than another row of it - and they carry the fold that closes them in their own head. The label that opened them stays above the panel, which is a scroll away once the list is open, and a panel whose way out cannot be found is one that stays open
+- Publishing waits for the notes. The button that publishes a release is disabled while the editor is empty, since a version published with nothing written says nothing to whoever reads it, and it says why for as long as it waits; whitespace counts as empty. Saving a draft is not that case - a draft is where the notes are still being written - so it is not held back
+- The analytics summary leads with reviews rather than pull requests. Its first card counts the reviews in the range and its second the ones still waiting, and both were labelled and hinted in the words of the pull requests they are counted from; the labels now say what the numbers are, and "Active PRs", which described neither, is gone
+
+### Fixed
+- Publishing with "Sync to Confluence" ticked now writes the page. The write is a background task reading the release through a session of its own, and background tasks run before the dependency that commits the request: a release that had just been created was not there at all for that session, and one being published still carried the draft status it was published from - so the write was skipped in silence, no page and no recorded failure, and the release went on offering "Sync to Confluence" by hand. The request now commits before the write is queued, and a sync that is skipped is logged rather than lost
+- "Sync to Confluence" on a release row no longer takes the page with it. Answering it meant reading the whole list again to pick up the page address, which empties the panel, loses the scroll and folds away the notes that were open - one write, and a page that flashed. That release alone is read back now and put where it stands: its button becomes the page, or carries the failure and the way to try again, and everything around it stays where the reader left it. The poll that follows a publish does the same, reading the list only for a release that is not on the page on screen
+
+---
+
+## [1.31.0] - 2026-10-18
+
+**Backend Version**: 1.31.0
+**Frontend Version**: 1.26.0
+
+### Added
+- The Release Diff can be read the other way round from the page itself. Its two refs are one comparison in two directions, and turning it around meant typing both of them again in the other fields; a button now sits between Source Release and Target Release and exchanges them, and a comparison already on the page is asked for again rather than left standing for the direction that has just been exchanged. It is the round icon button the page's other controls look like, disabled until both refs name one, and it carries no words
+- The release being written carries the commits it is meant to account for. A release note is usually generated, and the one thing a writer has to check afterwards is whether what the release brought is in the text: the commits of its scope are now one click away - an info label under Tag/Version, carrying their count - and they open between the tag and the previous version, where that scope is decided, to stay there while the notes below are written. They are the commits the notes were generated from rather than a second reading of the repository, because the answer that writes the body already carries them: a draft opened from a tag takes the list the tags panel has just read instead of asking again, and the range, the inferred-scope warning, the trimming notice and the way to read the scope again all read as they do there. A page of ten rows keeps the panel about the height of the editor beneath it, the rest of the scope behind the pager the table already had
+
+### Changed
+- The Release Dependency Graph is read from a toolbar of its own - zoom in and out, fit to view, maximize and restore, and a reset of the layout - each with its words instead of an unlabelled icon. The drawing the reset returns to can be laid out in layers: the projects on the top row, every package on the row of the shallowest one that pulls it in, each row ordered by where its parents stand so that a drawing does not cross itself where the names alone would shuffle it, and a package nothing reaches kept on a row of its own below the rest, where an orphan no longer lands on top of the roots. A force layout of several hundred packages settles into a hairball, and takes seconds to do it; the layers are read at once
+- The drawing is kept per repository. Another project or repository is another graph, so it opens at the zoom and the layout of its own rather than inheriting the previous drawing's, and a maximized graph does not come back maximized over a graph the reader has just asked for
+
+### Fixed
+- The Release Notes keep the range they are scoped to when the previous version is picked in the form. Choosing a predecessor answers the panel with a scope the server was given rather than one it had resolved, and the line that names the range only counted the resolved kind - so a release narrowed to ``v1.0.0`` was labelled ``full history of v1.1.0`` while the commits listed beneath it were the correct few. A scope with a predecessor now reads as a range however that predecessor was arrived at - supplied in the form, proven an ancestor, or inferred from the tag order - and only a scope without one falls back to the full history
+
+---
 
 ## [1.30.1] - 2026-10-15
 
@@ -20,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Release Notes list keeps the way back to its own head, and says how far down the page the reader has come. A page of releases stacks up past the screen, and scrolling back through it was the only way to reach the top: an up arrow now appears once the list has been scrolled past, carrying a ring that fills as the page is read and empties on the way back up, and returning to the top of the list rather than to the top of the document, since the filters above it are not what the reader came back for. It is the round button the application's other controls look like, a real button so a keyboard reaches it as well, and it carries no words - an arrow is what it says
 
 ### Fixed
-- The release scope of an irregular tag is the version below it, not another build of itself, and a release is measured against the releases of its repository rather than against whatever tag merely sits beside it. The predecessor was walked newest first by date and the first tag that turned out to be an ancestor won: ``3.14.0-Build23004`` was measured against ``3.14.0-Build23003`` - the build before it of the same version - so the notes carried only what that last build happened to add, and a ``DEBUG-`` or ``Test-`` tag cut after the last release answered for that release, because those tags are cut from the same history and are ancestors of it too. A tag that names a version now follows the highest tag of the version below it, and within that version its highest build; the walk asks about the releases of the repository before the tags that name no version, which is what a tag naming no version at all - the first tag of a branch among them - now follows as well: the last release beneath it. A repository whose releases are named irregularly keeps resolving by ancestry exactly as it did
+- The release scope of an irregular tag is the version below it, not another build of itself, and a release is measured against the releases of its repository rather than against whatever tag merely sits beside it. The predecessor was walked newest first by date and the first tag that turned out to be an ancestor won: ``1.2.3-build1002`` was measured against ``1.2.3-build1000`` - the build before it of the same version - so the notes carried only what that last build happened to add, and a ``DEBUG-`` or ``Test-`` tag cut after the last release answered for that release, because those tags are cut from the same history and are ancestors of it too. A tag that names a version now follows the highest tag of the version below it, and within that version its highest build; the walk asks about the releases of the repository before the tags that name no version, which is what a tag naming no version at all - the first tag of a branch among them - now follows as well: the last release beneath it. A repository whose releases are named irregularly keeps resolving by ancestry exactly as it did
 - The Release Diff export no longer carries a URL column. It printed each commit's complete address beside a SHA that already links to the same commit - long enough to wrap the table around it and stretch its row - so the column is gone, and the SHA remains the link to the commit. Both commit tables of the report - the compare and the check - are a column narrower for it
 
 ## [1.30.0] - 2026-10-15

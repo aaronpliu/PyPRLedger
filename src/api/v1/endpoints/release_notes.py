@@ -155,7 +155,11 @@ async def serialize_notes(
     return [_serialize(note, latest_id, avatars) for note in notes]
 
 
-def schedule_confluence_sync(background_tasks: BackgroundTasks, note: ReleaseNote) -> None:
+async def schedule_confluence_sync(
+    background_tasks: BackgroundTasks,
+    session: AsyncSession,
+    note: ReleaseNote,
+) -> None:
     """Queue a Confluence sync for a release that has just been published.
 
     It runs after the response, with a session of its own, so publishing is
@@ -166,6 +170,13 @@ def schedule_confluence_sync(background_tasks: BackgroundTasks, note: ReleaseNot
     A pre-release is never written by itself: it is a version being tried out, and
     what a reader of the space should see is the release. Writing one by hand is
     still offered on the release row.
+
+    The request commits before the task is queued, because the task reads the
+    release through a session of its own and background tasks run before the
+    dependency that would otherwise commit this request. A release that is still
+    only flushed is not there at all for that session, and one that still carries
+    its old draft status reads as unpublished: either way the write the reader
+    asked for would quietly do nothing.
     """
     if note.status != ReleaseNoteStatus.PUBLISHED:
         return
@@ -174,6 +185,7 @@ def schedule_confluence_sync(background_tasks: BackgroundTasks, note: ReleaseNot
     if not is_auto_sync_enabled():
         return
 
+    await session.commit()
     background_tasks.add_task(sync_release_note_to_confluence, note.id)
 
 
@@ -482,7 +494,7 @@ async def create_release_note(
         )
 
     if payload.sync_to_confluence:
-        schedule_confluence_sync(background_tasks, note)
+        await schedule_confluence_sync(background_tasks, service.db, note)
 
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug
@@ -550,7 +562,7 @@ async def update_release_note(
     # A release that had no page gets one; a release that has one is written again
     # only when something the page holds changed.
     if payload.sync_to_confluence and page_needs_writing(before, note):
-        schedule_confluence_sync(background_tasks, note)
+        await schedule_confluence_sync(background_tasks, service.db, note)
 
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug

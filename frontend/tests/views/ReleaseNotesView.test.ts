@@ -212,6 +212,14 @@ function buttonsByLabel(wrapper: AnyWrapper, label: string) {
   return wrapper.findAll('button').filter((button: AnyWrapper) => button.text() === label)
 }
 
+/** Write the notes into the editor (md-editor-v3 is stubbed as a plain textarea). */
+async function writeNotes(wrapper: AnyWrapper, body = '## Notes\n\n- ship the login fix') {
+  const editor = wrapper.find('.md-editor-stub')
+  expect(editor.exists(), 'the notes editor is not open').toBe(true)
+  await editor.setValue(body)
+  await flushPromises()
+}
+
 /**
  * Open the overflow menu of one release entry.
  *
@@ -508,6 +516,46 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     )
   })
 
+  it('does not publish a release whose notes are still empty', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const publish = () =>
+      wrapper.findComponent('[data-test="publish-release"]') as unknown as AnyWrapper
+    // A tag and a repository are not a release on their own: with nothing written
+    // there is nothing to publish, so the button waits - and says why.
+    expect(publish().props('disabled')).toBe(true)
+    expect(wrapper.find('[data-test="notes-required"]').text()).toBe(
+      enMessages.releaseNotes.notes_required,
+    )
+
+    // A draft is where the notes are still being written, so it is not held back
+    const saveDraft = buttonsByLabel(wrapper, enMessages.releaseNotes.save_draft)[0]
+    expect(saveDraft.element.hasAttribute('disabled')).toBe(false)
+
+    await writeNotes(wrapper)
+
+    expect(publish().props('disabled')).toBe(false)
+    expect(wrapper.find('[data-test="notes-required"]').exists()).toBe(false)
+  })
+
+  it('treats notes of nothing but whitespace as empty', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+    await writeNotes(wrapper, '   \n\n  ')
+
+    const publish = wrapper.findComponent('[data-test="publish-release"]') as unknown as AnyWrapper
+    expect(publish.props('disabled')).toBe(true)
+  })
+
   it('polls a Confluence-synced release into view after publishing', async () => {
     vi.useFakeTimers()
     try {
@@ -526,6 +574,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
 
       await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
       await flushPromises()
+      await writeNotes(wrapper)
 
       await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
       await flushPromises()
@@ -534,14 +583,16 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
       expect(releaseNotesApi.create).toHaveBeenCalledWith(
         expect.objectContaining({ sync_to_confluence: true }),
       )
-      // ...which runs after the response, so the page re-reads the release and
-      // refreshes the list once it lands rather than leaving "Sync to Confluence".
+      // ...which runs after the response, so the page re-reads that one release and
+      // puts it back where it stands: reading the list again would blank the panel
+      // for a change to a single row.
       const listCallsBefore = vi.mocked(releaseNotesApi.list).mock.calls.length
       await vi.advanceTimersByTimeAsync(750)
       await flushPromises()
 
       expect(releaseNotesApi.get).toHaveBeenCalled()
-      expect(vi.mocked(releaseNotesApi.list).mock.calls.length).toBeGreaterThan(listCallsBefore)
+      expect(vi.mocked(releaseNotesApi.list).mock.calls.length).toBe(listCallsBefore)
+      expect(wrapper.find('[data-test="note-confluence-view"]').exists()).toBe(true)
     } finally {
       vi.useRealTimers()
     }
@@ -589,6 +640,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     const preRelease = wrapper.findComponent('[data-test="is-prerelease"]') as AnyWrapper
     preRelease.vm.$emit('update:modelValue', true)
     await flushPromises()
+    await writeNotes(wrapper)
 
     await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
     await flushPromises()
@@ -1235,6 +1287,49 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(wrapper.find('[data-test="editor-commits-toggle"]').text()).toContain(
       enMessages.releaseNotes.show_commits,
     )
+  })
+
+  it('closes the commits from inside the panel they opened', async () => {
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([PREVIEW_COMMIT]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+    await toggleEditorCommits(wrapper)
+
+    // The fold that opened the panel sits above it, which is a scroll away once the
+    // list is open, so the panel carries the same fold in its own head.
+    await wrapper.find('[data-test="editor-commits-hide"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="editor-commits"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="editor-commits-toggle"]').text()).toContain(
+      enMessages.releaseNotes.show_commits,
+    )
+  })
+
+  it('says that it is generating while the notes are on their way', async () => {
+    // never settles: the button is read while the call is still out
+    vi.mocked(releaseNotesApi.preview).mockReturnValue(new Promise(() => {}) as any)
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const generate = () => wrapper.findComponent('[data-test="generate-notes"]')
+    expect(generate().text()).toBe(enMessages.releaseNotes.generate_notes)
+
+    await generate().trigger('click')
+    await flushPromises()
+
+    // A spinner alone asks the reader to trust it; the label says what is happening.
+    expect(generate().text()).toBe(enMessages.releaseNotes.generating_notes)
   })
 
   it('pages a long scope inside the panel instead of growing it', async () => {
@@ -2069,6 +2164,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(pushCheckbox).toBeDefined()
     await pushCheckbox!.vm.$emit('update:modelValue', true)
     await flushPromises()
+    await writeNotes(wrapper)
 
     await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
     await flushPromises()
@@ -2525,6 +2621,9 @@ describe('ReleaseNotesView export', () => {
       page_url: 'https://confluence.local/spaces/DOC/pages/100',
       message: 'Synced to Confluence',
     })
+    vi.mocked(releaseNotesApi.get).mockResolvedValue(
+      release({ id: 11, confluence_url: 'https://confluence.local/spaces/DOC/pages/100' }) as any,
+    )
     const success = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as any)
 
     const wrapper = await mountAndSelect()
@@ -2534,8 +2633,12 @@ describe('ReleaseNotesView export', () => {
     // The first release of the fixture list, which is the one clicked
     expect(releaseNotesApi.syncToConfluence).toHaveBeenCalledWith(11)
     expect(success).toHaveBeenCalled()
-    // The page url is on the release, so the list is read back for it
-    expect(releaseNotesApi.list).toHaveBeenCalledTimes(2)
+    // The page url is on the release, so that one release is read back and the row
+    // answers in place: the list is not read again, which is what used to flash the
+    // whole panel and fold away whatever was open.
+    expect(releaseNotesApi.get).toHaveBeenCalledWith(11)
+    expect(releaseNotesApi.list).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-test="note-confluence-view"]').exists()).toBe(true)
   })
 
   it('reports a sync that failed without hiding the release', async () => {

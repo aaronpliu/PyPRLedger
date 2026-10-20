@@ -618,9 +618,9 @@
     "analytics": {
       "page_title": "任務分配分析",
       "summary": {
-        "total_prs": "已評審 PR 數",
-        "active_prs": "進行中 PR 數",
-        "active_prs_hint": "仍有未完成工作的 PR：存在尚未完成的評審人分配，或還沒有指派評審人。",
+        "total_reviews": "評審總數",
+        "pending_reviews": "待評審",
+        "pending_reviews_hint": "尚未完成的評審：至少有一位評審人尚未完成評審，或尚未指派評審人。",
         "avg_assignments": "平均分配數 / PR",
         "scoring_rate": "評分率"
       },
@@ -859,7 +859,11 @@
     "not_found_desc": "您尋找的頁面不存在",
     "network_error": "網路錯誤，請檢查您的連線。",
     "server_error": "伺服器錯誤，請稍後重試。",
-    "permission_denied": "您沒有執行此操作的權限。"
+    "permission_denied": "您沒有執行此操作的權限。",
+    "service_unavailable": "服務不可用",
+    "service_unavailable_desc": "伺服器目前沒有回應，可能正在重新啟動或維護，請稍後再試。",
+    "service_unavailable_retry_failed": "服務仍不可用，請稍後再試。",
+    "retry": "重試"
   },
   "notifications": {
     "title": "通知",
@@ -1148,9 +1152,11 @@
     "notes": "版本說明",
     "notes_placeholder": "使用 Markdown 撰寫版本說明，或依提交自動產生",
     "notes_empty": "尚無說明",
+    "notes_required": "發佈前請先填寫版本說明",
     "show_more": "展開全文",
     "show_less": "收合",
     "generate_notes": "產生說明",
+    "generating_notes": "正在產生…",
     "generated": "本次發佈範圍包含 {count} 個提交",
     "ai_summary": "AI 摘要",
     "ai_summary_help": "額外產生一段概述，並對沒有 conventional 前綴的提交重新歸類。提交資訊會傳送給已設定的 LLM。",

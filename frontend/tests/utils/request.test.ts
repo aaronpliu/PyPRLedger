@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { AxiosRequestConfig } from 'axios'
 
@@ -15,8 +15,15 @@ vi.mock('@/stores/auth', () => ({
   }),
 }))
 
+// The outage flagging path shows a message, but the message itself is not what the
+// test reads - keep Element Plus out of the way.
+vi.mock('element-plus', () => ({
+  ElMessage: { error: vi.fn(), warning: vi.fn(), closeAll: vi.fn(), info: vi.fn(), success: vi.fn() },
+}))
+
 import request from '@/utils/request'
 import { resetProgress, useProgress } from '@/composables/useProgress'
+import { backendUnavailable, markBackendAvailable } from '@/composables/useBackendAvailability'
 import { CLIENT_DEVICE_HEADER } from '@/utils/deviceInfo'
 
 /** An adapter that holds the request open until ``release`` is called, so a test
@@ -76,6 +83,74 @@ describe('request progress wiring', () => {
     release()
     await pending
     expect(active.value).toBe(false)
+  })
+})
+
+describe('service outage detection', () => {
+  beforeEach(() => {
+    markBackendAvailable()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('flags the backend as unavailable after the probe confirms it is down', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
+    request.defaults.adapter = async (config) => {
+      throw Object.assign(new Error('Network Error'), { config })
+    }
+
+    await expect(request.get('/release/notes')).rejects.toThrow('Network Error')
+    await vi.waitFor(() => expect(backendUnavailable.value).toBe(true))
+  })
+
+  it('keeps the page away when a request fails but the backend answers the probe', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
+    request.defaults.adapter = async (config) => {
+      throw Object.assign(new Error('Network Error'), { config })
+    }
+
+    await expect(request.get('/release/notes')).rejects.toThrow('Network Error')
+    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
+    expect(backendUnavailable.value).toBe(false)
+  })
+
+  it('detects the outage from background traffic too', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
+    request.defaults.adapter = async (config) => {
+      throw Object.assign(new Error('Network Error'), { config })
+    }
+
+    await expect(request.get('/auth/heartbeat')).rejects.toThrow('Network Error')
+    await vi.waitFor(() => expect(backendUnavailable.value).toBe(true))
+  })
+
+  it('confirms an outage when a 5xx answers for a backend that is gone', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
+    request.defaults.adapter = async (config) => {
+      throw Object.assign(new Error('Bad Gateway'), {
+        config,
+        response: { status: 502, data: {} },
+      })
+    }
+
+    await expect(request.get('/release/notes')).rejects.toThrow('Bad Gateway')
+    await vi.waitFor(() => expect(backendUnavailable.value).toBe(true))
+  })
+
+  it('keeps the page away when a real 5xx is answered and the backend is healthy', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
+    request.defaults.adapter = async (config) => {
+      throw Object.assign(new Error('Server Error'), {
+        config,
+        response: { status: 500, data: {} },
+      })
+    }
+
+    await expect(request.get('/release/notes')).rejects.toThrow('Server Error')
+    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
+    expect(backendUnavailable.value).toBe(false)
   })
 })
 

@@ -618,9 +618,9 @@
     "analytics": {
       "page_title": "任务分配分析",
       "summary": {
-        "total_prs": "已评审 PR 数",
-        "active_prs": "进行中 PR 数",
-        "active_prs_hint": "仍有未完成工作的 PR：存在尚未完成的评审人分配，或还没有指派评审人。",
+        "total_reviews": "评审总数",
+        "pending_reviews": "待评审",
+        "pending_reviews_hint": "尚未完成的评审：至少有一位评审人尚未完成评审，或尚未指派评审人。",
         "avg_assignments": "平均分配数 / PR",
         "scoring_rate": "评分率"
       },
@@ -859,7 +859,11 @@
     "not_found_desc": "您查找的页面不存在",
     "network_error": "网络错误，请检查您的连接。",
     "server_error": "服务器错误，请稍后重试。",
-    "permission_denied": "您没有执行此操作的权限。"
+    "permission_denied": "您没有执行此操作的权限。",
+    "service_unavailable": "服务不可用",
+    "service_unavailable_desc": "服务器当前没有响应，可能正在重启或维护，请稍后重试。",
+    "service_unavailable_retry_failed": "服务仍不可用，请稍后再试。",
+    "retry": "重试"
   },
   "notifications": {
     "title": "通知",
@@ -1148,9 +1152,11 @@
     "notes": "版本说明",
     "notes_placeholder": "使用 Markdown 编写版本说明，或按提交自动生成",
     "notes_empty": "暂无说明",
+    "notes_required": "发布前请先填写版本说明",
     "show_more": "展开全文",
     "show_less": "收起",
     "generate_notes": "生成说明",
+    "generating_notes": "正在生成…",
     "generated": "本次发布范围包含 {count} 个提交",
     "ai_summary": "AI 摘要",
     "ai_summary_help": "额外生成一段概述，并对没有 conventional 前缀的提交重新归类。提交信息会发送给已配置的 LLM。",

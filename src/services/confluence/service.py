@@ -244,6 +244,15 @@ async def sync_release_note_to_confluence(note_id: int) -> None:
         return
 
     try:
-        await ConfluenceSyncService().sync_note(note_id, automatic=True)
+        outcome = await ConfluenceSyncService().sync_note(note_id, automatic=True)
     except Exception:  # noqa: BLE001 - a background task has nobody to raise at
         logger.exception("Confluence sync task failed", extra={"note_id": note_id})
+        return
+
+    # A skipped sync leaves the release as it was - no page, no recorded error - so
+    # it is the one outcome that only the log can account for.
+    if not outcome.attempted:
+        logger.info(
+            "Confluence sync skipped",
+            extra={"note_id": note_id, "reason": outcome.skipped},
+        )
