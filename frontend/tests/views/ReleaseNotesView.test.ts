@@ -300,6 +300,14 @@ async function selectRepository(wrapper: AnyWrapper) {
   await nextTick()
 }
 
+/** Pick a tag in the navigator: nothing is selected when the tab is opened. */
+async function selectTagItem(wrapper: AnyWrapper, tag: string) {
+  const row = wrapper.findAll('.tag-item').find((item: AnyWrapper) => item.text() === tag)
+  expect(row, `tag ${tag} is not in the navigator`).toBeTruthy()
+  await row!.trigger('click')
+  await flushPromises()
+}
+
 /** Names of the tags on the visible page of the tag navigator. */
 function tagNames(wrapper: AnyWrapper) {
   return wrapper
@@ -1231,7 +1239,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await selectRepository(wrapper)
     // selecting the tag is what reads its commits in the tags panel
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
-    await flushPromises()
+    await selectTagItem(wrapper, 'v1.2.0')
     expect(releaseNotesApi.preview).toHaveBeenCalledTimes(1)
 
     await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
@@ -1540,6 +1548,26 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     ])
   })
 
+  it('opens the tags tab without reading the commits of the newest tag', async () => {
+    vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
+      ...REFS,
+      tags: ['v1.2.0', 'v1.1.0'],
+    } as never)
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([PREVIEW_COMMIT]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+    await flushPromises()
+
+    // the newest tag can carry a whole release worth of history: opening the tab
+    // reads nothing until a tag is picked, so browsing cannot stall on it
+    expect(releaseNotesApi.preview).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.tags_select_hint)
+  })
+
   it('gives the commit table the height of the panel it fills', async () => {
     vi.mocked(releaseDiffApi.listRefs).mockResolvedValue({
       ...REFS,
@@ -1551,6 +1579,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await flushPromises()
     await selectRepository(wrapper)
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+    await selectTagItem(wrapper, 'v1.2.0')
 
     // The commits are the panel here, not a list beside something else: the card hands
     // its height down to the table, and the table asks for that height instead of
@@ -1572,6 +1601,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await selectRepository(wrapper)
 
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+    await selectTagItem(wrapper, 'v1.2.0')
 
     // The tag is scoped by the server: the browser only holds a page of tags, so
     // it must not decide the predecessor itself.
@@ -1636,6 +1666,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await flushPromises()
     await selectRepository(wrapper)
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+    await selectTagItem(wrapper, 'v1.2.0')
 
     expect(wrapper.text()).toContain('v1.1.0 (1111111)...v1.2.0 (2222222)')
   })
@@ -1653,6 +1684,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await flushPromises()
     await selectRepository(wrapper)
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+    await selectTagItem(wrapper, 'v1.2.0')
 
     // the scope is still used, but the panel says it was not proven
     expect(wrapper.text()).toContain('v1.1.0...v1.2.0')
@@ -1679,6 +1711,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await flushPromises()
     await selectRepository(wrapper)
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+    await selectTagItem(wrapper, 'v1.2.0')
 
     expect(wrapper.text()).toContain(
       enMessages.releaseNotes.scope_unresolved.replace('{tag}', 'v1.2.0'),
@@ -1699,6 +1732,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await flushPromises()
     await selectRepository(wrapper)
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+    await selectTagItem(wrapper, 'v1.2.0')
 
     expect(wrapper.find('.el-alert').text()).toContain(
       enMessages.releaseNotes.commits_trimmed
@@ -1892,6 +1926,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await flushPromises()
     await selectRepository(wrapper)
     await selectTab(wrapper, enMessages.releaseNotes.panel_tags)
+    await selectTagItem(wrapper, 'v1.2.0')
 
     await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_for_tag)[0].trigger('click')
     await flushPromises()

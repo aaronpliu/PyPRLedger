@@ -1195,6 +1195,7 @@
     "open_note": "Open the release note",
     "select_title": "Release notes",
     "select_hint": "Select a release or a tag on the left to read its notes",
+    "tags_select_hint": "Select a tag on the left to read the commits it released",
     "tag_commits_title": "Commits of {tag}",
     "editor_commits_help": "The notes should account for these commits - check them once the notes are generated",
     "commits_refresh": "Read the commits of this release again",

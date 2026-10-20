@@ -1195,6 +1195,7 @@
     "open_note": "打开版本说明",
     "select_title": "版本说明",
     "select_hint": "在左侧选择版本或标签以查看说明",
+    "tags_select_hint": "在左侧选择一个标签以查看它包含的提交",
     "tag_commits_title": "{tag} 的提交",
     "editor_commits_help": "发布说明应覆盖这些提交 —— 生成后请核对是否遗漏",
     "commits_refresh": "重新读取本次发布的提交",

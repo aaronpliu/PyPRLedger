@@ -933,9 +933,11 @@
               t(
                 !hasCoordinates
                   ? 'releaseNotes.needs_repository'
-                  : notesTotal === 0
-                    ? 'releaseNotes.empty'
-                    : 'releaseNotes.select_hint',
+                  : tabIsTags
+                    ? 'releaseNotes.tags_select_hint'
+                    : notesTotal === 0
+                      ? 'releaseNotes.empty'
+                      : 'releaseNotes.select_hint',
               )
             "
           />
@@ -1807,13 +1809,9 @@ async function loadRefs(force = false) {
     tags.value = tagNames
     branches.value = branchNames
     tagPage.value = 1
-    // The tags tab always has a selection so the commits of a tag are visible
-    if (tabIsTags.value && !selectedTag.value) {
-      const newest = tags.value[0]
-      if (newest) {
-        selectTag(newest)
-      }
-    }
+    // No tag is selected on arrival: the commits of a tag can be a whole release
+    // worth of history, and loading the newest one was a wait nobody asked for.
+    // The list reads as a list until a tag is picked.
     if (force) {
       ElMessage.success(t('releaseNotes.refresh_tags_ok'))
       // A refreshed tag list is the moment a new tag may exist or an old one may
@@ -2586,20 +2584,15 @@ watch(tagSearch, () => {
   tagPage.value = 1
 })
 
-// The tags tab maps a tag to the commits it released: pick the newest tag when
-// the tab is opened without an explicit selection, and know which tags have a
-// release so their note icon can be shown
+// The tags tab maps a tag to the commits it released: opening it reads which tags
+// have a release, so their note icon can be shown. Nothing is selected for the
+// reader - the commits of the newest tag are a whole release worth of history, and
+// were a wait on every visit to a tab that is often just being browsed.
 watch(activeTab, (tab) => {
   if (tab !== 'tags') {
     return
   }
   void loadReleaseTagIndex()
-  if (!selectedTag.value) {
-    const newest = tags.value[0]
-    if (newest) {
-      selectTag(newest)
-    }
-  }
 })
 
 onMounted(() => {
