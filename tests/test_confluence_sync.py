@@ -21,6 +21,7 @@ from src.api.v1.endpoints.release_notes import (
     get_confluence_sync_service,
     get_rbac_service,
     get_release_note_service,
+    schedule_confluence_sync,
 )
 from src.core.config import settings
 from src.core.database import get_db_session
@@ -859,6 +860,37 @@ async def test_publishing_schedules_a_sync_when_it_is_on(
 
     assert response.status_code == 201
     assert scheduled == [response.json()["id"]]
+
+
+async def test_the_release_is_committed_before_the_write_is_queued(
+    db_session, confluence_settings, monkeypatch
+) -> None:
+    """The write reads the release through a session of its own, after the response.
+
+    Background tasks run before the dependency that commits the request, so a
+    release that is only flushed - or still carrying the draft status it is being
+    published from - is one that session cannot see. Publishing with the switch on
+    then writes nothing at all, which is what someone drafting a new release and
+    ticking the box ran into.
+    """
+    note = await make_note(db_session)
+    order: list[str] = []
+
+    class Queue:
+        def add_task(self, func, *args, **kwargs) -> None:
+            order.append("queued")
+
+    real_commit = db_session.commit
+
+    async def commit() -> None:
+        order.append("committed")
+        await real_commit()
+
+    monkeypatch.setattr(db_session, "commit", commit)
+
+    await schedule_confluence_sync(Queue(), db_session, note)
+
+    assert order == ["committed", "queued"]
 
 
 async def test_a_prerelease_is_not_synced_by_itself(
