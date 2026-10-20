@@ -212,6 +212,14 @@ function buttonsByLabel(wrapper: AnyWrapper, label: string) {
   return wrapper.findAll('button').filter((button: AnyWrapper) => button.text() === label)
 }
 
+/** Write the notes into the editor (md-editor-v3 is stubbed as a plain textarea). */
+async function writeNotes(wrapper: AnyWrapper, body = '## Notes\n\n- ship the login fix') {
+  const editor = wrapper.find('.md-editor-stub')
+  expect(editor.exists(), 'the notes editor is not open').toBe(true)
+  await editor.setValue(body)
+  await flushPromises()
+}
+
 /**
  * Open the overflow menu of one release entry.
  *
@@ -508,6 +516,44 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     )
   })
 
+  it('does not publish a release whose notes are still empty', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const publish = () => wrapper.findComponent('[data-test="publish-release"]')
+    // A tag and a repository are not a release on their own: with nothing written
+    // there is nothing to publish, so the button waits - and says why.
+    expect(publish().props('disabled')).toBe(true)
+    expect(wrapper.find('[data-test="notes-required"]').text()).toBe(
+      enMessages.releaseNotes.notes_required,
+    )
+
+    // A draft is where the notes are still being written, so it is not held back
+    const saveDraft = buttonsByLabel(wrapper, enMessages.releaseNotes.save_draft)[0]
+    expect(saveDraft.element.hasAttribute('disabled')).toBe(false)
+
+    await writeNotes(wrapper)
+
+    expect(publish().props('disabled')).toBe(false)
+    expect(wrapper.find('[data-test="notes-required"]').exists()).toBe(false)
+  })
+
+  it('treats notes of nothing but whitespace as empty', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+    await writeNotes(wrapper, '   \n\n  ')
+
+    expect(wrapper.findComponent('[data-test="publish-release"]').props('disabled')).toBe(true)
+  })
+
   it('polls a Confluence-synced release into view after publishing', async () => {
     vi.useFakeTimers()
     try {
@@ -526,6 +572,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
 
       await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
       await flushPromises()
+      await writeNotes(wrapper)
 
       await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
       await flushPromises()
@@ -589,6 +636,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     const preRelease = wrapper.findComponent('[data-test="is-prerelease"]') as AnyWrapper
     preRelease.vm.$emit('update:modelValue', true)
     await flushPromises()
+    await writeNotes(wrapper)
 
     await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
     await flushPromises()
@@ -2069,6 +2117,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(pushCheckbox).toBeDefined()
     await pushCheckbox!.vm.$emit('update:modelValue', true)
     await flushPromises()
+    await writeNotes(wrapper)
 
     await buttonsByLabel(wrapper, enMessages.releaseNotes.publish)[0].trigger('click')
     await flushPromises()

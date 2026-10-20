@@ -597,6 +597,11 @@
                   :style="{ height: '420px' }"
                   :placeholder="t('releaseNotes.notes_placeholder')"
                 />
+                <!-- Publishing writes the notes out, so the button that does it waits
+                     for the editor to hold something: this is the word that says why -->
+                <div v-if="canSave && !hasNotes" class="field-hint" data-test="notes-required">
+                  {{ t('releaseNotes.notes_required') }}
+                </div>
               </div>
             </el-form-item>
 
@@ -649,7 +654,8 @@
               <el-button
                 type="primary"
                 :loading="saving"
-                :disabled="!canSave"
+                :disabled="!canPublish"
+                data-test="publish-release"
                 @click="saveRelease('published')"
               >
                 {{ editingId && editingStatus === 'published' ? t('releaseNotes.save') : t('releaseNotes.publish') }}
@@ -1344,6 +1350,11 @@ const canManage = computed(() =>
 // Importing / pushing only works for providers with a release API
 const canImportFromProvider = computed(() => canManage.value && isGithubProvider.value)
 const canSave = computed(() => hasCoordinates.value && Boolean(form.value.tag_name.trim()))
+// A release is published with its notes, so an empty body would publish a version
+// that says nothing. A draft is not that case: it is where the notes are still
+// being written, which is why only publishing waits for them.
+const hasNotes = computed(() => Boolean(form.value.body.trim()))
+const canPublish = computed(() => canSave.value && hasNotes.value)
 
 // The tags are shown in the order the provider lists them, which is the order
 // Bitbucket lists tags in: most recently created first. This page used to re-sort
@@ -2250,6 +2261,10 @@ async function generateNotes() {
 async function saveRelease(status: 'draft' | 'published') {
   if (!canSave.value) {
     ElMessage.warning(t('releaseNotes.tag_required'))
+    return
+  }
+  if (status === 'published' && !hasNotes.value) {
+    ElMessage.warning(t('releaseNotes.notes_required'))
     return
   }
 

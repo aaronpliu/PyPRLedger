@@ -1152,6 +1152,7 @@
     "notes": "Release notes",
     "notes_placeholder": "Write the release notes in markdown, or generate them from the commits",
     "notes_empty": "No notes yet",
+    "notes_required": "Write the release notes before publishing",
     "show_more": "Show more",
     "show_less": "Show less",
     "generate_notes": "Generate notes",
