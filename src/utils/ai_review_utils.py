@@ -3,6 +3,41 @@
 import hashlib
 
 
+# The severities an AI review reports for the issues it found, most severe first.
+# Stored on reviews inside ai_suggestions["issues"][*]["severity"], so anything that
+# filters or matches on severity reads them from here.
+ISSUE_SEVERITIES = ("critical", "high", "medium", "low")
+
+
+def extract_issue_severities(ai_suggestions: dict | None) -> list[str]:
+    """The severities of the issues an AI review reported, in the order they appear.
+
+    A review that found nothing - or was never analysed - has no severities, which is
+    what a rule matching on severity reads as "does not match".
+
+    Args:
+        ai_suggestions: The AI review payload, shaped ``{"issues": [{"severity": ...}]}``
+
+    Returns:
+        Lower-case severity strings, duplicates included as reported
+    """
+    if not isinstance(ai_suggestions, dict):
+        return []
+
+    issues = ai_suggestions.get("issues")
+    if not isinstance(issues, list):
+        return []
+
+    severities: list[str] = []
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        severity = str(issue.get("severity") or "").strip().lower()
+        if severity:
+            severities.append(severity)
+    return severities
+
+
 def generate_ai_review_id(
     project_key: str,
     repository_slug: str,

@@ -31,6 +31,7 @@ from src.schemas.review import (
 )
 from src.services.notification_service import NotificationService
 from src.services.project_registry_service import ProjectRegistryService
+from src.utils.ai_review_utils import extract_issue_severities
 from src.utils.metrics import MetricsCollector, metrics
 from src.utils.timezone import get_current_time
 
@@ -604,21 +605,7 @@ class MultiReviewerService:
     @staticmethod
     def _extract_issue_severities(ai_suggestions: dict[str, Any] | None) -> list[str]:
         """Extract issue severity strings from AI suggestions (keeps payload slim)"""
-        if not ai_suggestions:
-            return []
-
-        issues = ai_suggestions.get("issues")
-        if not isinstance(issues, list):
-            return []
-
-        severities: list[str] = []
-        for issue in issues:
-            if not isinstance(issue, dict):
-                continue
-            severity = str(issue.get("severity") or "").lower()
-            if severity:
-                severities.append(severity)
-        return severities
+        return extract_issue_severities(ai_suggestions)
 
     async def get_review_by_id(
         self, db: AsyncSession, review_id: int
