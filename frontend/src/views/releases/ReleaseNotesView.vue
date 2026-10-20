@@ -484,6 +484,19 @@
                       @click="loadEditorCommits(true)"
                     />
                   </el-tooltip>
+                  <!-- The fold that opened this is above it, which is a scroll away once
+                       the panel is tall: this is the same fold, where a reader who has
+                       read enough will be looking for it. -->
+                  <el-tooltip :content="t('releaseNotes.hide_commits')" placement="top">
+                    <el-button
+                      link
+                      size="small"
+                      :icon="ArrowUp"
+                      :aria-label="t('releaseNotes.hide_commits')"
+                      data-test="editor-commits-hide"
+                      @click="editorCommitsOpen = false"
+                    />
+                  </el-tooltip>
                 </div>
                 <div class="field-hint">{{ t('releaseNotes.editor_commits_help') }}</div>
 
@@ -552,13 +565,24 @@
             <el-form-item :label="t('releaseNotes.notes')">
               <div class="notes-editor">
                 <div class="notes-toolbar">
+                  <!-- The one action that fills the editor, so it is the button of the
+                       toolbar rather than one of its trimmings: full size, filled, with
+                       the icon that says what it makes - and while it runs it says so in
+                       words next to the spinner instead of only spinning. -->
                   <el-button
-                    size="small"
+                    class="generate-notes"
+                    type="primary"
+                    :icon="MagicStick"
                     :loading="generating"
                     :disabled="!hasCoordinates || !form.tag_name"
+                    data-test="generate-notes"
                     @click="generateNotes"
                   >
-                    {{ t('releaseNotes.generate_notes') }}
+                    {{
+                      generating
+                        ? t('releaseNotes.generating_notes')
+                        : t('releaseNotes.generate_notes')
+                    }}
                   </el-button>
                   <el-checkbox
                     v-if="llmEnabled"
@@ -967,6 +991,7 @@ import {
   CopyDocument,
   Document,
   InfoFilled,
+  MagicStick,
   MoreFilled,
   Refresh,
   Search,
@@ -3119,6 +3144,12 @@ onBeforeUnmount(() => {
   margin-bottom: 8px;
 }
 
+/* Wide enough for the label it carries while it works, so generating does not
+   resize the button under the pointer that just pressed it */
+.generate-notes {
+  min-width: 152px;
+}
+
 /* The commits of the release being written, folded away until they are asked for */
 .editor-commits-trigger {
   display: flex;
@@ -3128,8 +3159,15 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 
+/* A panel of its own, because it is one: the commits are read while the notes are
+   written, and a block drawn like the rest of the form is one a reader takes for a
+   piece of it and forgets is open. The border is what says it folds away again. */
 .editor-commits {
   width: 100%;
+  padding: 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter);
 }
 
 .editor-commits-head {

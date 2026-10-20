@@ -1156,6 +1156,7 @@
     "show_more": "Show more",
     "show_less": "Show less",
     "generate_notes": "Generate notes",
+    "generating_notes": "Generating…",
     "generated": "{count} commit(s) in this release scope",
     "ai_summary": "AI summary",
     "ai_summary_help": "Adds a summary paragraph and re-groups the commits whose subjects carry no conventional prefix. Commit messages are sent to the configured LLM.",

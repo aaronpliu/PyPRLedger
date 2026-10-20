@@ -1156,6 +1156,7 @@
     "show_more": "展開全文",
     "show_less": "收合",
     "generate_notes": "產生說明",
+    "generating_notes": "正在產生…",
     "generated": "本次發佈範圍包含 {count} 個提交",
     "ai_summary": "AI 摘要",
     "ai_summary_help": "額外產生一段概述，並對沒有 conventional 前綴的提交重新歸類。提交資訊會傳送給已設定的 LLM。",

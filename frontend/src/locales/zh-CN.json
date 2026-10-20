@@ -1156,6 +1156,7 @@
     "show_more": "展开全文",
     "show_less": "收起",
     "generate_notes": "生成说明",
+    "generating_notes": "正在生成…",
     "generated": "本次发布范围包含 {count} 个提交",
     "ai_summary": "AI 摘要",
     "ai_summary_help": "额外生成一段概述，并对没有 conventional 前缀的提交重新归类。提交信息会发送给已配置的 LLM。",

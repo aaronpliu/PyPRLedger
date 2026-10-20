@@ -1285,6 +1285,49 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     )
   })
 
+  it('closes the commits from inside the panel they opened', async () => {
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(preview([PREVIEW_COMMIT]))
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+    await toggleEditorCommits(wrapper)
+
+    // The fold that opened the panel sits above it, which is a scroll away once the
+    // list is open, so the panel carries the same fold in its own head.
+    await wrapper.find('[data-test="editor-commits-hide"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="editor-commits"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="editor-commits-toggle"]').text()).toContain(
+      enMessages.releaseNotes.show_commits,
+    )
+  })
+
+  it('says that it is generating while the notes are on their way', async () => {
+    // never settles: the button is read while the call is still out
+    vi.mocked(releaseNotesApi.preview).mockReturnValue(new Promise(() => {}) as any)
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const generate = () => wrapper.findComponent('[data-test="generate-notes"]')
+    expect(generate().text()).toBe(enMessages.releaseNotes.generate_notes)
+
+    await generate().trigger('click')
+    await flushPromises()
+
+    // A spinner alone asks the reader to trust it; the label says what is happening.
+    expect(generate().text()).toBe(enMessages.releaseNotes.generating_notes)
+  })
+
   it('pages a long scope inside the panel instead of growing it', async () => {
     const longScope = Array.from({ length: 25 }, (_, index) => ({
       ...PREVIEW_COMMIT,
