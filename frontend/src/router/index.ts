@@ -201,12 +201,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/errors/ForbiddenView.vue'),
   },
   {
-    path: '/service-unavailable',
-    name: 'ServiceUnavailable',
-    component: () => import('@/views/errors/ServiceUnavailableView.vue'),
-    meta: { requiresAuth: false },
-  },
-  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/errors/NotFoundView.vue'),

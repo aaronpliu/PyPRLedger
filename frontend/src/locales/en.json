@@ -860,6 +860,7 @@
     "network_error": "Network error. Please check your connection.",
     "server_error": "Server error. Please try again later.",
     "permission_denied": "You do not have permission to perform this action.",
+    "connection_lost": "Connection to the service lost - retrying…",
     "service_unavailable": "Service Unavailable",
     "service_unavailable_desc": "The server is not responding right now. It may be restarting or under maintenance - please try again in a moment.",
     "service_unavailable_retry_failed": "The service is still unavailable. Please try again later.",

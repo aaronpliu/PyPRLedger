@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
 import { beginProgress, endProgress } from '@/composables/useProgress'
-import { confirmBackendDown } from '@/composables/useBackendAvailability'
+import { confirmBackendDown, markBackendAvailable } from '@/composables/useBackendAvailability'
 import { CLIENT_DEVICE_HEADER, getClientDeviceHeader } from '@/utils/deviceInfo'
 
 type RetryableRequestConfig = InternalAxiosRequestConfig & {
@@ -166,6 +166,10 @@ request.interceptors.response.use(
   (response: AxiosResponse) => {
     const config = response.config as RetryableRequestConfig
     endProgress(config._progressId)
+    // An answer is the one thing a probe cannot argue with: whatever was said about
+    // the service being gone, it is not gone. This is also what ends an outage
+    // without the reader pressing anything.
+    markBackendAvailable()
     return response.data
   },
   async (error: AxiosError) => {

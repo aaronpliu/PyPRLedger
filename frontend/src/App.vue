@@ -2,6 +2,10 @@
   <div id="app">
     <GlobalProgress />
     <router-view />
+    <ServiceUnavailableNotice
+      v-if="backendSuspect || backendUnavailable"
+      :confirmed="backendUnavailable"
+    />
     <PWAInstallPrompt />
     <PageAgentLauncher
       v-if="pageAgentInitialized && !pageAgentVisible"
@@ -13,14 +17,18 @@
 
 <script setup lang="ts">
 import { watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import PWAInstallPrompt from '@/components/common/PWAInstallPrompt.vue'
 import PageAgentLauncher from '@/components/common/PageAgentLauncher.vue'
 import GlobalProgress from '@/components/common/GlobalProgress.vue'
+import ServiceUnavailableNotice from '@/components/common/ServiceUnavailableNotice.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useIdleSessionHeartbeat } from '@/composables/useIdleSessionHeartbeat'
 import { usePageAgent } from '@/composables/usePageAgent'
-import { backendUnavailable } from '@/composables/useBackendAvailability'
+import {
+  backendSuspect,
+  backendUnavailable,
+  useBackendReachabilityProbe,
+} from '@/composables/useBackendAvailability'
 
 // Theme is now managed globally by useTheme composable
 // The composable auto-initializes on import
@@ -34,17 +42,11 @@ const {
   initialized: pageAgentInitialized,
 } = usePageAgent()
 const authStore = useAuthStore()
-const router = useRouter()
-const route = useRoute()
 
-// A request that could not reach the server flips the outage flag: take the reader
-// to the outage page instead of leaving a broken page (or a login that never lands),
-// and remember where they were headed so the page can put them back.
-watch(backendUnavailable, (down) => {
-  if (down && route.path !== '/service-unavailable') {
-    void router.replace({ path: '/service-unavailable', query: { from: route.fullPath } })
-  }
-})
+// A request that cannot reach the server puts a notice over the page - never in
+// place of it - and while the answer stays the same the shell keeps asking, which is
+// what turns one failed probe into an outage and what ends it again.
+useBackendReachabilityProbe()
 
 // Slide the idle session deadline on real user activity (never on background polling)
 useIdleSessionHeartbeat()
