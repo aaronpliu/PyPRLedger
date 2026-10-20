@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-10-20
+
+**Backend Version**: 1.32.0
+**Frontend Version**: 1.27.0
+
+### Added
+- Auto-assignment rules can match the severities an AI review reports. A rule's conditions accept `issue_severity` with any of critical, high, medium and low, and the rule matches when the review carries a finding at one of those levels - so "anything critical goes to this reviewer" is a rule of its own rather than something to approximate with a project or a branch. The levels are checked on write, trimmed, lower-cased and de-duplicated: an unknown one would otherwise be a rule that never fires, without saying so
+
+### Changed
+- The messages the backend writes follow the language chosen in the interface rather than the browser's own. Every request carries `Accept-Language` from the UI locale, so a rejected login says "Invalid credentials" to a reader who switched to English instead of "凭证无效", and the same holds for every other message the backend translates
+- The messages the interface raises by itself are translated too: forbidden, not found, validation, server error, offline, session expiry, and the keyboard-shortcut help and hint. Where the backend sent a message it is preferred - in whichever field it wrapped it - instead of a validation detail rendering as ``[object Object]``, and a fallback is only used when there is nothing to show
+- The search dialog is one dialog with one open state: the toolbar button, Ctrl+K and "/" all ask the same thing to open, and "/" opens it instead of looking for an input that only exists while it is already open. What the dialog says follows the interface language - placeholder, tips, recent searches, result count, type tags, key hints - and so do the relative dates ("3 days ago") it shows
+- An unreachable service is drawn over the page rather than in place of it. A confirmed outage is a modal notice whose Retry reports a retry that failed, and a single unanswered request is a banner with a spinner that clears itself - one failed probe is a slow connection, not a verdict. The page underneath is never unmounted, so whatever was being written on it survives a restart
+- Dashboard charts open fullscreen as a card and come back at the right size. Sizing follows the container through a `ResizeObserver` instead of a fixed delay, so a chart that grew to fill the screen is no longer left clipped at the old size after Esc; the container also stopped animating its height, which is what made the canvas lag behind it
+- The tags tab of Release Notes no longer selects the newest tag on arrival. The commits of a tag are a whole release worth of history, which was a wait on every visit to a tab that is often only being browsed; the list now reads as a list, and says as much, until a tag is picked
+
+### Fixed
+- The provider tag on a registry row stops raising a prop-validation warning: the default provider keeps the tag's own styling as "no type" rather than an empty string, which Element Plus rejects
+
+---
+
 ## [1.31.1] - 2026-10-20
 
 **Backend Version**: 1.31.1
