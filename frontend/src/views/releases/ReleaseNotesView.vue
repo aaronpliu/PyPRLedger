@@ -608,6 +608,19 @@
                   <span>{{ aiFallbackMessage }}</span>
                   <!-- the provider's own message, which is what can be acted on -->
                   <code v-if="summaryError" class="ai-summary-error">{{ summaryError }}</code>
+                  <!-- a provider that was busy a moment ago is worth asking again,
+                       without regenerating the notes from another button -->
+                  <el-button
+                    v-if="canRetryAiSummary"
+                    link
+                    type="primary"
+                    size="small"
+                    class="ai-summary-retry"
+                    :loading="generating"
+                    @click="generateNotes()"
+                  >
+                    {{ t('releaseNotes.retry_ai_summary') }}
+                  </el-button>
                 </div>
                 <div v-else-if="aiSummary" class="field-hint">
                   {{ t('releaseNotes.ai_summary_help') }}
@@ -1266,6 +1279,28 @@ const aiFallbackMessage = computed(() => {
       return ''
   }
 })
+// A retry can only help where the failure was about the answer itself: a deployment
+// with no LLM configured says the same thing however often it is asked
+const canRetryAiSummary = computed(
+  () => Boolean(aiFallback.value) && aiFallback.value !== 'not_configured' && llmEnabled.value,
+)
+
+/**
+ * The AI notice describes the notes it was generated with.
+ *
+ * Anything that puts different notes on screen - another tag, another scope, a closed
+ * editor - leaves it describing text that is no longer there, which is how a failure
+ * on one release stayed on screen over the next one.
+ */
+function clearSummaryState() {
+  summarizedByAi.value = false
+  summaryNotice.value = null
+  summaryError.value = null
+}
+
+// The switch is about the next pass: what it says now belongs to the previous one
+watch(aiSummary, clearSummaryState)
+
 const formCard = ref<HTMLElement | null>(null)
 
 /**
@@ -2041,6 +2076,7 @@ function resetForm() {
   editingId.value = null
   editingStatus.value = 'draft'
   generatedCount.value = null
+  clearSummaryState()
   clearEditorScope()
   form.value = {
     tag_name: '',
@@ -2118,6 +2154,10 @@ function startNewRelease(tag?: string) {
 
 /** The tag or the predecessor of a draft changed: its commits changed with it. */
 function onEditorScopeChange() {
+  // The notes on screen were generated for the previous scope, and so was whatever
+  // the AI pass said about them
+  clearSummaryState()
+  generatedCount.value = null
   void loadEditorCommits()
 }
 
@@ -2217,6 +2257,7 @@ function editNote(note: ReleaseNote) {
   editingId.value = note.id
   editingStatus.value = note.status
   generatedCount.value = null
+  clearSummaryState()
   editorOpen.value = true
   form.value = {
     tag_name: note.tag_name,
@@ -2247,6 +2288,8 @@ async function loadLlmConfig() {
 async function generateNotes() {
   if (!hasCoordinates.value || !form.value.tag_name) return
 
+  // Whatever the previous pass said is about notes that are about to be replaced
+  clearSummaryState()
   generating.value = true
   try {
     const preview = await releaseNotesApi.preview({
@@ -3246,6 +3289,11 @@ onBeforeUnmount(() => {
   font-family: var(--el-font-family-mono, monospace);
   opacity: 0.85;
   word-break: break-word;
+}
+
+.ai-summary-retry {
+  margin-top: 2px;
+  padding: 0;
 }
 
 .form-actions {

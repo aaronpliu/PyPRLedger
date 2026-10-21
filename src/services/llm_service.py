@@ -8,6 +8,7 @@ API key is only ever held here, so it never reaches a client.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -39,6 +40,17 @@ CONNECT_TIMEOUT_SECONDS = 15.0
 
 HTTP_ERROR_STATUS = 400
 
+# A provider that is momentarily out of capacity answers 429 or 5xx, and the same
+# call a moment later is often answered - the whole answer, or nothing, depending on
+# how patient the reader is. Those are asked again; a 4xx (an unknown model, a bad
+# key) is not, because repeating it only repeats the wait.
+RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+MAX_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = 1.0
+# A provider that says how long to wait is believed up to this much: beyond it the
+# reader would be waiting on a request that has already been read as a failure.
+MAX_RETRY_WAIT_SECONDS = 5.0
+
 
 def provider_timeout(answer_seconds: float = REQUEST_TIMEOUT_SECONDS) -> httpx.Timeout:
     """The timeouts one call to the provider is made under.
@@ -48,6 +60,7 @@ def provider_timeout(answer_seconds: float = REQUEST_TIMEOUT_SECONDS) -> httpx.T
     what the deployment's own allowance is for.
     """
     return httpx.Timeout(answer_seconds, connect=CONNECT_TIMEOUT_SECONDS)
+
 
 # A provider message is carried into the log and into the reason a caller
 # reports, so it is cut to a readable length and the credential is taken out of
@@ -182,6 +195,10 @@ class LlmService:
         when one is configured, the model. A parameter a given model refuses
         (``temperature``, ``max_tokens``) turns a question it can answer into a
         400, and how long an answer may be is the provider's to decide.
+
+        A provider that is busy or briefly failing is asked a couple of times more
+        before its answer is taken as none: the failure that says "not now" is the
+        one worth waiting out, and the pass is optional in the first place.
         """
         reason = self._config.unusable_reason
         if reason is not None:
@@ -198,24 +215,74 @@ class LlmService:
         if self._config.api_key:
             headers["Authorization"] = f"Bearer {self._config.api_key}"
 
-        try:
-            async with httpx.AsyncClient(timeout=provider_timeout(self._timeout)) as client:
-                response = await client.post(url, json=payload, headers=headers)
-        except httpx.HTTPError as e:
-            error = redact(f"{type(e).__name__}: {e}", self._config.api_key)
-            logger.warning("LLM completion request failed", extra={"url": url, "error": error})
-            return Completion(error=error)
+        last_error = ""
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                async with httpx.AsyncClient(timeout=provider_timeout(self._timeout)) as client:
+                    response = await client.post(url, json=payload, headers=headers)
+            except httpx.TimeoutException as e:
+                # The answer took longer than this deployment allows: asking again
+                # would spend the same wait a second time
+                last_error = redact(f"{type(e).__name__}: {e}", self._config.api_key)
+                logger.warning(
+                    "LLM completion timed out",
+                    extra={"url": url, "error": last_error, "attempt": attempt},
+                )
+                return Completion(error=last_error)
+            except httpx.HTTPError as e:
+                last_error = redact(f"{type(e).__name__}: {e}", self._config.api_key)
+                logger.warning(
+                    "LLM completion request failed",
+                    extra={"url": url, "error": last_error, "attempt": attempt},
+                )
+                # An unreachable host is not a provider that is busy: there is
+                # nothing to wait out, so it is reported at once
+                if isinstance(e, httpx.ConnectError) or attempt == MAX_ATTEMPTS:
+                    return Completion(error=last_error)
+                await asyncio.sleep(self._retry_wait(attempt, None))
+                continue
 
-        # The body is what names the problem - an unknown model, a bad key, a
-        # prompt longer than the model takes - so it is read before anything else.
-        if response.status_code >= HTTP_ERROR_STATUS:
-            error = redact(response.text, self._config.api_key)
-            logger.warning(
-                "LLM completion was refused by the provider",
-                extra={"url": url, "status": response.status_code, "body": error},
-            )
-            return Completion(error=f"HTTP {response.status_code}: {error}")
+            # The body is what names the problem - an unknown model, a bad key, a
+            # prompt longer than the model takes - so it is read before anything else.
+            if response.status_code >= HTTP_ERROR_STATUS:
+                body = redact(response.text, self._config.api_key)
+                last_error = f"HTTP {response.status_code}: {body}"
+                logger.warning(
+                    "LLM completion was refused by the provider",
+                    extra={
+                        "url": url,
+                        "status": response.status_code,
+                        "body": body,
+                        "attempt": attempt,
+                    },
+                )
+                if response.status_code not in RETRYABLE_STATUS or attempt == MAX_ATTEMPTS:
+                    return Completion(error=last_error)
+                await asyncio.sleep(self._retry_wait(attempt, response.headers.get("retry-after")))
+                continue
 
+            return self._read_answer(response)
+
+        return Completion(error=last_error or "the provider gave no answer")
+
+    @staticmethod
+    def _retry_wait(attempt: int, retry_after: str | None) -> float:
+        """How long to wait before asking again.
+
+        The provider's own hint is used when it gave a usable one, since that is
+        what its limit is; otherwise the wait grows with each attempt.
+        """
+        if retry_after:
+            try:
+                hinted = float(retry_after.strip())
+            except ValueError:
+                hinted = 0.0
+            if 0 < hinted <= MAX_RETRY_WAIT_SECONDS:
+                return hinted
+        return RETRY_BACKOFF_SECONDS * attempt
+
+    def _read_answer(self, response: httpx.Response) -> Completion:
+        """The answer in a 2xx body, or the reason there is nothing usable in it."""
         try:
             body = response.json()
         except ValueError as e:

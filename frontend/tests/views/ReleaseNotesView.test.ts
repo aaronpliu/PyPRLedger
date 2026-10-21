@@ -844,6 +844,52 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     // the reason, and the answer that names what to change
     expect(wrapper.text()).toContain(enMessages.releaseNotes.ai_summary_fallback_provider_error)
     expect(wrapper.text()).toContain('HTTP 404: model `test-model` not found')
+    // a provider that was busy is worth asking again from where the failure is read
+    expect(buttonsByLabel(wrapper, enMessages.releaseNotes.retry_ai_summary)).toHaveLength(1)
+  })
+
+  it('takes a failed AI notice with the notes it was generated for', async () => {
+    vi.mocked(llmApi.getConfig).mockResolvedValue({
+      enabled: true,
+      model: 'test-model',
+      base_url: 'https://llm.local/v1',
+    })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue({
+      ...preview([], { version: 'v1.1.0', commit_count: 3 }),
+      summary: null,
+      summary_source: 'deterministic',
+      summary_notice: 'provider_error',
+      summary_error: 'HTTP 503: overloaded',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    const aiSummary = wrapper
+      .findAllComponents({ name: 'ElCheckbox' })
+      .find((box: AnyWrapper) => box.text() === enMessages.releaseNotes.ai_summary)
+    await aiSummary!.vm.$emit('update:modelValue', true)
+    await flushPromises()
+
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.generate_notes)[0].trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.ai_summary_fallback_provider_error)
+
+    // the editor is closed and another release is drafted: the notes on screen are
+    // not the ones that pass was about, so neither is its failure
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.close_editor)[0].trigger('click')
+    await flushPromises()
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(enMessages.releaseNotes.ai_summary_fallback_provider_error)
+    expect(wrapper.text()).not.toContain('HTTP 503: overloaded')
+    // the switch is still on, and says what it does rather than what went wrong
+    expect(wrapper.text()).toContain(enMessages.releaseNotes.ai_summary_help)
   })
 
   it('edits the notes with the rendered markdown beside them', async () => {
