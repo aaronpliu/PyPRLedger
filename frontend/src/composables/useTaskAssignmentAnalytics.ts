@@ -221,7 +221,6 @@ export function useTaskAssignmentAnalytics() {
             grouped[reviewer].in_progress++
             break
           case 'assigned':
-          case 'pending':
           default:
             grouped[reviewer].pending++
             break

@@ -319,8 +319,8 @@
     "association_removed": "Link removed",
     "no_associations": "No associated reviews",
     "assignment_status_descriptions": {
-      "pending": "Review task has not been assigned to any reviewer yet",
-      "assigned": "Task has been assigned to a reviewer by the review admin",
+      "open": "No reviewer has been assigned to this task yet",
+      "assigned": "A reviewer has been assigned and has not started on it yet",
       "in_progress": "Reviewer has viewed the task but has not submitted a score yet",
       "completed": "Reviewer has completed scoring for this review"
     },
@@ -523,6 +523,7 @@
     "pr_user": "PR User",
     "reviewers": "Reviewers",
     "status": "Status",
+    "status_open": "Open",
     "scores": "Scores",
     "created": "Created",
     "actions": "Actions",
@@ -586,6 +587,7 @@
       "id": "ID",
       "reviewer": "Reviewer",
       "assigned_by": "Assigned By",
+      "auto_assigned": "Auto-assigned",
       "assigned_date": "Assigned Date",
       "status": "Status",
       "comments": "Comments",

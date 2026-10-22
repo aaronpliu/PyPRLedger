@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.core.database import Base
 from src.models.auto_assign_rule import PullRequestReviewAutoAssignmentRule
 from src.models.pull_request import (
+    PullRequestReviewAssignment,
     PullRequestReviewBase,
 )
 from src.models.user import User
@@ -341,7 +342,10 @@ class TestAutoAssignIntegration:
             assignment = assignments[0]
             assert assignment.reviewer == "alice"
             assert assignment.assigned_by is None  # NULL because FK references user(username)
-            assert assignment.assignment_status == "pending"
+            # A rule's reviewer is assigned, exactly like one a person placed; the
+            # source is what tells the two apart, not the status.
+            assert assignment.assignment_status == "assigned"
+            assert assignment.assignment_source == "auto"
             assert assignment.review_base_id == review_base.id
 
         async with engine.begin() as conn:
@@ -622,3 +626,42 @@ class TestAutoAssignRuleSchema:
         conditions = {"project_key": ["PROJ-A"]}
         rule = AutoAssignRuleCreate(name="plain", conditions=conditions, assign_to=["alice"])
         assert rule.conditions == conditions
+
+
+class TestAssignmentSource:
+    """An assignment says whether a person or a rule put the reviewer there"""
+
+    def test_a_rule_assignment_reads_as_automatic(self):
+        assignment = PullRequestReviewAssignment(
+            review_base_id=1,
+            reviewer="alice",
+            assigned_by=None,
+            assignment_status="assigned",
+            assignment_source="auto",
+        )
+
+        assert assignment.assignment_source == "auto"
+        # the page reads it through to_dict(), so it travels with the record
+        assert assignment.to_dict()["assignment_source"] == "auto"
+
+    def test_an_assignment_a_person_made_reads_as_manual(self):
+        assignment = PullRequestReviewAssignment(
+            review_base_id=1,
+            reviewer="alice",
+            assigned_by="admin",
+            assignment_status="assigned",
+        )
+
+        assert assignment.to_dict()["assignment_source"] == "manual"
+
+    def test_a_manual_assignment_without_a_recorded_assigner_is_still_manual(self):
+        # A review created with its reviewer named up front records no assigner. The
+        # source is written by whatever created the row, so it stays manual.
+        assignment = PullRequestReviewAssignment(
+            review_base_id=1,
+            reviewer="alice",
+            assigned_by=None,
+            assignment_status="assigned",
+        )
+
+        assert assignment.to_dict()["assignment_source"] == "manual"

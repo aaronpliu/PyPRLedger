@@ -93,7 +93,7 @@ When a rule matches, the system SHALL create `PullRequestReviewAssignment` recor
 
 #### Scenario: Assign all reviewers from matched rule
 - **WHEN** a rule with `assign_to: ["alice", "bob"]` and `max_assignments: 0` matches a review
-- **THEN** both Alice and Bob get `PullRequestReviewAssignment` records with `assignment_status = "pending"`
+- **THEN** both Alice and Bob get `PullRequestReviewAssignment` records with `assignment_status = "assigned"` and `assignment_source = "auto"`
 
 #### Scenario: max_assignments limits how many are assigned
 - **WHEN** a rule with `assign_to: ["alice", "bob", "carol"]` and `max_assignments: 2` matches
@@ -102,6 +102,17 @@ When a rule matches, the system SHALL create `PullRequestReviewAssignment` recor
 #### Scenario: Reviewer already assigned is skipped
 - **WHEN** a rule matches but one reviewer already has an existing assignment for the same review
 - **THEN** that reviewer is skipped (unique constraint prevents duplicate, the code checks before creating)
+
+### Requirement: status describes progress, source describes who assigned
+`PullRequestReviewAssignment.assignment_status` SHALL record progress only, as one of `assigned`, `in_progress` or `completed`; `pending` SHALL NOT be written. A review with no assignment record SHALL be reported as `open`. Who placed the reviewer SHALL be recorded separately in `assignment_source`, as `auto` for a rule's work and `manual` otherwise.
+
+#### Scenario: A rule's reviewer is assigned, not pending
+- **WHEN** an automatic rule assigns a reviewer
+- **THEN** the assignment reads `assignment_status = "assigned"` and `assignment_source = "auto"` - the same status a person's assignment gets
+
+#### Scenario: A task nobody is on is open
+- **WHEN** a review carries no assignment record
+- **THEN** the task is reported as `open`, which is the absence of an assignment rather than a status one can set on an assignment
 
 ### Requirement: rules support date ranges and enable/disable
 Rules SHALL support optional `starts_at` and `expires_at` timestamps (timezone-aware). Rules outside their date range SHALL be treated as inactive. The `is_active` boolean SHALL allow manual enable/disable without deleting the rule.

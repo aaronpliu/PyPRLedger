@@ -174,6 +174,14 @@
                   <span v-if="reviewer.assignment_status === 'completed'" class="status-icon">✓</span>
                 </el-tag>
               </el-tooltip>
+              <el-tag
+                v-if="row.reviewers.length === 0"
+                type="warning"
+                size="small"
+                class="reviewer-tag"
+              >
+                {{ t('task_assignment.status_open', 'Open') }}
+              </el-tag>
               <el-button
                 v-if="row.reviewers.length === 0"
                 type="primary"
@@ -729,7 +737,7 @@ const getReviewerTagType = (status: string) => {
 // Get assignment status description
 const getAssignmentStatusDescription = (status: string | undefined | null) => {
   if (!status) {
-    return t('reviews.assignment_status_descriptions.pending', 'Pending')
+    return t('reviews.assignment_status_descriptions.assigned', 'Assigned')
   }
   return t(`reviews.assignment_status_descriptions.${status}`, status)
 }
@@ -826,18 +834,11 @@ const handleAssignReviewer = async (review: ReviewV2) => {
   await loadAvailableReviewers(review)
 }
 
-// Determine if a review is unassigned (no reviewers or all pending)
+// A review nobody has been put on. A reviewer an assignment rule placed is still an
+// assignment, whether or not they have started, so it does not make the row
+// unassigned.
 const isUnassigned = (review: ReviewV2): boolean => {
-  // No reviewers at all
-  if (!review.reviewers || review.reviewers.length === 0) {
-    return true
-  }
-  
-  // All reviewers are in 'pending' status
-  const hasActiveReviewers = review.reviewers.some(
-    r => r.assignment_status !== 'pending'
-  )
-  return !hasActiveReviewers
+  return !review.reviewers || review.reviewers.length === 0
 }
 
 // Get row class name for styling unassigned tasks

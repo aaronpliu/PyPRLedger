@@ -268,28 +268,21 @@ class MultiReviewerService:
         total_result = await db.execute(count_stmt)
         total = total_result.scalar() or 0
 
-        # Apply pagination with priority sorting for unassigned tasks
-        # Unassigned tasks (no reviewers or all pending) should appear first
-
-        # Create a CASE expression to prioritize unassigned tasks
-        # Priority 0 = unassigned (no active reviewers), Priority 1 = assigned
-
-        # Build EXISTS subquery to check if review has any non-pending assignments
-        has_active_reviewers = (
+        # Apply pagination with priority sorting: a review nobody has been put on
+        # comes first. A reviewer who has been assigned but has not started yet is
+        # still a reviewer - that is exactly what the automatic rules write - so the
+        # test is whether the review carries any assignment at all, not how far
+        # along one of them is.
+        has_any_assignment = (
             select(1)
-            .where(
-                and_(
-                    PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
-                    PullRequestReviewAssignment.assignment_status != "pending",
-                )
-            )
+            .where(PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id)
             .correlate(PullRequestReviewBase)  # Explicitly correlate with outer query
             .exists()
         )
 
         priority_case = case(
-            (~has_active_reviewers, 0),  # No active reviewers = unassigned (priority 0)
-            else_=1,  # Has active reviewers = assigned (priority 1)
+            (~has_any_assignment, 0),  # Nobody assigned = priority 0
+            else_=1,  # Someone assigned = priority 1
         )
 
         stmt = stmt.order_by(priority_case, desc(PullRequestReviewBase.created_date))
@@ -540,7 +533,7 @@ class MultiReviewerService:
                 AnalyticsReviewerItem(
                     reviewer=reviewer_name,
                     reviewer_info=reviewer_info,
-                    assignment_status=assign_row.assignment_status or "pending",
+                    assignment_status=assign_row.assignment_status or "assigned",
                 )
             )
 

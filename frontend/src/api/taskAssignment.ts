@@ -13,7 +13,9 @@ export interface ReviewerAssignment {
   } | null
   assigned_by?: string | null
   assigned_date?: string | null
-  assignment_status: 'pending' | 'assigned' | 'in_progress' | 'completed'
+  assignment_status: 'assigned' | 'in_progress' | 'completed'
+  /** Who put the reviewer here: a person, or an assignment rule that ran on its own */
+  assignment_source?: 'auto' | 'manual'
   reviewer_comments?: string | null
   created_date: string
   updated_date: string
@@ -115,7 +117,7 @@ export interface AssignReviewerRequest {
 }
 
 export interface UpdateAssignmentStatusRequest {
-  assignment_status: 'pending' | 'assigned' | 'in_progress' | 'completed'
+  assignment_status: 'assigned' | 'in_progress' | 'completed'
   reviewer_comments?: string | null
 }
 

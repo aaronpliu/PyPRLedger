@@ -319,8 +319,8 @@
     "association_removed": "已解除关联",
     "no_associations": "暂无关联的审查",
     "assignment_status_descriptions": {
-      "pending": "审查任务尚未分配给任何审查者",
-      "assigned": "任务已由审查管理员分配给审查者",
+      "open": "尚未指派审查者",
+      "assigned": "审查者已分配，但尚未开始处理",
       "in_progress": "审查者已查看任务但尚未提交评分",
       "completed": "审查者已完成此审查的评分"
     },
@@ -523,6 +523,7 @@
     "pr_user": "PR用户",
     "reviewers": "审查者",
     "status": "状态",
+    "status_open": "待分配",
     "scores": "评分",
     "created": "创建时间",
     "actions": "操作",
@@ -586,6 +587,7 @@
       "id": "ID",
       "reviewer": "审查者",
       "assigned_by": "分配人",
+      "auto_assigned": "自动分配",
       "assigned_date": "分配日期",
       "status": "状态",
       "comments": "评论",

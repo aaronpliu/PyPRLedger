@@ -85,6 +85,9 @@
           <div class="reviewers-column">
             <div class="section-header">
               <h3>{{ t('task_assignment.detail.reviewers') }} ({{ review.total_reviewers }})</h3>
+              <el-tag v-if="review.total_reviewers === 0" type="warning" size="small">
+                {{ t('task_assignment.status_open', 'Open') }}
+              </el-tag>
               <el-button type="primary" size="small" @click="handleAssignReviewer">
                 {{ t('task_assignment.detail.assign_reviewer') }}
               </el-button>
@@ -106,7 +109,13 @@
 
               <el-table-column :label="t('task_assignment.detail.assigned_by')" width="150" align="center">
                 <template #default="{ row }">
-                  {{ row.assigned_by || t('reviews.detail.na') }}
+                  <span v-if="row.assigned_by">{{ row.assigned_by }}</span>
+                  <!-- A rule has no username to record, so the reviewer it placed is
+                       named by what did it rather than left reading as nobody. -->
+                  <el-tag v-else-if="row.assignment_source === 'auto'" size="small" type="info">
+                    {{ t('task_assignment.detail.auto_assigned') }}
+                  </el-tag>
+                  <span v-else>{{ t('reviews.detail.na') }}</span>
                 </template>
               </el-table-column>
 
@@ -125,7 +134,6 @@
                     </el-tag>
                     <template #dropdown>
                       <el-dropdown-menu>
-                        <el-dropdown-item command="pending">{{ t('reviews.pending') }}</el-dropdown-item>
                         <el-dropdown-item command="assigned">{{ t('reviews.assigned') }}</el-dropdown-item>
                         <el-dropdown-item command="in_progress">{{ t('reviews.in_progress') }}</el-dropdown-item>
                         <el-dropdown-item command="completed">{{ t('reviews.completed') }}</el-dropdown-item>
@@ -435,23 +443,15 @@ const getAssignmentStatusType = (status: string) => {
 }
 
 const formatAssignmentStatusLabel = (status: string) => {
-  switch (status) {
-    case 'in_progress':
-      return 'In Progress'
-    case 'assigned':
-      return 'Assigned'
-    case 'pending':
-      return 'Pending'
-    case 'completed':
-      return 'Completed'
-    default:
-      return status
+  if (!status) {
+    return t('reviews.assigned', 'Assigned')
   }
+  return t(`reviews.${status}`, status)
 }
 
 const getAssignmentStatusDescription = (status: string | undefined | null) => {
   if (!status) {
-    return t('reviews.assignment_status_descriptions.pending', 'Pending')
+    return t('reviews.assignment_status_descriptions.assigned', 'Assigned')
   }
   return t(`reviews.assignment_status_descriptions.${status}`, status)
 }

@@ -261,14 +261,16 @@ class AutoTaskAssignmentService:
 
                 # Create the assignment
                 # assigned_by is NULL (not a sentinel string) because the FK
-                # constraint references user(username). Auto-assignments are
-                # distinguishable by assignment_status='pending' vs manual's 'assigned'.
+                # constraint references user(username). What placed the reviewer is
+                # recorded in assignment_source, so the status can stay the plain
+                # "assigned" that a person's assignment also gets.
                 assignment = PullRequestReviewAssignment(
                     review_base_id=review_base.id,
                     reviewer=reviewer_username,
                     assigned_by=None,
                     assigned_date=get_current_time(),
-                    assignment_status="pending",
+                    assignment_status="assigned",
+                    assignment_source="auto",
                 )
                 db.add(assignment)
                 assigned.append(assignment)

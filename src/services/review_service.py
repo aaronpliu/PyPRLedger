@@ -242,9 +242,9 @@ class ReviewService:
                     if assignment
                     else None
                 ),
-                "assignment_status": (
-                    assignment.assignment_status if assignment else "auto_created"
-                ),
+                # No assignment row means nobody has been put on the task: that is
+                # the "open" state, not an assignment status of its own.
+                "assignment_status": assignment.assignment_status if assignment else "open",
             }
         )
         return review_dict

@@ -42,7 +42,14 @@ class ReviewerAssignmentResponse(BaseModel):
     assigned_by: str | None = None
     assigned_by_info: dict[str, Any] | None = None  # Enriched assigner details
     assigned_date: datetime | None = None
-    assignment_status: str = "pending"
+    # Lifecycle of the assignment itself: assigned -> in_progress -> completed. A
+    # review nobody has been put on carries no assignment at all, and is reported as
+    # "open" where a single status has to stand for the task.
+    assignment_status: str = "assigned"
+    # "manual" when a person put the reviewer here, "auto" when an assignment rule
+    # did. Stored on the assignment rather than inferred from its status, so the
+    # status keeps describing progress alone.
+    assignment_source: str = "manual"
     reviewer_comments: str | None = None
     created_date: datetime
     updated_date: datetime
@@ -55,7 +62,7 @@ class AnalyticsReviewerItem(BaseModel):
 
     reviewer: str | None = None
     reviewer_info: dict[str, Any] | None = None
-    assignment_status: str = "pending"
+    assignment_status: str = "assigned"
 
     model_config = {"from_attributes": True}
 
@@ -122,7 +129,7 @@ class AssignReviewerRequest(BaseModel):
     reviewer: str = Field(..., min_length=1, max_length=64, description="Reviewer username")
     assignment_status: str = Field(
         default="assigned",
-        description="Initial assignment status (pending, assigned, in_progress)",
+        description="Initial assignment status (assigned, in_progress)",
     )
 
 
@@ -130,6 +137,6 @@ class UpdateAssignmentStatusRequest(BaseModel):
     """Request schema for updating assignment status"""
 
     assignment_status: str = Field(
-        ..., description="New status (pending, assigned, in_progress, completed)"
+        ..., description="New status (assigned, in_progress, completed)"
     )
     reviewer_comments: str | None = Field(None, description="Optional comments")

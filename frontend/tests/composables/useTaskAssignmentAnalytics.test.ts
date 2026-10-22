@@ -134,8 +134,8 @@ describe('useTaskAssignmentAnalytics summary', () => {
 
     it('never exceeds the total', () => {
       const summary = summaryOf([
-        review({ id: 1, pull_request_id: '1', reviewers: [reviewer('alice', 'pending')] }),
-        review({ id: 2, pull_request_id: '1', reviewers: [reviewer('alice', 'pending')] }),
+        review({ id: 1, pull_request_id: '1', reviewers: [reviewer('alice', 'assigned')] }),
+        review({ id: 2, pull_request_id: '1', reviewers: [reviewer('alice', 'assigned')] }),
         review({ id: 3, pull_request_id: '2', reviewers: [reviewer('bob', 'completed')] }),
       ])
 

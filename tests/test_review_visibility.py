@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import uuid4
 
 import anyio
@@ -134,6 +135,7 @@ async def _create_review_base(
     commit_id: str,
     owner_username: str,
     source_filename: str | None = None,
+    created_date: datetime | None = None,
 ) -> PullRequestReviewBase:
     review_base = PullRequestReviewBase(
         pull_request_id=pull_request_id,
@@ -148,6 +150,8 @@ async def _create_review_base(
         pull_request_status="open",
         pull_request_user=owner_username,
     )
+    if created_date is not None:
+        review_base.created_date = created_date
     db.add(review_base)
     await db.flush()
     return review_base
@@ -254,6 +258,13 @@ async def _test_review_service_lists_assigned_and_self_raised_reviews(
     assert any(review["reviewer"] == alice.username for review in reviews)
     assert not any(review["reviewer"] == bob.username for review in reviews)
     assert sum(1 for review in reviews if review["reviewer"] is None) == 2
+    # A row with nobody on it is an open task, a status of its own, rather than an
+    # assignment that has not started.
+    assert all(
+        review["assignment_status"] == "open"
+        for review in reviews
+        if review["reviewer"] is None
+    )
 
 
 def test_review_service_lists_assigned_and_self_raised_reviews():
@@ -483,3 +494,120 @@ def test_score_submission_rejects_self_raised_review_without_assignment():
         _run_with_test_session,
         _test_score_submission_rejects_self_raised_review_without_assignment,
     )
+
+
+async def _test_get_reviews_prioritizes_unassigned_then_newest(
+    db_session: AsyncSession,
+) -> None:
+    suffix = uuid4().hex[:8]
+    project, repository = await _create_project_repository(db_session, suffix)
+
+    alice = await _create_bitbucket_user(
+        db_session, suffix=suffix, username=f"alice-{suffix}", is_reviewer=True
+    )
+
+    unassigned_new = await _create_review_base(
+        db_session,
+        project=project,
+        repository=repository,
+        pull_request_id=f"pr-unassigned-new-{suffix}",
+        commit_id=f"g{suffix}1",
+        owner_username=alice.username,
+        created_date=datetime(2026, 3, 10, 12, 0),
+    )
+    unassigned_old = await _create_review_base(
+        db_session,
+        project=project,
+        repository=repository,
+        pull_request_id=f"pr-unassigned-old-{suffix}",
+        commit_id=f"h{suffix}2",
+        owner_username=alice.username,
+        created_date=datetime(2026, 3, 1, 12, 0),
+    )
+    assigned_new = await _create_review_base(
+        db_session,
+        project=project,
+        repository=repository,
+        pull_request_id=f"pr-assigned-new-{suffix}",
+        commit_id=f"i{suffix}3",
+        owner_username=alice.username,
+        created_date=datetime(2026, 3, 12, 12, 0),
+    )
+    await _assign_review(db_session, review_base=assigned_new, reviewer_username=alice.username)
+
+    assigned_old = await _create_review_base(
+        db_session,
+        project=project,
+        repository=repository,
+        pull_request_id=f"pr-assigned-old-{suffix}",
+        commit_id=f"j{suffix}4",
+        owner_username=alice.username,
+        created_date=datetime(2026, 3, 2, 12, 0),
+    )
+    await _assign_review(db_session, review_base=assigned_old, reviewer_username=alice.username)
+
+    await db_session.commit()
+
+    service = MultiReviewerService()
+    reviews, total = await service.get_reviews(
+        db=db_session,
+        page=1,
+        page_size=20,
+        project_key=project.project_key,
+    )
+
+    assert total == 4
+    assert [review.pull_request_id for review in reviews] == [
+        unassigned_new.pull_request_id,
+        unassigned_old.pull_request_id,
+        assigned_new.pull_request_id,
+        assigned_old.pull_request_id,
+    ]
+
+
+def test_get_reviews_prioritizes_unassigned_then_newest():
+    anyio.run(_run_with_test_session, _test_get_reviews_prioritizes_unassigned_then_newest)
+
+
+async def _test_get_reviews_filters_unassigned_only(db_session: AsyncSession) -> None:
+    suffix = uuid4().hex[:8]
+    project, repository = await _create_project_repository(db_session, suffix)
+
+    alice = await _create_bitbucket_user(
+        db_session, suffix=suffix, username=f"alice-{suffix}", is_reviewer=True
+    )
+
+    unassigned = await _create_review_base(
+        db_session,
+        project=project,
+        repository=repository,
+        pull_request_id=f"pr-no-assignment-{suffix}",
+        commit_id=f"k{suffix}1",
+        owner_username=alice.username,
+    )
+    assigned = await _create_review_base(
+        db_session,
+        project=project,
+        repository=repository,
+        pull_request_id=f"pr-has-assignment-{suffix}",
+        commit_id=f"l{suffix}2",
+        owner_username=alice.username,
+    )
+    await _assign_review(db_session, review_base=assigned, reviewer_username=alice.username)
+
+    await db_session.commit()
+
+    service = MultiReviewerService()
+    reviews, total = await service.get_reviews(
+        db=db_session,
+        page=1,
+        page_size=20,
+        reviewer="__unassigned__",
+    )
+
+    assert total == 1
+    assert [review.pull_request_id for review in reviews] == [unassigned.pull_request_id]
+
+
+def test_get_reviews_filters_unassigned_only():
+    anyio.run(_run_with_test_session, _test_get_reviews_filters_unassigned_only)

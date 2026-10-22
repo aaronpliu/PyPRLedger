@@ -293,8 +293,8 @@ Redis PubSub → SSEBroker (singleton) → asyncio.Queue per client → SSE stre
 | ID | Requirement | Priority |
 |---|---|---|
 | FR-5.2.1 | Each review can have multiple reviewer assignments | P0 |
-| FR-5.2.2 | Each assignment tracks: reviewer, assigned_by, assignment_status, comments | P0 |
-| FR-5.2.3 | Assignment status lifecycle: `pending` → `assigned` → `in_progress` → `completed` | P0 |
+| FR-5.2.2 | Each assignment tracks: reviewer, assigned_by, assignment_status, assignment_source, comments | P0 |
+| FR-5.2.3 | Assignment status lifecycle: `assigned` → `in_progress` → `completed`; a task with no assignment is `open`, and `assignment_source` records `auto` or `manual` | P0 |
 | FR-5.2.4 | Unique constraint: one assignment per (review, reviewer) pair | P0 |
 | FR-5.2.5 | Manual assignment by review_admin via task assignment endpoints | P0 |
 | FR-5.2.6 | Automatic assignment via auto-assignment engine when no reviewer specified | P1 |
@@ -681,7 +681,7 @@ Request: GET /reviews?app_names=member,tv
 | `project` | Code review projects | `id`, `project_id`, `project_name`, `project_key`, `project_url`, `git_provider` |
 | `repository` | Repos per project | `id`, `repository_id`, `project_key` (FK), `repository_name`, `repository_slug` |
 | `pull_request_review_base` | PR review records | `id`, `pull_request_id`, `project_key` (FK), `repository_slug` (FK), `source_filename`, `source_branch`, `target_branch`, `git_code_diff` (MEDIUMTEXT), `pull_request_status`, `pull_request_user` (FK→user, SET NULL), `ai_review_id` |
-| `pull_request_review_assignment` | Reviewer assignments | `id`, `review_base_id` (FK), `reviewer` (FK→user, SET NULL), `assigned_by` (FK→user), `assignment_status`, `reviewer_comments` |
+| `pull_request_review_assignment` | Reviewer assignments | `id`, `review_base_id` (FK), `reviewer` (FK→user, SET NULL), `assigned_by` (FK→user), `assignment_status`, `assignment_source`, `reviewer_comments` |
 | `pull_request_score` | Review scores | `id`, `pull_request_id`, `project_key` (FK), `repository_slug` (FK), `source_filename`, `reviewer` (FK→user, SET NULL), `score` (Float), `score_description`, `active` |
 | `pull_request_review_raw` | Raw incoming payloads | `id`, `request_payload` (JSON), `status`, `error_message`, `review_base_id` (FK) |
 | `pull_request_review_association` | Review linking | `id`, `review_id` (FK), `associated_review_id` (FK), `created_by` (FK→auth_user) |
