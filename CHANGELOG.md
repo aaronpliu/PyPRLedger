@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-10-22
+
+**Backend Version**: 1.33.0
+**Frontend Version**: 1.28.0
+
+### Added
+- An assignment says who put the reviewer there. A reviewer placed by an assignment rule is recorded as `auto` and the task detail page names it "Auto-assigned", where the assigner column used to read as nobody; a reviewer a person added stays `manual`. The answer is stored on the assignment itself (`assignment_source`) rather than inferred from its status, so the status is left free to describe progress alone
+- The task pages name the state of a task nobody is on: **Open**. It sits beside the reviewers heading in the detail page and in the reviewers column of the list, and it is what the API reports for a review with no assignment (`assignment_status: "open"`), in place of the `auto_created` sentinel
+- The AI summary of a release note is asked again when the provider is momentarily out of capacity. A 429 or 5xx is retried a couple of times with backoff - honouring a `Retry-After` only up to the point where waiting would outlast the request - while a timeout, an unreachable host or a 4xx is reported at once, because repeating it only repeats the wait; the fallback notice carries a "Try again" action
+
+### Changed
+- Assignment status now describes progress only: `assigned` → `in_progress` → `completed`. `pending` is retired, because it meant two things at once - "nobody has been put on this task" and "a rule put someone here who has not started" - so a review with a reviewer on it read as unassigned. Migration `036` moves the historical `pending` rows to `assigned`, records `auto` as their source, and makes `assigned` the column default; the task detail status dropdown no longer offers Pending
+- The task list puts a review nobody has been put on ahead of the rest, and within each group the newest first. A reviewer a rule placed counts as assigned from the moment the rule writes it, rather than waiting for them to start, so the amber "needs attention" row, the hide-archived filter and the sort all follow the same rule
+- The status descriptions in all three interface languages say what each state means in the new vocabulary, with an `open` description for the unassigned task, and the detail page's status tag follows the interface language rather than hard-coded English
+- Upgrading this release needs `alembic upgrade head` before the new code runs: migration `036` adds `assignment_source`, backfills it from the retired `pending` status, and changes `assignment_status`'s default to `assigned`
+
+### Fixed
+- Opening a review marks it in progress for a reviewer an assignment rule placed. The check only recognised the `assigned` status, which a rule's reviewer never carried, so the task stayed at its first state until the reviewer submitted a score
+
+---
+
 ## [1.32.0] - 2026-10-20
 
 **Backend Version**: 1.32.0
