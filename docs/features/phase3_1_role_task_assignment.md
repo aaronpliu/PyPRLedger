@@ -696,7 +696,8 @@ In the "Task Assignment Details" page, each reviewer entry displays:
    - 🟡 Yellow: In Progress
    - 🟢 Green: Completed
 
-   A task with no reviewer shows an **Open** tag next to the reviewers heading.
+   A task with no reviewer is read from the amber row and the assign action rather
+   than a status tag of its own.
 
 2. **Tooltip**: Hovering over the status tag shows a detailed description:
    - **Assigned**: "A reviewer has been assigned and has not started on it yet"
@@ -709,7 +710,7 @@ In the "Task Assignment Details" page, each reviewer entry displays:
 #### Task Assignment List View
 
 In the main "Task Assignment" list view:
-- Reviewer tags show status with tooltips; a task with no reviewer shows an **Open** tag
+- Reviewer tags show status with tooltips
 - Progress bar indicates completion percentage (completed/total reviewers)
 - Visual indicators help admins quickly identify task states
 
@@ -723,7 +724,6 @@ All status labels and descriptions are internationalized and support:
 Translation keys follow the pattern:
 - Labels: `reviews.{status}` (e.g., `reviews.open`, `reviews.assigned`)
 - Descriptions: `reviews.assignment_status_descriptions.{status}`
-- The task-level open label: `task_assignment.status_open`
 
 ### Database Schema
 

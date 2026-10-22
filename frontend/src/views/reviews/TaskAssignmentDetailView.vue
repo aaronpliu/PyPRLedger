@@ -85,9 +85,6 @@
           <div class="reviewers-column">
             <div class="section-header">
               <h3>{{ t('task_assignment.detail.reviewers') }} ({{ review.total_reviewers }})</h3>
-              <el-tag v-if="review.total_reviewers === 0" type="warning" size="small">
-                {{ t('task_assignment.status_open', 'Open') }}
-              </el-tag>
               <el-button type="primary" size="small" @click="handleAssignReviewer">
                 {{ t('task_assignment.detail.assign_reviewer') }}
               </el-button>

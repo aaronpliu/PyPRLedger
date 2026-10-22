@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The task assignment list and detail page no longer put an "Open" tag on a task nobody has been assigned: the amber row and the assign action already say it, and `open` stays the status the API reports for a task with no reviewer
+
 ## [1.33.0] - 2026-10-22
 
 **Backend Version**: 1.33.0

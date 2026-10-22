@@ -174,14 +174,6 @@
                   <span v-if="reviewer.assignment_status === 'completed'" class="status-icon">✓</span>
                 </el-tag>
               </el-tooltip>
-              <el-tag
-                v-if="row.reviewers.length === 0"
-                type="warning"
-                size="small"
-                class="reviewer-tag"
-              >
-                {{ t('task_assignment.status_open', 'Open') }}
-              </el-tag>
               <el-button
                 v-if="row.reviewers.length === 0"
                 type="primary"
