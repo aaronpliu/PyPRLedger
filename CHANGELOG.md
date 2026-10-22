@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - The task assignment list and detail page no longer put an "Open" tag on a task nobody has been assigned: the amber row and the assign action already say it, and `open` stays the status the API reports for a task with no reviewer
 
+### Fixed
+- A tab left open across a deployment recovers instead of going dead. Route components are lazy imports named after their content, so after a new build the tab's next click asked for a chunk the server no longer had, rejected with "Failed to fetch dynamically imported module", and - with nothing listening - looked like a click that did nothing. A failure of that kind now tells the reader a new version has been deployed and offers to reload, which fetches the `index.html` the server serves now and the chunks it names. The question is asked rather than reloading on its own, so a half-written score or comment is not thrown away; it is asked once, cannot be dismissed by clicking outside or pressing Esc, and choosing Later leaves the page as it is instead of asking again on every click. Vite's own `vite:preloadError` is handled the same way
+- A missing file under `/assets/` is answered as a 404 instead of with the SPA shell. The shell was handed to the browser for a JavaScript URL, which it then could not execute, and the image's nginx config also cached it under the chunk's own name; the config now keeps the fallback to real routes and leaves hashed assets to be missing when they are missing
+
 ## [1.33.0] - 2026-10-22
 
 **Backend Version**: 1.33.0

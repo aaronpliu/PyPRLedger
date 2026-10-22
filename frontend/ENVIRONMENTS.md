@@ -101,6 +101,19 @@ const jwtStorageKey = import.meta.env.VITE_JWT_STORAGE_KEY
 2. **Test Deployment**: Run `npm run build:test` and deploy the `dist/` folder
 3. **Production Deployment**: Run `npm run build:prod` and deploy the `dist/` folder
 
+### Replacing a build that is already being used
+
+Every asset is named after its own content, so a new build replaces all chunk
+filenames at once. Copy the new `dist/` over the served directory without emptying
+it first: a tab that was open during the deploy still names the chunks of the build
+before it, and deleting them turns its next click into a 404. When the app meets
+such a missing chunk it tells the reader a new version is available and offers to
+reload, which only helps if the files the new `index.html` names are there.
+
+Serve `index.html` with `no-cache`, and `/assets/` as `immutable` - but answer a
+missing file under `/assets/` as a 404, never with the SPA fallback. The browser
+would take that HTML for a module and fail to execute it.
+
 ## Notes
 
 - Never commit sensitive data (API keys, secrets) to `.env` files

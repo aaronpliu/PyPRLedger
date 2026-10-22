@@ -74,6 +74,12 @@
     "viewAll": "View All",
     "backToHome": "Back to Home",
     "refresh": "Refresh",
+    "new_version": {
+      "title": "A new version is available",
+      "message": "This page was opened before the latest deployment, so part of it can no longer be loaded. Reload to continue with the new version.",
+      "refresh": "Reload",
+      "later": "Later"
+    },
     "enabled": "Enabled",
     "disabled": "Disabled",
     "fullscreen": "Fullscreen",

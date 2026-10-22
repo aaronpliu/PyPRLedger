@@ -74,6 +74,12 @@
     "viewAll": "查看全部",
     "backToHome": "返回首頁",
     "refresh": "重新整理",
+    "new_version": {
+      "title": "有新版本可用",
+      "message": "此頁面是在最新部署之前開啟的，部分內容已無法載入。請重新整理以繼續使用新版本。",
+      "refresh": "重新整理頁面",
+      "later": "稍後"
+    },
     "enabled": "啟用",
     "disabled": "停用",
     "fullscreen": "全螢幕",
