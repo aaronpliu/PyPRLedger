@@ -31,6 +31,7 @@ from src.schemas.review import (
 )
 from src.services.notification_service import NotificationService
 from src.services.project_registry_service import ProjectRegistryService
+from src.utils.ai_review_utils import extract_issue_severities
 from src.utils.metrics import MetricsCollector, metrics
 from src.utils.timezone import get_current_time
 
@@ -267,28 +268,21 @@ class MultiReviewerService:
         total_result = await db.execute(count_stmt)
         total = total_result.scalar() or 0
 
-        # Apply pagination with priority sorting for unassigned tasks
-        # Unassigned tasks (no reviewers or all pending) should appear first
-
-        # Create a CASE expression to prioritize unassigned tasks
-        # Priority 0 = unassigned (no active reviewers), Priority 1 = assigned
-
-        # Build EXISTS subquery to check if review has any non-pending assignments
-        has_active_reviewers = (
+        # Apply pagination with priority sorting: a review nobody has been put on
+        # comes first. A reviewer who has been assigned but has not started yet is
+        # still a reviewer - that is exactly what the automatic rules write - so the
+        # test is whether the review carries any assignment at all, not how far
+        # along one of them is.
+        has_any_assignment = (
             select(1)
-            .where(
-                and_(
-                    PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id,
-                    PullRequestReviewAssignment.assignment_status != "pending",
-                )
-            )
+            .where(PullRequestReviewAssignment.review_base_id == PullRequestReviewBase.id)
             .correlate(PullRequestReviewBase)  # Explicitly correlate with outer query
             .exists()
         )
 
         priority_case = case(
-            (~has_active_reviewers, 0),  # No active reviewers = unassigned (priority 0)
-            else_=1,  # Has active reviewers = assigned (priority 1)
+            (~has_any_assignment, 0),  # Nobody assigned = priority 0
+            else_=1,  # Someone assigned = priority 1
         )
 
         stmt = stmt.order_by(priority_case, desc(PullRequestReviewBase.created_date))
@@ -539,7 +533,7 @@ class MultiReviewerService:
                 AnalyticsReviewerItem(
                     reviewer=reviewer_name,
                     reviewer_info=reviewer_info,
-                    assignment_status=assign_row.assignment_status or "pending",
+                    assignment_status=assign_row.assignment_status or "assigned",
                 )
             )
 
@@ -604,21 +598,7 @@ class MultiReviewerService:
     @staticmethod
     def _extract_issue_severities(ai_suggestions: dict[str, Any] | None) -> list[str]:
         """Extract issue severity strings from AI suggestions (keeps payload slim)"""
-        if not ai_suggestions:
-            return []
-
-        issues = ai_suggestions.get("issues")
-        if not isinstance(issues, list):
-            return []
-
-        severities: list[str] = []
-        for issue in issues:
-            if not isinstance(issue, dict):
-                continue
-            severity = str(issue.get("severity") or "").lower()
-            if severity:
-                severities.append(severity)
-        return severities
+        return extract_issue_severities(ai_suggestions)
 
     async def get_review_by_id(
         self, db: AsyncSession, review_id: int

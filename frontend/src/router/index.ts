@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { installStaleChunkRecovery } from './staleChunkRecovery'
 
 const routes: RouteRecordRaw[] = [
   // Auth routes
@@ -201,12 +202,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/errors/ForbiddenView.vue'),
   },
   {
-    path: '/service-unavailable',
-    name: 'ServiceUnavailable',
-    component: () => import('@/views/errors/ServiceUnavailableView.vue'),
-    meta: { requiresAuth: false },
-  },
-  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/errors/NotFoundView.vue'),
@@ -217,6 +212,9 @@ const router = createRouter({
   history: createWebHistory(),
   routes,
 })
+
+// A tab left open across a deployment asks for chunks the new build replaced.
+installStaleChunkRecovery(router)
 
 // Navigation guard
 router.beforeEach(async (to, _from) => {

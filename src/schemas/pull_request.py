@@ -27,7 +27,7 @@ class ReviewBase(BaseModel):
         None,
         min_length=1,
         max_length=64,
-        description="Reviewer username (NULL for pending assignment)",
+        description="Reviewer username (NULL when the task has no reviewer yet)",
     )
     pull_request_user: str | None = Field(
         None, min_length=1, max_length=64, description="Pull request user username"
@@ -291,7 +291,7 @@ class ReviewResponse(BaseModel):
         None,
         min_length=1,
         max_length=64,
-        description="Reviewer username (NULL for pending assignment)",
+        description="Reviewer username (NULL when the task has no reviewer yet)",
     )
     pull_request_user: str | None = Field(
         None, min_length=1, max_length=64, description="Pull request user username"
@@ -311,7 +311,10 @@ class ReviewResponse(BaseModel):
     )
     assignment_status: str | None = Field(
         None,
-        description="Assignment status for reviewer-specific review rows",
+        description=(
+            "Assignment status for reviewer-specific review rows: open when nobody is "
+            "assigned, otherwise assigned, in_progress or completed"
+        ),
     )
     pull_request_status: str = Field(..., description="Pull request status")
     metadata: dict[str, Any] | None = Field(None, description="Additional metadata")

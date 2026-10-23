@@ -232,6 +232,107 @@ async def test_an_error_body_under_a_200_is_reported(monkeypatch: pytest.MonkeyP
     assert "quota exhausted" in completion.error
 
 
+# --------------------------------------------------------------------------- #
+# Asking again when the provider is busy
+# --------------------------------------------------------------------------- #
+
+
+def settle_instantly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Waits between attempts are the provider's business, not the suite's."""
+
+    async def no_wait(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(llm_module.asyncio, "sleep", no_wait)
+
+
+async def test_a_busy_provider_is_asked_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    """429 is "not now", and the same call a moment later is often answered."""
+    settle_instantly(monkeypatch)
+    statuses = [429, 200]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        status = statuses.pop(0)
+        if status == 200:
+            return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+        return httpx.Response(status, json={"error": {"message": "slow down"}})
+
+    install_transport(monkeypatch, handler)
+
+    completion = await LlmService(config()).complete([{"role": "user", "content": "hi"}])
+
+    assert completion.text == "ok"
+    assert completion.error is None
+    assert statuses == []
+
+
+async def test_a_provider_that_stays_busy_is_reported_after_the_last_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settle_instantly(monkeypatch)
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(503, json={"error": {"message": "overloaded"}})
+
+    install_transport(monkeypatch, handler)
+
+    completion = await LlmService(config()).complete([{"role": "user", "content": "hi"}])
+
+    assert completion.text is None
+    assert completion.error is not None
+    assert "HTTP 503" in completion.error
+    # bounded: the reader is waiting on this request
+    assert len(calls) == llm_module.MAX_ATTEMPTS
+
+
+async def test_a_refusal_that_will_not_change_is_not_asked_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unknown model or a bad key fails the same way however often it is asked."""
+    settle_instantly(monkeypatch)
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(400, json={"error": {"message": "model not found"}})
+
+    install_transport(monkeypatch, handler)
+
+    completion = await LlmService(config()).complete([{"role": "user", "content": "hi"}])
+
+    assert completion.error is not None
+    assert len(calls) == 1
+
+
+async def test_a_dropped_connection_is_asked_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A connection cut mid-answer is not a provider that is refusing."""
+    settle_instantly(monkeypatch)
+    outcomes: list[str] = ["drop", "answer"]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if outcomes.pop(0) == "drop":
+            raise httpx.ReadError("connection reset by peer")
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    install_transport(monkeypatch, handler)
+
+    completion = await LlmService(config()).complete([{"role": "user", "content": "hi"}])
+
+    assert completion.text == "ok"
+
+
+async def test_a_provider_hint_is_believed_up_to_the_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A retry-after longer than the ceiling is not waited out."""
+    assert LlmService._retry_wait(1, "2") == 2.0
+    assert LlmService._retry_wait(1, "600") == llm_module.RETRY_BACKOFF_SECONDS
+    assert LlmService._retry_wait(1, "soon") == llm_module.RETRY_BACKOFF_SECONDS
+    assert LlmService._retry_wait(2, None) == llm_module.RETRY_BACKOFF_SECONDS * 2
+
+
 def test_redact_cuts_the_message_to_a_reportable_length() -> None:
     assert redact("bad key sk-secret\n\n", "sk-secret") == "bad key ***"
     assert len(redact("x" * 500, "sk-secret")) == llm_module.MAX_ERROR_CHARS

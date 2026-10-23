@@ -23,7 +23,13 @@ vi.mock('element-plus', () => ({
 
 import request from '@/utils/request'
 import { resetProgress, useProgress } from '@/composables/useProgress'
-import { backendUnavailable, markBackendAvailable } from '@/composables/useBackendAvailability'
+import {
+  backendSuspect,
+  backendUnavailable,
+  confirmBackendDown,
+  markBackendAvailable,
+  markBackendUnavailable,
+} from '@/composables/useBackendAvailability'
 import { CLIENT_DEVICE_HEADER } from '@/utils/deviceInfo'
 
 /** An adapter that holds the request open until ``release`` is called, so a test
@@ -95,39 +101,65 @@ describe('service outage detection', () => {
     vi.unstubAllGlobals()
   })
 
-  it('flags the backend as unavailable after the probe confirms it is down', async () => {
+  function probeFails() {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
+  }
+
+  function requestCannotReach() {
     request.defaults.adapter = async (config) => {
       throw Object.assign(new Error('Network Error'), { config })
     }
+  }
+
+  it('leaves the connection in doubt after one unanswered request', async () => {
+    probeFails()
+    requestCannotReach()
 
     await expect(request.get('/release/notes')).rejects.toThrow('Network Error')
-    await vi.waitFor(() => expect(backendUnavailable.value).toBe(true))
-  })
-
-  it('keeps the page away when a request fails but the backend answers the probe', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
-    request.defaults.adapter = async (config) => {
-      throw Object.assign(new Error('Network Error'), { config })
-    }
-
-    await expect(request.get('/release/notes')).rejects.toThrow('Network Error')
-    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
+    await vi.waitFor(() => expect(backendSuspect.value).toBe(true))
+    // one request and one probe is a doubt about the connection, not a verdict
     expect(backendUnavailable.value).toBe(false)
   })
 
-  it('detects the outage from background traffic too', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
-    request.defaults.adapter = async (config) => {
-      throw Object.assign(new Error('Network Error'), { config })
-    }
+  it('calls the service unavailable when the next probe fails too', async () => {
+    probeFails()
+    requestCannotReach()
 
-    await expect(request.get('/auth/heartbeat')).rejects.toThrow('Network Error')
-    await vi.waitFor(() => expect(backendUnavailable.value).toBe(true))
+    await expect(request.get('/release/notes')).rejects.toThrow('Network Error')
+    await vi.waitFor(() => expect(backendSuspect.value).toBe(true))
+    await flushPromises()
+
+    // the shell keeps asking while in doubt, and the second answer settles it
+    await confirmBackendDown()
+
+    expect(backendUnavailable.value).toBe(true)
   })
 
-  it('confirms an outage when a 5xx answers for a backend that is gone', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
+  it('keeps the page away when a request fails but the backend answers the probe', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200 }))
+    requestCannotReach()
+
+    await expect(request.get('/release/notes')).rejects.toThrow('Network Error')
+    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
+    expect(backendSuspect.value).toBe(false)
+    expect(backendUnavailable.value).toBe(false)
+  })
+
+  it('detects an outage from background traffic too', async () => {
+    probeFails()
+    requestCannotReach()
+
+    await expect(request.get('/auth/heartbeat')).rejects.toThrow('Network Error')
+    await vi.waitFor(() => expect(backendSuspect.value).toBe(true))
+    await flushPromises()
+
+    await confirmBackendDown()
+
+    expect(backendUnavailable.value).toBe(true)
+  })
+
+  it('asks the probe when a gateway answers for a backend that is gone', async () => {
+    probeFails()
     request.defaults.adapter = async (config) => {
       throw Object.assign(new Error('Bad Gateway'), {
         config,
@@ -136,11 +168,12 @@ describe('service outage detection', () => {
     }
 
     await expect(request.get('/release/notes')).rejects.toThrow('Bad Gateway')
-    await vi.waitFor(() => expect(backendUnavailable.value).toBe(true))
+    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
+    expect(backendSuspect.value).toBe(true)
   })
 
   it('keeps the page away when a real 5xx is answered and the backend is healthy', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200 }))
     request.defaults.adapter = async (config) => {
       throw Object.assign(new Error('Server Error'), {
         config,
@@ -150,7 +183,24 @@ describe('service outage detection', () => {
 
     await expect(request.get('/release/notes')).rejects.toThrow('Server Error')
     await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
+    expect(backendSuspect.value).toBe(false)
     expect(backendUnavailable.value).toBe(false)
+  })
+
+  it('a request that gets an answer ends the outage', async () => {
+    markBackendUnavailable()
+    request.defaults.adapter = async (config) => ({
+      data: { ok: true },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config,
+    })
+
+    await request.get('/release/notes')
+
+    expect(backendUnavailable.value).toBe(false)
+    expect(backendSuspect.value).toBe(false)
   })
 })
 

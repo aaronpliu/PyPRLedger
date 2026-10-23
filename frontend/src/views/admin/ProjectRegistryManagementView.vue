@@ -366,8 +366,7 @@ const registerForm = reactive({
 
 const getProviderLabel = (provider: string) => getGitProviderLabel(provider)
 
-const getProviderTagType = (provider: string): '' | 'success' | 'warning' | 'info' | 'danger' =>
-  getGitProviderTagType(provider)
+const getProviderTagType = (provider: string) => getGitProviderTagType(provider)
 
 const updateForm = reactive({
   newAppName: '',

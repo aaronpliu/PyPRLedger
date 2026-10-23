@@ -6,13 +6,13 @@
       @click="openSearch"
       class="search-trigger"
     >
-      <span class="search-hint">Search...</span>
+      <span class="search-hint">{{ t('global_search.trigger') }}</span>
       <kbd class="shortcut">Ctrl+K</kbd>
     </el-button>
 
     <!-- Search Dialog -->
     <el-dialog
-      v-model="dialogVisible"
+      v-model="isOpen"
       width="600px"
       :show-close="false"
       class="search-dialog"
@@ -23,7 +23,7 @@
           <el-input
             ref="searchInputRef"
             v-model="searchQuery"
-            placeholder="Search reviews, scores, users..."
+            :placeholder="t('global_search.placeholder')"
             :prefix-icon="Search"
             clearable
             size="large"
@@ -42,8 +42,8 @@
         <div v-if="!searchQuery && recentSearches.length > 0" class="recent-section">
           <div class="section-title">
             <el-icon><Clock /></el-icon>
-            <span>Recent Searches</span>
-            <el-button link size="small" @click="clearRecentSearches">Clear</el-button>
+            <span>{{ t('global_search.recent_searches') }}</span>
+            <el-button link size="small" @click="clearRecentSearches">{{ t('global_search.clear') }}</el-button>
           </div>
           <div
             v-for="(search, index) in recentSearches"
@@ -60,17 +60,17 @@
         <div v-else-if="!searchQuery" class="suggestions-section">
           <div class="section-title">
             <el-icon><Guide /></el-icon>
-            <span>Search Tips</span>
+            <span>{{ t('global_search.tips') }}</span>
           </div>
           <div class="suggestion-list">
             <div class="suggestion-item">
-              <strong>Reviews:</strong> Search by PR ID, project key, or repository
+              <strong>{{ t('global_search.tip_reviews_label') }}</strong> {{ t('global_search.tip_reviews') }}
             </div>
             <div class="suggestion-item">
-              <strong>Users:</strong> Search by username or display name
+              <strong>{{ t('global_search.tip_users_label') }}</strong> {{ t('global_search.tip_users') }}
             </div>
             <div class="suggestion-item">
-              <strong>Projects:</strong> Search by project name, key, or app name
+              <strong>{{ t('global_search.tip_projects_label') }}</strong> {{ t('global_search.tip_projects') }}
             </div>
           </div>
         </div>
@@ -79,13 +79,13 @@
         <div v-else-if="searchQuery.length >= 2 && !hasSearched && !loading" class="enter-hint-section">
           <div class="enter-hint">
             <kbd>Enter</kbd>
-            <span>to search for &quot;{{ searchQuery }}&quot;</span>
+            <span>{{ t('global_search.enter_hint', { query: searchQuery }) }}</span>
           </div>
         </div>
 
         <!-- Search Results List -->
         <div v-else-if="searchResults.length > 0" class="results-section">
-          <div class="results-count">{{ searchResults.length }} results found</div>
+          <div class="results-count">{{ t('global_search.results_found', { count: searchResults.length }) }}</div>
           <div
             v-for="(result, index) in searchResults"
             :key="result.id"
@@ -106,7 +106,7 @@
               <div class="result-description">{{ result.description }}</div>
               <div class="result-meta">
                 <el-tag size="small" :type="getTypeTagType(result.type)">
-                  {{ result.type }}
+                  {{ typeLabel(result.type) }}
                 </el-tag>
                 <span class="result-date">{{ formatDate(result.created_at) }}</span>
               </div>
@@ -117,11 +117,11 @@
         <!-- No Results -->
         <el-empty
           v-else-if="searchQuery && !loading"
-          description="No results found"
+          :description="t('global_search.no_results')"
           :image-size="100"
         >
           <template #description>
-            <p>Try different keywords or filters</p>
+            <p>{{ t('global_search.no_results_hint') }}</p>
           </template>
         </el-empty>
       </div>
@@ -130,9 +130,9 @@
       <template #footer>
         <div class="dialog-footer">
           <span class="footer-hints">
-            <kbd>↑↓</kbd> Navigate
-            <kbd>↵</kbd> Search / Select
-            <kbd>Esc</kbd> Close
+            <kbd>↑↓</kbd> {{ t('global_search.hint_navigate') }}
+            <kbd>↵</kbd> {{ t('global_search.hint_select') }}
+            <kbd>Esc</kbd> {{ t('global_search.hint_close') }}
           </span>
         </div>
       </template>
@@ -141,21 +141,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Search, Clock, Guide, Document, Star, User, Folder } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { globalSearch, type SearchResult } from '@/api/search'
+import { useGlobalSearch } from '@/composables/useGlobalSearch'
 
 // Extend dayjs with relativeTime plugin
 dayjs.extend(relativeTime)
 
 const router = useRouter()
+const { t } = useI18n()
+const { isOpen } = useGlobalSearch()
 
 // State
-const dialogVisible = ref(false)
 const searchQuery = ref('')
 const searchResults = ref<SearchResult[]>([])
 const selectedIndex = ref(0)
@@ -217,22 +220,10 @@ const handleKeyboardShortcut = (e: KeyboardEvent) => {
   }
 }
 
-const openSearch = async () => {
-  dialogVisible.value = true
+const resetSearch = () => {
   searchQuery.value = ''
   searchResults.value = []
   selectedIndex.value = 0
-  hasSearched = false
-  
-  // Focus input after dialog opens
-  await nextTick()
-  searchInputRef.value?.focus()
-}
-
-const closeSearch = () => {
-  dialogVisible.value = false
-  searchQuery.value = ''
-  searchResults.value = []
   hasSearched = false
 
   // Clear any pending search timeout
@@ -240,6 +231,27 @@ const closeSearch = () => {
     clearTimeout(searchTimeout)
     searchTimeout = null
   }
+}
+
+// Whoever opened the dialog - toolbar button, Ctrl+K or "/" - it starts clean and focused
+watch(isOpen, async (opened) => {
+  resetSearch()
+  if (opened) {
+    await nextTick()
+    searchInputRef.value?.focus()
+  }
+})
+
+const openSearch = async () => {
+  if (isOpen.value) {
+    searchInputRef.value?.focus()
+    return
+  }
+  isOpen.value = true
+}
+
+const closeSearch = () => {
+  isOpen.value = false
 }
 
 const handleSearch = () => {
@@ -332,7 +344,7 @@ const handleResultClick = async (result: SearchResult) => {
     
     // If route doesn't exist, show error
     if (!resolved || !resolved.matched || resolved.matched.length === 0) {
-      ElMessage.warning('This page is not available')
+      ElMessage.warning(t('global_search.page_unavailable'))
       return
     }
     
@@ -347,7 +359,7 @@ const handleResultClick = async (result: SearchResult) => {
       return
     }
     
-    ElMessage.error('Failed to navigate to this page')
+    ElMessage.error(t('global_search.navigate_failed'))
   }
 }
 
@@ -381,6 +393,17 @@ const getTypeTagType = (type: string) => {
     project: 'success',
   }
   return types[type] || 'info'
+}
+
+const TYPE_LABEL_KEYS: Record<string, string> = {
+  review: 'global_search.type_review',
+  user: 'global_search.type_user',
+  project: 'global_search.type_project',
+}
+
+const typeLabel = (type: string) => {
+  const key = TYPE_LABEL_KEYS[type]
+  return key ? t(key) : type
 }
 
 const highlightMatch = (text: string, query: string) => {

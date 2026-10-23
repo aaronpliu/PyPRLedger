@@ -5,14 +5,17 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.core.database import Base
 from src.models.auto_assign_rule import PullRequestReviewAutoAssignmentRule
 from src.models.pull_request import (
+    PullRequestReviewAssignment,
     PullRequestReviewBase,
 )
 from src.models.user import User
+from src.schemas.auto_assign_rule import AutoAssignRuleCreate
 from src.schemas.pull_request import ReviewCreate
 from src.services.auto_assign_service import AutoTaskAssignmentService
 from src.utils.timezone import get_current_time
@@ -130,6 +133,73 @@ class TestRuleMatches:
         """Rule does NOT match when pull_request_status is not in the list"""
         rule = self._make_rule({"pull_request_status": ["merged"]})
         assert auto_service.rule_matches(rule, review_data) is False
+
+    def test_issue_severity_match(self, auto_service):
+        """Rule matches when any reported issue is at a listed level"""
+        rule = self._make_rule({"issue_severity": ["critical", "high"]})
+        data = ReviewCreate(
+            pull_request_id="PR-1",
+            project_key="PROJ-A",
+            repository_slug="frontend-store",
+            source_branch="feature/x",
+            target_branch="main",
+            ai_suggestions={
+                "issues": [
+                    {"severity": "low", "description": "naming"},
+                    {"severity": "high", "description": "race"},
+                ]
+            },
+        )
+        assert auto_service.rule_matches(rule, data) is True
+
+    def test_issue_severity_no_match_below_the_level(self, auto_service):
+        """Rule does NOT match when only milder issues were reported"""
+        rule = self._make_rule({"issue_severity": ["critical", "high"]})
+        data = ReviewCreate(
+            pull_request_id="PR-2",
+            project_key="PROJ-A",
+            repository_slug="frontend-store",
+            source_branch="feature/x",
+            target_branch="main",
+            ai_suggestions={"issues": [{"severity": "low", "description": "naming"}]},
+        )
+        assert auto_service.rule_matches(rule, data) is False
+
+    def test_issue_severity_requires_findings(self, auto_service, review_data):
+        """A review with no AI findings has no severity and cannot match"""
+        rule = self._make_rule({"issue_severity": ["critical", "high", "medium", "low"]})
+        assert auto_service.rule_matches(rule, review_data) is False
+
+    def test_issue_severity_is_case_insensitive(self, auto_service):
+        """Stored severities are compared in lower case"""
+        rule = self._make_rule({"issue_severity": ["high"]})
+        data = ReviewCreate(
+            pull_request_id="PR-3",
+            project_key="PROJ-A",
+            repository_slug="frontend-store",
+            source_branch="feature/x",
+            target_branch="main",
+            ai_suggestions={"issues": [{"severity": "High"}]},
+        )
+        assert auto_service.rule_matches(rule, data) is True
+
+    def test_issue_severity_and_other_conditions(self, auto_service):
+        """Severity is ANDed with the other conditions like any other key"""
+        rule = self._make_rule(
+            {
+                "project_key": ["PROJ-B"],
+                "issue_severity": ["high"],
+            }
+        )
+        data = ReviewCreate(
+            pull_request_id="PR-4",
+            project_key="PROJ-A",
+            repository_slug="frontend-store",
+            source_branch="feature/x",
+            target_branch="main",
+            ai_suggestions={"issues": [{"severity": "high"}]},
+        )
+        assert auto_service.rule_matches(rule, data) is False
 
     def test_empty_conditions_no_match(self, auto_service, review_data):
         """Empty conditions dict matches nothing (safe default)"""
@@ -272,7 +342,10 @@ class TestAutoAssignIntegration:
             assignment = assignments[0]
             assert assignment.reviewer == "alice"
             assert assignment.assigned_by is None  # NULL because FK references user(username)
-            assert assignment.assignment_status == "pending"
+            # A rule's reviewer is assigned, exactly like one a person placed; the
+            # source is what tells the two apart, not the status.
+            assert assignment.assignment_status == "assigned"
+            assert assignment.assignment_source == "auto"
             assert assignment.review_base_id == review_base.id
 
         async with engine.begin() as conn:
@@ -523,3 +596,72 @@ class TestAutoAssignIntegration:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
         await engine.dispose()
+
+
+# ======================================================================
+# Schema validation of the severity condition
+# ======================================================================
+
+
+class TestAutoAssignRuleSchema:
+    """The severity list is normalized and typos are rejected at the API edge"""
+
+    def test_severities_are_normalized(self):
+        rule = AutoAssignRuleCreate(
+            name="critical-first",
+            conditions={"issue_severity": ["HIGH", "high", " low "]},
+            assign_to=["alice"],
+        )
+        assert rule.conditions["issue_severity"] == ["high", "low"]
+
+    def test_unknown_severity_is_rejected(self):
+        with pytest.raises(ValidationError):
+            AutoAssignRuleCreate(
+                name="typo",
+                conditions={"issue_severity": ["urgent"]},
+                assign_to=["alice"],
+            )
+
+    def test_conditions_without_severity_are_untouched(self):
+        conditions = {"project_key": ["PROJ-A"]}
+        rule = AutoAssignRuleCreate(name="plain", conditions=conditions, assign_to=["alice"])
+        assert rule.conditions == conditions
+
+
+class TestAssignmentSource:
+    """An assignment says whether a person or a rule put the reviewer there"""
+
+    def test_a_rule_assignment_reads_as_automatic(self):
+        assignment = PullRequestReviewAssignment(
+            review_base_id=1,
+            reviewer="alice",
+            assigned_by=None,
+            assignment_status="assigned",
+            assignment_source="auto",
+        )
+
+        assert assignment.assignment_source == "auto"
+        # the page reads it through to_dict(), so it travels with the record
+        assert assignment.to_dict()["assignment_source"] == "auto"
+
+    def test_an_assignment_a_person_made_reads_as_manual(self):
+        assignment = PullRequestReviewAssignment(
+            review_base_id=1,
+            reviewer="alice",
+            assigned_by="admin",
+            assignment_status="assigned",
+        )
+
+        assert assignment.to_dict()["assignment_source"] == "manual"
+
+    def test_a_manual_assignment_without_a_recorded_assigner_is_still_manual(self):
+        # A review created with its reviewer named up front records no assigner. The
+        # source is written by whatever created the row, so it stays manual.
+        assignment = PullRequestReviewAssignment(
+            review_base_id=1,
+            reviewer="alice",
+            assigned_by=None,
+            assignment_status="assigned",
+        )
+
+        assert assignment.to_dict()["assignment_source"] == "manual"

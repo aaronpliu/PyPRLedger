@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.33.1] - 2026-10-23
+
+**Backend Version**: 1.33.1
+**Frontend Version**: 1.28.1
+
+### Changed
+- The task assignment list and detail page no longer put an "Open" tag on a task nobody has been assigned: the amber row and the assign action already say it, and `open` stays the status the API reports for a task with no reviewer
+
+### Fixed
+- A tab left open across a deployment recovers instead of going dead. Route components are lazy imports named after their content, so after a new build the tab's next click asked for a chunk the server no longer had, rejected with "Failed to fetch dynamically imported module", and - with nothing listening - looked like a click that did nothing. A failure of that kind now tells the reader a new version has been deployed and offers to reload, which fetches the `index.html` the server serves now and the chunks it names. The question is asked rather than reloading on its own, so a half-written score or comment is not thrown away; it is asked once, cannot be dismissed by clicking outside or pressing Esc, and choosing Later leaves the page as it is instead of asking again on every click. Vite's own `vite:preloadError` is handled the same way
+- A missing file under `/assets/` is answered as a 404 instead of with the SPA shell. The shell was handed to the browser for a JavaScript URL, which it then could not execute, and the image's nginx config also cached it under the chunk's own name; the config now keeps the fallback to real routes and leaves hashed assets to be missing when they are missing
+
+---
+
+## [1.33.0] - 2026-10-22
+
+**Backend Version**: 1.33.0
+**Frontend Version**: 1.28.0
+
+### Added
+- An assignment says who put the reviewer there. A reviewer placed by an assignment rule is recorded as `auto` and the task detail page names it "Auto-assigned", where the assigner column used to read as nobody; a reviewer a person added stays `manual`. The answer is stored on the assignment itself (`assignment_source`) rather than inferred from its status, so the status is left free to describe progress alone
+- The task pages name the state of a task nobody is on: **Open**. It sits beside the reviewers heading in the detail page and in the reviewers column of the list, and it is what the API reports for a review with no assignment (`assignment_status: "open"`), in place of the `auto_created` sentinel
+- The AI summary of a release note is asked again when the provider is momentarily out of capacity. A 429 or 5xx is retried a couple of times with backoff - honouring a `Retry-After` only up to the point where waiting would outlast the request - while a timeout, an unreachable host or a 4xx is reported at once, because repeating it only repeats the wait; the fallback notice carries a "Try again" action
+
+### Changed
+- Assignment status now describes progress only: `assigned` → `in_progress` → `completed`. `pending` is retired, because it meant two things at once - "nobody has been put on this task" and "a rule put someone here who has not started" - so a review with a reviewer on it read as unassigned. Migration `036` moves the historical `pending` rows to `assigned`, records `auto` as their source, and makes `assigned` the column default; the task detail status dropdown no longer offers Pending
+- The task list puts a review nobody has been put on ahead of the rest, and within each group the newest first. A reviewer a rule placed counts as assigned from the moment the rule writes it, rather than waiting for them to start, so the amber "needs attention" row, the hide-archived filter and the sort all follow the same rule
+- The status descriptions in all three interface languages say what each state means in the new vocabulary, with an `open` description for the unassigned task, and the detail page's status tag follows the interface language rather than hard-coded English
+- Upgrading this release needs `alembic upgrade head` before the new code runs: migration `036` adds `assignment_source`, backfills it from the retired `pending` status, and changes `assignment_status`'s default to `assigned`
+
+### Fixed
+- Opening a review marks it in progress for a reviewer an assignment rule placed. The check only recognised the `assigned` status, which a rule's reviewer never carried, so the task stayed at its first state until the reviewer submitted a score
+
+---
+
+## [1.32.0] - 2026-10-20
+
+**Backend Version**: 1.32.0
+**Frontend Version**: 1.27.0
+
+### Added
+- Auto-assignment rules can match the severities an AI review reports. A rule's conditions accept `issue_severity` with any of critical, high, medium and low, and the rule matches when the review carries a finding at one of those levels - so "anything critical goes to this reviewer" is a rule of its own rather than something to approximate with a project or a branch. The levels are checked on write, trimmed, lower-cased and de-duplicated: an unknown one would otherwise be a rule that never fires, without saying so
+
+### Changed
+- The messages the backend writes follow the language chosen in the interface rather than the browser's own. Every request carries `Accept-Language` from the UI locale, so a rejected login says "Invalid credentials" to a reader who switched to English instead of "凭证无效", and the same holds for every other message the backend translates
+- The messages the interface raises by itself are translated too: forbidden, not found, validation, server error, offline, session expiry, and the keyboard-shortcut help and hint. Where the backend sent a message it is preferred - in whichever field it wrapped it - instead of a validation detail rendering as ``[object Object]``, and a fallback is only used when there is nothing to show
+- The search dialog is one dialog with one open state: the toolbar button, Ctrl+K and "/" all ask the same thing to open, and "/" opens it instead of looking for an input that only exists while it is already open. What the dialog says follows the interface language - placeholder, tips, recent searches, result count, type tags, key hints - and so do the relative dates ("3 days ago") it shows
+- An unreachable service is drawn over the page rather than in place of it. A confirmed outage is a modal notice whose Retry reports a retry that failed, and a single unanswered request is a banner with a spinner that clears itself - one failed probe is a slow connection, not a verdict. The page underneath is never unmounted, so whatever was being written on it survives a restart
+- Dashboard charts open fullscreen as a card and come back at the right size. Sizing follows the container through a `ResizeObserver` instead of a fixed delay, so a chart that grew to fill the screen is no longer left clipped at the old size after Esc; the container also stopped animating its height, which is what made the canvas lag behind it
+- The tags tab of Release Notes no longer selects the newest tag on arrival. The commits of a tag are a whole release worth of history, which was a wait on every visit to a tab that is often only being browsed; the list now reads as a list, and says as much, until a tag is picked
+
+### Fixed
+- The provider tag on a registry row stops raising a prop-validation warning: the default provider keeps the tag's own styling as "no type" rather than an empty string, which Element Plus rejects
+
+---
+
 ## [1.31.1] - 2026-10-20
 
 **Backend Version**: 1.31.1

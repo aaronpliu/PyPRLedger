@@ -344,33 +344,100 @@ const handleResize = () => {
   suggestionsChart?.resize()
 }
 
-// Toggle fullscreen for a specific chart
-const toggleFullscreen = (chartName: 'activity' | 'score' | 'project' | 'suggestions') => {
-  if (fullscreenChart.value === chartName) {
-    // Exit fullscreen
-    fullscreenChart.value = null
-    document.exitFullscreen().catch(console.error)
-  } else {
-    // Enter fullscreen
-    fullscreenChart.value = chartName
-    const chartRef = 
-      chartName === 'activity' ? activityChartRef.value :
-      chartName === 'score' ? scoreChartRef.value :
-      chartName === 'project' ? projectChartRef.value :
-      suggestionsChartRef.value
-    
-    if (chartRef) {
-      const cardElement = chartRef.closest('.chart-card')
-      if (cardElement && cardElement.requestFullscreen) {
-        cardElement.requestFullscreen().catch(console.error)
-      }
-    }
-  }
-  
-  // Resize chart after fullscreen transition
-  setTimeout(() => {
+type ChartName = 'activity' | 'score' | 'project' | 'suggestions'
+
+const getCardElement = (chartName: ChartName): HTMLElement | null => {
+  const chartRef =
+    chartName === 'activity' ? activityChartRef.value :
+    chartName === 'score' ? scoreChartRef.value :
+    chartName === 'project' ? projectChartRef.value :
+    suggestionsChartRef.value
+  return chartRef ? (chartRef.closest('.chart-card') as HTMLElement | null) : null
+}
+
+let chartResizeObserver: ResizeObserver | null = null
+let resizeFrame = 0
+
+// Coalesce resize bursts (CSS transitions fire many entries) into one frame
+const scheduleResize = () => {
+  if (resizeFrame) return
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = 0
     handleResize()
-  }, 300)
+  })
+}
+
+// Keep every chart in sync with its container: fullscreen switch, layout changes, resize
+const observeChartContainers = () => {
+  if (typeof ResizeObserver === 'undefined') return
+  chartResizeObserver = new ResizeObserver(scheduleResize)
+  for (const container of [
+    activityChartRef.value,
+    scoreChartRef.value,
+    projectChartRef.value,
+    suggestionsChartRef.value,
+  ]) {
+    if (container) chartResizeObserver.observe(container)
+  }
+}
+
+const getFullscreenElement = (): Element | null => {
+  const doc = document as Document & { webkitFullscreenElement?: Element | null }
+  return doc.fullscreenElement ?? doc.webkitFullscreenElement ?? null
+}
+
+const enterFullscreen = async (element: HTMLElement) => {
+  const target = element as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void }
+  if (typeof target.requestFullscreen === 'function') {
+    await target.requestFullscreen()
+  } else if (typeof target.webkitRequestFullscreen === 'function') {
+    await target.webkitRequestFullscreen()
+  } else {
+    throw new Error('Fullscreen API is not supported')
+  }
+}
+
+const exitFullscreen = async () => {
+  const doc = document as Document & { webkitExitFullscreen?: () => Promise<void> | void }
+  if (!getFullscreenElement()) return
+  if (typeof doc.exitFullscreen === 'function') {
+    await doc.exitFullscreen()
+  } else if (typeof doc.webkitExitFullscreen === 'function') {
+    await doc.webkitExitFullscreen()
+  }
+}
+
+// Toggle fullscreen for a specific chart
+const toggleFullscreen = async (chartName: ChartName) => {
+  if (fullscreenChart.value === chartName) {
+    try {
+      await exitFullscreen()
+    } catch (error) {
+      console.error('Failed to exit fullscreen', error)
+    }
+    return
+  }
+
+  const cardElement = getCardElement(chartName)
+  if (!cardElement) return
+
+  try {
+    await enterFullscreen(cardElement)
+    fullscreenChart.value = chartName
+    scheduleResize()
+  } catch (error) {
+    // Browsers reject the request (permission, iframe, gesture) - keep UI in sync
+    console.error('Failed to enter fullscreen', error)
+    fullscreenChart.value = null
+  }
+}
+
+// Handle fullscreen state changes triggered outside the button (ESC, system gestures)
+const handleFullscreenChange = () => {
+  if (!getFullscreenElement()) {
+    fullscreenChart.value = null
+    scheduleResize()
+  }
 }
 
 // Load reviewer activity trends
@@ -934,10 +1001,12 @@ const getPrUrl = (review: Review): string | null => {
 
 onMounted(() => {
   initCharts()
-  window.addEventListener('resize', handleResize)
+  observeChartContainers()
+  window.addEventListener('resize', scheduleResize)
   
   // Listen for fullscreen changes
   document.addEventListener('fullscreenchange', handleFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
   
   loadTrendData()
   loadRecentReviews()
@@ -971,20 +1040,16 @@ watch(locale, () => {
   if (trendData.value.suggestions.length > 0) renderSuggestionsChart()
 })
 
-// Handle fullscreen change events
-const handleFullscreenChange = () => {
-  if (!document.fullscreenElement) {
-    // Exited fullscreen
-    fullscreenChart.value = null
-    setTimeout(() => {
-      handleResize()
-    }, 100)
-  }
-}
-
 onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
+  window.removeEventListener('resize', scheduleResize)
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
+  chartResizeObserver?.disconnect()
+  chartResizeObserver = null
+  if (resizeFrame) {
+    cancelAnimationFrame(resizeFrame)
+    resizeFrame = 0
+  }
   activityChart?.dispose()
   scoreChart?.dispose()
   projectChart?.dispose()
@@ -1042,7 +1107,8 @@ onUnmounted(() => {
 .chart-container {
   width: 100%;
   height: 350px;
-  transition: all 0.3s ease;
+  /* No height transition: an animated height makes the canvas lag behind the
+     container when leaving fullscreen, which clips the chart. */
   overflow: hidden; /* Prevent any overflow */
 }
 

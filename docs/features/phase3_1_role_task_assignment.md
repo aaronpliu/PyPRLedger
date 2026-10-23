@@ -647,24 +647,30 @@ The review assignment system uses four distinct statuses to track the lifecycle 
 
 | Status | Label | Description | Who Can Set | Typical Flow |
 |--------|-------|-------------|-------------|--------------|
-| `pending` | Pending | Review task has not been assigned to any reviewer yet | System (default) | Initial state when PR is detected |
-| `assigned` | Assigned | Task has been assigned to a reviewer by the review admin | Review Admin | After admin assigns a reviewer |
+| `open` | Open | Review task has not been assigned to any reviewer yet | Absence of a reviewer assignment | Initial state when PR is detected |
+| `assigned` | Assigned | A reviewer has been assigned and has not started | Review Admin, or an auto-assignment rule | After a reviewer is assigned |
 | `in_progress` | In Progress | Reviewer has viewed the task but has not submitted a score yet | Assigned Reviewer | When reviewer starts working on it |
 | `completed` | Completed | Reviewer has completed scoring for this review | Assigned Reviewer | Final state after scoring |
+
+`open` is not an `assignment_status` value: it is the state of a task with no
+assignment record at all. An assignment moves through `assigned` → `in_progress`
+→ `completed` only. Who placed the reviewer is recorded separately in
+`assignment_source` (`auto` for an auto-assignment rule, `manual` otherwise), so
+a rule's reviewer is still simply "assigned".
 
 ### Status Transitions
 
 ```
-pending → assigned → in_progress → completed
-   ↑          ↓
-   └──────────┘ (admin can reassign)
+open → assigned → in_progress → completed
+         ↑            ↓
+         └────────────┘ (admin can reassign)
 ```
 
 **Transition Rules**:
-1. **pending → assigned**: Review admin assigns a reviewer to the task
+1. **open → assigned**: Review admin assigns a reviewer, or an auto-assignment rule does it
 2. **assigned → in_progress**: Assigned reviewer acknowledges and starts reviewing
 3. **in_progress → completed**: Reviewer submits their score and completes the review
-4. **Any status → pending**: Review admin can unassign or reset the task
+4. **Any status → open**: Review admin removes the last assignment
 5. **completed → assigned**: Review admin can reassign for re-review if needed
 
 ### Permission Matrix
@@ -676,7 +682,7 @@ pending → assigned → in_progress → completed
 | Assign reviewer | ❌ | ✅ | ✅ |
 | Update status to "in_progress" | ✅ (own tasks only) | ✅ | ✅ |
 | Update status to "completed" | ✅ (own tasks only) | ✅ | ✅ |
-| Reset to "pending" | ❌ | ✅ | ✅ |
+| Reset to "open" (remove assignment) | ❌ | ✅ | ✅ |
 | Remove assignment | ❌ | ✅ | ✅ |
 
 ### UI Implementation
@@ -689,15 +695,16 @@ In the "Task Assignment Details" page, each reviewer entry displays:
    - 🔵 Blue: Assigned
    - 🟡 Yellow: In Progress
    - 🟢 Green: Completed
-   - ⚪ Gray: Pending
+
+   A task with no reviewer is read from the amber row and the assign action rather
+   than a status tag of its own.
 
 2. **Tooltip**: Hovering over the status tag shows a detailed description:
-   - **Pending**: "Review task has not been assigned to any reviewer yet"
-   - **Assigned**: "Task has been assigned to a reviewer by the review admin"
+   - **Assigned**: "A reviewer has been assigned and has not started on it yet"
    - **In Progress**: "Reviewer has viewed the task but has not submitted a score yet"
    - **Completed**: "Reviewer has completed scoring for this review"
 
-3. **Status Dropdown**: Review admins can change status via dropdown menu
+3. **Status Dropdown**: Review admins can change status via dropdown menu (Assigned / In Progress / Completed)
 4. **Comments Column**: Optional field for reviewers to add notes or explanations
 
 #### Task Assignment List View
@@ -715,7 +722,7 @@ All status labels and descriptions are internationalized and support:
 - Traditional Chinese (zh-TW)
 
 Translation keys follow the pattern:
-- Labels: `reviews.{status}` (e.g., `reviews.pending`, `reviews.assigned`)
+- Labels: `reviews.{status}` (e.g., `reviews.open`, `reviews.assigned`)
 - Descriptions: `reviews.assignment_status_descriptions.{status}`
 
 ### Database Schema
@@ -729,7 +736,8 @@ CREATE TABLE pull_request_review_assignment (
     reviewer VARCHAR(64) NOT NULL,
     assigned_by VARCHAR(64),
     assigned_date DATETIME,
-    assignment_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    assignment_status VARCHAR(32) NOT NULL DEFAULT 'assigned',
+    assignment_source VARCHAR(16) NOT NULL DEFAULT 'manual',
     reviewer_comments TEXT,
     created_date DATETIME NOT NULL,
     updated_date DATETIME NOT NULL,
@@ -740,10 +748,12 @@ CREATE TABLE pull_request_review_assignment (
 ```
 
 Valid status values are enforced at the application level:
-- `pending`
 - `assigned`
 - `in_progress`
 - `completed`
+
+`open` is not stored on an assignment; it is how a task with no assignment
+record is reported. `assignment_source` is either `manual` or `auto`.
 
 ---
 

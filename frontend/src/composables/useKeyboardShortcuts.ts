@@ -1,6 +1,8 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { useGlobalSearch } from '@/composables/useGlobalSearch'
 
 interface ShortcutConfig {
   key: string
@@ -8,7 +10,7 @@ interface ShortcutConfig {
   shift?: boolean
   alt?: boolean
   handler: () => void
-  description: string
+  descriptionKey: string
 }
 
 /**
@@ -16,43 +18,37 @@ interface ShortcutConfig {
  */
 export function useKeyboardShortcuts() {
   const router = useRouter()
+  const { t } = useI18n()
+  const { open: openGlobalSearch } = useGlobalSearch()
 
   const shortcuts: ShortcutConfig[] = [
     {
       key: 'g',
       handler: () => {
         router.push('/')
-        ElMessage.success('Navigated to Dashboard')
       },
-      description: 'Go to Dashboard',
+      descriptionKey: 'shortcuts.go_dashboard',
     },
     {
       key: 'r',
       handler: () => {
         router.push('/reviews')
-        ElMessage.success('Navigated to Reviews')
       },
-      description: 'Go to Reviews',
+      descriptionKey: 'shortcuts.go_reviews',
     },
     {
       key: 's',
       handler: () => {
         router.push('/scores')
-        ElMessage.success('Navigated to Scores')
       },
-      description: 'Go to Scores',
+      descriptionKey: 'shortcuts.go_scores',
     },
     {
       key: '/',
       handler: () => {
-        // Focus search input
-        const searchInput = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement
-        if (searchInput) {
-          searchInput.focus()
-          ElMessage.success('Search focused')
-        }
+        openGlobalSearch()
       },
-      description: 'Focus Search',
+      descriptionKey: 'shortcuts.open_search',
     },
     {
       key: '?',
@@ -60,7 +56,7 @@ export function useKeyboardShortcuts() {
       handler: () => {
         showShortcutsHelp()
       },
-      description: 'Show Keyboard Shortcuts',
+      descriptionKey: 'shortcuts.show_help',
     },
     {
       key: 'Escape',
@@ -71,7 +67,7 @@ export function useKeyboardShortcuts() {
           activeElement.blur()
         }
       },
-      description: 'Close Dialog/Focus',
+      descriptionKey: 'shortcuts.close_dialog',
     },
   ]
 
@@ -104,11 +100,11 @@ export function useKeyboardShortcuts() {
       if (s.shift) modifiers.push('Shift')
       if (s.alt) modifiers.push('Alt')
       modifiers.push(s.key.toUpperCase())
-      return `${modifiers.join('+')} - ${s.description}`
+      return `${modifiers.join('+')} - ${t(s.descriptionKey)}`
     }).join('\n')
 
     ElMessage({
-      message: `Keyboard Shortcuts:\n\n${helpText}`,
+      message: `${t('shortcuts.title')}\n\n${helpText}`,
       type: 'info',
       duration: 10000,
       showClose: true,

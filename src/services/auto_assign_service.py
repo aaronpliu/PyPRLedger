@@ -21,6 +21,7 @@ from src.models.user import User
 from src.schemas.notification import NotificationCreate
 from src.schemas.pull_request import ReviewCreate
 from src.services.notification_service import NotificationService
+from src.utils.ai_review_utils import extract_issue_severities
 from src.utils.metrics import MetricsCollector, metrics
 from src.utils.timezone import get_current_time
 
@@ -115,6 +116,11 @@ class AutoTaskAssignmentService:
         Conditions are ANDed across keys. List values are ORed (any match).
         Missing condition keys act as wildcards (no filter on that dimension).
 
+        ``issue_severity`` matches the severities of the issues the AI review
+        reported: a review matches when any of its findings is at a listed level, so
+        a rule can route the critical findings to one set of reviewers and the rest to
+        another. A review with no findings has no severity and does not match.
+
         Args:
             rule: The rule to evaluate
             review_data: The incoming review data
@@ -134,6 +140,7 @@ class AutoTaskAssignmentService:
             "source_branch": review_data.source_branch,
             "target_branch": review_data.target_branch,
             "pull_request_status": review_data.pull_request_status,
+            "issue_severity": set(extract_issue_severities(review_data.ai_suggestions)),
         }
 
         for key, value in conditions.items():
@@ -146,6 +153,14 @@ class AutoTaskAssignmentService:
             elif key == "pull_request_status":
                 # Status exact match against list
                 if review.get(key) not in value:
+                    return False
+            elif key == "issue_severity":
+                # The review can report several issues: any requested level matches
+                wanted = {
+                    str(level).strip().lower()
+                    for level in (value if isinstance(value, list) else [value])
+                }
+                if not review["issue_severity"] & wanted:
                     return False
             elif isinstance(value, list):
                 # Exact match against list of acceptable values
@@ -246,14 +261,16 @@ class AutoTaskAssignmentService:
 
                 # Create the assignment
                 # assigned_by is NULL (not a sentinel string) because the FK
-                # constraint references user(username). Auto-assignments are
-                # distinguishable by assignment_status='pending' vs manual's 'assigned'.
+                # constraint references user(username). What placed the reviewer is
+                # recorded in assignment_source, so the status can stay the plain
+                # "assigned" that a person's assignment also gets.
                 assignment = PullRequestReviewAssignment(
                     review_base_id=review_base.id,
                     reviewer=reviewer_username,
                     assigned_by=None,
                     assigned_date=get_current_time(),
-                    assignment_status="pending",
+                    assignment_status="assigned",
+                    assignment_source="auto",
                 )
                 db.add(assignment)
                 assigned.append(assignment)

@@ -285,6 +285,24 @@
           <div class="form-help-text">{{ t('auto_rules.f_pr_status_hint') }}</div>
         </el-form-item>
 
+        <el-form-item :label="t('auto_rules.f_issue_severity')">
+          <el-select
+            v-model="cond.issue_severity"
+            multiple
+            clearable
+            :placeholder="t('auto_rules.f_issue_severity_placeholder')"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="level in ISSUE_SEVERITIES"
+              :key="level"
+              :label="t(`auto_rules.severity_${level}`)"
+              :value="level"
+            />
+          </el-select>
+          <div class="form-help-text">{{ t('auto_rules.f_issue_severity_hint') }}</div>
+        </el-form-item>
+
         <!-- Assign To -->
         <el-divider content-position="left">{{ t('auto_rules.section_assign') }}</el-divider>
 
@@ -413,7 +431,11 @@ const cond = reactive({
   source_branch_prefix: '',
   target_branch: [] as string[],
   pull_request_status: [] as string[],
+  issue_severity: [] as string[],
 })
+
+// The severities an AI review reports per issue, most severe first
+const ISSUE_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
 
 const defaultForm = {
   name: '',
@@ -443,6 +465,7 @@ function buildConditions(): Record<string, any> {
   if (cond.source_branch_prefix) c.source_branch_prefix = cond.source_branch_prefix
   if (cond.target_branch.length > 0) c.target_branch = [...cond.target_branch]
   if (cond.pull_request_status.length > 0) c.pull_request_status = [...cond.pull_request_status]
+  if (cond.issue_severity.length > 0) c.issue_severity = [...cond.issue_severity]
   return c
 }
 
@@ -595,6 +618,7 @@ function applyConditionsToForm(conditions: Record<string, any>) {
   cond.source_branch_prefix = conditions.source_branch_prefix || ''
   cond.target_branch = conditions.target_branch || []
   cond.pull_request_status = conditions.pull_request_status || []
+  cond.issue_severity = conditions.issue_severity || []
   // Reverse-map project_key/repository_slug back to app_name
   const selectedApps: string[] = []
   for (const [app, entries] of Object.entries(registryMap.value)) {
@@ -620,6 +644,7 @@ function resetConditions() {
   cond.source_branch_prefix = ''
   cond.target_branch = []
   cond.pull_request_status = []
+  cond.issue_severity = []
   form.value.conditions = {}
 }
 

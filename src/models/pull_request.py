@@ -247,9 +247,16 @@ class PullRequestReviewAssignment(Base):
     assignment_status: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
-        default="pending",
-        server_default="pending",
-        comment="Status: pending, assigned, in_progress, completed",
+        default="assigned",
+        server_default="assigned",
+        comment="Status: assigned, in_progress, completed",
+    )
+    assignment_source: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="manual",
+        server_default="manual",
+        comment="Who put the reviewer here: manual (a person) or auto (an assignment rule)",
     )
     reviewer_comments: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -298,6 +305,9 @@ class PullRequestReviewAssignment(Base):
             if self.assigned_date
             else None,
             "assignment_status": self.assignment_status,
+            # A row that has not been flushed yet has not had the column default
+            # applied, and a person's assignment is the one to assume.
+            "assignment_source": self.assignment_source or "manual",
             "reviewer_comments": self.reviewer_comments,
             "created_date": (
                 utc_to_local(self.created_date).isoformat()
@@ -322,7 +332,8 @@ class PullRequestReviewAssignment(Base):
             reviewer=data.get("reviewer"),
             assigned_by=data.get("assigned_by"),
             assigned_date=data.get("assigned_date"),
-            assignment_status=data.get("assignment_status", "pending"),
+            assignment_status=data.get("assignment_status", "assigned"),
+            assignment_source=data.get("assignment_source", "manual"),
             reviewer_comments=data.get("reviewer_comments"),
         )
 
@@ -332,6 +343,7 @@ class PullRequestReviewAssignment(Base):
             "assigned_by",
             "assigned_date",
             "assignment_status",
+            "assignment_source",
             "reviewer_comments",
         ]
 

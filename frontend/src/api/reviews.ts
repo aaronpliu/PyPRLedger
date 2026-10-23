@@ -18,7 +18,7 @@ export interface Review {
   source_filename?: string | null  // null for PR-level review
   ai_suggestions?: AIReviewSuggestions | null
   reviewer_comments?: string | null
-  assignment_status?: 'pending' | 'assigned' | 'in_progress' | 'completed' | string
+  assignment_status?: 'open' | 'assigned' | 'in_progress' | 'completed' | string
   assigned_by?: string | null
   assigned_date?: string | null
   pull_request_status: string

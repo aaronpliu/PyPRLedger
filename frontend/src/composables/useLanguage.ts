@@ -1,5 +1,6 @@
 import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
+import { applyDayjsLocale } from '@/utils/dayjsLocale'
 
 /** How a language is written, which is what the switcher shows. */
 export type LanguageScript = 'latin' | 'cjk'
@@ -39,6 +40,7 @@ export function useLanguage() {
   const setLanguage = (lang: string) => {
     locale.value = lang
     localStorage.setItem('language', lang)
+    applyDayjsLocale(lang)
     // Update document title if needed
     document.documentElement.lang = lang
   }

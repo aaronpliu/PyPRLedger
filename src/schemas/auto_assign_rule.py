@@ -4,7 +4,39 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from src.utils.ai_review_utils import ISSUE_SEVERITIES
+
+
+def _normalize_issue_severity(conditions: dict | None) -> dict | None:
+    """Trim, lower-case and check the severity list a rule matches on.
+
+    The AI review reports a severity per issue; a rule matches when any finding is at
+    one of the levels it lists. Anything else is a typo that would silently never
+    match, so it is rejected here instead.
+    """
+    if not conditions:
+        return conditions
+
+    severities = conditions.get("issue_severity")
+    if severities is None:
+        return conditions
+    if not isinstance(severities, list) or not severities:
+        raise ValueError("issue_severity must be a non-empty list of severities")
+
+    normalized: list[str] = []
+    for severity in severities:
+        level = str(severity).strip().lower()
+        if level not in ISSUE_SEVERITIES:
+            raise ValueError(
+                f"Unknown issue severity '{severity}'. Must be one of: "
+                f"{', '.join(ISSUE_SEVERITIES)}"
+            )
+        if level not in normalized:
+            normalized.append(level)
+
+    return {**conditions, "issue_severity": normalized}
 
 
 class AutoAssignRuleCreate(BaseModel):
@@ -18,10 +50,12 @@ class AutoAssignRuleCreate(BaseModel):
     conditions: dict = Field(
         ...,
         description="Match conditions as JSON. Supported keys: project_key, repository_slug, "
-        "pull_request_user, source_branch_prefix, target_branch, pull_request_status",
+        "pull_request_user, source_branch_prefix, target_branch, pull_request_status, "
+        "issue_severity (critical, high, medium, low)",
         example={
             "project_key": ["PROJ-A"],
             "repository_slug": ["frontend-store"],
+            "issue_severity": ["critical", "high"],
         },
     )
     assign_to: list[str] = Field(
@@ -39,6 +73,12 @@ class AutoAssignRuleCreate(BaseModel):
     expires_at: datetime | None = Field(None, description="Optional end date for rule validity")
     is_active: bool = Field(default=True, description="Whether this rule is active")
 
+    @field_validator("conditions")
+    @classmethod
+    def validate_conditions(cls, value: dict) -> dict:
+        """Reject severities the engine could never match on."""
+        return _normalize_issue_severity(value) or {}
+
 
 class AutoAssignRuleUpdate(BaseModel):
     """Schema for updating an auto-assignment rule"""
@@ -52,7 +92,8 @@ class AutoAssignRuleUpdate(BaseModel):
     )
     conditions: dict | None = Field(
         None,
-        description="Match conditions as JSON",
+        description="Match conditions as JSON. ``issue_severity`` matches the severities "
+        "of the issues the AI review reported (critical, high, medium, low)",
     )
     assign_to: list[str] | None = Field(
         None,
@@ -67,6 +108,12 @@ class AutoAssignRuleUpdate(BaseModel):
     starts_at: datetime | None = Field(None, description="Optional start date for rule validity")
     expires_at: datetime | None = Field(None, description="Optional end date for rule validity")
     is_active: bool | None = Field(None, description="Whether this rule is active")
+
+    @field_validator("conditions")
+    @classmethod
+    def validate_conditions(cls, value: dict | None) -> dict | None:
+        """Reject severities the engine could never match on."""
+        return _normalize_issue_severity(value)
 
 
 class AutoAssignRuleResponse(BaseModel):
