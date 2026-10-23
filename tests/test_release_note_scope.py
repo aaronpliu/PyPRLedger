@@ -20,9 +20,12 @@ from src.services.release_note_scope_service import (
     SOURCE_ANCESTOR,
     SOURCE_EXPLICIT,
     SOURCE_NAME_ORDER,
+    SOURCE_NEAREST,
     SOURCE_NONE,
     ReleaseNoteScopeService,
+    nearest_tag,
     order_candidates,
+    orders_above,
     predecessor_candidates,
     previous_by_name,
     previous_by_version,
@@ -179,35 +182,56 @@ def test_previous_by_name_is_none_when_the_ref_is_not_a_tag() -> None:
     assert previous_by_name("main", [tag("v1.0.0", C1)]) is None
 
 
-def test_previous_by_version_reads_the_version_below_a_build() -> None:
-    """``3.14.0-Build23004`` follows 3.13.0, not the build before it of 3.14.0."""
+def test_previous_by_version_reads_the_build_before_a_build() -> None:
+    """``3.14.0-Build23005`` follows ``3.14.0-Build23004``, another release of 3.14.0."""
     tags = [
-        tag("3.14.0-Build23004", C1, 400),
-        tag("3.14.0-Build23003", C2, 300),
-        tag("Test-Build23000", C4, 250),
-        tag("DEBUG-Build22010", C5, 240),
-        tag("3.13.0-Build23003", C3, 100),
+        tag("3.14.0-Build23005", C1, 500),
+        tag("3.14.0-Build23004", C2, 400),
+        tag("3.14.0-Build23003", C3, 300),
+        tag("Test-Build23000", C5, 250),
+        tag("DEBUG-Build22010", C4, 240),
+        tag("3.13.0-Build23003", C4, 100),
     ]
 
-    previous = previous_by_version("3.14.0-Build23004", tags)
+    previous = previous_by_version("3.14.0-Build23005", tags)
 
     assert previous is not None
-    assert previous["name"] == "3.13.0-Build23003"
+    assert previous["name"] == "3.14.0-Build23004"
 
 
-def test_previous_by_version_takes_the_highest_build_of_that_version() -> None:
-    """Within the version that does precede it, the highest build is the one before."""
+def test_previous_by_version_ignores_a_later_build_of_the_same_version() -> None:
+    """A build released after the tag is not its predecessor, even if it exists."""
     tags = [
-        tag("3.14.0-Build23004", C1, 400),
+        tag("3.14.0-Build23006", C1, 600),
+        tag("3.14.0-Build23005", C2, 500),
+    ]
+
+    assert previous_by_version("3.14.0-Build23005", tags) is None
+
+
+def test_previous_by_version_falls_back_to_the_version_below() -> None:
+    """No build of the version precedes it: the highest build below does."""
+    tags = [
+        tag("3.14.0", C1, 400),
         tag("3.13.0-Build23001", C2, 90),
         tag("3.13.0-Build23003", C3, 100),
         tag("3.13.0-Build23002", C4, 95),
     ]
 
-    previous = previous_by_version("3.14.0-Build23004", tags)
+    previous = previous_by_version("3.14.0", tags)
 
     assert previous is not None
     assert previous["name"] == "3.13.0-Build23003"
+
+
+def test_orders_above_keeps_later_releases_out_of_the_answer() -> None:
+    """A later build, or any higher version, can never precede the released tag."""
+    assert orders_above("3.14.0-Build23005", "3.14.0-Build23006") is True
+    assert orders_above("3.14.0-Build23005", "3.18.0-Build21000") is True
+    assert orders_above("3.14.0-Build23005", "3.14.0-Build23004") is False
+    assert orders_above("3.14.0-Build23005", "3.13.0-Build23003") is False
+    # a tag that names no version is left to the name order, not ordered here
+    assert orders_above("3.14.0-Build23005", "Test-Build23000") is False
 
 
 def test_previous_by_version_compares_versions_as_numbers() -> None:
@@ -294,8 +318,8 @@ async def test_resolution_falls_back_to_name_order_and_reports_unverified() -> N
     assert scope.previous_ref == "v2.0.0"
 
 
-async def test_resolution_follows_the_version_below_a_build_of_itself() -> None:
-    """An irregular tag's scope starts at the version below it, not at its last build."""
+async def test_resolution_follows_the_build_before_a_build() -> None:
+    """A build of a version is measured against the build released before it."""
     provider = FakeProvider(
         tags=[
             tag("3.14.0-Build23004", C1, 400),
@@ -315,14 +339,14 @@ async def test_resolution_follows_the_version_below_a_build_of_itself() -> None:
     assert scope.source == SOURCE_ANCESTOR
     assert scope.verified is True
     assert scope.reason == REASON_RESOLVED
-    assert scope.previous_ref == "3.13.0-Build23003"
-    assert scope.previous_sha == C3
-    # the version below it is the first candidate asked about
-    assert provider.probes[0] == (C1, C3)
+    assert scope.previous_ref == "3.14.0-Build23003"
+    assert scope.previous_sha == C2
+    # the build before it is the first candidate asked about
+    assert provider.probes[0] == (C1, C2)
 
 
-async def test_unverified_scope_follows_the_version_below_as_well() -> None:
-    """With nothing to verify, the version below still beats the name order."""
+async def test_unverified_scope_follows_the_build_before_as_well() -> None:
+    """With nothing to verify, the build before it still beats the name order."""
     provider = FakeProvider(
         tags=[
             tag("3.14.0-Build23004", C1, 400),
@@ -338,7 +362,119 @@ async def test_unverified_scope_follows_the_version_below_as_well() -> None:
 
     assert scope.source == SOURCE_NAME_ORDER
     assert scope.verified is False
-    assert scope.previous_ref == "3.13.0-Build23003"
+    assert scope.previous_ref == "3.14.0-Build23003"
+
+
+def test_nearest_tag_takes_the_closest_older_tag_by_date() -> None:
+    """No order to read: the tag cut just before it is the base."""
+    tags = [
+        tag("aaa-23005", C1, 500),
+        tag("build-23004", C2, 450),
+        tag("build-22990", C3, 100),
+    ]
+
+    nearest = nearest_tag("aaa-23005", tags)
+
+    assert nearest is not None
+    assert nearest["name"] == "build-23004"
+
+
+def test_nearest_tag_never_takes_a_later_release() -> None:
+    """A higher version is closer in time, and still cannot precede the release."""
+    tags = [
+        tag("3.14.0", C1, 500),
+        tag("3.18.0-Build21000", C2, 490),
+        tag("3.13.0-Build23003", C3, 100),
+    ]
+
+    nearest = nearest_tag("3.14.0", tags)
+
+    assert nearest is not None
+    assert nearest["name"] == "3.13.0-Build23003"
+
+
+def test_nearest_tag_without_dates_takes_the_nearest_name_below() -> None:
+    """No dates to compare (GitHub reports none): the nearest name answers."""
+    tags = [tag("aaa", C1), tag("aab", C2)]
+
+    nearest = nearest_tag("aab", tags)
+
+    assert nearest is not None
+    assert nearest["name"] == "aaa"
+
+
+def test_nearest_tag_is_none_when_every_tag_is_newer() -> None:
+    tags = [tag("aaa-23005", C1, 100), tag("build-23004", C2, 450)]
+
+    assert nearest_tag("aaa-23005", tags) is None
+
+
+def test_nearest_tag_is_none_for_a_ref_that_is_not_a_tag() -> None:
+    assert nearest_tag("main", [tag("v1.0.0", C1, 100)]) is None
+
+
+def test_predecessor_candidates_leave_out_later_releases() -> None:
+    """A later build, and any higher version, are never worth asking about."""
+    tags = [
+        tag("3.14.0-Build23005", C1, 500),
+        tag("3.14.0-Build23004", C2, 400),
+        tag("3.14.0-Build23006", C3, 600),
+        tag("3.18.0-Build21000", C4, 700),
+    ]
+
+    ordered = [entry["name"] for entry in predecessor_candidates("3.14.0-Build23005", tags)]
+
+    assert ordered == ["3.14.0-Build23004"]
+
+
+async def test_a_release_line_does_not_follow_a_later_one() -> None:
+    """``3.14.0-Build23005`` follows its own build, not the later 3.18.0-Build21000.
+
+    The later tag is an ancestor of the released commit - the 3.14.0 line was branched
+    off it - which is what used to make it the answer. It names a later release, though,
+    and the commits it shares with 3.14.0 are not the ones 3.14.0 added.
+    """
+    provider = FakeProvider(
+        tags=[
+            tag("3.14.0-Build23005", C1, 500),
+            tag("3.14.0-Build23004", C2, 400),
+            tag("3.14.0-Build23003", C3, 300),
+            tag("3.18.0-Build21000", C4, 200),
+        ],
+        ancestors=(C2, C4),
+    )
+
+    scope = await build_service(provider).resolve(
+        project_key=PROJECT, repository_slug=REPO, version="3.14.0-Build23005"
+    )
+
+    assert scope.reason == REASON_RESOLVED
+    assert scope.previous_ref == "3.14.0-Build23004"
+    assert scope.previous_sha == C2
+    # the later release was never even asked about
+    assert all(probe[1] != C4 for probe in provider.probes)
+
+
+async def test_a_tag_with_no_readable_order_falls_back_to_the_closest_tag() -> None:
+    """Names carry no order and nothing is an ancestor: the closest tag still bounds it."""
+    provider = FakeProvider(
+        tags=[
+            tag("aaa-23005", C1, 500),
+            tag("build-23004", C2, 450),
+            tag("build-22990", C3, 100),
+        ],
+        ancestors=(),
+    )
+
+    scope = await build_service(provider).resolve(
+        project_key=PROJECT, repository_slug=REPO, version="aaa-23005"
+    )
+
+    assert scope.reason == REASON_RESOLVED
+    assert scope.source == SOURCE_NEAREST
+    assert scope.verified is False
+    assert scope.previous_ref == "build-23004"
+    assert scope.previous_sha == C2
 
 
 async def test_a_tag_that_names_no_version_keeps_the_name_order() -> None:

@@ -1260,7 +1260,7 @@
     "full_history": "full history of {tag}",
     "scope_first_release": "No earlier tag - showing every commit reachable from {tag}",
     "scope_unresolved": "The previous tag could not be determined - showing every commit reachable from {tag}",
-    "scope_inferred": "The previous tag ({from}) was inferred from the tag order, not verified as an ancestor - this scope may be incomplete",
+    "scope_inferred": "The previous tag ({from}) was inferred from the tags around it, not verified as an ancestor - this scope may be incomplete",
     "commit_count": "{count} commit(s)",
     "commits_empty": "No commits found for this tag",
     "commits_trimmed": "Showing the first {shown} of {count} commits of this release",
