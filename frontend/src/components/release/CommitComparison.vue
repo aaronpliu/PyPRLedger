@@ -1,5 +1,9 @@
 <template>
   <div class="code" :data-test="testId('axis')">
+    <!-- What the comparison is about, read before how it went: a comparison that
+         could not be read still says which two versions it was between. -->
+    <slot name="note" />
+
     <!-- Waiting its turn is not the same as impossible and not the same as read:
          it says so, and the page fills it in as the batches come back. -->
     <p v-if="code.deferred" class="code-deferred" :data-test="testId('deferred')">
@@ -24,8 +28,6 @@
           · {{ t('appDiff.code_missing', { count: code.missing_count }) }}
         </span>
       </p>
-
-      <slot name="note" />
 
       <el-button
         v-if="total"

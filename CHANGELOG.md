@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- A package's commit comparison on the App Diff page is titled by the package's own versions rather than by the application's releases. The commits are read between those two versions in the package's own repository, so the release pair named a comparison the commits were never between - a reader looking for `1.0.0 → 1.0.1` was shown `v1.1.0 → v2.0.0` and could not tell which move the commits belonged to. The title is now also carried by a comparison that could not be read, so the versions it was between are named beside the reason it could not be read rather than left out
+
 ## [1.33.2] - 2026-10-23
 
 **Backend Version**: 1.33.2

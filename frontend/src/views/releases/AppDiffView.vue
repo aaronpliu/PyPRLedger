@@ -338,7 +338,7 @@
               >
                 <td :colspan="releases.length + 1">
                   <CommitComparison
-                    v-for="entry in rowCodes(row)"
+                    v-for="(entry, index) in rowCodes(row)"
                     :key="entry.key"
                     :code="entry.code"
                     :scope="`matrix-${row.name}`"
@@ -346,7 +346,9 @@
                     @toggle="toggleCommits(commitKey(row, entry.key))"
                   >
                     <template #note>
-                      <p class="detail-pair">{{ entry.label }}</p>
+                      <p class="detail-pair" :data-test="`matrix-${row.name}-pair-${index}`">
+                        {{ entry.label }}
+                      </p>
                     </template>
                   </CommitComparison>
                 </td>
@@ -416,6 +418,7 @@ import {
   moveLabelKey,
   moveSymbol,
   moveTone,
+  moveVersions,
   ragTone,
 } from '@/utils/appVersionDiff'
 import type { AppDiffCell, AppDiffRow } from '@/utils/appVersionDiff'
@@ -763,22 +766,33 @@ function intervalKey(interval: { source_ref: string; target_ref: string }): stri
   return `${interval.source_ref}->${interval.target_ref}`
 }
 
-/** The comparison of one matrix row within one pair, or nothing where there is none. */
-function rowCode(row: AppDiffRow, interval: AppVersionDiffInterval): AppVersionDiffCode | null {
-  if (row.kind === 'application') return interval.code
-  return interval.packages.find((entry) => entry.name === row.name)?.code ?? null
-}
-
-/** Every pair's comparison for one row, labelled by the pair it sits between. */
+/**
+ * Every pair's comparison for one row, labelled by what the commits are between.
+ *
+ * An application's axis compares its two releases, so the release refs name it. A
+ * package's axis compares its own two versions in its own repository, so those name
+ * it instead: the app's release refs would title a pair the commits are not between,
+ * and the reader would look for the package's own versions to no avail.
+ */
 function rowCodes(row: AppDiffRow): { key: string; label: string; code: AppVersionDiffCode }[] {
   return (result.value?.intervals ?? []).flatMap((interval) => {
-    const code = rowCode(row, interval)
-    if (!code) return []
+    if (row.kind === 'application') {
+      if (!interval.code) return []
+      return [
+        {
+          key: intervalKey(interval),
+          label: `${interval.source_ref} → ${interval.target_ref}`,
+          code: interval.code,
+        },
+      ]
+    }
+    const comparison = interval.packages.find((entry) => entry.name === row.name)
+    if (!comparison) return []
     return [
       {
         key: intervalKey(interval),
-        label: `${interval.source_ref} → ${interval.target_ref}`,
-        code,
+        label: moveVersions(comparison),
+        code: comparison.code,
       },
     ]
   })
