@@ -998,6 +998,32 @@ class ReleaseNoteService:
             logger.warning(f"Could not build the release comparison link: {e}")
             return None
 
+    def tag_url(
+        self,
+        *,
+        project_key: str,
+        repository_slug: str,
+        tag_name: str,
+        git_provider: str | None = None,
+        workspace_slug: str | None = None,
+    ) -> str | None:
+        """Browsable repository page of the tag a release was cut from.
+
+        Best effort, like the comparison link: an unknown provider or a missing
+        host leaves the tag unlinked rather than failing the request that reads it.
+        """
+        if not tag_name or not tag_name.strip():
+            return None
+
+        try:
+            provider_name = resolve_provider_name(git_provider)
+            provider = self._provider_factory(provider_name)
+            remote_key = resolve_remote_project_key(project_key, provider_name, workspace_slug)
+            return provider.web_tag_url(remote_key, repository_slug, tag_name)
+        except Exception as e:
+            logger.warning(f"Could not build the release tag link: {e}")
+            return None
+
     def resolve_author_urls(
         self,
         commits: list[dict[str, Any]],

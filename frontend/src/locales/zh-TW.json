@@ -1193,6 +1193,7 @@
     "badge_latest": "最新",
     "badge_prerelease": "預發佈",
     "badge_draft": "草稿",
+    "tag_link_hint": "在程式碼庫中開啟該標籤",
     "tag": "Tag / 版本號",
     "tag_placeholder": "選擇本倉庫的 tag，例如 v1.2.0",
     "ref_no_match": "本倉庫沒有相符的標籤或分支。",

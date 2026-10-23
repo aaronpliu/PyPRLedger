@@ -7,6 +7,8 @@ export interface ReleaseNote {
   project_key: string
   repository_slug: string
   tag_name: string
+  /** Browsable page of the repository at the tag, when the platform has one */
+  tag_url?: string | null
   name: string
   body: string
   previous_tag?: string | null

@@ -1193,6 +1193,7 @@
     "badge_latest": "最新",
     "badge_prerelease": "预发布",
     "badge_draft": "草稿",
+    "tag_link_hint": "在代码库中打开该标签",
     "tag": "Tag / 版本号",
     "tag_placeholder": "选择本仓库的 tag，例如 v1.2.0",
     "ref_no_match": "本仓库没有匹配的标签或分支。",

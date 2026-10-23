@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- A release note carries a badge with the tag it was cut from, linking to that tag in the repository: Bitbucket Server opens the browse page at `refs/tags/{tag}`, Bitbucket Cloud the source at the tag, and GitHub Enterprise the tree at the tag. It is what lets a release be traced back to the code it describes; a platform without a web UI, or one whose host is not configured, keeps the badge as plain text rather than a dead link
+
 ## [1.33.1] - 2026-10-23
 
 **Backend Version**: 1.33.1

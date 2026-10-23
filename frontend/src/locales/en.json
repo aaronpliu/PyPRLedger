@@ -1193,6 +1193,7 @@
     "badge_latest": "Latest",
     "badge_prerelease": "Pre-release",
     "badge_draft": "Draft",
+    "tag_link_hint": "Open this tag in the repository",
     "tag": "Tag / Version",
     "tag_placeholder": "Choose a tag of this repository, e.g. v1.2.0",
     "ref_no_match": "No tag or branch of this repository matches.",

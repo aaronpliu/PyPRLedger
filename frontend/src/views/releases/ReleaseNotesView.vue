@@ -766,6 +766,23 @@
                       {{ note.name }}
                     </a>
                   </h4>
+                  <!-- The tag the release was cut from, as a badge that leaves the
+                       app for the repository - so a release can be traced back to
+                       the code it describes without hunting for the tag -->
+                  <a
+                    v-if="note.tag_url"
+                    class="note-entry-tag-badge"
+                    :href="note.tag_url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    :title="t('releaseNotes.tag_link_hint')"
+                  >
+                    <el-tag size="small" effect="plain" round>
+                      <el-icon class="tag-badge-icon"><Link /></el-icon>
+                      {{ note.tag_name }}
+                    </el-tag>
+                  </a>
+                  <el-tag v-else size="small" effect="plain" round>{{ note.tag_name }}</el-tag>
                   <el-tag v-if="note.is_latest" size="small" type="success" round>
                     {{ t('releaseNotes.badge_latest') }}
                   </el-tag>
@@ -1006,6 +1023,7 @@ import {
   CopyDocument,
   Document,
   InfoFilled,
+  Link,
   MagicStick,
   MoreFilled,
   Refresh,
@@ -3048,6 +3066,30 @@ onBeforeUnmount(() => {
   color: var(--el-color-primary);
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* The tag badge points out of the app, to the code the release was cut from. It
+   sits beside the name so a release and its tag read as one line. */
+.note-entry-tag-badge {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.tag-badge-icon {
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+.note-entry-tag-badge:hover .el-tag {
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+}
+
+.note-entry-tag-badge:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .note-entry-actions {

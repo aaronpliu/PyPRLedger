@@ -214,6 +214,22 @@ class BitbucketCloudProvider(BaseGitProvider):
 
         return values[:limit], total
 
+    def web_tag_url(
+        self,
+        project_key: str,
+        repository_slug: str,
+        tag_name: str,
+    ) -> str | None:
+        """Repository at a tag (``/{workspace}/{repo}/src/{tag}``)."""
+        if not self.compare_refs_ready(project_key, repository_slug, tag_name):
+            return None
+
+        return (
+            f"{CLOUD_WEB_URL}/{quote(project_key.strip(), safe='')}"
+            f"/{quote(repository_slug.strip(), safe='')}/src/"
+            f"{quote(tag_name.strip(), safe='')}"
+        )
+
     def web_compare_url(
         self,
         project_key: str,

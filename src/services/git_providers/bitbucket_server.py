@@ -85,6 +85,29 @@ class BitbucketServerProvider(BaseGitProvider):
             f"/repos/{quote(repository_slug.strip(), safe='')}/compare/commits?{query}"
         )
 
+    def web_tag_url(
+        self,
+        project_key: str,
+        repository_slug: str,
+        tag_name: str,
+    ) -> str | None:
+        """Repository at a tag (``/browse?at=refs/tags/{tag}``).
+
+        The browse page takes any ref, so the tag is named in full: a bare name
+        would be looked up as a branch first and land on the wrong revision when
+        the repository has both.
+        """
+        if not self._server_url or not self.compare_refs_ready(
+            project_key, repository_slug, tag_name
+        ):
+            return None
+
+        query = urlencode({"at": f"refs/tags/{tag_name.strip()}"})
+        return (
+            f"{self._server_url}/projects/{quote(project_key.strip(), safe='')}"
+            f"/repos/{quote(repository_slug.strip(), safe='')}/browse?{query}"
+        )
+
     def web_user_url(self, username: str) -> str | None:
         """Profile page of a Bitbucket Server user (``/users/{slug}``)."""
         if not self._server_url or not username or not username.strip():
