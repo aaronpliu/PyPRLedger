@@ -202,6 +202,7 @@
             <el-form-item :label="t('auto_rules.f_assign_to')" prop="assign_to">
               <el-select
                 v-model="form.assign_to"
+                class="tag-select"
                 multiple
                 filterable
                 clearable
@@ -256,6 +257,7 @@
             <el-form-item label="App Name">
               <el-select
                 v-model="cond.app_name"
+                class="tag-select"
                 multiple
                 filterable
                 clearable
@@ -276,6 +278,7 @@
             <el-form-item :label="t('auto_rules.f_pr_user')">
               <el-select
                 v-model="cond.pull_request_user"
+                class="tag-select"
                 multiple
                 filterable
                 clearable
@@ -889,6 +892,16 @@ async function loadAppOptions() {
    the space between them is not. */
 .rule-form :deep(.el-form-item) {
   margin-bottom: 14px;
+}
+
+/* A picker whose list can be long scrolls inside itself instead of stretching the
+   dialog: three rows of tags, then the rest are a scroll away. Without this, choosing
+   a dozen applications pushed every control below it out of the column and left the
+   two columns uneven. */
+.rule-form :deep(.tag-select .el-select__selection) {
+  max-height: 88px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .preview-fold {
