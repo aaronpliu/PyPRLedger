@@ -307,7 +307,6 @@ class TestAutoAssignIntegration:
                 priority=10,
                 conditions={"project_key": ["PROJ-A"]},
                 assign_to=["alice", "bob"],
-                max_assignments=0,
                 is_active=True,
                 created_by="admin",
                 created_at=get_current_time(),
@@ -353,8 +352,8 @@ class TestAutoAssignIntegration:
         await engine.dispose()
 
     @pytest.mark.asyncio
-    async def test_max_assignments_limits_reviewers(self, auto_service, review_data):
-        """max_assignments should limit how many reviewers get assigned"""
+    async def test_assigns_every_reviewer_in_the_list(self, auto_service, review_data):
+        """The rule's list is exactly who reviews: nothing is truncated"""
         engine = create_async_engine(TEST_DATABASE_URL, echo=False)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -374,13 +373,12 @@ class TestAutoAssignIntegration:
                 session.add(user)
             await session.flush()
 
-            # Rule with max_assignments=2
+            # Rule naming three reviewers, all of whom exist
             rule = PullRequestReviewAutoAssignmentRule(
-                name="Limited",
+                name="Team",
                 priority=10,
                 conditions={"project_key": ["PROJ-A"]},
                 assign_to=["reviewer1", "reviewer2", "reviewer3"],
-                max_assignments=2,
                 is_active=True,
                 created_by="admin",
                 created_at=get_current_time(),
@@ -405,7 +403,8 @@ class TestAutoAssignIntegration:
                 db=session, review_base=review_base, review_data=review_data
             )
 
-            assert len(assignments) == 2, "Only 2 reviewers should be assigned (max_assignments=2)"
+            assert len(assignments) == 3, "Every reviewer the rule names should be assigned"
+            assert {a.reviewer for a in assignments} == {"reviewer1", "reviewer2", "reviewer3"}
 
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)

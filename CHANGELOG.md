@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- A rule's **Assign To** list is now exactly who reviews. **Max Assignments** is gone from the rule form and the rules table: it truncated the list to its first N names, so a rule naming three reviewers with a limit of one assigned whoever stood first and dropped the rest without a word. The truncation also ran before the usernames were checked, so a stale name in the first slots could leave a review with fewer reviewers than the rule named, or none at all. Existing rules keep their lists and now assign every name in them; migration `037` drops the column
+
 ### Added
 - The assignment rules table says when a rule last changed. An **Updated** column sits beside **Created**, so an edited rule and a rule switched off read as recently touched rather than as newly added; the day is shown, and the hour and minute are a hover away
 

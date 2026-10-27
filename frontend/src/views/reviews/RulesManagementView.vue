@@ -86,11 +86,6 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="max_assignments" :label="t('auto_rules.col_max')" width="80" align="center">
-            <template #default="{ row }">
-              {{ row.max_assignments === 0 ? t('auto_rules.all') : row.max_assignments }}
-            </template>
-          </el-table-column>
           <el-table-column :label="t('auto_rules.col_starts_at')" width="175" align="center">
             <template #default="{ row }">
               <span class="date-cell" :class="{ 'date-null': !row.starts_at }">
@@ -193,12 +188,6 @@
           <el-col :span="12">
             <el-form-item :label="t('auto_rules.f_priority')" prop="priority">
               <el-input-number v-model="form.priority" :min="0" :max="9999" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('auto_rules.f_max_assignments')" prop="max_assignments">
-              <el-input-number v-model="form.max_assignments" :min="0" style="width: 100%" />
-              <div class="form-help-text">{{ t('auto_rules.f_max_hint') }}</div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -452,7 +441,6 @@ const defaultForm = {
   priority: 100,
   conditions: {} as Record<string, any>,
   assign_to: [] as string[],
-  max_assignments: 0,
   starts_at: null as string | null,
   expires_at: null as string | null,
   is_active: true,
@@ -676,7 +664,6 @@ function openEditDialog(rule: AutoAssignRule) {
     priority: rule.priority,
     conditions: { ...rule.conditions },
     assign_to: [...rule.assign_to],
-    max_assignments: rule.max_assignments,
     starts_at: rule.starts_at ?? null,
     expires_at: rule.expires_at ?? null,
     is_active: rule.is_active,
