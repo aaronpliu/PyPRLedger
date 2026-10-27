@@ -155,10 +155,14 @@
     </el-card>
 
     <!-- Create/Edit Dialog -->
+    <!-- Room for two columns where the screen allows it, one where it does not, and a
+         body that scrolls inside the dialog: Cancel and Save stay in reach whatever
+         the window height. -->
     <el-dialog
       v-model="dialogVisible"
       :title="isEditing ? t('auto_rules.edit_rule') : t('auto_rules.create_rule')"
-      width="700px"
+      width="min(1024px, 92vw)"
+      body-class="rule-dialog-body"
       :close-on-click-modal="false"
     >
       <el-form
@@ -166,206 +170,212 @@
         :model="form"
         :rules="formRules"
         label-position="top"
+        class="rule-form"
       >
-        <!-- Basic Info -->
-        <el-divider content-position="left">{{ t('auto_rules.section_basic') }}</el-divider>
+        <!-- Two columns, so the whole rule fits a screen: what the rule is and who
+             reviews on the left, what it matches on the right. Six stacked sections
+             used to run past the viewport and put Save below the fold. -->
+        <el-row :gutter="28">
+          <el-col :xs="24" :md="12">
+            <h3 class="section-title">{{ t('auto_rules.section_basic') }}</h3>
 
-        <el-form-item :label="t('auto_rules.f_name')" prop="name">
-          <el-input v-model="form.name" :placeholder="t('auto_rules.f_name_placeholder')" maxlength="128" />
-        </el-form-item>
+            <el-form-item :label="t('auto_rules.f_name')" prop="name">
+              <el-input v-model="form.name" :placeholder="t('auto_rules.f_name_placeholder')" maxlength="128" />
+            </el-form-item>
 
-        <el-form-item :label="t('auto_rules.f_description')" prop="description">
-          <el-input
-            v-model="form.description"
-            type="textarea"
-            :rows="2"
-            :placeholder="t('auto_rules.f_description_placeholder')"
-            maxlength="1000"
-          />
-        </el-form-item>
+            <el-form-item :label="t('auto_rules.f_description')" prop="description">
+              <el-input
+                v-model="form.description"
+                type="textarea"
+                :rows="2"
+                :placeholder="t('auto_rules.f_description_placeholder')"
+                maxlength="1000"
+              />
+            </el-form-item>
 
-        <el-row :gutter="16">
-          <el-col :span="12">
             <el-form-item :label="t('auto_rules.f_priority')" prop="priority">
               <el-input-number v-model="form.priority" :min="0" :max="9999" style="width: 100%" />
             </el-form-item>
-          </el-col>
-        </el-row>
 
-        <!-- Match Conditions -->
-        <el-divider content-position="left">{{ t('auto_rules.section_conditions') }}</el-divider>
+            <h3 class="section-title">{{ t('auto_rules.section_assign') }}</h3>
 
-        <el-form-item label="App Name">
-          <el-select
-            v-model="cond.app_name"
-            multiple
-            filterable
-            clearable
-            placeholder="Select applications"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="app in appOptions"
-              :key="app.app_name"
-              :label="`${app.app_name} (${app.project_count} projects)`"
-              :value="app.app_name"
-            />
-          </el-select>
-          <div class="form-help-text">Conditions will be resolved to project_key and repository_slug in JSON</div>
-        </el-form-item>
-
-        <el-form-item :label="t('auto_rules.f_pr_user')">
-          <el-select
-            v-model="cond.pull_request_user"
-            multiple
-            filterable
-            clearable
-            placeholder="e.g. alice"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="u in gitUsers"
-              :key="u.username"
-              :label="`${u.display_name} (${u.username})`"
-              :value="u.username"
-            />
-          </el-select>
-          <div class="form-help-text">{{ t('auto_rules.f_pr_user_hint') }}</div>
-        </el-form-item>
-
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('auto_rules.f_source_branch_prefix')">
-              <el-input
-                v-model="cond.source_branch_prefix"
-                placeholder="e.g. feature/"
-                clearable
-              />
-              <div class="form-help-text">{{ t('auto_rules.f_source_branch_hint') }}</div>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('auto_rules.f_target_branch')">
+            <el-form-item :label="t('auto_rules.f_assign_to')" prop="assign_to">
               <el-select
-                v-model="cond.target_branch"
+                v-model="form.assign_to"
                 multiple
                 filterable
-                allow-create
                 clearable
-                default-first-option
-                placeholder="e.g. main"
+                :placeholder="t('auto_rules.f_assign_to_placeholder')"
                 style="width: 100%"
               >
-                <el-option label="main" value="main" />
-                <el-option label="master" value="master" />
-                <el-option label="develop" value="develop" />
-                <el-option label="staging" value="staging" />
+                <el-option
+                  v-for="u in reviewerUsers"
+                  :key="u.username"
+                  :label="`${u.display_name} (${u.username})`"
+                  :value="u.username"
+                />
               </el-select>
-              <div class="form-help-text">{{ t('auto_rules.f_target_branch_hint') }}</div>
+              <div class="form-help-text">{{ t('auto_rules.f_assign_to_hint') }}</div>
+            </el-form-item>
+
+            <h3 class="section-title">{{ t('auto_rules.section_temporal') }}</h3>
+
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item :label="t('auto_rules.f_starts_at')" prop="starts_at">
+                  <el-date-picker
+                    v-model="form.starts_at"
+                    type="datetime"
+                    :placeholder="t('auto_rules.f_date_placeholder')"
+                    style="width: 100%"
+                    clearable
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item :label="t('auto_rules.f_expires_at')" prop="expires_at">
+                  <el-date-picker
+                    v-model="form.expires_at"
+                    type="datetime"
+                    :placeholder="t('auto_rules.f_date_placeholder')"
+                    style="width: 100%"
+                    clearable
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-form-item :label="t('auto_rules.f_is_active')">
+              <el-switch v-model="form.is_active" />
+            </el-form-item>
+          </el-col>
+
+          <el-col :xs="24" :md="12">
+            <h3 class="section-title">{{ t('auto_rules.section_conditions') }}</h3>
+
+            <el-form-item label="App Name">
+              <el-select
+                v-model="cond.app_name"
+                multiple
+                filterable
+                clearable
+                placeholder="Select applications"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="app in appOptions"
+                  :key="app.app_name"
+                  :label="`${app.app_name} (${app.project_count} projects)`"
+                  :value="app.app_name"
+                />
+              </el-select>
+              <div class="form-help-text">Conditions will be resolved to project_key and repository_slug in JSON</div>
+            </el-form-item>
+
+            <el-form-item :label="t('auto_rules.f_pr_user')">
+              <el-select
+                v-model="cond.pull_request_user"
+                multiple
+                filterable
+                clearable
+                placeholder="e.g. alice"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="u in gitUsers"
+                  :key="u.username"
+                  :label="`${u.display_name} (${u.username})`"
+                  :value="u.username"
+                />
+              </el-select>
+              <div class="form-help-text">{{ t('auto_rules.f_pr_user_hint') }}</div>
+            </el-form-item>
+
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item :label="t('auto_rules.f_source_branch_prefix')">
+                  <el-input
+                    v-model="cond.source_branch_prefix"
+                    placeholder="e.g. feature/"
+                    clearable
+                  />
+                  <div class="form-help-text">{{ t('auto_rules.f_source_branch_hint') }}</div>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item :label="t('auto_rules.f_target_branch')">
+                  <el-select
+                    v-model="cond.target_branch"
+                    multiple
+                    filterable
+                    allow-create
+                    clearable
+                    default-first-option
+                    placeholder="e.g. main"
+                    style="width: 100%"
+                  >
+                    <el-option label="main" value="main" />
+                    <el-option label="master" value="master" />
+                    <el-option label="develop" value="develop" />
+                    <el-option label="staging" value="staging" />
+                  </el-select>
+                  <div class="form-help-text">{{ t('auto_rules.f_target_branch_hint') }}</div>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-form-item :label="t('auto_rules.f_pr_status')">
+              <el-select
+                v-model="cond.pull_request_status"
+                multiple
+                filterable
+                clearable
+                placeholder="Select PR statuses"
+                style="width: 100%"
+              >
+                <el-option label="open" value="open" />
+                <el-option label="merged" value="merged" />
+                <el-option label="closed" value="closed" />
+                <el-option label="draft" value="draft" />
+              </el-select>
+              <div class="form-help-text">{{ t('auto_rules.f_pr_status_hint') }}</div>
+            </el-form-item>
+
+            <el-form-item :label="t('auto_rules.f_issue_severity')">
+              <el-select
+                v-model="cond.issue_severity"
+                multiple
+                clearable
+                :placeholder="t('auto_rules.f_issue_severity_placeholder')"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="level in ISSUE_SEVERITIES"
+                  :key="level"
+                  :label="t(`auto_rules.severity_${level}`)"
+                  :value="level"
+                />
+              </el-select>
+              <div class="form-help-text">{{ t('auto_rules.f_issue_severity_hint') }}</div>
             </el-form-item>
           </el-col>
         </el-row>
 
-        <el-form-item :label="t('auto_rules.f_pr_status')">
-          <el-select
-            v-model="cond.pull_request_status"
-            multiple
-            filterable
-            clearable
-            placeholder="Select PR statuses"
-            style="width: 100%"
-          >
-            <el-option label="open" value="open" />
-            <el-option label="merged" value="merged" />
-            <el-option label="closed" value="closed" />
-            <el-option label="draft" value="draft" />
-          </el-select>
-          <div class="form-help-text">{{ t('auto_rules.f_pr_status_hint') }}</div>
-        </el-form-item>
-
-        <el-form-item :label="t('auto_rules.f_issue_severity')">
-          <el-select
-            v-model="cond.issue_severity"
-            multiple
-            clearable
-            :placeholder="t('auto_rules.f_issue_severity_placeholder')"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="level in ISSUE_SEVERITIES"
-              :key="level"
-              :label="t(`auto_rules.severity_${level}`)"
-              :value="level"
-            />
-          </el-select>
-          <div class="form-help-text">{{ t('auto_rules.f_issue_severity_hint') }}</div>
-        </el-form-item>
-
-        <!-- Assign To -->
-        <el-divider content-position="left">{{ t('auto_rules.section_assign') }}</el-divider>
-
-        <el-form-item :label="t('auto_rules.f_assign_to')" prop="assign_to">
-          <el-select
-            v-model="form.assign_to"
-            multiple
-            filterable
-            clearable
-            :placeholder="t('auto_rules.f_assign_to_placeholder')"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="u in reviewerUsers"
-              :key="u.username"
-              :label="`${u.display_name} (${u.username})`"
-              :value="u.username"
-            />
-          </el-select>
-          <div class="form-help-text">{{ t('auto_rules.f_assign_to_hint') }}</div>
-        </el-form-item>
-
-        <!-- Temporal -->
-        <el-divider content-position="left">{{ t('auto_rules.section_temporal') }}</el-divider>
-
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('auto_rules.f_starts_at')" prop="starts_at">
-              <el-date-picker
-                v-model="form.starts_at"
-                type="datetime"
-                :placeholder="t('auto_rules.f_date_placeholder')"
-                style="width: 100%"
-                clearable
+        <!-- The JSON is what the rule becomes rather than what is typed into it: it
+             opens on demand, so it no longer costs every edit a scroll. -->
+        <el-collapse class="preview-fold">
+          <el-collapse-item :title="t('auto_rules.section_preview')" name="preview">
+            <el-form-item :label="t('auto_rules.f_conditions')">
+              <el-input
+                :model-value="conditionsPreview"
+                type="textarea"
+                :rows="4"
+                readonly
               />
+              <div class="form-help-text">{{ t('auto_rules.f_preview_hint') }}</div>
             </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('auto_rules.f_expires_at')" prop="expires_at">
-              <el-date-picker
-                v-model="form.expires_at"
-                type="datetime"
-                :placeholder="t('auto_rules.f_date_placeholder')"
-                style="width: 100%"
-                clearable
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-form-item :label="t('auto_rules.f_is_active')">
-          <el-switch v-model="form.is_active" />
-        </el-form-item>
-
-        <!-- JSON Preview -->
-        <el-divider content-position="left">{{ t('auto_rules.section_preview') }}</el-divider>
-        <el-form-item :label="t('auto_rules.f_conditions')">
-          <el-input
-            :model-value="conditionsPreview"
-            type="textarea"
-            :rows="4"
-            readonly
-          />
-          <div class="form-help-text">{{ t('auto_rules.f_preview_hint') }}</div>
-        </el-form-item>
+          </el-collapse-item>
+        </el-collapse>
       </el-form>
 
       <template #footer>
@@ -862,5 +872,46 @@ async function loadAppOptions() {
   font-size: 12px;
   color: var(--el-color-danger);
   margin-top: 4px;
+}
+
+/* A section heading that names the group beside it rather than dividing the form:
+   the two columns are read side by side, so a full-width rule would cut across. */
+.section-title {
+  margin: 0 0 12px;
+  padding-left: 8px;
+  border-left: 3px solid var(--el-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--el-text-color-primary);
+}
+
+.section-title:not(:first-child) {
+  margin-top: 20px;
+}
+
+/* Room is what the dialog was short of: a hint under every field is worth its line,
+   the space between them is not. */
+.rule-form :deep(.el-form-item) {
+  margin-bottom: 14px;
+}
+
+.preview-fold {
+  margin-top: 4px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.preview-fold :deep(.el-collapse-item__header) {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+/* The body scrolls, not the page: Cancel and Save stay where they are even when the
+   window is shorter than the form. */
+:global(.rule-dialog-body) {
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+  padding-right: 6px;
 }
 </style>
