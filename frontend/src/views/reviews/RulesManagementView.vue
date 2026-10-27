@@ -119,6 +119,15 @@
               {{ formatDate(row.created_at) }}
             </template>
           </el-table-column>
+          <!-- The day a rule last changed says whether it was edited or switched off
+               since; the hour and minute are a hover away rather than another column -->
+          <el-table-column :label="t('auto_rules.col_updated')" width="110">
+            <template #default="{ row }">
+              <span :title="formatDateTime(row.updated_at)">
+                {{ formatDate(row.updated_at) }}
+              </span>
+            </template>
+          </el-table-column>
           <el-table-column :label="t('auto_rules.col_actions')" width="140" fixed="right" align="center">
             <template #default="{ row }">
               <el-button size="small" type="primary" link @click="openEditDialog(row)">

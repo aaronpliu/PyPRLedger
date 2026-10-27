@@ -680,6 +680,7 @@
     "col_expires_at": "End Date",
     "col_status": "Active",
     "col_created": "Created",
+    "col_updated": "Updated",
     "col_actions": "Actions",
     "all": "All",
     "edit": "Edit",

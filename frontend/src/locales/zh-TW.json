@@ -680,6 +680,7 @@
     "col_expires_at": "結束時間",
     "col_status": "狀態",
     "col_created": "建立時間",
+    "col_updated": "更新時間",
     "col_actions": "操作",
     "all": "全部",
     "edit": "編輯",
