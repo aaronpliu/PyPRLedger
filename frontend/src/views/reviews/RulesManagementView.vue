@@ -261,6 +261,7 @@
                 clearable
                 placeholder="Select applications"
                 style="width: 100%"
+                @change="onAppsChosen"
               >
                 <el-option
                   v-for="app in appOptions"
@@ -402,6 +403,7 @@ import { projectsApi, type ProjectSummary, type RepositorySummary } from '@/api/
 import { usersApi, type ReviewerUser } from '@/api/users'
 import { projectRegistryApi } from '@/api/projectRegistry'
 import type { AppInfo } from '@/api/projectRegistry'
+import { appsForTargets, targetsForApps } from '@/utils/ruleConditions'
 
 const { t } = useI18n()
 
@@ -476,21 +478,17 @@ function buildConditions(): Record<string, any> {
   return c
 }
 
-// Watch app_name — resolve to project_key + repository_slug via registry map
-watch(() => cond.app_name, (newApps) => {
-  const pkSet = new Set<string>()
-  const slugSet = new Set<string>()
-  for (const app of newApps) {
-    const entries = registryMap.value[app] || []
-    for (const entry of entries) {
-      const [pk, slug] = entry.split('/')
-      if (pk) pkSet.add(pk)
-      if (slug) slugSet.add(slug)
-    }
-  }
-  cond.project_key = Array.from(pkSet)
-  cond.repository_slug = Array.from(slugSet)
-}, { deep: true })
+// Resolve the chosen app names into project_key + repository_slug, on the reader's
+// choice only - never on a programmatic assignment. Opening a rule for editing sets
+// app_name from its conditions; a watcher here would read that back as a fresh choice
+// and rebuild the conditions from it, which a rule the registry cannot explain
+// (an extra project key, say) would answer by emptying them.
+function onAppsChosen(apps: string[]) {
+  const targets = targetsForApps(registryMap.value, apps)
+  cond.project_key = targets.projectKeys
+  cond.repository_slug = targets.repositorySlugs
+  form.value.conditions = buildConditions()
+}
 
 // Sync conditions from cond form -> form.conditions (for the API payload)
 watch(
@@ -618,28 +616,25 @@ function formatDateTime(dateStr: string | null | undefined): string {
 }
 
 // === Replace cond fields from conditions JSON (used when editing) ===
+function asList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String)
+  return value ? [String(value)] : []
+}
+
 function applyConditionsToForm(conditions: Record<string, any>) {
-  cond.project_key = conditions.project_key || []
-  cond.repository_slug = conditions.repository_slug || []
-  cond.pull_request_user = conditions.pull_request_user || []
+  const projectKeys = asList(conditions.project_key)
+  const repositorySlugs = asList(conditions.repository_slug)
+  cond.project_key = projectKeys
+  cond.repository_slug = repositorySlugs
+  cond.pull_request_user = asList(conditions.pull_request_user)
   cond.source_branch_prefix = conditions.source_branch_prefix || ''
-  cond.target_branch = conditions.target_branch || []
-  cond.pull_request_status = conditions.pull_request_status || []
-  cond.issue_severity = conditions.issue_severity || []
-  // Reverse-map project_key/repository_slug back to app_name
-  const selectedApps: string[] = []
-  for (const [app, entries] of Object.entries(registryMap.value)) {
-    const matchAll = cond.project_key.every(pk =>
-      entries.some(e => e.startsWith(`${pk}/`))
-    )
-    const matchSlugs = cond.repository_slug.length === 0 || cond.repository_slug.every(slug =>
-      entries.some(e => e.endsWith(`/${slug}`))
-    )
-    if (matchAll && matchSlugs) {
-      selectedApps.push(app)
-    }
-  }
-  cond.app_name = selectedApps
+  cond.target_branch = asList(conditions.target_branch)
+  cond.pull_request_status = asList(conditions.pull_request_status)
+  cond.issue_severity = asList(conditions.issue_severity)
+  // The rule keeps the two lists, not the applications they were picked from: read
+  // them back when a selection of applications explains them, and leave the field
+  // empty when it does not.
+  cond.app_name = appsForTargets(registryMap.value, projectKeys, repositorySlugs)
   form.value.conditions = buildConditions()
 }
 
