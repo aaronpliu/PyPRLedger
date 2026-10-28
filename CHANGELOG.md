@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.34.1] - 2026-10-28
+
+**Backend Version**: 1.34.1
+**Frontend Version**: 1.29.1
+
 ### Added
-- A generated release note closes with **Contributors**: every person whose commits are in its scope, once each - as `@login` linked to their profile where the provider reports an account, by name where it does not - under a horizontal rule, beneath **Full Changelog**, in the note's language. Each name carries the account's profile picture at 16px when the instance knows one, and the initial of the name when it does not, so a long line of names still reads at a glance. The picture is the app's: a git platform's release page cannot resolve the instance's own avatar path and a Confluence page would show the image tag itself, so both receive the credits as usernames alone, written when the release is pushed rather than stored that way. Merge commits are left out, as they are from the list above: the integration of work is credited through the commits it merged. Notes written without author mentions drop the credits with them
+- A published release is credited under its notes: **Contributors** lists every person whose commits are in the release scope, once each - as `@login` linked to the profile the provider reports, by name where the commits name only an author - with the picture of the instance account that login (or, failing that, the commit's email) is bound to, and with the initial of the name in a circle where no account is bound. Merge commits are left out, as they are from the notes: the integration of work is credited through the commits it merged. A draft carries no credits - it is still being written
+- The credits are read once, while the notes are generated. The commits of the scope are already in hand there, so they are deduplicated by person and matched to their accounts before the notes are saved, and travel with them into the release (`release_note.contributors`, migration `038`). Showing a release no longer reads its commits from the git provider again, and a page of ten releases costs one reading of the scope, not ten
+
+### Changed
+- The credits sit beside the notes rather than inside them: the body ends with **Full Changelog** again, and the GitHub Enterprise release and the Confluence page carry what was written and nothing else. The `GET /release/notes/{id}/contributors` endpoint is gone with the paragraph it used to feed
+- A release generated before this version, written by hand or imported from a git provider carries no credits until its notes are generated again
+
+---
 
 ## [1.34.0] - 2026-10-28
 
