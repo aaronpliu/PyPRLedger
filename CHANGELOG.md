@@ -7,16 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- The rule dialog fits a screen. Its six sections ran down one column past the viewport, so Save sat below the fold: what the rule is and who reviews now sit on the left, what it matches on the right, and the JSON the form builds moved into a fold that is closed until opened. The dialog widens with the window up to 1024px, folds to one column on a narrow screen, and its body scrolls inside the dialog rather than taking the buttons with it. A picker that can hold a long list - applications, reviewers, the PR's author - scrolls inside itself after three rows of tags, so choosing a dozen applications no longer pushes the rest of its column out of view or leaves the two columns uneven
-- A rule's **Assign To** list is now exactly who reviews. **Max Assignments** is gone from the rule form and the rules table: it truncated the list to its first N names, so a rule naming three reviewers with a limit of one assigned whoever stood first and dropped the rest without a word. The truncation also ran before the usernames were checked, so a stale name in the first slots could leave a review with fewer reviewers than the rule named, or none at all. Existing rules keep their lists and now assign every name in them; migration `037` drops the column
+## [1.34.0] - 2026-10-28
+
+**Backend Version**: 1.34.0
+**Frontend Version**: 1.29.0
 
 ### Added
 - The assignment rules table says when a rule last changed. An **Updated** column sits beside **Created**, so an edited rule and a rule switched off read as recently touched rather than as newly added; the day is shown, and the hour and minute are a hover away
 
+### Changed
+- The rule dialog fits a screen. Its six sections ran down one column past the viewport, so Save sat below the fold: what the rule is and who reviews now sit on the left, what it matches on the right, and the JSON the form builds moved into a fold that is closed until opened. The dialog widens with the window up to 1024px, folds to one column on a narrow screen, and its body scrolls inside the dialog rather than taking the buttons with it. A picker that can hold a long list - applications, reviewers, the PR's author - scrolls inside itself after three rows of tags, so choosing a dozen applications no longer pushes the rest of its column out of view or leaves the two columns uneven
+- A rule's **Assign To** list is now exactly who reviews. **Max Assignments** is gone from the rule form and the rules table: it truncated the list to its first N names, so a rule naming three reviewers with a limit of one assigned whoever stood first and dropped the rest without a word. The truncation also ran before the usernames were checked, so a stale name in the first slots could leave a review with fewer reviewers than the rule named, or none at all. Existing rules keep their lists and now assign every name in them; migration `037` drops the column
+
 ### Fixed
 - Reopening a rule for editing keeps the applications it was built from. The rule stores only `project_key` and `repository_slug` lists, and the dialog read them back by asking every application whether it contained *all* of the rule's project keys - which no single application does once two were chosen, so a rule written across several applications opened with **App Name** empty. The conditions are now read back the other way (the applications whose repositories the rule covers, offered only when together they reproduce the rule exactly), and opening a rule no longer rebuilds its conditions from that answer, so editing a rule cannot quietly widen or narrow what it matches
 - A package's commit comparison on the App Diff page is titled by the package's own versions rather than by the application's releases. The commits are read between those two versions in the package's own repository, so the release pair named a comparison the commits were never between - a reader looking for `1.0.0 → 1.0.1` was shown `v1.1.0 → v2.0.0` and could not tell which move the commits belonged to. The title is now also carried by a comparison that could not be read, so the versions it was between are named beside the reason it could not be read rather than left out
+
+---
 
 ## [1.33.2] - 2026-10-23
 
