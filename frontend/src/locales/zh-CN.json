@@ -1226,6 +1226,7 @@
     "released_by": "发布人 {author}",
     "contributors": "贡献者",
     "contributor_commits": "{count} 次提交",
+    "contributor_profile": "查看主页",
     "updated_at": "更新于 {date}",
     "range": "{from}...{to}",
     "load_failed": "加载版本列表失败",

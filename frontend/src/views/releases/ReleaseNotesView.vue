@@ -934,29 +934,47 @@
                   <li
                     v-for="(person, index) in contributorsOf(note)"
                     :key="person.username || person.display_name || index"
-                    class="contributor"
-                    :title="person.display_name || person.username || ''"
+                    class="contributor-item"
                   >
-                    <UserAvatar
-                      class="contributor-avatar"
-                      :username="person.username || person.display_name || '?'"
-                      :avatar-url="person.avatar_url"
-                      :size="20"
-                    />
-                    <a
-                      v-if="person.profile_url"
-                      class="contributor-name"
-                      :href="person.profile_url"
-                      target="_blank"
-                      rel="noopener"
-                      @click.stop
+                    <!-- A picture over the name, as a face is read before the
+                         handle is; hovering it says who the person is without
+                         leaving the release -->
+                    <el-popover
+                      trigger="hover"
+                      placement="top"
+                      :width="260"
+                      :show-after="150"
+                      :hide-after="60"
+                      :offset="10"
                     >
-                      {{ contributorLabel(person) }}
-                    </a>
-                    <span v-else class="contributor-name">{{ contributorLabel(person) }}</span>
-                    <span class="contributor-commits">
-                      {{ t('releaseNotes.contributor_commits', { count: person.commit_count }) }}
-                    </span>
+                      <template #reference>
+                        <div class="contributor">
+                          <component
+                            :is="person.profile_url ? 'a' : 'div'"
+                            class="contributor-avatar-frame"
+                            :href="person.profile_url ?? undefined"
+                            :target="person.profile_url ? '_blank' : undefined"
+                            :rel="person.profile_url ? 'noopener' : undefined"
+                            @click.stop
+                          >
+                            <UserAvatar
+                              class="contributor-avatar"
+                              :username="person.username || person.display_name || '?'"
+                              :avatar-url="person.avatar_url"
+                              :size="40"
+                            />
+                          </component>
+                          <span class="contributor-name">{{ contributorLabel(person) }}</span>
+                        </div>
+                      </template>
+                      <ContributorProfileCard
+                        :username="person.username"
+                        :display-name="person.display_name"
+                        :avatar-url="person.avatar_url"
+                        :profile-url="person.profile_url"
+                        :commit-count="person.commit_count"
+                      />
+                    </el-popover>
                   </li>
                 </ul>
               </div>
@@ -1077,6 +1095,7 @@ import { releaseDiffApi } from '@/api/releaseDiff'
 import type { CommitInfo } from '@/api/releaseDiff'
 import CommitTable from '@/components/release/CommitTable.vue'
 import ContentLoader from '@/components/common/ContentLoader.vue'
+import ContributorProfileCard from '@/components/release/ContributorProfileCard.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
 import { useJira } from '@/composables/useJira'
 import { searchCandidates } from '@/composables/useRefCandidates'
@@ -3229,9 +3248,8 @@ onBeforeUnmount(() => {
    the release, not part of what was written */
 .release-contributors {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px 12px;
+  flex-direction: column;
+  gap: 10px;
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--el-border-color-lighter);
@@ -3246,29 +3264,49 @@ onBeforeUnmount(() => {
 .contributor-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 12px;
+  gap: 14px 18px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* A face over the handle, one person per column: the picture is read first, the
+   name says who it is */
 .contributor {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 6px;
+  width: 76px;
+  text-decoration: none;
+}
+
+.contributor-avatar-frame {
+  display: inline-flex;
+  border-radius: 50%;
+  line-height: 0;
 }
 
 .contributor-avatar {
   box-sizing: border-box;
   border: 1px solid var(--el-border-color-lighter);
+  transition: box-shadow 0.15s ease;
+}
+
+.contributor:hover .contributor-avatar {
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-5);
 }
 
 .contributor-name {
+  max-width: 100%;
+  overflow: hidden;
   color: var(--el-text-color-regular);
-  text-decoration: none;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-a.contributor-name:hover {
+.contributor:hover .contributor-name {
   color: var(--el-color-primary);
 }
 

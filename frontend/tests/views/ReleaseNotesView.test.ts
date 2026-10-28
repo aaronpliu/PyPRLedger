@@ -538,13 +538,18 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(credits.exists()).toBe(true)
     expect(credits.text()).toContain(enMessages.releaseNotes.contributors)
     // the login is the credit, linked to the profile it belongs to
-    expect(credits.find('a.contributor-name').attributes('href')).toBe('https://github.local/jdoe')
+    expect(credits.find('a.contributor-avatar-frame').attributes('href')).toBe(
+      'https://github.local/jdoe',
+    )
     expect(credits.text()).toContain('@jdoe')
-    expect(credits.text()).toContain('3 commit(s)')
     // an author the provider knows only by name is named, not linked
     expect(credits.text()).toContain('Unlinked Author')
     // the picture of the account is shown next to the login
     expect(credits.find('img.avatar-img').attributes('src')).toBe('/api/v1/users/avatars/77_jd.png')
+    // a face over the handle: the picture is large enough to be read at a glance
+    expect(credits.find('.contributor-avatar').attributes('style')).toContain('width: 40px')
+    // and each person opens a profile card on hover
+    expect(credits.findAllComponents({ name: 'ElPopover' })).toHaveLength(2)
   })
 
   it('credits nobody before the release is published', async () => {
