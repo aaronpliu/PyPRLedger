@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- A generated release note closes with **Contributors**: every person whose commits are in its scope, once each - as `@login` linked to their profile where the provider reports an account, by name where it does not. It sits under **Full Changelog** and follows the note's language. Merge commits are left out, as they are from the list above: the integration of work is credited through the commits it merged. Notes written without author mentions drop the line with them
+
 ## [1.34.0] - 2026-10-28
 
 **Backend Version**: 1.34.0

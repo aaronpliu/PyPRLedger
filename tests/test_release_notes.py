@@ -491,6 +491,81 @@ def test_build_markdown_can_skip_authors_and_handles_empty_scopes() -> None:
     assert "No commits found in this release scope" in empty
 
 
+def test_build_markdown_closes_with_the_contributors_it_credits() -> None:
+    commits = [
+        commit(C1, "feat: add login page").model_dump(),
+        commit(C2, "fix: crash on logout", author="John Roe").model_dump(),
+        commit(C3, "docs: update readme").model_dump(),
+    ]
+
+    body = build_release_notes_markdown(commits, version="v1.1.0", previous_version="v1.0.0")
+
+    # the two people who wrote the lines above, each named once
+    assert "**Contributors**: Jane Doe, John Roe" in body
+    # and the note ends with them, after the comparison link
+    assert body.index("**Full Changelog**") < body.index("**Contributors**")
+    assert body.rstrip().endswith("Jane Doe, John Roe")
+
+
+def test_build_markdown_credits_a_provider_account_as_a_linked_mention() -> None:
+    commits = [
+        {
+            **commit(C1, "feat: add login page").model_dump(),
+            "author_username": "jane",
+            "author_url": "https://git.local/users/jane",
+        },
+        # the same account twice is one person
+        {
+            **commit(C2, "fix: crash on logout", author="J. Doe").model_dump(),
+            "author_username": "jane",
+            "author_url": "https://git.local/users/jane",
+        },
+        {
+            **commit(C3, "docs: update readme").model_dump(),
+            "author_username": "jroe",
+            "author_url": None,
+        },
+    ]
+
+    body = build_release_notes_markdown(commits, version="v1.1.0")
+
+    assert (
+        "**Contributors**: [@jane](https://git.local/users/jane), @jroe" in body
+    )
+
+
+def test_build_markdown_does_not_credit_the_merger() -> None:
+    commits = [
+        commit(C1, "feat: add login page").model_dump(),
+        commit(
+            C2,
+            "Merge pull request #12 from feature/login",
+            author="John Roe",
+        ).model_dump(),
+    ]
+
+    body = build_release_notes_markdown(commits, version="v1.1.0")
+
+    assert "**Contributors**: Jane Doe" in body
+    assert "John Roe" not in body
+
+
+def test_build_markdown_names_the_contributors_in_the_notes_language() -> None:
+    commits = [commit(C1, "feat: add login page").model_dump()]
+
+    body = build_release_notes_markdown(commits, version="v1.1.0", language="zh-CN")
+
+    assert "**贡献者**: Jane Doe" in body
+
+
+def test_build_markdown_drops_the_contributors_with_the_authors() -> None:
+    commits = [commit(C1, "feat: add login page").model_dump()]
+
+    body = build_release_notes_markdown(commits, version="v1.1.0", include_authors=False)
+
+    assert "Contributors" not in body
+
+
 # --------------------------------------------------------------------------- #
 # Author mentions and JIRA ticket links
 # --------------------------------------------------------------------------- #

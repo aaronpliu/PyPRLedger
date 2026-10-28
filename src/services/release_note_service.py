@@ -278,6 +278,7 @@ SECTION_TRANSLATIONS: dict[str, dict[str, str]] = {
         "Tests": "测试",
         OTHER_SECTION: "其他变更",
         "## What's Changed": "## 变更内容",
+        "Contributors": "贡献者",
         "_No commits found in this release scope._": "_此发布范围没有提交。_",
     },
     "zh-TW": {
@@ -291,6 +292,7 @@ SECTION_TRANSLATIONS: dict[str, dict[str, str]] = {
         "Tests": "測試",
         OTHER_SECTION: "其他變更",
         "## What's Changed": "## 變更內容",
+        "Contributors": "貢獻者",
         "_No commits found in this release scope._": "_此發佈範圍沒有提交。_",
     },
 }
@@ -443,6 +445,42 @@ def author_reference(commit: dict[str, Any]) -> str:
     return f" by {name}" if name else ""
 
 
+def contributor_mentions(commits: Iterable[dict[str, Any]]) -> list[str]:
+    """The people a release note credits, in the order they first appear.
+
+    A provider account is mentioned as ``@login`` linked to its profile, so one person
+    with several commits counts once however their name is spelled; a commit without an
+    account falls back to the author's name. Merge commits are left out for the same
+    reason they are left out of the list: the integration of work is credited through
+    the commits it merged.
+    """
+    seen: set[str] = set()
+    mentions: list[str] = []
+
+    for commit in commits:
+        if is_merge_commit(commit.get("message")):
+            continue
+
+        username = commit.get("author_username")
+        if username:
+            key = f"login:{username.casefold()}"
+            if key in seen:
+                continue
+            seen.add(key)
+            url = commit.get("author_url")
+            mentions.append(f"[@{username}]({url})" if url else f"@{username}")
+            continue
+
+        name = (commit.get("author_name") or "").strip()
+        key = f"name:{name.casefold()}"
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        mentions.append(name)
+
+    return mentions
+
+
 def commit_subject(message: str | None) -> str:
     """First line of the commit, with the conventional prefix stripped."""
     if not message:
@@ -474,7 +512,8 @@ def build_release_notes_markdown(
     When ``compare_url`` is given the "Full Changelog" line links to the
     revision comparison on the git platform, otherwise the range stays plain text.
     Commit authors are mentioned as ``@login`` linked to their profile, and JIRA
-    ticket keys are linked when ``jira_base_url`` is configured.
+    ticket keys are linked when ``jira_base_url`` is configured. The note closes with
+    the people behind those commits, once each, under a "Contributors" line.
 
     ``summary`` is an optional paragraph - the one thing a reader wants before the
     list - rendered right under the heading. A commit may carry a ``section`` of
@@ -533,6 +572,13 @@ def build_release_notes_markdown(
             lines.append(f"**Full Changelog**: [{label}]({compare_url})")
         else:
             lines.append(f"**Full Changelog**: `{label}`")
+
+    contributors = contributor_mentions(commits) if include_authors else []
+    if contributors:
+        if lines and lines[-1] != "":
+            lines.append("")
+        label = section_label("Contributors", language)
+        lines.append(f"**{label}**: {', '.join(contributors)}")
 
     return "\n".join(lines).strip() + "\n"
 
