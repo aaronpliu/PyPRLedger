@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime
+from html import escape
 from typing import Any
 
 from sqlalchemy import func, select
@@ -20,6 +21,7 @@ from src.core.config import settings
 from src.core.exceptions import NotFoundException
 from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
+from src.models.user import User
 from src.schemas.release_diff import ReleaseCompareRequest
 from src.schemas.release_note import (
     EXPORT_MAX_RELEASES,
@@ -445,17 +447,28 @@ def author_reference(commit: dict[str, Any]) -> str:
     return f" by {name}" if name else ""
 
 
-def contributor_mentions(commits: Iterable[dict[str, Any]]) -> list[str]:
+def contributor_mentions(
+    commits: Iterable[dict[str, Any]],
+    avatars: Mapping[str, str] | None = None,
+) -> list[str]:
     """The people a release note credits, in the order they first appear.
 
     A provider account is mentioned as ``@login`` linked to its profile, so one person
     with several commits counts once however their name is spelled; a commit without an
-    account falls back to the author's name. Merge commits are left out for the same
-    reason they are left out of the list: the integration of work is credited through
-    the commits it merged.
+    account falls back to the author's name. Each name carries the account's picture
+    when ``avatars`` holds one - an inline image small enough to sit in a line of text -
+    and the initial of the name otherwise, so a line of names stays scannable. Merge
+    commits are left out for the same reason they are left out of the list: the
+    integration of work is credited through the commits it merged.
     """
+    pictures = {username.casefold(): url for username, url in (avatars or {}).items() if url}
     seen: set[str] = set()
     mentions: list[str] = []
+
+    def badge(letter_source: str, avatar_url: str | None) -> str:
+        if avatar_url:
+            return f'<img src="{escape(avatar_url, quote=True)}" width="16" height="16" alt="" />'
+        return f"**{letter_source[:1].upper()}**"
 
     for commit in commits:
         if is_merge_commit(commit.get("message")):
@@ -468,7 +481,8 @@ def contributor_mentions(commits: Iterable[dict[str, Any]]) -> list[str]:
                 continue
             seen.add(key)
             url = commit.get("author_url")
-            mentions.append(f"[@{username}]({url})" if url else f"@{username}")
+            mention = f"[@{username}]({url})" if url else f"@{username}"
+            mentions.append(f"{badge(username, pictures.get(username.casefold()))} {mention}")
             continue
 
         name = (commit.get("author_name") or "").strip()
@@ -476,7 +490,7 @@ def contributor_mentions(commits: Iterable[dict[str, Any]]) -> list[str]:
         if not name or key in seen:
             continue
         seen.add(key)
-        mentions.append(name)
+        mentions.append(f"{badge(name, None)} {name}")
 
     return mentions
 
@@ -506,6 +520,7 @@ def build_release_notes_markdown(
     jira_project_keys: Iterable[str] = (),
     language: str | None = None,
     summary: str | None = None,
+    avatars: Mapping[str, str] | None = None,
 ) -> str:
     """Group commits into a changelog in the style of GitHub release notes.
 
@@ -573,14 +588,48 @@ def build_release_notes_markdown(
         else:
             lines.append(f"**Full Changelog**: `{label}`")
 
-    contributors = contributor_mentions(commits) if include_authors else []
+    contributors = contributor_mentions(commits, avatars) if include_authors else []
     if contributors:
         if lines and lines[-1] != "":
             lines.append("")
+        # A rule of its own: the credits answer a different question from the change
+        # list above them, and the blank line keeps ``---`` a divider rather than a
+        # heading underline for the line before it.
+        lines.append("---")
+        lines.append("")
         label = section_label("Contributors", language)
         lines.append(f"**{label}**: {', '.join(contributors)}")
 
     return "\n".join(lines).strip() + "\n"
+
+
+CONTRIBUTOR_LABELS: tuple[str, ...] = ("Contributors", "贡献者", "貢獻者")
+
+_IMAGE_TAG_RE = re.compile(r"<img\b[^>]*>\s*", re.IGNORECASE)
+_INITIAL_BADGE_RE = re.compile(r"\*\*[^*]\*\*\s*")
+
+
+def without_contributor_pictures(body: str) -> str:
+    """The note as it reads where pictures do not.
+
+    The credits carry each contributor's picture as an inline ``<img>``, which the app
+    renders and which a downloaded markdown file keeps. A Confluence page takes a
+    storage format that would show the tag itself, and a git platform cannot resolve
+    the instance's relative avatar path, so the credits leave the instance as the
+    usernames - and the initials that stood in for a picture of their own. Every other
+    line is returned untouched, images elsewhere in the note included.
+    """
+    labels = tuple(f"**{label}" for label in CONTRIBUTOR_LABELS)
+    lines: list[str] = []
+    for line in body.splitlines():
+        head, separator, tail = line.partition("**:")
+        if separator and head.lstrip().startswith(labels):
+            tail = _IMAGE_TAG_RE.sub("", tail)
+            tail = _INITIAL_BADGE_RE.sub("", tail)
+            lines.append(f"{head}**:{tail}".rstrip())
+            continue
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def parse_provider_datetime(value: str | None) -> datetime | None:
@@ -902,6 +951,10 @@ class ReleaseNoteService:
             request.project_key, provider_name, request.workspace_slug
         )
 
+        # The stored body is the one the app shows, pictures and all; the provider gets
+        # the same note with its credits written as usernames.
+        provider_body = without_contributor_pictures(note.body or "")
+
         release: dict[str, Any] | None = None
         if note.external_id and request.update_existing:
             try:
@@ -910,7 +963,7 @@ class ReleaseNoteService:
                     request.repository_slug,
                     note.external_id,
                     name=note.name,
-                    body=note.body,
+                    body=provider_body,
                     prerelease=note.is_prerelease,
                 )
             except NotFoundException:
@@ -924,7 +977,7 @@ class ReleaseNoteService:
                 request.repository_slug,
                 tag_name=note.tag_name,
                 name=note.name,
-                body=note.body,
+                body=provider_body,
                 target_commitish=request.target_commitish,
                 prerelease=note.is_prerelease,
             )
@@ -1070,6 +1123,43 @@ class ReleaseNoteService:
             logger.warning(f"Could not build the release tag link: {e}")
             return None
 
+    async def resolve_author_usernames(self, commits: list[dict[str, Any]]) -> None:
+        """Fill in the provider login of the authors that carry only an email.
+
+        A provider names the account behind a commit only when it knows one - GitHub
+        leaves ``author`` empty for a commit whose email belongs to no account of the
+        repository - and the note then falls back to the display name, which can be
+        neither mentioned nor linked. The instance knows the account an email belongs
+        to, so the login is read from there. Best effort: an author whose email matches
+        no account keeps the name the provider reported.
+        """
+        pending = [
+            commit
+            for commit in commits
+            if not commit.get("author_username") and commit.get("author_email")
+        ]
+        if not pending:
+            return
+
+        emails = {str(commit["author_email"]).strip().lower() for commit in pending}
+        try:
+            rows = (
+                await self.db.execute(
+                    select(func.lower(User.email_address), User.username).where(
+                        func.lower(User.email_address).in_(emails)
+                    )
+                )
+            ).all()
+        except Exception as e:  # noqa: BLE001 - a note must be drafted all the same
+            logger.warning(f"Could not resolve the commit author accounts: {e}")
+            return
+
+        by_email = {email: username for email, username in rows if email}
+        for commit in pending:
+            username = by_email.get(str(commit["author_email"]).strip().lower())
+            if username:
+                commit["author_username"] = username
+
     def resolve_author_urls(
         self,
         commits: list[dict[str, Any]],
@@ -1192,6 +1282,7 @@ class ReleaseNoteService:
             else None
         )
 
+        await self.resolve_author_usernames(commits)
         self.resolve_author_urls(commits, git_provider=request.git_provider)
 
         summary, summary_source, summary_notice, summary_error = await self._summarize(
@@ -1199,6 +1290,11 @@ class ReleaseNoteService:
         )
 
         jira_base_url, jira_project_keys = jira_settings()
+
+        # Pictures come from the local accounts, keyed by the login the commits carry:
+        # a contributor the instance knows is shown by their avatar, the rest by an
+        # initial.
+        avatars = await self.author_avatars(commit.get("author_username") for commit in commits)
 
         body = build_release_notes_markdown(
             commits,
@@ -1210,6 +1306,7 @@ class ReleaseNoteService:
             jira_project_keys=jira_project_keys,
             language=request.language,
             summary=summary,
+            avatars=avatars,
         )
 
         return ReleaseNotePreviewResponse(

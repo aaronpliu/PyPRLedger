@@ -291,6 +291,26 @@ async def test_the_notes_are_written_as_storage_xhtml(db_session, confluence_set
     assert "make release" in written
 
 
+async def test_the_credits_are_written_without_pictures(
+    db_session, confluence_settings
+) -> None:
+    fake = FakeConfluence()
+    body = (
+        "**Contributors**: <img"
+        ' src="/api/v1/users/avatars/jane.png" width="16" height="16" alt="" />'
+        " [@jane](https://git.local/users/jane)"
+    )
+    note = await make_note(db_session, body=body)
+
+    await build_sync(fake, db_session).sync_note(note.id)
+
+    # the storage format would show the tag itself, so the page names the account
+    assert len(fake.bodies) == 1
+    written = fake.bodies[0]
+    assert "<img" not in written
+    assert "@jane" in written
+
+
 async def test_the_app_name_is_used_once_the_repository_is_registered(
     db_session, confluence_settings, monkeypatch
 ) -> None:
