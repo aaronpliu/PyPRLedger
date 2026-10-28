@@ -438,6 +438,41 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(text).toContain(enMessages.releaseNotes.released_by.replace('{author}', 'alice'))
   })
 
+  it('links a release to the tag page in its repository', async () => {
+    const tagUrl =
+      'https://git.local/projects/ALPHA/repos/alpha-api/browse?at=refs%2Ftags%2Fv1.1.0'
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ tag_url: tagUrl })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const badge = wrapper.find('.note-entry-tag-badge')
+    expect(badge.exists()).toBe(true)
+    expect(badge.attributes('href')).toBe(tagUrl)
+    expect(badge.attributes('target')).toBe('_blank')
+    expect(badge.attributes('rel')).toContain('noopener')
+    expect(badge.attributes('title')).toBe(enMessages.releaseNotes.tag_link_hint)
+    expect(badge.text()).toContain('v1.1.0')
+  })
+
+  it('shows the tag unlinked when the platform has no tag page', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ tag_url: null })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    expect(wrapper.find('.note-entry-tag-badge').exists()).toBe(false)
+    expect(wrapper.find('.note-entry-title').text()).toContain('v1.1.0')
+  })
+
   it('shows the profile icon of the author when one is available', async () => {
     vi.mocked(releaseNotesApi.list).mockResolvedValue({
       total: 1,

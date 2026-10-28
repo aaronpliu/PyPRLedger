@@ -7,6 +7,8 @@ export interface ReleaseNote {
   project_key: string
   repository_slug: string
   tag_name: string
+  /** Browsable page of the repository at the tag, when the platform has one */
+  tag_url?: string | null
   name: string
   body: string
   previous_tag?: string | null
@@ -112,8 +114,12 @@ export interface PreviewCommit {
   url?: string | null
 }
 
-/** How the release scope base was obtained: proven ('ancestor'), inferred from the tag order, or supplied. */
-export type ReleaseScopeSource = 'explicit' | 'ancestor' | 'name_order' | 'none'
+/**
+ * How the release scope base was obtained: proven ('ancestor'), inferred from the tag
+ * order ('name_order'), taken as the closest tag when the names carry no order
+ * ('nearest'), or supplied.
+ */
+export type ReleaseScopeSource = 'explicit' | 'ancestor' | 'name_order' | 'nearest' | 'none'
 
 /** Why the scope looks the way it does; the last two mean the commits come from the full history. */
 export type ReleaseScopeReason = 'provided' | 'resolved' | 'first_release' | 'unresolved'

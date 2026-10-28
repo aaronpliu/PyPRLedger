@@ -332,6 +332,34 @@ describe('AppDiffView', () => {
     )
   })
 
+  it("titles a package's comparison by its own versions, not the app's releases", async () => {
+    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
+
+    await wrapper.find('[data-test="matrix-row-packageA"]').trigger('click')
+
+    // the commits are between the package's two versions in its own repository
+    expect(wrapper.find('[data-test="matrix-packageA-pair-0"]').text()).toBe('1.0.0 → 1.0.1')
+  })
+
+  it("titles the application's comparison by the releases it ran between", async () => {
+    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
+
+    await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+
+    expect(wrapper.find(`[data-test="matrix-${APP_NAME}-pair-0"]`).text()).toBe(
+      `${RELEASE_EARLIER} → ${RELEASE_LATER}`,
+    )
+  })
+
+  it('draws the version a package no longer has as a dash in its title', async () => {
+    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
+
+    await wrapper.find('[data-test="matrix-row-packageC"]').trigger('click')
+
+    // a removed package reads as a change of state rather than a blank side
+    expect(wrapper.find('[data-test="matrix-packageC-pair-0"]').text()).toBe('1.0.0 → —')
+  })
+
   it('says so when no repository is registered for a package', async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 

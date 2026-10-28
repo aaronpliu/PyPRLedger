@@ -89,15 +89,11 @@ The `conditions` JSON field SHALL support these optional keys. All present keys 
 - **THEN** the rule does NOT match
 
 ### Requirement: auto-assignment assigns all reviewers from the matched rule's list
-When a rule matches, the system SHALL create `PullRequestReviewAssignment` records for ALL reviewer usernames in the rule's `assign_to` list. If `max_assignments` > 0, only that many reviewers from the list SHALL be assigned.
+When a rule matches, the system SHALL create `PullRequestReviewAssignment` records for ALL reviewer usernames in the rule's `assign_to` list. The list is the whole answer: no cap, order-dependent truncation or per-pull-request limit SHALL shorten it.
 
 #### Scenario: Assign all reviewers from matched rule
-- **WHEN** a rule with `assign_to: ["alice", "bob"]` and `max_assignments: 0` matches a review
-- **THEN** both Alice and Bob get `PullRequestReviewAssignment` records with `assignment_status = "assigned"` and `assignment_source = "auto"`
-
-#### Scenario: max_assignments limits how many are assigned
-- **WHEN** a rule with `assign_to: ["alice", "bob", "carol"]` and `max_assignments: 2` matches
-- **THEN** only Alice and Bob are assigned (first 2 from the list)
+- **WHEN** a rule with `assign_to: ["alice", "bob", "carol"]` matches a review
+- **THEN** all three get `PullRequestReviewAssignment` records with `assignment_status = "assigned"` and `assignment_source = "auto"`
 
 #### Scenario: Reviewer already assigned is skipped
 - **WHEN** a rule matches but one reviewer already has an existing assignment for the same review

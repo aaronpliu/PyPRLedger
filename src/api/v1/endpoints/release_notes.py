@@ -60,7 +60,11 @@ from src.services.confluence.service import (
     is_auto_sync_enabled,
     sync_release_note_to_confluence,
 )
-from src.services.git_provider_resolver import with_repository_provider
+from src.services.git_provider_resolver import (
+    registered_provider,
+    registered_workspace_slug,
+    with_repository_provider,
+)
 from src.services.rbac_service import RBACService
 from src.services.release_note_service import ReleaseNoteService
 from src.utils.log import get_logger
@@ -124,6 +128,7 @@ def _serialize(
     note: ReleaseNote,
     latest_id: int | None,
     avatars: Mapping[str, str] | None = None,
+    tag_url: str | None = None,
 ) -> ReleaseNoteResponse:
     """Serialize a release and flag it when it is the latest published version."""
     response = ReleaseNoteResponse.model_validate(note)
@@ -132,7 +137,46 @@ def _serialize(
     # the provider login, which has no avatar here)
     if avatars and note.author:
         response.author_avatar_url = avatars.get(note.author)
+    response.tag_url = tag_url
     return response
+
+
+async def _tag_urls(
+    service: ReleaseNoteService,
+    notes: list[ReleaseNote],
+) -> dict[int, str]:
+    """The repository page of each release's tag, where the platform has one.
+
+    Resolved per repository rather than per release: the provider and workspace
+    are a property of the repository, and reading them once keeps a page of
+    releases from repeating the same lookup.
+    """
+    resolved: dict[tuple[str, str], tuple[str | None, str | None]] = {}
+    urls: dict[int, str] = {}
+
+    for note in notes:
+        pair = (note.project_key, note.repository_slug)
+        if pair not in resolved:
+            resolved[pair] = (
+                await registered_provider(
+                    note.project_key, note.repository_slug, service.db
+                ),
+                await registered_workspace_slug(
+                    note.project_key, note.repository_slug, service.db
+                ),
+            )
+        git_provider, workspace_slug = resolved[pair]
+        url = service.tag_url(
+            project_key=note.project_key,
+            repository_slug=note.repository_slug,
+            tag_name=note.tag_name,
+            git_provider=git_provider,
+            workspace_slug=workspace_slug,
+        )
+        if url and note.id is not None:
+            urls[note.id] = url
+
+    return urls
 
 
 async def serialize_note(
@@ -140,9 +184,10 @@ async def serialize_note(
     note: ReleaseNote,
     latest_id: int | None,
 ) -> ReleaseNoteResponse:
-    """Serialize one release, resolving the profile picture of its author."""
+    """Serialize one release, resolving its author picture and tag page."""
     avatars = await service.author_avatars([note.author])
-    return _serialize(note, latest_id, avatars)
+    tag_urls = await _tag_urls(service, [note])
+    return _serialize(note, latest_id, avatars, tag_urls.get(note.id))
 
 
 async def serialize_notes(
@@ -150,9 +195,10 @@ async def serialize_notes(
     notes: list[ReleaseNote],
     latest_id: int | None,
 ) -> list[ReleaseNoteResponse]:
-    """Serialize releases, resolving the profile pictures of their authors."""
+    """Serialize releases, resolving their author pictures and tag pages."""
     avatars = await service.author_avatars([note.author for note in notes])
-    return [_serialize(note, latest_id, avatars) for note in notes]
+    tag_urls = await _tag_urls(service, notes)
+    return [_serialize(note, latest_id, avatars, tag_urls.get(note.id)) for note in notes]
 
 
 async def schedule_confluence_sync(

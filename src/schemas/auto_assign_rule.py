@@ -64,11 +64,6 @@ class AutoAssignRuleCreate(BaseModel):
         description="List of git usernames to assign when this rule matches",
         example=["alice", "bob"],
     )
-    max_assignments: int = Field(
-        default=0,
-        ge=0,
-        description="Maximum reviewers to assign (0 = assign all from list)",
-    )
     starts_at: datetime | None = Field(None, description="Optional start date for rule validity")
     expires_at: datetime | None = Field(None, description="Optional end date for rule validity")
     is_active: bool = Field(default=True, description="Whether this rule is active")
@@ -100,11 +95,6 @@ class AutoAssignRuleUpdate(BaseModel):
         min_length=1,
         description="List of git usernames to assign when this rule matches",
     )
-    max_assignments: int | None = Field(
-        None,
-        ge=0,
-        description="Maximum reviewers to assign (0 = assign all from list)",
-    )
     starts_at: datetime | None = Field(None, description="Optional start date for rule validity")
     expires_at: datetime | None = Field(None, description="Optional end date for rule validity")
     is_active: bool | None = Field(None, description="Whether this rule is active")
@@ -125,7 +115,6 @@ class AutoAssignRuleResponse(BaseModel):
     priority: int
     conditions: dict
     assign_to: list[str]
-    max_assignments: int
     starts_at: datetime | None = None
     expires_at: datetime | None = None
     is_active: bool

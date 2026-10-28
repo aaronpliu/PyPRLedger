@@ -6,8 +6,8 @@ export interface AutoAssignRule {
   description?: string | null
   priority: number
   conditions: Record<string, any>
+  /** Every username listed here is assigned; the list is the whole answer. */
   assign_to: string[]
-  max_assignments: number
   starts_at?: string | null
   expires_at?: string | null
   is_active: boolean
@@ -22,7 +22,6 @@ export interface AutoAssignRuleCreate {
   priority: number
   conditions: Record<string, any>
   assign_to: string[]
-  max_assignments: number
   starts_at?: string | null
   expires_at?: string | null
   is_active: boolean
@@ -34,7 +33,6 @@ export interface AutoAssignRuleUpdate {
   priority?: number
   conditions?: Record<string, any>
   assign_to?: string[]
-  max_assignments?: number
   starts_at?: string | null
   expires_at?: string | null
   is_active?: boolean

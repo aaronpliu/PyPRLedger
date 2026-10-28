@@ -6,18 +6,26 @@ that answer the commits a tag released are a provider *difference*
 the tag, which is what used to cap out on a repository with years of history.
 
 The predecessor is resolved in a defined order - an explicit ref supplied by the
-caller, a verified ancestor (one provider call per candidate), the previous tag
-in version-aware name order, or nothing at all - and the result carries how it was
-obtained, so the UI can state the scope instead of guessing it from a page-sized
-list of tags.
+caller, the previous build of the same version, the version below it, a verified
+ancestor (one provider call per candidate), the previous tag in version-aware name
+order, the tag closest to it, or nothing at all - and the result carries how it was
+obtained, so the UI can state the scope instead of guessing it from a page-sized list
+of tags.
 
-The version a tag names leads that order: a release follows the version below it, not
-another build of itself, so an irregular tag such as ``3.14.0-Build23004`` is measured
-against ``3.13.0-Build23003`` rather than the ``3.14.0-Build23003`` that happens to be
-more recent - whose commits are the ones its last build added, not the ones the release
-carried. The releases of the repository are then asked about before the tags that name
-no version, which are cut from the same history and would otherwise answer for a release
-they merely sit beside.
+The build of a version is a release in its own right. A repository that publishes
+``3.14.0-Build23000`` … ``3.14.0-Build23005`` ships five releases of 3.14.0, and each
+one is measured against the build before it: choosing ``3.14.0-Build23005`` has to
+infer ``3.14.0-Build23004``, not the version below 3.14.0. When no build of the same
+version precedes the tag, the version below answers instead.
+
+A candidate has to be older than the released tag - a later build of the same version
+or a higher version can never be its predecessor, however it sits in the history. This
+is what kept a repository whose release lines branch apart from resolving
+``3.14.0-Build23005`` against ``3.18.0-Build21000``: that tag is an ancestor of the
+released commit, but it is a later release, and the commits it shares with 3.14.0 are
+not the ones 3.14.0 added. The releases of the repository are then asked about before
+the tags that name no version, which are cut from the same history and would otherwise
+answer for a release they merely sit beside.
 """
 
 from __future__ import annotations
@@ -41,6 +49,7 @@ from src.schemas.release_note import (
     SOURCE_ANCESTOR,
     SOURCE_EXPLICIT,
     SOURCE_NAME_ORDER,
+    SOURCE_NEAREST,
     SOURCE_NONE,
 )
 from src.services.git_providers import BaseGitProvider, get_git_provider
@@ -67,9 +76,10 @@ TAGS_PER_PROBE = 5
 # exercise: a generous cap keeps the resolver correct on most repositories.
 TAG_LIST_LIMIT = 1000
 
-# Bumped when the Bitbucket Server comparison direction was corrected: the
-# ancestry probes behind a cached resolution used the reversed direction too.
-CACHE_KEY_VERSION = "v2"
+# Bumped when the resolution rules change, so a cached answer from the old rules is
+# not served under the new ones. v4: the closest tag answers when the names carry no
+# order, so a tag with no readable predecessor no longer reads as a full-history scan.
+CACHE_KEY_VERSION = "v4"
 
 
 def probe_budget(tag_count: int) -> int:
@@ -110,22 +120,68 @@ def version_of(name: str) -> tuple[int, ...] | None:
     return tuple(int(part) for part in match.group(1).split("."))
 
 
-def previous_by_version(version: str, tags: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """The tag a released version follows: the highest tag of the version below it.
+def previous_build(version: str, tags: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The build of the same version released just before ``version``.
 
-    A tag that names a version *is* that release, so another tag of the same version is
-    that release built again - the build before it, or another line's build of it - and
-    not the release that came before it. Reading the predecessor off those builds cuts a
-    release's commits down to the ones its own last build happened to add, which is what
-    an irregular tag like ``3.14.0-Build23004`` used to be measured by.
-
-    Within the version that does precede it the highest tag wins, read by name and then
-    by date, so ``3.13.0-Build23003`` is taken over ``3.13.0-Build23002``.
-
-    Returns ``None`` when the tag names no version, and when no lower version is known:
-    the caller falls back to the name order in the first case and to the remaining
-    candidates in the second.
+    ``3.14.0-Build23005`` follows ``3.14.0-Build23004``: the builds of one version are
+    releases in their own right, each covering what it added over the build before it.
+    Only tags that name the same version qualify, and only those that order below the
+    released tag - a later build of 3.14.0 is a later release, not a predecessor.
     """
+    current_version = version_of(version)
+    if current_version is None:
+        return None
+
+    current_key = version_sort_key(version)
+    lower = [
+        tag
+        for tag in tags
+        if str(tag.get("name") or "") != version
+        and version_of(str(tag.get("name") or "")) == current_version
+        and version_sort_key(str(tag.get("name") or "")) < current_key
+    ]
+    if not lower:
+        return None
+
+    return max(lower, key=lambda tag: version_sort_key(str(tag.get("name") or "")))
+
+
+def orders_above(version: str, candidate: str) -> bool:
+    """Whether ``candidate`` names a later release than ``version``.
+
+    An answer has to be older than the question. A later build of the same version, or
+    a higher version altogether, is never the predecessor of a tag - even when it is an
+    ancestor of the commit that tag points at, which is exactly the case for a release
+    line that was branched off a later one.
+    """
+    current = version_of(version)
+    other = version_of(candidate)
+    if current is None or other is None:
+        return False
+    if other != current:
+        return other > current
+    return version_sort_key(candidate) > version_sort_key(version)
+
+
+def previous_by_version(version: str, tags: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The tag a release follows: the build before it, else the version below it.
+
+    The builds of a version come first. A repository that publishes
+    ``3.14.0-Build23000`` … ``3.14.0-Build23005`` ships five releases of 3.14.0, so
+    ``3.14.0-Build23005`` is measured against ``3.14.0-Build23004``.
+
+    Only when no build of the same version precedes the tag does the version below
+    answer, where the highest tag of that version wins, read by name and then by date:
+    ``3.13.0-Build23003`` is taken over ``3.13.0-Build23002``.
+
+    Returns ``None`` when the tag names no version, and when neither a build nor a lower
+    version is known: the caller falls back to the name order in the first case and to
+    the remaining candidates in the second.
+    """
+    build = previous_build(version, tags)
+    if build is not None:
+        return build
+
     current = version_of(version)
     if current is None:
         return None
@@ -176,9 +232,13 @@ def predecessor_candidates(version: str, tags: list[dict[str, Any]]) -> list[dic
 
     Three groups, the provider being asked about the first group before the next:
 
-    1. the version below the released one, when the tag names a version at all;
+    1. the release before it - its previous build, or the version below when no build
+       of the same version precedes the tag;
     2. the other tags that name a version, newest first;
     3. the tags that name no version, newest first.
+
+    Tags that name a later release are left out altogether: they can be ancestors of
+    the released commit and still be the wrong answer.
 
     That order is what keeps a repository's debug and test tags from answering for its
     releases. Those tags are cut from the same history as the release beside them, so by
@@ -189,14 +249,21 @@ def predecessor_candidates(version: str, tags: list[dict[str, Any]]) -> list[dic
     release precedes the tag at all: a repository whose releases are named irregularly
     keeps resolving by ancestry exactly as it did.
     """
-    released_below = previous_by_version(version, tags)
-    others = order_candidates([tag for tag in tags if str(tag.get("name") or "") != version])
-    if released_below is not None:
-        others = [tag for tag in others if tag is not released_below]
+    released_before = previous_by_version(version, tags)
+    others = order_candidates(
+        [
+            tag
+            for tag in tags
+            if str(tag.get("name") or "") != version
+            and not orders_above(version, str(tag.get("name") or ""))
+        ]
+    )
+    if released_before is not None:
+        others = [tag for tag in others if tag is not released_before]
 
     named = [tag for tag in others if version_of(str(tag.get("name") or "")) is not None]
     unnamed = [tag for tag in others if version_of(str(tag.get("name") or "")) is None]
-    return ([released_below] if released_below is not None else []) + named + unnamed
+    return ([released_before] if released_before is not None else []) + named + unnamed
 
 
 def previous_by_name(version: str, tags: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -214,6 +281,66 @@ def previous_by_name(version: str, tags: list[dict[str, Any]]) -> dict[str, Any]
 
     index = names.index(version)
     return ordered[index + 1] if index + 1 < len(ordered) else None
+
+
+def nearest_tag(version: str, tags: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The tag closest to ``version``, for a repository no ordering can be read from.
+
+    Tags are named by hand in such a repository - debug, test and temporary tags sit
+    beside the releases - so neither the version nor the name order names a
+    predecessor. Taking the tag closest to it still keeps the commits of the release
+    a difference instead of a scan of the whole history; the answer is unverified and
+    reported as such.
+
+    Closeness is time: the newest tag cut before the released one. A repository
+    whose providers report no dates falls back to the nearest name below it. A tag
+    that names a later release is never chosen, and a tag with nothing older around
+    it has no neighbour at all.
+
+    Returns ``None`` when ``version`` is not part of the tag list, so a ref that is
+    not a tag is left to the caller's 'unknown' rather than guessed at.
+    """
+    current = next((tag for tag in tags if str(tag.get("name") or "") == version), None)
+    if current is None:
+        return None
+
+    candidates = [
+        tag
+        for tag in tags
+        if str(tag.get("name") or "") != version
+        and not orders_above(version, str(tag.get("name") or ""))
+    ]
+    if not candidates:
+        return None
+
+    current_date = current.get("date")
+    if current_date:
+        older = [
+            tag
+            for tag in candidates
+            if tag.get("date") is not None and tag.get("date") < current_date
+        ]
+        if older:
+            return max(
+                older,
+                key=lambda tag: (
+                    tag.get("date"),
+                    version_sort_key(str(tag.get("name") or "")),
+                ),
+            )
+        if any(tag.get("date") is not None for tag in candidates):
+            # every comparable tag is newer: this one is the oldest release
+            return None
+
+    current_key = version_sort_key(version)
+    below = [
+        tag
+        for tag in candidates
+        if version_sort_key(str(tag.get("name") or "")) < current_key
+    ]
+    if not below:
+        return None
+    return max(below, key=lambda tag: version_sort_key(str(tag.get("name") or "")))
 
 
 @dataclass(frozen=True)
@@ -376,8 +503,8 @@ class ReleaseNoteScopeService:
         pinned_ref = version_sha or version
 
         # Releases are asked about before the debug and test tags that share their
-        # history, and the version below the released one before either.
-        released_below = previous_by_version(version, tags)
+        # history, and the release before the tag - its own build first - before either.
+        released_before = previous_by_version(version, tags)
         candidates = predecessor_candidates(version, tags)
 
         budget = probe_budget(len(tags))
@@ -435,7 +562,14 @@ class ReleaseNoteScopeService:
 
         # Nothing could be verified: the version below is still the likelier answer than
         # the name order, which knows nothing of versions at all.
-        neighbour = released_below or previous_by_name(version, tags)
+        neighbour = released_before or previous_by_name(version, tags)
+        source = SOURCE_NAME_ORDER
+        if neighbour is None:
+            # Tags a repository names by hand carry no order to read, and the walk
+            # found no ancestor: the tag closest to this one keeps the commits a
+            # difference instead of a scan of the whole history.
+            neighbour = nearest_tag(version, tags)
+            source = SOURCE_NEAREST
         if neighbour is not None:
             # a legitimate answer, just not a proven one - the UI warns about it
             return ReleaseScope(
@@ -443,7 +577,7 @@ class ReleaseNoteScopeService:
                 previous_ref=str(neighbour.get("name") or ""),
                 previous_sha=str(neighbour.get("sha") or "") or None,
                 version_sha=version_sha,
-                source=SOURCE_NAME_ORDER,
+                source=source,
                 verified=False,
                 reason=REASON_RESOLVED,
             )

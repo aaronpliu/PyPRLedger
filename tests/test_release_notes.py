@@ -1546,6 +1546,45 @@ async def test_endpoint_create_list_and_publish(async_client, authenticated_clie
     assert listed.json()["items"][0]["is_latest"] is True
 
 
+class TagUrlProvider(StubProvider):
+    """Provider whose tags have a browsable page, for the tag badge."""
+
+    def web_tag_url(
+        self, project_key: str, repository_slug: str, tag_name: str
+    ) -> str | None:
+        return f"https://git.local/{project_key}/{repository_slug}/tree/{tag_name}"
+
+
+async def test_endpoint_links_a_release_to_its_tag_page(
+    async_client, authenticated_client, db_session
+) -> None:
+    app.dependency_overrides[get_release_note_service] = lambda: build_service(
+        db_session, provider=TagUrlProvider()
+    )
+
+    created = await async_client.post(
+        "/api/v1/release/notes",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "tag_name": "v1.0.0",
+            "name": "First release",
+        },
+    )
+
+    assert created.status_code == 201
+    assert created.json()["tag_url"] == "https://git.local/PROJ/my-repo/tree/v1.0.0"
+
+    # The list carries the same link, resolved once per repository
+    listed = await async_client.get(
+        "/api/v1/release/notes", params={"project_key": "PROJ", "repository_slug": "my-repo"}
+    )
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["tag_url"] == (
+        "https://git.local/PROJ/my-repo/tree/v1.0.0"
+    )
+
+
 async def test_endpoint_returns_the_author_avatar_url(
     async_client, authenticated_client, db_session
 ) -> None:

@@ -225,11 +225,9 @@ class AutoTaskAssignmentService:
                 },
             )
             assigned = []
+            # The rule's list is exactly who reviews: every name in it is assigned,
+            # so the rule itself is the only place that decides how many there are.
             reviewers = list(rule.assign_to)
-
-            # Apply max_assignments cap
-            if rule.max_assignments > 0 and len(reviewers) > rule.max_assignments:
-                reviewers = reviewers[: rule.max_assignments]
 
             for reviewer_username in reviewers:
                 # Verify reviewer exists in User table

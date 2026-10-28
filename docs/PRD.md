@@ -313,7 +313,7 @@ Redis PubSub → SSEBroker (singleton) → asyncio.Queue per client → SSE stre
 | FR-5.3.1 | Rules are evaluated in priority order (lower number = higher priority) | P0 |
 | FR-5.3.2 | Conditions stored as JSON: `project_key`, `repository_slug`, `source_branch_prefix`, `pr_author`, `status` | P0 |
 | FR-5.3.3 | Each rule specifies `assign_to` (list of git usernames) | P0 |
-| FR-5.3.4 | `max_assignments` controls how many from the list to assign (0 = all) | P1 |
+| FR-5.3.4 | Every username in `assign_to` is assigned: the list is the only place that says how many reviewers there are | P0 |
 | FR-5.3.5 | Rules support temporal validity (`starts_at`, `expires_at`) | P1 |
 | FR-5.3.6 | Rules can be enabled/disabled via toggle | P0 |
 | FR-5.3.7 | First matching rule wins (evaluation stops after first match) | P0 |
@@ -686,7 +686,7 @@ Request: GET /reviews?app_names=member,tv
 | `pull_request_review_raw` | Raw incoming payloads | `id`, `request_payload` (JSON), `status`, `error_message`, `review_base_id` (FK) |
 | `pull_request_review_association` | Review linking | `id`, `review_id` (FK), `associated_review_id` (FK), `created_by` (FK→auth_user) |
 | `user_pinned_reviews` | User bookmarks | `id`, `user_id` (FK→auth_user), `review_id` (FK) |
-| `pull_request_review_auto_assignment_rule` | Auto-assign rules | `id`, `name`, `priority`, `conditions` (JSON), `assign_to` (JSON), `max_assignments`, `starts_at`, `expires_at`, `is_active` |
+| `pull_request_review_auto_assignment_rule` | Auto-assign rules | `id`, `name`, `priority`, `conditions` (JSON), `assign_to` (JSON), `starts_at`, `expires_at`, `is_active` |
 | `project_registry` | App name mappings | `id`, `app_name`, `project_key` (FK), `repository_slug`, `description` |
 | `role` | RBAC roles | `id`, `name`, `description`, `permissions` (JSON) |
 | `user_role_assignment` | User-role mappings | `id`, `auth_user_id` (FK), `role_id` (FK), `resource_type`, `resource_id`, `is_delegated`, `delegator_id`, `delegation_status`, `expires_at` |

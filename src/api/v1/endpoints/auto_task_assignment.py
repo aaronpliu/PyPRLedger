@@ -111,7 +111,6 @@ async def create_rule(
         priority=rule_data.priority,
         conditions=rule_data.conditions,
         assign_to=rule_data.assign_to,
-        max_assignments=rule_data.max_assignments,
         starts_at=rule_data.starts_at,
         expires_at=rule_data.expires_at,
         is_active=rule_data.is_active,

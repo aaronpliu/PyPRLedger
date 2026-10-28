@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.34.0] - 2026-10-28
+
+**Backend Version**: 1.34.0
+**Frontend Version**: 1.29.0
+
+### Added
+- The assignment rules table says when a rule last changed. An **Updated** column sits beside **Created**, so an edited rule and a rule switched off read as recently touched rather than as newly added; the day is shown, and the hour and minute are a hover away
+
+### Changed
+- The rule dialog fits a screen. Its six sections ran down one column past the viewport, so Save sat below the fold: what the rule is and who reviews now sit on the left, what it matches on the right, and the JSON the form builds moved into a fold that is closed until opened. The dialog widens with the window up to 1024px, folds to one column on a narrow screen, and its body scrolls inside the dialog rather than taking the buttons with it. A picker that can hold a long list - applications, reviewers, the PR's author - scrolls inside itself after three rows of tags, so choosing a dozen applications no longer pushes the rest of its column out of view or leaves the two columns uneven
+- A rule's **Assign To** list is now exactly who reviews. **Max Assignments** is gone from the rule form and the rules table: it truncated the list to its first N names, so a rule naming three reviewers with a limit of one assigned whoever stood first and dropped the rest without a word. The truncation also ran before the usernames were checked, so a stale name in the first slots could leave a review with fewer reviewers than the rule named, or none at all. Existing rules keep their lists and now assign every name in them; migration `037` drops the column
+
+### Fixed
+- Reopening a rule for editing keeps the applications it was built from. The rule stores only `project_key` and `repository_slug` lists, and the dialog read them back by asking every application whether it contained *all* of the rule's project keys - which no single application does once two were chosen, so a rule written across several applications opened with **App Name** empty. The conditions are now read back the other way (the applications whose repositories the rule covers, offered only when together they reproduce the rule exactly), and opening a rule no longer rebuilds its conditions from that answer, so editing a rule cannot quietly widen or narrow what it matches
+- A package's commit comparison on the App Diff page is titled by the package's own versions rather than by the application's releases. The commits are read between those two versions in the package's own repository, so the release pair named a comparison the commits were never between - a reader looking for `1.0.0 → 1.0.1` was shown `v1.1.0 → v2.0.0` and could not tell which move the commits belonged to. The title is now also carried by a comparison that could not be read, so the versions it was between are named beside the reason it could not be read rather than left out
+
+---
+
+## [1.33.2] - 2026-10-23
+
+**Backend Version**: 1.33.2
+**Frontend Version**: 1.28.2
+
+### Added
+- A release note carries a badge with the tag it was cut from, linking to that tag in the repository: Bitbucket Server opens the browse page at `refs/tags/{tag}`, Bitbucket Cloud the source at the tag, and GitHub Enterprise the tree at the tag. It is what lets a release be traced back to the code it describes; a platform without a web UI, or one whose host is not configured, keeps the badge as plain text rather than a dead link
+
+### Changed
+- Each release on the notes page reads as its own sheet - a hairline border, a 12px corner and a gap between entries - in place of the rule that divided one release from the next. The release the navigator points at is ringed rather than marked by a rail drawn in the margin, and the sheet takes the colour of the card it sits on, so the edges hold in dark mode too; the fade over a collapsed release had been ending on the page colour rather than the card's, which showed as a band
+
+### Fixed
+- When a repository's tags carry no order to read - debug, test and temporary tags named by hand beside the releases - the predecessor is now taken as the tag closest to the chosen one, by commit date, or by name where the provider reports no dates. The answer is reported as inferred rather than proven, and it keeps a release's commits a difference instead of a scan of the whole history; a tag with nothing older around it is still reported as a first release, and a ref that is not a tag is still left unknown
+
+---
+
 ## [1.33.1] - 2026-10-23
 
 **Backend Version**: 1.33.1
@@ -16,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The task assignment list and detail page no longer put an "Open" tag on a task nobody has been assigned: the amber row and the assign action already say it, and `open` stays the status the API reports for a task with no reviewer
 
 ### Fixed
+- Choosing a build tag infers the build released before it. A repository publishing `3.14.0-Build23000` … `3.14.0-Build23005` had `3.14.0-Build23005` resolve to a later release line's tag (`3.18.0-Build21000`) that merely happened to be an ancestor of the released commit, so its commits were measured against a release that came after it. The builds of a version are releases in their own right, so the previous build answers first and the version below only when no build precedes the tag; a tag naming a later build or a higher version is never accepted as a predecessor, and the scope cache key moves on so an answer from the old rules is not served
 - A tab left open across a deployment recovers instead of going dead. Route components are lazy imports named after their content, so after a new build the tab's next click asked for a chunk the server no longer had, rejected with "Failed to fetch dynamically imported module", and - with nothing listening - looked like a click that did nothing. A failure of that kind now tells the reader a new version has been deployed and offers to reload, which fetches the `index.html` the server serves now and the chunks it names. The question is asked rather than reloading on its own, so a half-written score or comment is not thrown away; it is asked once, cannot be dismissed by clicking outside or pressing Esc, and choosing Later leaves the page as it is instead of asking again on every click. Vite's own `vite:preloadError` is handled the same way
 - A missing file under `/assets/` is answered as a 404 instead of with the SPA shell. The shell was handed to the browser for a JavaScript URL, which it then could not execute, and the image's nginx config also cached it under the chunk's own name; the config now keeps the fallback to real routes and leaves hashed assets to be missing when they are missing
 

@@ -44,9 +44,6 @@ class PullRequestReviewAutoAssignmentRule(Base):
     # Example: ["alice", "bob"]
     assign_to: Mapped[list] = mapped_column(JSON, nullable=False)
 
-    # Max reviewers from the list to assign (0 = all)
-    max_assignments: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-
     # Temporal validity
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

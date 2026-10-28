@@ -22,10 +22,13 @@ EXPORT_MAX_RELEASES = 200
 # How the release scope base of a tag was obtained.
 #
 # ``ancestor`` is the only resolved value that was *proven* (the base is an
-# ancestor of the released ref); ``name_order`` is inferred from the tag order.
+# ancestor of the released ref); ``name_order`` is inferred from the tag order, and
+# ``nearest`` from the tag closest to it, for a repository whose tags cannot be
+# ordered at all.
 SOURCE_EXPLICIT = "explicit"
 SOURCE_ANCESTOR = "ancestor"
 SOURCE_NAME_ORDER = "name_order"
+SOURCE_NEAREST = "nearest"
 SOURCE_NONE = "none"
 
 # Why a scope looks the way it does.
@@ -156,6 +159,14 @@ class ReleaseNoteResponse(BaseModel):
     project_key: str
     repository_slug: str
     tag_name: str
+    tag_url: str | None = Field(
+        default=None,
+        description=(
+            "Browsable page of the repository at the tag, when the platform has "
+            "one. Null when the provider exposes no web UI or its host is not "
+            "configured."
+        ),
+    )
     name: str
     body: str
     previous_tag: str | None = None

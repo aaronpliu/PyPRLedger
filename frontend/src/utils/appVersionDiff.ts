@@ -125,8 +125,14 @@ export function moveSymbol(tone: MoveTone): string {
  *
  * A side the move does not have is drawn as a dash rather than left blank, so an
  * added or removed package reads as a change of state and not as a missing value.
+ *
+ * A package's own comparison carries the same two fields, so the same reading names
+ * the commits of a dependency - which are between its versions, not between the
+ * releases that shipped them.
  */
-export function moveVersions(move: AppVersionDiffMove): string {
+export function moveVersions(
+  move: Pick<AppVersionDiffMove, 'source_version' | 'target_version'>,
+): string {
   return `${move.source_version ?? '—'} → ${move.target_version ?? '—'}`
 }
 

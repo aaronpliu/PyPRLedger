@@ -766,6 +766,23 @@
                       {{ note.name }}
                     </a>
                   </h4>
+                  <!-- The tag the release was cut from, as a badge that leaves the
+                       app for the repository - so a release can be traced back to
+                       the code it describes without hunting for the tag -->
+                  <a
+                    v-if="note.tag_url"
+                    class="note-entry-tag-badge"
+                    :href="note.tag_url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    :title="t('releaseNotes.tag_link_hint')"
+                  >
+                    <el-tag size="small" effect="plain" round>
+                      <el-icon class="tag-badge-icon"><Link /></el-icon>
+                      {{ note.tag_name }}
+                    </el-tag>
+                  </a>
+                  <el-tag v-else size="small" effect="plain" round>{{ note.tag_name }}</el-tag>
                   <el-tag v-if="note.is_latest" size="small" type="success" round>
                     {{ t('releaseNotes.badge_latest') }}
                   </el-tag>
@@ -1006,6 +1023,7 @@ import {
   CopyDocument,
   Document,
   InfoFilled,
+  Link,
   MagicStick,
   MoreFilled,
   Refresh,
@@ -2994,28 +3012,48 @@ onBeforeUnmount(() => {
   margin-top: 12px;
 }
 
-/* Reading column: one entry per release of the page */
+/* Reading column: one sheet per release of the page.
+   The gap groups them and the border gives each one its own edge, so no rule has
+   to divide one release from the next. */
 .note-entry {
-  padding: 16px 0 20px;
-  border-bottom: 1px solid var(--el-border-color);
+  padding: 20px 22px 22px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  /* The colour of the card it sits on: in dark mode Element Plus paints the card
+     with --el-bg-color-overlay, so --el-bg-color would cut a darker hole */
+  background: var(--el-card-bg-color, var(--el-bg-color));
+  scroll-margin-top: 16px;
 }
 
-.note-entry:last-of-type {
-  border-bottom: 0;
+.note-entry + .note-entry {
+  margin-top: 16px;
 }
 
+/* Hover is a hint that the sheet has reachable controls, not that the sheet
+   itself opens: the border deepens, nothing moves and nothing lifts. */
+.note-entry:not(.focused):hover {
+  border-color: var(--el-border-color);
+}
+
+/* The release the navigator points at. A ring, in place of the rail the list
+   layout drew in the margin. */
 .note-entry.focused {
-  margin-left: -12px;
-  padding-left: 10px;
-  border-left: 2px solid var(--el-color-primary);
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 1px var(--el-color-primary);
 }
 
 .note-entry-header {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+}
+
+/* Inside a sheet the metadata line is separated from the title rather than
+   hanging under it. Scoped to the sheet: the tag tab keeps its own meta line. */
+.note-entry .release-meta {
+  margin-top: 8px;
 }
 
 .note-entry-title {
@@ -3050,6 +3088,30 @@ onBeforeUnmount(() => {
   text-underline-offset: 3px;
 }
 
+/* The tag badge points out of the app, to the code the release was cut from. It
+   sits beside the name so a release and its tag read as one line. */
+.note-entry-tag-badge {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.tag-badge-icon {
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+.note-entry-tag-badge:hover .el-tag {
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+}
+
+.note-entry-tag-badge:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
 .note-entry-actions {
   display: flex;
   flex-wrap: wrap;
@@ -3075,16 +3137,18 @@ onBeforeUnmount(() => {
   inset-inline: 0;
   bottom: 0;
   height: 3rem;
-  background: linear-gradient(transparent, var(--el-bg-color));
+  /* Ends on the sheet's own colour, not the page's: the fade is drawn over the
+     notes, and the two differ in dark mode */
+  background: linear-gradient(transparent, var(--el-card-bg-color, var(--el-bg-color)));
   pointer-events: none;
 }
 
 .note-expand {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .detail-pagination {
-  margin-top: 12px;
+  margin-top: 20px;
   justify-content: flex-end;
 }
 
@@ -3310,5 +3374,22 @@ onBeforeUnmount(() => {
   margin-left: 8px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+/* The reading column on a narrow screen: the sheet keeps its edge, with the
+   padding and the title brought down so a release still fits a phone. */
+@media (max-width: 768px) {
+  .note-entry {
+    padding: 16px;
+    border-radius: 10px;
+  }
+
+  .note-entry + .note-entry {
+    margin-top: 12px;
+  }
+
+  .note-entry-name {
+    font-size: 22px;
+  }
 }
 </style>

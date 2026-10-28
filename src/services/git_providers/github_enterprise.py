@@ -61,6 +61,28 @@ class GitHubEnterpriseProvider(BaseGitProvider):
             f"{quote(from_ref.strip(), safe='')}...{quote(to_ref.strip(), safe='')}"
         )
 
+    def web_tag_url(
+        self,
+        project_key: str,
+        repository_slug: str,
+        tag_name: str,
+    ) -> str | None:
+        """Repository at a tag (``/tree/{tag}``).
+
+        The tree rather than ``/releases/tag/{tag}``: a release is only there when
+        one was published on GitHub, while the tag always names the code.
+        """
+        if not self.base_url or not self.compare_refs_ready(
+            project_key, repository_slug, tag_name
+        ):
+            return None
+
+        return (
+            f"{self.base_url}/{quote(project_key.strip(), safe='')}"
+            f"/{quote(repository_slug.strip(), safe='')}/tree/"
+            f"{quote(tag_name.strip(), safe='')}"
+        )
+
     def web_user_url(self, username: str) -> str | None:
         """Profile page of a GitHub user (``{base}/{login}``)."""
         if not self.base_url or not username or not username.strip():

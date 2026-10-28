@@ -283,6 +283,25 @@ class BaseGitProvider(ABC):
         """
         return None
 
+    def web_tag_url(
+        self,
+        project_key: str,
+        repository_slug: str,
+        tag_name: str,
+    ) -> str | None:
+        """Browsable page of a tag - the code as it was cut for the release.
+
+        Args:
+            project_key: Project key (Bitbucket) or org/owner (GitHub)
+            repository_slug: Repository slug/name
+            tag_name: Tag the release was cut from
+
+        Returns:
+            The tag URL, or ``None`` when the provider exposes no web UI or the
+            host needed to build the URL is not configured.
+        """
+        return None
+
     def web_user_url(self, username: str) -> str | None:
         """Browsable profile page of a user, when the platform has one.
 
