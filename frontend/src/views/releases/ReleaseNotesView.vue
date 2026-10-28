@@ -3281,10 +3281,14 @@ onBeforeUnmount(() => {
   text-decoration: none;
 }
 
+/* The frame is a link when the platform has a profile page: an underlined link
+   over a picture whose line box is collapsed draws a line across the avatar, so
+   the underline is dropped and the hover ring says the picture is clickable */
 .contributor-avatar-frame {
   display: inline-flex;
   border-radius: 50%;
   line-height: 0;
+  text-decoration: none;
 }
 
 .contributor-avatar {
