@@ -467,3 +467,25 @@ class ReleaseNoteExportResponse(BaseModel):
             "carries the newest ones"
         ),
     )
+
+
+class ReleaseNoteContributor(BaseModel):
+    """One person credited for a published release."""
+
+    username: str | None = Field(
+        default=None, description="Provider login, when the commit names one"
+    )
+    display_name: str | None = Field(default=None, description="Name the provider reports")
+    avatar_url: str | None = Field(default=None, description="Profile picture of the account")
+    profile_url: str | None = Field(default=None, description="Browsable profile page")
+    commit_count: int = Field(default=0, description="Commits this person wrote in the scope")
+
+
+class ReleaseNoteContributorsResponse(BaseModel):
+    """The people a published release was written by, read from its commits."""
+
+    note_id: int
+    published: bool = Field(
+        default=False, description="Credits are only read for a published release"
+    )
+    contributors: list[ReleaseNoteContributor] = Field(default_factory=list)

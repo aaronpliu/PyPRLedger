@@ -9,9 +9,8 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime
-from html import escape
 from typing import Any
 
 from sqlalchemy import func, select
@@ -32,6 +31,7 @@ from src.schemas.release_note import (
     SUMMARY_DETERMINISTIC,
     SUMMARY_LLM,
     SUMMARY_NOTICE_FAILED,
+    ReleaseNoteContributor,
     ReleaseNoteCreateRequest,
     ReleaseNoteImportRequest,
     ReleaseNotePreviewRequest,
@@ -39,6 +39,7 @@ from src.schemas.release_note import (
     ReleaseNotePushRequest,
     ReleaseNoteUpdateRequest,
 )
+from src.services.git_provider_resolver import registered_provider, registered_workspace_slug
 from src.services.git_providers import BaseGitProvider, get_git_provider
 from src.services.release_diff_service import (
     ReleaseDiffService,
@@ -266,6 +267,11 @@ SECTION_EMOJI: dict[str, str] = {
 
 DEFAULT_LANGUAGE = "en"
 
+# A release page credits the people behind the commits, which means reading the scope
+# for every published release shown. A thousand commits is a long release by any
+# measure and keeps the reading to one provider call per release.
+CONTRIBUTOR_COMMIT_LIMIT = 1000
+
 # Section titles and the surrounding prose in the language of the caller. The
 # section keys stay English: they are what the classifier and an LLM answer with.
 SECTION_TRANSLATIONS: dict[str, dict[str, str]] = {
@@ -280,7 +286,6 @@ SECTION_TRANSLATIONS: dict[str, dict[str, str]] = {
         "Tests": "测试",
         OTHER_SECTION: "其他变更",
         "## What's Changed": "## 变更内容",
-        "Contributors": "贡献者",
         "_No commits found in this release scope._": "_此发布范围没有提交。_",
     },
     "zh-TW": {
@@ -294,7 +299,6 @@ SECTION_TRANSLATIONS: dict[str, dict[str, str]] = {
         "Tests": "測試",
         OTHER_SECTION: "其他變更",
         "## What's Changed": "## 變更內容",
-        "Contributors": "貢獻者",
         "_No commits found in this release scope._": "_此發佈範圍沒有提交。_",
     },
 }
@@ -447,54 +451,6 @@ def author_reference(commit: dict[str, Any]) -> str:
     return f" by {name}" if name else ""
 
 
-def contributor_mentions(
-    commits: Iterable[dict[str, Any]],
-    avatars: Mapping[str, str] | None = None,
-) -> list[str]:
-    """The people a release note credits, in the order they first appear.
-
-    A provider account is mentioned as ``@login`` linked to its profile, so one person
-    with several commits counts once however their name is spelled; a commit without an
-    account falls back to the author's name. Each name carries the account's picture
-    when ``avatars`` holds one - an inline image small enough to sit in a line of text -
-    and the initial of the name otherwise, so a line of names stays scannable. Merge
-    commits are left out for the same reason they are left out of the list: the
-    integration of work is credited through the commits it merged.
-    """
-    pictures = {username.casefold(): url for username, url in (avatars or {}).items() if url}
-    seen: set[str] = set()
-    mentions: list[str] = []
-
-    def badge(letter_source: str, avatar_url: str | None) -> str:
-        if avatar_url:
-            return f'<img src="{escape(avatar_url, quote=True)}" width="16" height="16" alt="" />'
-        return f"**{letter_source[:1].upper()}**"
-
-    for commit in commits:
-        if is_merge_commit(commit.get("message")):
-            continue
-
-        username = commit.get("author_username")
-        if username:
-            key = f"login:{username.casefold()}"
-            if key in seen:
-                continue
-            seen.add(key)
-            url = commit.get("author_url")
-            mention = f"[@{username}]({url})" if url else f"@{username}"
-            mentions.append(f"{badge(username, pictures.get(username.casefold()))} {mention}")
-            continue
-
-        name = (commit.get("author_name") or "").strip()
-        key = f"name:{name.casefold()}"
-        if not name or key in seen:
-            continue
-        seen.add(key)
-        mentions.append(f"{badge(name, None)} {name}")
-
-    return mentions
-
-
 def commit_subject(message: str | None) -> str:
     """First line of the commit, with the conventional prefix stripped."""
     if not message:
@@ -520,15 +476,13 @@ def build_release_notes_markdown(
     jira_project_keys: Iterable[str] = (),
     language: str | None = None,
     summary: str | None = None,
-    avatars: Mapping[str, str] | None = None,
 ) -> str:
     """Group commits into a changelog in the style of GitHub release notes.
 
     When ``compare_url`` is given the "Full Changelog" line links to the
     revision comparison on the git platform, otherwise the range stays plain text.
     Commit authors are mentioned as ``@login`` linked to their profile, and JIRA
-    ticket keys are linked when ``jira_base_url`` is configured. The note closes with
-    the people behind those commits, once each, under a "Contributors" line.
+    ticket keys are linked when ``jira_base_url`` is configured.
 
     ``summary`` is an optional paragraph - the one thing a reader wants before the
     list - rendered right under the heading. A commit may carry a ``section`` of
@@ -588,48 +542,7 @@ def build_release_notes_markdown(
         else:
             lines.append(f"**Full Changelog**: `{label}`")
 
-    contributors = contributor_mentions(commits, avatars) if include_authors else []
-    if contributors:
-        if lines and lines[-1] != "":
-            lines.append("")
-        # A rule of its own: the credits answer a different question from the change
-        # list above them, and the blank line keeps ``---`` a divider rather than a
-        # heading underline for the line before it.
-        lines.append("---")
-        lines.append("")
-        label = section_label("Contributors", language)
-        lines.append(f"**{label}**: {', '.join(contributors)}")
-
     return "\n".join(lines).strip() + "\n"
-
-
-CONTRIBUTOR_LABELS: tuple[str, ...] = ("Contributors", "贡献者", "貢獻者")
-
-_IMAGE_TAG_RE = re.compile(r"<img\b[^>]*>\s*", re.IGNORECASE)
-_INITIAL_BADGE_RE = re.compile(r"\*\*[^*]\*\*\s*")
-
-
-def without_contributor_pictures(body: str) -> str:
-    """The note as it reads where pictures do not.
-
-    The credits carry each contributor's picture as an inline ``<img>``, which the app
-    renders and which a downloaded markdown file keeps. A Confluence page takes a
-    storage format that would show the tag itself, and a git platform cannot resolve
-    the instance's relative avatar path, so the credits leave the instance as the
-    usernames - and the initials that stood in for a picture of their own. Every other
-    line is returned untouched, images elsewhere in the note included.
-    """
-    labels = tuple(f"**{label}" for label in CONTRIBUTOR_LABELS)
-    lines: list[str] = []
-    for line in body.splitlines():
-        head, separator, tail = line.partition("**:")
-        if separator and head.lstrip().startswith(labels):
-            tail = _IMAGE_TAG_RE.sub("", tail)
-            tail = _INITIAL_BADGE_RE.sub("", tail)
-            lines.append(f"{head}**:{tail}".rstrip())
-            continue
-        lines.append(line)
-    return "\n".join(lines)
 
 
 def parse_provider_datetime(value: str | None) -> datetime | None:
@@ -818,6 +731,166 @@ class ReleaseNoteService:
         rows = (await self.db.execute(statement)).all()
         return {username: avatar_url for username, avatar_url in rows if avatar_url}
 
+    async def contributor_avatars(self, commits: list[dict[str, Any]]) -> dict[str, str]:
+        """Pictures for the commit authors, keyed by the login a commit carries.
+
+        A contributor is a git account while a picture lives on an app account, so the
+        two are matched by login first and, where the logins differ, by the email the
+        commit carries. Accounts without a picture are simply absent.
+        """
+        logins = {
+            str(commit["author_username"]).strip()
+            for commit in commits
+            if commit.get("author_username")
+        }
+        pictures: dict[str, str] = {}
+        if logins:
+            rows = (
+                await self.db.execute(
+                    select(AuthUser.username, AuthUser.avatar_url).where(
+                        AuthUser.username.in_(logins),
+                        AuthUser.avatar_url.is_not(None),
+                    )
+                )
+            ).all()
+            pictures.update({username: url for username, url in rows if url})
+
+        emails = {
+            str(commit["author_email"]).strip().lower()
+            for commit in commits
+            if commit.get("author_email")
+            and str(commit.get("author_username") or "").strip() not in pictures
+        }
+        if not emails:
+            return pictures
+
+        rows = (
+            await self.db.execute(
+                select(func.lower(AuthUser.email), AuthUser.avatar_url).where(
+                    func.lower(AuthUser.email).in_(emails),
+                    AuthUser.avatar_url.is_not(None),
+                )
+            )
+        ).all()
+        by_email = {email: url for email, url in rows if email and url}
+        for commit in commits:
+            login = str(commit.get("author_username") or "").strip()
+            email = str(commit.get("author_email") or "").strip().lower()
+            if login and email and login not in pictures and by_email.get(email):
+                pictures[login] = by_email[email]
+        return pictures
+
+    async def contributors(self, note: ReleaseNote) -> list[ReleaseNoteContributor]:
+        """The people a published release was written by, read from its commits.
+
+        The credits are a reading of the repository rather than a part of the note: a
+        note typed by hand is credited all the same, nothing about them is stored, and
+        the list is built when the release page asks to show it. Only a published
+        release has credits - a draft is still being written.
+        """
+        if note.status != ReleaseNoteStatus.PUBLISHED:
+            return []
+
+        provider_name = await registered_provider(note.project_key, note.repository_slug, self.db)
+        workspace_slug = await registered_workspace_slug(
+            note.project_key, note.repository_slug, self.db
+        )
+
+        previous_ref = (note.previous_tag or "").strip() or None
+        if not previous_ref:
+            scope = await self._scope_service.resolve(
+                project_key=note.project_key,
+                repository_slug=note.repository_slug,
+                version=note.tag_name,
+                git_provider=provider_name,
+                workspace_slug=workspace_slug,
+            )
+            previous_ref = scope.previous_ref
+
+        commits = await self._scope_commits(
+            project_key=note.project_key,
+            repository_slug=note.repository_slug,
+            version=note.tag_name,
+            previous_ref=previous_ref,
+            git_provider=provider_name,
+            workspace_slug=workspace_slug,
+        )
+        await self.resolve_author_usernames(commits)
+        self.resolve_author_urls(commits, git_provider=provider_name)
+        pictures = await self.contributor_avatars(commits)
+
+        people: dict[str, ReleaseNoteContributor] = {}
+        for commit in commits:
+            if is_merge_commit(commit.get("message")):
+                continue
+            username = str(commit.get("author_username") or "").strip() or None
+            name = str(commit.get("author_name") or "").strip() or None
+            if not username and not name:
+                continue
+
+            key = f"login:{username.casefold()}" if username else f"name:{name.casefold()}"
+            person = people.get(key)
+            if person is None:
+                person = ReleaseNoteContributor(
+                    username=username,
+                    display_name=name,
+                    avatar_url=pictures.get(username) if username else None,
+                    profile_url=commit.get("author_url"),
+                    commit_count=0,
+                )
+                people[key] = person
+
+            person.commit_count += 1
+            if person.display_name is None:
+                person.display_name = name
+            if person.profile_url is None:
+                person.profile_url = commit.get("author_url")
+
+        return sorted(
+            people.values(),
+            key=lambda person: (
+                -person.commit_count,
+                (person.username or person.display_name or "").casefold(),
+            ),
+        )
+
+    async def _scope_commits(
+        self,
+        *,
+        project_key: str,
+        repository_slug: str,
+        version: str,
+        previous_ref: str | None,
+        git_provider: str | None,
+        workspace_slug: str | None,
+    ) -> list[dict[str, Any]]:
+        """The commits of a release scope, as the notes of that release read them."""
+        if previous_ref:
+            comparison = await self._diff_service.compare_releases(
+                ReleaseCompareRequest(
+                    project_key=project_key,
+                    repository_slug=repository_slug,
+                    git_provider=git_provider,
+                    workspace_slug=workspace_slug,
+                    source_ref=previous_ref,
+                    target_ref=version,
+                    include_commits=True,
+                    scan_limit=CONTRIBUTOR_COMMIT_LIMIT,
+                    render_limit=CONTRIBUTOR_COMMIT_LIMIT,
+                )
+            )
+            return [commit.model_dump() for commit in comparison.added_commits]
+
+        version_commits, _ = await self._diff_service.list_release_commits(
+            project_key=project_key,
+            repository_slug=repository_slug,
+            git_provider=git_provider,
+            workspace_slug=workspace_slug,
+            ref=version,
+            limit=CONTRIBUTOR_COMMIT_LIMIT,
+        )
+        return [commit.model_dump() for commit in version_commits]
+
     async def get_note(self, note_id: int) -> ReleaseNote | None:
         """Fetch one release by id."""
         return (
@@ -951,10 +1024,6 @@ class ReleaseNoteService:
             request.project_key, provider_name, request.workspace_slug
         )
 
-        # The stored body is the one the app shows, pictures and all; the provider gets
-        # the same note with its credits written as usernames.
-        provider_body = without_contributor_pictures(note.body or "")
-
         release: dict[str, Any] | None = None
         if note.external_id and request.update_existing:
             try:
@@ -963,7 +1032,7 @@ class ReleaseNoteService:
                     request.repository_slug,
                     note.external_id,
                     name=note.name,
-                    body=provider_body,
+                    body=note.body,
                     prerelease=note.is_prerelease,
                 )
             except NotFoundException:
@@ -977,7 +1046,7 @@ class ReleaseNoteService:
                 request.repository_slug,
                 tag_name=note.tag_name,
                 name=note.name,
-                body=provider_body,
+                body=note.body,
                 target_commitish=request.target_commitish,
                 prerelease=note.is_prerelease,
             )
@@ -1291,11 +1360,6 @@ class ReleaseNoteService:
 
         jira_base_url, jira_project_keys = jira_settings()
 
-        # Pictures come from the local accounts, keyed by the login the commits carry:
-        # a contributor the instance knows is shown by their avatar, the rest by an
-        # initial.
-        avatars = await self.author_avatars(commit.get("author_username") for commit in commits)
-
         body = build_release_notes_markdown(
             commits,
             version=request.version,
@@ -1306,7 +1370,6 @@ class ReleaseNoteService:
             jira_project_keys=jira_project_keys,
             language=request.language,
             summary=summary,
-            avatars=avatars,
         )
 
         return ReleaseNotePreviewResponse(

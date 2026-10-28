@@ -30,7 +30,6 @@ from src.services.confluence.client import (
 from src.services.confluence.markdown import markdown_to_storage
 from src.services.confluence.targets import Resolution, label, load_targets, resolve
 from src.services.project_registry_service import ProjectRegistryService
-from src.services.release_note_service import without_contributor_pictures
 from src.utils.log import get_logger
 from src.utils.timezone import get_current_time
 
@@ -159,9 +158,7 @@ class ConfluenceSyncService:
                 note.project_key, note.repository_slug, session
             )
             title = page_title(app_name, note.repository_slug, note.tag_name)
-            # Confluence would show a contributor's picture as the tag itself, so the
-            # credits are written as usernames here.
-            body = markdown_to_storage(without_contributor_pictures(note.body or ""))
+            body = markdown_to_storage(note.body or "")
 
             page = await self._upsert_page(note, title, body, target)
         except ConfluenceError as e:

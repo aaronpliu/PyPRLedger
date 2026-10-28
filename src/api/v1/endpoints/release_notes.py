@@ -42,6 +42,7 @@ from src.models.release_note import ReleaseNote, ReleaseNoteStatus
 from src.schemas.release_note import (
     ReleaseNoteConfluenceStatusResponse,
     ReleaseNoteConfluenceSyncResponse,
+    ReleaseNoteContributorsResponse,
     ReleaseNoteCreateRequest,
     ReleaseNoteExportRequest,
     ReleaseNoteExportResponse,
@@ -574,6 +575,55 @@ async def get_release_note(
         project_key=note.project_key, repository_slug=note.repository_slug
     )
     return await serialize_note(service, note, latest_id)
+
+
+@router.get(
+    "/{note_id}/contributors",
+    response_model=ReleaseNoteContributorsResponse,
+    summary="The people a published release was written by",
+    description=(
+        "Read from the commits of the release scope rather than stored with the "
+        "release: a published release is credited however its notes were written, and "
+        "a draft reports no credits because it is still being written."
+    ),
+)
+async def get_release_contributors(
+    note_id: int,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> ReleaseNoteContributorsResponse:
+    """Credit the people behind the commits of one published release."""
+    await ensure_permission(rbac_service, current_user, "read")
+
+    note = await service.get_note(note_id)
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "NOT_FOUND", "message": f"Release {note_id} not found"},
+        )
+
+    published = note.status == ReleaseNoteStatus.PUBLISHED
+    contributors = []
+    if published:
+        try:
+            contributors = await service.contributors(note)
+        except Exception as e:  # noqa: BLE001 - credits must not fail the release page
+            logger.warning(
+                "Could not read the commits behind a release, leaving it uncredited",
+                extra={
+                    "note_id": note.id,
+                    "project_key": note.project_key,
+                    "repository_slug": note.repository_slug,
+                    "error": str(e),
+                },
+            )
+
+    return ReleaseNoteContributorsResponse(
+        note_id=note.id,
+        published=published,
+        contributors=contributors,
+    )
 
 
 @router.put(

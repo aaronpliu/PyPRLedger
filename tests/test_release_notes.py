@@ -54,7 +54,6 @@ from src.services.release_note_service import (
     jira_settings,
     linkify_jira_tickets,
     parse_provider_datetime,
-    without_contributor_pictures,
 )
 
 
@@ -493,146 +492,6 @@ def test_build_markdown_can_skip_authors_and_handles_empty_scopes() -> None:
     assert "No commits found in this release scope" in empty
 
 
-def test_build_markdown_closes_with_the_contributors_it_credits() -> None:
-    commits = [
-        commit(C1, "feat: add login page").model_dump(),
-        commit(C2, "fix: crash on logout", author="John Roe").model_dump(),
-        commit(C3, "docs: update readme").model_dump(),
-    ]
-
-    body = build_release_notes_markdown(commits, version="v1.1.0", previous_version="v1.0.0")
-
-    # the two people who wrote the lines above, each named once, over the initial that
-    # stands in for a picture neither has
-    assert "**Contributors**: **J** Jane Doe, **J** John Roe" in body
-    # a rule separates the credits from the change list, after the comparison link
-    assert "**Full Changelog**" in body
-    assert body.index("**Full Changelog**") < body.index("\n---\n")
-    assert body.index("\n---\n") < body.index("**Contributors**")
-    assert body.rstrip().endswith("**J** John Roe")
-
-
-def test_build_markdown_credits_a_provider_account_as_a_linked_mention() -> None:
-    commits = [
-        {
-            **commit(C1, "feat: add login page").model_dump(),
-            "author_username": "jane",
-            "author_url": "https://git.local/users/jane",
-        },
-        # the same account twice is one person
-        {
-            **commit(C2, "fix: crash on logout", author="J. Doe").model_dump(),
-            "author_username": "jane",
-            "author_url": "https://git.local/users/jane",
-        },
-        {
-            **commit(C3, "docs: update readme").model_dump(),
-            "author_username": "jroe",
-            "author_url": None,
-        },
-    ]
-
-    body = build_release_notes_markdown(commits, version="v1.1.0")
-
-    assert (
-        "**Contributors**: **J** [@jane](https://git.local/users/jane), **J** @jroe" in body
-    )
-
-
-def test_build_markdown_shows_the_account_picture_beside_the_name() -> None:
-    commits = [
-        {
-            **commit(C1, "feat: add login page").model_dump(),
-            "author_username": "jane",
-            "author_url": "https://git.local/users/jane",
-        },
-        {
-            **commit(C2, "fix: crash on logout").model_dump(),
-            "author_username": "jroe",
-            "author_url": None,
-        },
-    ]
-
-    body = build_release_notes_markdown(
-        commits,
-        version="v1.1.0",
-        avatars={"Jane": "/api/v1/users/avatars/jane.png"},
-    )
-
-    # the picture stands in for the initial, and the login is still looked up however
-    # the case differs
-    assert (
-        '**Contributors**: <img src="/api/v1/users/avatars/jane.png"'
-        ' width="16" height="16" alt="" />'
-        " [@jane](https://git.local/users/jane), **J** @jroe" in body
-    )
-
-
-def test_external_body_writes_the_credits_as_usernames() -> None:
-    body = (
-        "## What's Changed\n\n- add login page\n\n---\n\n**Contributors**: "
-        '<img src="/api/v1/users/avatars/jane.png" width="16" height="16" alt="" />'
-        " [@jane](https://git.local/users/jane), **J** @jroe\n"
-    )
-
-    # a Confluence page would show the tag, and a release page cannot resolve the
-    # instance's own avatar path: the credits leave as the names alone
-    assert without_contributor_pictures(body) == (
-        "## What's Changed\n\n- add login page\n\n---\n\n"
-        "**Contributors**: [@jane](https://git.local/users/jane), @jroe"
-    )
-
-
-def test_external_body_keeps_an_image_that_is_not_a_credit() -> None:
-    body = '<img src="/screenshots/diff.png" width="600" />\n\n**Contributors**: **J** @jroe'
-
-    assert without_contributor_pictures(body) == (
-        '<img src="/screenshots/diff.png" width="600" />\n\n**Contributors**: @jroe'
-    )
-
-
-def test_external_body_recognises_the_credits_in_every_language() -> None:
-    for label in ("Contributors", "贡献者", "貢獻者"):
-        body = (
-            f'**{label}**: <img src="/api/v1/users/avatars/jane.png"'
-            ' width="16" height="16" alt="" /> @jane'
-        )
-        assert without_contributor_pictures(body) == f"**{label}**: @jane"
-
-
-def test_build_markdown_does_not_credit_the_merger() -> None:
-    commits = [
-        commit(C1, "feat: add login page").model_dump(),
-        commit(
-            C2,
-            "Merge pull request #12 from feature/login",
-            author="John Roe",
-        ).model_dump(),
-    ]
-
-    body = build_release_notes_markdown(commits, version="v1.1.0")
-
-    assert "**Contributors**: **J** Jane Doe" in body
-    assert "John Roe" not in body
-
-
-def test_build_markdown_names_the_contributors_in_the_notes_language() -> None:
-    commits = [commit(C1, "feat: add login page").model_dump()]
-
-    body = build_release_notes_markdown(commits, version="v1.1.0", language="zh-CN")
-
-    assert "**贡献者**: **J** Jane Doe" in body
-
-
-def test_build_markdown_drops_the_contributors_with_the_authors() -> None:
-    commits = [commit(C1, "feat: add login page").model_dump()]
-
-    body = build_release_notes_markdown(commits, version="v1.1.0", include_authors=False)
-
-    assert "Contributors" not in body
-    assert "\n---\n" not in body
-
-
 # --------------------------------------------------------------------------- #
 # Author mentions and JIRA ticket links
 # --------------------------------------------------------------------------- #
@@ -858,6 +717,81 @@ async def test_author_avatars_only_returns_accounts_that_have_a_picture(
     assert await service.author_avatars([None]) == {}
 
 
+async def test_contributors_are_read_from_the_commits_of_a_published_release(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        AuthUser(
+            username="jdoe",
+            email="john.doe@example.com",
+            password_hash="x",
+            avatar_url="/api/v1/users/avatars/jdoe.png",
+        )
+    )
+    await db_session.flush()
+
+    diff = StubDiffService(
+        [
+            CommitInfo(
+                id=C1,
+                display_id=C1[:7],
+                author_name="John Doe",
+                author_username="jdoe",
+                author_email="john.doe@example.com",
+                message="feat: add login page",
+            ),
+            CommitInfo(
+                id=C2,
+                display_id=C2[:7],
+                author_name="John Doe",
+                author_username="jdoe",
+                author_email="john.doe@example.com",
+                message="fix: crash on logout",
+            ),
+            CommitInfo(
+                id=C3,
+                display_id=C3[:7],
+                author_name="Jane Roe",
+                author_username="jroe",
+                message="docs: update readme",
+            ),
+            # the integration of work names nobody
+            CommitInfo(
+                id=C4,
+                display_id=C4[:7],
+                author_name="John Doe",
+                author_username="jdoe",
+                message="Merge pull request #12 from feature/login",
+            ),
+        ]
+    )
+    service = build_service(db_session, diff, provider=ComparingProvider())
+    note = await service.create_note(
+        create_payload(status="published", previous_tag="v0.9.0"), author="alice"
+    )
+
+    contributors = await service.contributors(note)
+
+    # every commit of the scope, merges aside, once per person and most active first
+    assert [(c.username, c.commit_count) for c in contributors] == [("jdoe", 2), ("jroe", 1)]
+    assert contributors[0].display_name == "John Doe"
+    assert contributors[0].avatar_url == "/api/v1/users/avatars/jdoe.png"
+    assert contributors[0].profile_url == "https://github.local/jdoe"
+    assert contributors[1].avatar_url is None
+
+
+async def test_contributors_are_not_read_before_a_release_is_published(
+    db_session: AsyncSession,
+) -> None:
+    diff = StubDiffService([commit(C1, "feat: add login page")])
+    service = build_service(db_session, diff, provider=ComparingProvider())
+    note = await service.create_note(create_payload(status="draft"), author="alice")
+
+    assert await service.contributors(note) == []
+    # a draft is never read from the provider at all
+    assert diff.compare_calls == []
+
+
 async def test_preview_names_the_account_behind_an_author_email(
     db_session: AsyncSession,
 ) -> None:
@@ -893,8 +827,6 @@ async def test_preview_names_the_account_behind_an_author_email(
     # the account the instance holds for that email, mentioned and linked
     assert preview.commits[0]["author_username"] == "jdoe"
     assert "by [@jdoe](https://github.local/jdoe) in" in preview.body
-    # and credited under the login rather than the display name
-    assert "**Contributors**: **J** [@jdoe](https://github.local/jdoe)" in preview.body
 
 
 async def test_preview_keeps_the_display_name_of_an_author_no_account_holds(
@@ -1495,35 +1427,6 @@ async def test_push_creates_the_provider_release(db_session: AsyncSession) -> No
     assert pushed.external_provider == "github_enterprise"
     assert pushed.external_id == "1001"
     assert pushed.external_url.endswith("/releases/tag/v1.0.0")
-
-
-async def test_push_sends_the_credits_without_pictures(db_session: AsyncSession) -> None:
-    provider = StubProvider()
-    service = build_service(db_session, provider=provider)
-    body = (
-        "## What's Changed\n\n- add login page\n\n---\n\n**Contributors**: "
-        '<img src="/api/v1/users/avatars/jane.png" width="16" height="16" alt="" />'
-        " [@jane](https://git.local/users/jane), @jroe"
-    )
-    note = await service.create_note(
-        create_payload(status="published", body=body), author="alice"
-    )
-
-    await service.push_to_provider(
-        note.id,
-        ReleaseNotePushRequest(
-            project_key="PROJ",
-            repository_slug="my-repo",
-            git_provider="github_enterprise",
-            target_commitish="main",
-        ),
-    )
-
-    sent = provider.created[0]["body"]
-    assert "<img" not in sent
-    assert "**Contributors**: [@jane](https://git.local/users/jane), @jroe" in sent
-    # the release page still shows the picture the app renders
-    assert "<img" in note.body
 
 
 async def test_push_updates_an_existing_provider_release(db_session: AsyncSession) -> None:
