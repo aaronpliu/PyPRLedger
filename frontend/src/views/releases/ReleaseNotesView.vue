@@ -921,6 +921,46 @@
               </div>
               <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
 
+              <!-- The people behind the commits, read from the repository rather
+                   than written into the notes: a draft has none, a published
+                   release is credited however its notes were written -->
+              <div
+                v-if="note.status === 'published' && contributorsOf(note).length"
+                class="release-contributors"
+                data-test="note-contributors"
+              >
+                <span class="contributors-label">{{ t('releaseNotes.contributors') }}</span>
+                <ul class="contributor-list">
+                  <li
+                    v-for="(person, index) in contributorsOf(note)"
+                    :key="person.username || person.display_name || index"
+                    class="contributor"
+                    :title="person.display_name || person.username || ''"
+                  >
+                    <UserAvatar
+                      class="contributor-avatar"
+                      :username="person.username || person.display_name || '?'"
+                      :avatar-url="person.avatar_url"
+                      :size="20"
+                    />
+                    <a
+                      v-if="person.profile_url"
+                      class="contributor-name"
+                      :href="person.profile_url"
+                      target="_blank"
+                      rel="noopener"
+                      @click.stop
+                    >
+                      {{ contributorLabel(person) }}
+                    </a>
+                    <span v-else class="contributor-name">{{ contributorLabel(person) }}</span>
+                    <span class="contributor-commits">
+                      {{ t('releaseNotes.contributor_commits', { count: person.commit_count }) }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+
               <!-- Collapsing is a reading aid: the notes stay whole in the release
                    and in an export -->
               <el-button
@@ -1041,7 +1081,11 @@ import UserAvatar from '@/components/user/UserAvatar.vue'
 import { useJira } from '@/composables/useJira'
 import { searchCandidates } from '@/composables/useRefCandidates'
 import { linkifyJiraMarkdown } from '@/utils/jira'
-import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
+import {
+  releaseNotesApi,
+  type ReleaseNote,
+  type ReleaseNoteContributor,
+} from '@/api/releaseNotes'
 import type {
   ReleaseNoteExportRequest,
   ReleaseNotePreviewResponse,
@@ -1131,6 +1175,15 @@ const tagSearch = ref('')
 const notes = ref<ReleaseNote[]>([])
 const notesTotal = ref(0)
 const notesLoading = ref(false)
+/**
+ * Credits of the notes being written, as the generator returned them.
+ *
+ * The commits are read once, when the notes are generated, so the people behind
+ * them are known then: deduplicated by person and matched to the account that
+ * carries a picture. Saving the notes stores them with the release, and the
+ * release page reads them from there - nobody asks the git provider again.
+ */
+const previewContributors = ref<ReleaseNoteContributor[] | null>(null)
 // Export selection: either the releases ticked in the list, or every release of
 // the repository - the latter covers releases the paginated list has not loaded,
 // which is what "export the change log" means. The two are exclusive: ticking a
@@ -1910,6 +1963,20 @@ async function loadNotes() {
 }
 
 /**
+ * The credits stored with a release.
+ *
+ * A release that was never generated - written by hand or imported - carries none.
+ */
+function contributorsOf(note: ReleaseNote): ReleaseNoteContributor[] {
+  return note.contributors ?? []
+}
+
+/** The login a release is credited under, or the name when the commits carry none. */
+function contributorLabel(person: ReleaseNoteContributor): string {
+  return person.username ? `@${person.username}` : person.display_name || ''
+}
+
+/**
  * Load the commits of a tag's release scope (from the previous tag to the tag).
  *
  * This is the tag -> commits mapping shown in the tags tab; the generated note
@@ -2094,6 +2161,7 @@ function resetForm() {
   editingId.value = null
   editingStatus.value = 'draft'
   generatedCount.value = null
+  previewContributors.value = null
   clearSummaryState()
   clearEditorScope()
   form.value = {
@@ -2275,6 +2343,8 @@ function editNote(note: ReleaseNote) {
   editingId.value = note.id
   editingStatus.value = note.status
   generatedCount.value = null
+  // The stored credits stay as they are until the notes are generated again
+  previewContributors.value = null
   clearSummaryState()
   editorOpen.value = true
   form.value = {
@@ -2323,6 +2393,9 @@ async function generateNotes() {
       form.value.name = preview.suggested_name
     }
     generatedCount.value = preview.commit_count
+    // The people behind those commits came back with them, so the credits are saved
+    // with the notes instead of being read again when the release is shown
+    previewContributors.value = preview.contributors ?? []
     // The notes and the commits they were built from come out of the same answer, so
     // the panel beside them is what the body was made of - not a second reading of
     // the repository that could disagree with it.
@@ -2354,6 +2427,9 @@ async function saveRelease(status: 'draft' | 'published') {
 
   // Read before the form is reset: whether this save asked to write to Confluence.
   const willSyncToConfluence = asksForConfluenceSync.value
+  // Only notes generated in this session carry credits; an edit that changes the
+  // wording leaves the credits already stored with the release alone
+  const contributors = previewContributors.value ?? undefined
   saving.value = true
   let saved: ReleaseNote
   try {
@@ -2364,6 +2440,7 @@ async function saveRelease(status: 'draft' | 'published') {
         previous_tag: form.value.previous_tag.trim() || null,
         is_prerelease: form.value.is_prerelease,
         status,
+        contributors,
         sync_to_confluence: asksForConfluenceSync.value,
       })
     } else {
@@ -2375,6 +2452,7 @@ async function saveRelease(status: 'draft' | 'published') {
         previous_tag: form.value.previous_tag.trim() || null,
         is_prerelease: form.value.is_prerelease,
         status,
+        contributors,
         sync_to_confluence: asksForConfluenceSync.value,
       })
     }
@@ -3145,6 +3223,53 @@ onBeforeUnmount(() => {
 
 .note-expand {
   margin-top: 8px;
+}
+
+/* The credits sit under the notes and quieter than them: they are a reading of
+   the release, not part of what was written */
+.release-contributors {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.contributors-label {
+  font-weight: 600;
+}
+
+.contributor-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contributor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.contributor-avatar {
+  box-sizing: border-box;
+  border: 1px solid var(--el-border-color-lighter);
+}
+
+.contributor-name {
+  color: var(--el-text-color-regular);
+  text-decoration: none;
+}
+
+a.contributor-name:hover {
+  color: var(--el-color-primary);
 }
 
 .detail-pagination {

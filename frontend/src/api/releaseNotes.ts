@@ -35,6 +35,11 @@ export interface ReleaseNote {
   confluence_url?: string | null
   confluence_synced_date?: string | null
   confluence_sync_error?: string | null
+  /**
+   * The people the release was written by, stored when its notes were generated
+   * (empty for notes written by hand).
+   */
+  contributors?: ReleaseNoteContributor[]
 }
 
 export interface ReleaseNoteListResponse {
@@ -47,18 +52,11 @@ export interface ReleaseNoteContributor {
   /** Provider login, absent when the commits name only the author's name */
   username?: string | null
   display_name?: string | null
-  /** Profile picture of the account, when it has one */
+  /** Profile picture of the account the login is bound to, when it has one */
   avatar_url?: string | null
   /** Browsable profile page, when the platform has one */
   profile_url?: string | null
   commit_count: number
-}
-
-export interface ReleaseNoteContributorsResponse {
-  note_id: number
-  /** Credits are only read for a published release */
-  published: boolean
-  contributors: ReleaseNoteContributor[]
 }
 
 export interface ReleaseNoteCoordinates {
@@ -75,6 +73,8 @@ export interface ReleaseNoteCreateRequest extends ReleaseNoteCoordinates {
   previous_tag?: string | null
   status?: ReleaseNoteStatus
   is_prerelease?: boolean
+  /** Credits of the notes being saved, as the note generator returned them */
+  contributors?: ReleaseNoteContributor[] | null
   /** Write the release to Confluence too when publishing it (ignored if not set up) */
   sync_to_confluence?: boolean
 }
@@ -85,6 +85,8 @@ export interface ReleaseNoteUpdateRequest {
   previous_tag?: string | null
   status?: ReleaseNoteStatus
   is_prerelease?: boolean
+  /** Credits of regenerated notes; omitted, the stored credits are kept */
+  contributors?: ReleaseNoteContributor[] | null
   /** Write the release to Confluence too when this update leaves it published */
   sync_to_confluence?: boolean
 }
@@ -160,6 +162,8 @@ export interface ReleaseNotePreviewResponse {
   /** Size of the release scope (a lower bound when a scan was capped) */
   commit_count: number
   commits: PreviewCommit[]
+  /** The people behind those commits, one entry per person */
+  contributors: ReleaseNoteContributor[]
   truncated: boolean
   /** Summary paragraph of the release, when one was written for it */
   summary?: string | null
@@ -274,17 +278,6 @@ export const releaseNotesApi = {
   /** Publish the release on the git provider (GitHub Enterprise Releases). */
   async push(noteId: number, payload: ReleaseNotePushRequest): Promise<ReleaseNote> {
     const response = await request.post(`/release/notes/${noteId}/push`, payload)
-    return response.data || response
-  },
-
-  /**
-   * The people a published release was written by.
-   *
-   * Read from the commits of the release scope by the server rather than stored with
-   * the release: a note written by hand is credited all the same.
-   */
-  async contributors(noteId: number): Promise<ReleaseNoteContributorsResponse> {
-    const response = await request.get(`/release/notes/${noteId}/contributors`)
     return response.data || response
   },
 

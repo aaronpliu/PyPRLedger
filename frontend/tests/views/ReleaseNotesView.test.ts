@@ -188,6 +188,7 @@ function preview(
     body: '## What’s Changed',
     commit_count: commits.length,
     commits,
+    contributors: [],
     truncated: false,
     ...overrides,
   }
@@ -510,6 +511,95 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(wrapper.find('.release-author-avatar').exists()).toBe(false)
   })
 
+  it('credits the people behind a published release under its notes', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({
+          contributors: [
+            {
+              username: 'jdoe',
+              display_name: 'John Doe',
+              avatar_url: '/api/v1/users/avatars/77_jd.png',
+              profile_url: 'https://github.local/jdoe',
+              commit_count: 3,
+            },
+            { username: null, display_name: 'Unlinked Author', commit_count: 1 },
+          ],
+        }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const credits = wrapper.find('[data-test="note-contributors"]')
+    expect(credits.exists()).toBe(true)
+    expect(credits.text()).toContain(enMessages.releaseNotes.contributors)
+    // the login is the credit, linked to the profile it belongs to
+    expect(credits.find('a.contributor-name').attributes('href')).toBe('https://github.local/jdoe')
+    expect(credits.text()).toContain('@jdoe')
+    expect(credits.text()).toContain('3 commit(s)')
+    // an author the provider knows only by name is named, not linked
+    expect(credits.text()).toContain('Unlinked Author')
+    // the picture of the account is shown next to the login
+    expect(credits.find('img.avatar-img').attributes('src')).toBe('/api/v1/users/avatars/77_jd.png')
+  })
+
+  it('credits nobody before the release is published', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({
+          status: 'draft',
+          published_date: null,
+          contributors: [{ username: 'jdoe', display_name: 'John Doe', commit_count: 3 }],
+        }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // the credits of a draft are still being written: they are shown once published
+    expect(wrapper.find('[data-test="note-contributors"]').exists()).toBe(false)
+  })
+
+  it('saves the credits the notes were generated with', async () => {
+    const credits = [
+      {
+        username: 'jdoe',
+        display_name: 'John Doe',
+        avatar_url: null,
+        profile_url: 'https://github.local/jdoe',
+        commit_count: 3,
+      },
+    ]
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({ total: 0, items: [] })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([PREVIEW_COMMIT], { version: 'v1.1.0', contributors: credits }),
+    )
+    vi.mocked(releaseNotesApi.create).mockResolvedValue(release({ contributors: credits }) as any)
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.generate_notes)[0].trigger('click')
+    await flushPromises()
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.save_draft)[0].trigger('click')
+    await flushPromises()
+
+    // the people behind the commits came back with the notes, so they are stored
+    // with the release instead of being read again when it is shown
+    expect(releaseNotesApi.create).toHaveBeenCalledWith(
+      expect.objectContaining({ contributors: credits }),
+    )
+  })
+
   it('refreshes the tag suggestions through the provider', async () => {
     const wrapper = mountView()
     await flushPromises()
@@ -731,6 +821,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
       body: '## What\u2019s Changed\n\n### ✨ Added\n- add login page',
       commit_count: 3,
       commits: [],
+      contributors: [],
       truncated: false,
     })
 

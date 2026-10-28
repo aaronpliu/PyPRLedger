@@ -1224,6 +1224,8 @@
     "generate_failed": "Failed to generate the release notes",
     "prerelease": "Set as a pre-release",
     "released_by": "Released by {author}",
+    "contributors": "Contributors",
+    "contributor_commits": "{count} commit(s)",
     "updated_at": "updated {date}",
     "range": "{from}...{to}",
     "load_failed": "Failed to load the releases",

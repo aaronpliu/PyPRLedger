@@ -39,7 +39,6 @@ from src.schemas.release_note import (
     ReleaseNotePushRequest,
     ReleaseNoteUpdateRequest,
 )
-from src.services.git_provider_resolver import registered_provider, registered_workspace_slug
 from src.services.git_providers import BaseGitProvider, get_git_provider
 from src.services.release_diff_service import (
     ReleaseDiffService,
@@ -266,11 +265,6 @@ SECTION_EMOJI: dict[str, str] = {
 }
 
 DEFAULT_LANGUAGE = "en"
-
-# A release page credits the people behind the commits, which means reading the scope
-# for every published release shown. A thousand commits is a long release by any
-# measure and keeps the reading to one provider call per release.
-CONTRIBUTOR_COMMIT_LIMIT = 1000
 
 # Section titles and the surrounding prose in the language of the caller. The
 # section keys stay English: they are what the classifier and an LLM answer with.
@@ -780,43 +774,14 @@ class ReleaseNoteService:
                 pictures[login] = by_email[email]
         return pictures
 
-    async def contributors(self, note: ReleaseNote) -> list[ReleaseNoteContributor]:
-        """The people a published release was written by, read from its commits.
+    async def credits_for(self, commits: list[dict[str, Any]]) -> list[ReleaseNoteContributor]:
+        """The people behind a list of commits, one entry per person.
 
-        The credits are a reading of the repository rather than a part of the note: a
-        note typed by hand is credited all the same, nothing about them is stored, and
-        the list is built when the release page asks to show it. Only a published
-        release has credits - a draft is still being written.
+        A person is credited once however many commits they wrote: the login is the
+        identity when the commits carry one, the name otherwise. Merge commits are not
+        writing, and the picture is the one of the account the login is bound to, so a
+        contributor without an account keeps the name and is shown as initials.
         """
-        if note.status != ReleaseNoteStatus.PUBLISHED:
-            return []
-
-        provider_name = await registered_provider(note.project_key, note.repository_slug, self.db)
-        workspace_slug = await registered_workspace_slug(
-            note.project_key, note.repository_slug, self.db
-        )
-
-        previous_ref = (note.previous_tag or "").strip() or None
-        if not previous_ref:
-            scope = await self._scope_service.resolve(
-                project_key=note.project_key,
-                repository_slug=note.repository_slug,
-                version=note.tag_name,
-                git_provider=provider_name,
-                workspace_slug=workspace_slug,
-            )
-            previous_ref = scope.previous_ref
-
-        commits = await self._scope_commits(
-            project_key=note.project_key,
-            repository_slug=note.repository_slug,
-            version=note.tag_name,
-            previous_ref=previous_ref,
-            git_provider=provider_name,
-            workspace_slug=workspace_slug,
-        )
-        await self.resolve_author_usernames(commits)
-        self.resolve_author_urls(commits, git_provider=provider_name)
         pictures = await self.contributor_avatars(commits)
 
         people: dict[str, ReleaseNoteContributor] = {}
@@ -854,43 +819,6 @@ class ReleaseNoteService:
             ),
         )
 
-    async def _scope_commits(
-        self,
-        *,
-        project_key: str,
-        repository_slug: str,
-        version: str,
-        previous_ref: str | None,
-        git_provider: str | None,
-        workspace_slug: str | None,
-    ) -> list[dict[str, Any]]:
-        """The commits of a release scope, as the notes of that release read them."""
-        if previous_ref:
-            comparison = await self._diff_service.compare_releases(
-                ReleaseCompareRequest(
-                    project_key=project_key,
-                    repository_slug=repository_slug,
-                    git_provider=git_provider,
-                    workspace_slug=workspace_slug,
-                    source_ref=previous_ref,
-                    target_ref=version,
-                    include_commits=True,
-                    scan_limit=CONTRIBUTOR_COMMIT_LIMIT,
-                    render_limit=CONTRIBUTOR_COMMIT_LIMIT,
-                )
-            )
-            return [commit.model_dump() for commit in comparison.added_commits]
-
-        version_commits, _ = await self._diff_service.list_release_commits(
-            project_key=project_key,
-            repository_slug=repository_slug,
-            git_provider=git_provider,
-            workspace_slug=workspace_slug,
-            ref=version,
-            limit=CONTRIBUTOR_COMMIT_LIMIT,
-        )
-        return [commit.model_dump() for commit in version_commits]
-
     async def get_note(self, note_id: int) -> ReleaseNote | None:
         """Fetch one release by id."""
         return (
@@ -911,6 +839,15 @@ class ReleaseNoteService:
     # ------------------------------------------------------------------ #
     # Mutations
     # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _stored_credits(
+        credits: Sequence[ReleaseNoteContributor] | None,
+    ) -> list[dict[str, Any]] | None:
+        """The credits as the release stores them, or None when none were given."""
+        if credits is None:
+            return None
+        return [credit.model_dump() for credit in credits]
 
     async def create_note(
         self,
@@ -941,6 +878,7 @@ class ReleaseNoteService:
             status=request.status,
             is_prerelease=request.is_prerelease,
             author=author,
+            contributors=self._stored_credits(request.contributors),
         )
         if request.status == ReleaseNoteStatus.PUBLISHED:
             note.published_date = get_current_time()
@@ -973,6 +911,10 @@ class ReleaseNoteService:
             note.previous_tag = request.previous_tag or None
         if request.is_prerelease is not None:
             note.is_prerelease = request.is_prerelease
+        if request.contributors is not None:
+            # Only a caller that generated the notes has credits to replace them with;
+            # an update that writes the body by hand leaves the stored ones alone
+            note.contributors = self._stored_credits(request.contributors)
         if request.status is not None:
             if request.status == ReleaseNoteStatus.PUBLISHED and not note.published_date:
                 note.published_date = get_current_time()
@@ -1353,6 +1295,10 @@ class ReleaseNoteService:
 
         await self.resolve_author_usernames(commits)
         self.resolve_author_urls(commits, git_provider=request.git_provider)
+        # The commits are in hand, so the credits are read here once: deduplicated by
+        # person and matched to the accounts that carry a picture. They travel with the
+        # notes into the release instead of being rebuilt when it is shown.
+        credits = await self.credits_for(commits)
 
         summary, summary_source, summary_notice, summary_error = await self._summarize(
             request, commits, previous_ref
@@ -1384,6 +1330,7 @@ class ReleaseNoteService:
             body=body,
             commit_count=commit_count,
             commits=commits,
+            contributors=credits,
             truncated=truncated,
             summary=summary,
             summary_source=summary_source,

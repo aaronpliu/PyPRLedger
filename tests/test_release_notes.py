@@ -33,6 +33,7 @@ from src.schemas.release_note import (
     SOURCE_EXPLICIT,
     SOURCE_NAME_ORDER,
     SOURCE_NONE,
+    ReleaseNoteContributor,
     ReleaseNoteCreateRequest,
     ReleaseNoteImportRequest,
     ReleaseNotePreviewRequest,
@@ -717,7 +718,7 @@ async def test_author_avatars_only_returns_accounts_that_have_a_picture(
     assert await service.author_avatars([None]) == {}
 
 
-async def test_contributors_are_read_from_the_commits_of_a_published_release(
+async def test_generating_the_notes_credits_the_people_behind_them(
     db_session: AsyncSession,
 ) -> None:
     db_session.add(
@@ -766,30 +767,82 @@ async def test_contributors_are_read_from_the_commits_of_a_published_release(
         ]
     )
     service = build_service(db_session, diff, provider=ComparingProvider())
-    note = await service.create_note(
-        create_payload(status="published", previous_tag="v0.9.0"), author="alice"
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="PROJ",
+            repository_slug="my-repo",
+            version="v1.1.0",
+            previous_version="v0.9.0",
+        )
     )
 
-    contributors = await service.contributors(note)
-
     # every commit of the scope, merges aside, once per person and most active first
+    contributors = preview.contributors
     assert [(c.username, c.commit_count) for c in contributors] == [("jdoe", 2), ("jroe", 1)]
     assert contributors[0].display_name == "John Doe"
     assert contributors[0].avatar_url == "/api/v1/users/avatars/jdoe.png"
     assert contributors[0].profile_url == "https://github.local/jdoe"
     assert contributors[1].avatar_url is None
+    # the commits were read once, for the notes themselves: the credits come with them
+    assert len(diff.compare_calls) == 1
 
 
-async def test_contributors_are_not_read_before_a_release_is_published(
+async def test_the_credits_of_generated_notes_are_stored_with_the_release(
     db_session: AsyncSession,
 ) -> None:
-    diff = StubDiffService([commit(C1, "feat: add login page")])
-    service = build_service(db_session, diff, provider=ComparingProvider())
-    note = await service.create_note(create_payload(status="draft"), author="alice")
+    service = build_service(db_session, StubDiffService())
+    credits = [
+        ReleaseNoteContributor(
+            username="jdoe",
+            display_name="John Doe",
+            avatar_url="/api/v1/users/avatars/jdoe.png",
+            profile_url="https://github.local/jdoe",
+            commit_count=2,
+        )
+    ]
 
-    assert await service.contributors(note) == []
-    # a draft is never read from the provider at all
-    assert diff.compare_calls == []
+    note = await service.create_note(
+        create_payload(status="published", contributors=credits), author="alice"
+    )
+
+    assert note.contributors == [
+        {
+            "username": "jdoe",
+            "display_name": "John Doe",
+            "avatar_url": "/api/v1/users/avatars/jdoe.png",
+            "profile_url": "https://github.local/jdoe",
+            "commit_count": 2,
+        }
+    ]
+
+
+async def test_an_update_without_credits_keeps_the_ones_already_stored(
+    db_session: AsyncSession,
+) -> None:
+    service = build_service(db_session, StubDiffService())
+    note = await service.create_note(
+        create_payload(
+            status="draft",
+            contributors=[ReleaseNoteContributor(username="jdoe", commit_count=3)],
+        ),
+        author="alice",
+    )
+
+    # rewriting the notes by hand says nothing about who wrote the commits
+    updated = await service.update_note(
+        note.id, ReleaseNoteUpdateRequest(body="## Hand written notes")
+    )
+
+    assert updated is not None
+    assert updated.contributors == [
+        {
+            "username": "jdoe",
+            "display_name": None,
+            "avatar_url": None,
+            "profile_url": None,
+            "commit_count": 3,
+        }
+    ]
 
 
 async def test_preview_names_the_account_behind_an_author_email(

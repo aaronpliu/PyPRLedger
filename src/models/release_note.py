@@ -16,6 +16,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     ForeignKey,
@@ -80,6 +81,14 @@ class ReleaseNote(Base):
 
     # Who released it (auth user username, snapshot at publish time)
     author: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # The people the release was written by, read from the commits of its scope when
+    # the notes are generated. A snapshot, like the author above: the credits belong
+    # to the release that was generated, and reading them again would ask the git
+    # provider for the same commits on every view.
+    contributors: Mapped[list[dict] | None] = mapped_column(
+        JSON, nullable=True, comment="Contributors of the release scope (one entry per person)"
+    )
 
     # Provider side release (GitHub Enterprise), set when pushed or imported
     external_provider: Mapped[str | None] = mapped_column(
@@ -149,6 +158,7 @@ class ReleaseNote(Base):
             "status": self.status,
             "is_prerelease": self.is_prerelease,
             "author": self.author,
+            "contributors": self.contributors or [],
             "external_provider": self.external_provider,
             "external_id": self.external_id,
             "external_url": self.external_url,
