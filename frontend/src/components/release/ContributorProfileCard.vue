@@ -1,9 +1,9 @@
 <template>
-  <!-- What a hover over a contributor says about them: the picture and the name
-       the instance holds, the login the commits carry, and the way to their page
-       on the platform. Nothing is invented for an author the instance has no
-       account for - the card then shows what the commits said. -->
   <div class="contributor-card" data-test="contributor-card">
+    <!-- What a hover over a contributor says about them: the picture and the name
+         the instance holds, the login the commits carry, and the way to their page
+         on the platform. Nothing is invented for an author the instance has no
+         account for - the card then shows what the commits said. -->
     <div class="contributor-card-head">
       <UserAvatar
         class="contributor-card-avatar"

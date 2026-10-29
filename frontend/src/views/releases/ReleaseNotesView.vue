@@ -1008,33 +1008,10 @@
                           </span>
                         </div>
                       </template>
-                      <div class="contributor-overflow-card">
-                        <p class="contributor-overflow-title">
-                          {{
-                            t('releaseNotes.contributor_more', {
-                              count: hiddenContributors(note).length,
-                            })
-                          }}
-                        </p>
-                        <!-- The people the faces did not draw are described in the
-                             same card as the ones they did, so nobody is only a name -->
-                        <ul class="contributor-overflow-list">
-                          <li
-                            v-for="(person, index) in hiddenContributors(note)"
-                            :key="person.username || person.display_name || index"
-                            class="contributor-overflow-item"
-                          >
-                            <ContributorProfileCard
-                              :username="person.username"
-                              :display-name="person.display_name"
-                              :avatar-url="person.avatar_url"
-                              :profile-url="person.profile_url"
-                              :commit-count="person.commit_count"
-                              :last-committed="person.last_committed"
-                            />
-                          </li>
-                        </ul>
-                      </div>
+                      <!-- Listed one line each, described in full for whoever the
+                           pointer rests on: a long list stays scannable and still
+                           says more than a name -->
+                      <ContributorOverflowPanel :contributors="hiddenContributors(note)" />
                     </el-popover>
                   </li>
                 </ul>
@@ -1156,6 +1133,7 @@ import { releaseDiffApi } from '@/api/releaseDiff'
 import type { CommitInfo } from '@/api/releaseDiff'
 import CommitTable from '@/components/release/CommitTable.vue'
 import ContentLoader from '@/components/common/ContentLoader.vue'
+import ContributorOverflowPanel from '@/components/release/ContributorOverflowPanel.vue'
 import ContributorProfileCard from '@/components/release/ContributorProfileCard.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
 import { useJira } from '@/composables/useJira'
@@ -3449,44 +3427,6 @@ onBeforeUnmount(() => {
 .contributor-overflow:hover {
   background: var(--el-fill-color-darker);
   color: var(--el-color-primary);
-}
-
-.contributor-overflow-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.contributor-overflow-title {
-  margin: 0;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-/* One card per person, ruled apart so a long list still reads as a list */
-.contributor-overflow-list {
-  display: flex;
-  flex-direction: column;
-  max-height: 260px;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-}
-
-.contributor-overflow-item {
-  padding: 8px 0;
-  border-top: 1px solid var(--el-border-color-lighter);
-}
-
-.contributor-overflow-item:first-child {
-  border-top: none;
-  padding-top: 0;
-}
-
-.contributor-overflow-item:last-child {
-  padding-bottom: 0;
 }
 
 .detail-pagination {

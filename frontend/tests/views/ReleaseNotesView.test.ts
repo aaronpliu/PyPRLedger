@@ -612,12 +612,15 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(title?.textContent?.trim()).toBe(
       enMessages.releaseNotes.contributor_more.replace('{count}', '3'),
     )
-    // and it describes everyone the faces did not, in the same card as the faces
-    const cards = Array.from(document.body.querySelectorAll('.contributor-overflow-item'))
-    expect(cards).toHaveLength(3)
-    expect(cards.map((card) => card.querySelector('.contributor-card-login')?.textContent)).toEqual(
-      ['@dev7', '@dev8', '@dev9'],
+    // and the rest are listed one line each, nobody's card opened yet
+    const rows = Array.from(
+      document.body.querySelectorAll('[data-test="contributor-overflow-row"]'),
     )
+    expect(rows).toHaveLength(3)
+    expect(
+      rows.map((row) => row.querySelector('.contributor-overflow-name')?.textContent?.trim()),
+    ).toEqual(['@dev7', '@dev8', '@dev9'])
+    expect(document.body.querySelector('.contributor-overflow-detail')).toBeNull()
   })
 
   it('credits nobody before the release is published', async () => {
