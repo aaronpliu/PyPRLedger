@@ -63,10 +63,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Drop the reaction table"""
+    """Drop the reaction table.
 
-    op.drop_index("ix_release_note_reaction_note_emoji", table_name="release_note_reaction")
-    op.drop_index(op.f("ix_release_note_reaction_user_id"), table_name="release_note_reaction")
-    op.drop_index(op.f("ix_release_note_reaction_note_id"), table_name="release_note_reaction")
-    op.drop_index(op.f("ix_release_note_reaction_id"), table_name="release_note_reaction")
+    The table goes in one statement rather than dropping its indexes first:
+    MySQL keeps the index behind each foreign key and refuses to remove it while
+    the constraint stands ("Cannot drop index ... needed in a foreign key
+    constraint"), and this table carries two of them. Dropping the table takes
+    its indexes and constraints with it, which is exactly what this migration
+    added.
+    """
+
     op.drop_table("release_note_reaction")
