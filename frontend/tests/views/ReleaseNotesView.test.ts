@@ -698,8 +698,14 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     const row = wrapper.find('[data-test="note-reactions"]')
     // no kudos yet: only the way to give the first one, and it is the first thing
     expect(row.findAll('.reaction-chip')).toHaveLength(1)
-    expect(row.find('.reaction-add').text()).toBe('😊')
     expect(row.find('.reaction-add').element).toBe(row.element.firstElementChild)
+    // the way in is drawn rather than being one of the emojis: it adds a reaction,
+    // so it cannot be mistaken for a reaction the release has already collected
+    expect(row.find('.reaction-add').text()).toBe('')
+    expect(row.find('.reaction-add .reaction-add-icon').exists()).toBe(true)
+    expect(row.find('.reaction-add').attributes('aria-label')).toBe(
+      enMessages.releaseNotes.reaction_add,
+    )
 
     await row.find('.reaction-add').trigger('click')
     await flushPromises()

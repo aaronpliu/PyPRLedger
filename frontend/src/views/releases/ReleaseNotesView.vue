@@ -1054,7 +1054,21 @@
                       :title="t('releaseNotes.reaction_add')"
                       :aria-label="t('releaseNotes.reaction_add')"
                     >
-                      <span class="reaction-emoji">😊</span>
+                      <!-- Drawn instead of being another emoji: this control adds
+                           a reaction, it is not one. A face here read as a
+                           reaction already given, next to the real chips -->
+                      <svg
+                        class="reaction-add-icon"
+                        viewBox="0 0 16 16"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <circle cx="6.6" cy="9.4" r="5" />
+                        <path d="M4.55 10.15c.42.8 1.14 1.25 2.05 1.25s1.63-.45 2.05-1.25" />
+                        <circle class="reaction-add-dot" cx="4.75" cy="7.7" r=".6" />
+                        <circle class="reaction-add-dot" cx="8.45" cy="7.7" r=".6" />
+                        <path d="M12.6 2.4v4M10.6 4.4h4" />
+                      </svg>
                     </button>
                   </template>
                   <div class="reaction-picker">
@@ -3580,16 +3594,28 @@ onBeforeUnmount(() => {
 .reaction-add {
   padding: 0 8px;
   color: var(--el-text-color-secondary);
+  transition: color 0.15s ease;
 }
 
-.reaction-add .reaction-emoji {
-  font-size: 14px;
-  filter: grayscale(0.4);
-  transition: filter 0.15s ease;
+.reaction-add:hover:not(:disabled) {
+  color: var(--el-color-primary);
 }
 
-.reaction-add:hover .reaction-emoji {
-  filter: none;
+/* One thin outline at the weight of the text around it: the control reads as a
+   way to add something, not as a reaction somebody already gave */
+.reaction-add-icon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.reaction-add-dot {
+  fill: currentColor;
+  stroke: none;
 }
 
 .reaction-picker {
