@@ -57,6 +57,8 @@ export interface ReleaseNoteContributor {
   /** Browsable profile page, when the platform has one */
   profile_url?: string | null
   commit_count: number
+  /** When this person last committed in the release scope (ISO timestamp) */
+  last_committed?: string | null
 }
 
 export interface ReleaseNoteCoordinates {

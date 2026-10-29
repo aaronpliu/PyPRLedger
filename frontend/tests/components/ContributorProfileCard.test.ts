@@ -51,6 +51,27 @@ describe('ContributorProfileCard', () => {
     expect(card.find('.avatar-fallback').text()).toBe('U')
   })
 
+  it('says how lately the person was seen in the repository', () => {
+    const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString()
+    const activity = (days: number) =>
+      mountCard({ username: 'jdoe', lastCommitted: daysAgo(days) })
+        .find('[data-test="contributor-activity"]')
+        .text()
+
+    expect(activity(3)).toBe(enMessages.releaseNotes.contributor_active_week)
+    expect(activity(20)).toBe(enMessages.releaseNotes.contributor_active_month)
+    expect(activity(200)).toBe(enMessages.releaseNotes.contributor_active_year)
+    expect(activity(500)).toBe(enMessages.releaseNotes.contributor_active_older)
+  })
+
+  it('says nothing about activity it does not know', () => {
+    const card = mountCard({ username: 'jdoe', commitCount: 2 })
+
+    expect(card.find('[data-test="contributor-activity"]').exists()).toBe(false)
+    // while what it does know is still said
+    expect(card.find('.contributor-card-commits').text()).toBe('2 commit(s)')
+  })
+
   it('stands on the login when the commits carry no name', () => {
     const card = mountCard({ username: 'jroe', commitCount: 2 })
 

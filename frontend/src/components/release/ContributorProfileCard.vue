@@ -17,6 +17,13 @@
       </div>
     </div>
 
+    <!-- How lately the person was seen here, from their newest commit in the
+         release scope: a face says who, this says whether they are still around -->
+    <p v-if="activity" class="contributor-card-activity" data-test="contributor-activity">
+      <el-icon class="contributor-card-icon"><Clock /></el-icon>
+      <span>{{ activity }}</span>
+    </p>
+
     <p class="contributor-card-commits">
       {{ t('releaseNotes.contributor_commits', { count: commitCount }) }}
     </p>
@@ -36,6 +43,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Clock } from '@element-plus/icons-vue'
 
 import UserAvatar from '@/components/user/UserAvatar.vue'
 
@@ -50,6 +58,8 @@ interface Props {
   profileUrl?: string | null
   /** Commits this person wrote in the release scope */
   commitCount?: number
+  /** When that person last committed in the release scope (ISO timestamp) */
+  lastCommitted?: string | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -58,11 +68,33 @@ const props = withDefaults(defineProps<Props>(), {
   avatarUrl: null,
   profileUrl: null,
   commitCount: 0,
+  lastCommitted: null,
 })
 
 const { t } = useI18n()
 
 const login = computed(() => (props.username ? `@${props.username}` : ''))
+
+const DAY = 24 * 60 * 60 * 1000
+
+/**
+ * How lately the person committed, in the reader's words.
+ *
+ * The date comes from their newest commit in the release scope, so a week here
+ * means a week in this repository at least - the scope is read from the release,
+ * not from the whole history of the branch.
+ */
+const activity = computed(() => {
+  if (!props.lastCommitted) return null
+  const committed = new Date(props.lastCommitted).getTime()
+  if (Number.isNaN(committed)) return null
+
+  const days = (Date.now() - committed) / DAY
+  if (days <= 7) return t('releaseNotes.contributor_active_week')
+  if (days <= 31) return t('releaseNotes.contributor_active_month')
+  if (days <= 365) return t('releaseNotes.contributor_active_year')
+  return t('releaseNotes.contributor_active_older')
+})
 </script>
 
 <style scoped>
@@ -105,6 +137,21 @@ const login = computed(() => (props.username ? `@${props.username}` : ''))
   color: var(--el-text-color-secondary);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.contributor-card-activity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.contributor-card-icon {
+  flex: none;
+  font-size: 13px;
 }
 
 .contributor-card-commits {

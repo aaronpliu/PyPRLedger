@@ -981,6 +981,7 @@
                         :avatar-url="person.avatar_url"
                         :profile-url="person.profile_url"
                         :commit-count="person.commit_count"
+                        :last-committed="person.last_committed"
                       />
                     </el-popover>
                   </li>
@@ -995,7 +996,7 @@
                     <el-popover
                       trigger="hover"
                       placement="top"
-                      :width="220"
+                      :width="260"
                       :show-after="150"
                       :hide-after="60"
                       :offset="10"
@@ -1015,20 +1016,22 @@
                             })
                           }}
                         </p>
+                        <!-- The people the faces did not draw are described in the
+                             same card as the ones they did, so nobody is only a name -->
                         <ul class="contributor-overflow-list">
                           <li
                             v-for="(person, index) in hiddenContributors(note)"
                             :key="person.username || person.display_name || index"
                             class="contributor-overflow-item"
                           >
-                            <UserAvatar
-                              :username="person.username || person.display_name || '?'"
+                            <ContributorProfileCard
+                              :username="person.username"
+                              :display-name="person.display_name"
                               :avatar-url="person.avatar_url"
-                              :size="20"
+                              :profile-url="person.profile_url"
+                              :commit-count="person.commit_count"
+                              :last-committed="person.last_committed"
                             />
-                            <span class="contributor-overflow-name">
-                              {{ contributorLabel(person) }}
-                            </span>
                           </li>
                         </ul>
                       </div>
@@ -3461,11 +3464,11 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
+/* One card per person, ruled apart so a long list still reads as a list */
 .contributor-overflow-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 220px;
+  max-height: 260px;
   margin: 0;
   padding: 0;
   overflow-y: auto;
@@ -3473,17 +3476,17 @@ onBeforeUnmount(() => {
 }
 
 .contributor-overflow-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
-.contributor-overflow-name {
-  overflow: hidden;
-  color: var(--el-text-color-regular);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.contributor-overflow-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.contributor-overflow-item:last-child {
+  padding-bottom: 0;
 }
 
 .detail-pagination {

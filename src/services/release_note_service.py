@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable, Iterable, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -774,13 +774,24 @@ class ReleaseNoteService:
                 pictures[login] = by_email[email]
         return pictures
 
+    @staticmethod
+    def _committed_at(commit: dict[str, Any]) -> datetime | None:
+        """When a commit was written, from the epoch milliseconds a provider reports."""
+        try:
+            milliseconds = int(commit.get("author_timestamp"))
+        except (TypeError, ValueError):
+            return None
+        return utc_to_local(datetime.fromtimestamp(milliseconds / 1000, UTC))
+
     async def credits_for(self, commits: list[dict[str, Any]]) -> list[ReleaseNoteContributor]:
         """The people behind a list of commits, one entry per person.
 
         A person is credited once however many commits they wrote: the login is the
         identity when the commits carry one, the name otherwise. Merge commits are not
         writing, and the picture is the one of the account the login is bound to, so a
-        contributor without an account keeps the name and is shown as initials.
+        contributor without an account keeps the name and is shown as initials. When
+        they last committed is read from the commits as well: the newest of the scope,
+        which is how a face can say it has been seen here lately.
         """
         pictures = await self.contributor_avatars(commits)
 
@@ -810,6 +821,10 @@ class ReleaseNoteService:
                 person.display_name = name
             if person.profile_url is None:
                 person.profile_url = commit.get("author_url")
+
+            committed = self._committed_at(commit)
+            if committed and (person.last_committed is None or committed > person.last_committed):
+                person.last_committed = committed
 
         return sorted(
             people.values(),
@@ -844,10 +859,14 @@ class ReleaseNoteService:
     def _stored_credits(
         credits: Sequence[ReleaseNoteContributor] | None,
     ) -> list[dict[str, Any]] | None:
-        """The credits as the release stores them, or None when none were given."""
+        """The credits as the release stores them, or None when none were given.
+
+        Written the way JSON keeps them - timestamps as text - because the column
+        holds the snapshot as it was read, not Python objects.
+        """
         if credits is None:
             return None
-        return [credit.model_dump() for credit in credits]
+        return [credit.model_dump(mode="json") for credit in credits]
 
     async def create_note(
         self,

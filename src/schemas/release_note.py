@@ -106,6 +106,13 @@ class ReleaseNoteContributor(BaseModel):
     )
     profile_url: str | None = Field(default=None, description="Browsable profile page")
     commit_count: int = Field(default=0, description="Commits this person wrote in the scope")
+    last_committed: datetime | None = Field(
+        default=None,
+        description=(
+            "When this person last committed in the scope, read from the commits: what "
+            "lets their card say how recently they were seen here."
+        ),
+    )
 
 
 class ReleaseNoteCreateRequest(ReleaseNoteCoordinates):

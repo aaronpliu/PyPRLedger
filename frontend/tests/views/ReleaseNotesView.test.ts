@@ -581,6 +581,45 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(credits.findAllComponents({ name: 'ElPopover' })).toHaveLength(7)
   })
 
+  it('names the crowded release it only counts', async () => {
+    const people = Array.from({ length: 9 }, (_, i) => ({
+      username: `dev${i + 1}`,
+      display_name: `Developer ${i + 1}`,
+      commit_count: 1,
+    }))
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ contributors: people })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    vi.useFakeTimers()
+    try {
+      await wrapper.find('[data-test="contributor-overflow"] .contributor-overflow').trigger(
+        'mouseenter',
+      )
+      vi.advanceTimersByTime(400)
+      await flushPromises()
+    } finally {
+      vi.useRealTimers()
+    }
+
+    // the card is written in the reader's language, not by its key
+    const title = document.body.querySelector('.contributor-overflow-title')
+    expect(title?.textContent?.trim()).toBe(
+      enMessages.releaseNotes.contributor_more.replace('{count}', '3'),
+    )
+    // and it describes everyone the faces did not, in the same card as the faces
+    const cards = Array.from(document.body.querySelectorAll('.contributor-overflow-item'))
+    expect(cards).toHaveLength(3)
+    expect(cards.map((card) => card.querySelector('.contributor-card-login')?.textContent)).toEqual(
+      ['@dev7', '@dev8', '@dev9'],
+    )
+  })
+
   it('credits nobody before the release is published', async () => {
     vi.mocked(releaseNotesApi.list).mockResolvedValue({
       total: 1,

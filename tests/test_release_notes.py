@@ -739,6 +739,7 @@ async def test_generating_the_notes_credits_the_people_behind_them(
                 author_name="John Doe",
                 author_username="jdoe",
                 author_email="john.doe@example.com",
+                author_timestamp=1_700_000_000_000,
                 message="feat: add login page",
             ),
             CommitInfo(
@@ -747,6 +748,7 @@ async def test_generating_the_notes_credits_the_people_behind_them(
                 author_name="John Doe",
                 author_username="jdoe",
                 author_email="john.doe@example.com",
+                author_timestamp=1_700_100_000_000,
                 message="fix: crash on logout",
             ),
             CommitInfo(
@@ -754,6 +756,7 @@ async def test_generating_the_notes_credits_the_people_behind_them(
                 display_id=C3[:7],
                 author_name="Jane Roe",
                 author_username="jroe",
+                author_timestamp=1_699_000_000_000,
                 message="docs: update readme",
             ),
             # the integration of work names nobody
@@ -783,6 +786,11 @@ async def test_generating_the_notes_credits_the_people_behind_them(
     assert contributors[0].avatar_url == "/api/v1/users/avatars/jdoe.png"
     assert contributors[0].profile_url == "https://github.local/jdoe"
     assert contributors[1].avatar_url is None
+    # the newest commit of each says when they were last seen here
+    assert contributors[0].last_committed is not None
+    assert contributors[0].last_committed.timestamp() == 1_700_100_000
+    assert contributors[1].last_committed is not None
+    assert contributors[1].last_committed.timestamp() == 1_699_000_000
     # the commits were read once, for the notes themselves: the credits come with them
     assert len(diff.compare_calls) == 1
 
@@ -812,6 +820,7 @@ async def test_the_credits_of_generated_notes_are_stored_with_the_release(
             "avatar_url": "/api/v1/users/avatars/jdoe.png",
             "profile_url": "https://github.local/jdoe",
             "commit_count": 2,
+            "last_committed": None,
         }
     ]
 
@@ -841,6 +850,7 @@ async def test_an_update_without_credits_keeps_the_ones_already_stored(
             "avatar_url": None,
             "profile_url": None,
             "commit_count": 3,
+            "last_committed": None,
         }
     ]
 
