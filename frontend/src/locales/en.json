@@ -1227,6 +1227,7 @@
     "contributors": "Contributors",
     "contributor_commits": "{count} commit(s)",
     "contributor_profile": "View profile",
+    "contributor_more": "…and {count} more",
     "updated_at": "updated {date}",
     "range": "{from}...{to}",
     "load_failed": "Failed to load the releases",

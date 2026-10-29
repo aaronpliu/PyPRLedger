@@ -930,9 +930,13 @@
                 data-test="note-contributors"
               >
                 <span class="contributors-label">{{ t('releaseNotes.contributors') }}</span>
-                <ul class="contributor-list">
+                <ul
+                  class="contributor-list"
+                  :class="{ 'is-stacked': isCrowded(note) }"
+                  data-test="contributor-list"
+                >
                   <li
-                    v-for="(person, index) in contributorsOf(note)"
+                    v-for="(person, index) in visibleContributors(note)"
                     :key="person.username || person.display_name || index"
                     class="contributor-item"
                   >
@@ -961,10 +965,14 @@
                               class="contributor-avatar"
                               :username="person.username || person.display_name || '?'"
                               :avatar-url="person.avatar_url"
-                              :size="40"
+                              :size="isCrowded(note) ? 32 : 40"
                             />
                           </component>
-                          <span class="contributor-name">{{ contributorLabel(person) }}</span>
+                          <!-- A crowded release is drawn as one line of faces, so
+                               the names are left to the card each picture opens -->
+                          <span v-if="!isCrowded(note)" class="contributor-name">
+                            {{ contributorLabel(person) }}
+                          </span>
                         </div>
                       </template>
                       <ContributorProfileCard
@@ -974,6 +982,56 @@
                         :profile-url="person.profile_url"
                         :commit-count="person.commit_count"
                       />
+                    </el-popover>
+                  </li>
+
+                  <!-- The names not drawn, counted: a release with thirty people
+                       in it should still read as one line -->
+                  <li
+                    v-if="hiddenContributors(note).length"
+                    class="contributor-item"
+                    data-test="contributor-overflow"
+                  >
+                    <el-popover
+                      trigger="hover"
+                      placement="top"
+                      :width="220"
+                      :show-after="150"
+                      :hide-after="60"
+                      :offset="10"
+                    >
+                      <template #reference>
+                        <div class="contributor-overflow">
+                          <span class="contributor-overflow-count">
+                            +{{ hiddenContributors(note).length }}
+                          </span>
+                        </div>
+                      </template>
+                      <div class="contributor-overflow-card">
+                        <p class="contributor-overflow-title">
+                          {{
+                            t('releaseNotes.contributor_more', {
+                              count: hiddenContributors(note).length,
+                            })
+                          }}
+                        </p>
+                        <ul class="contributor-overflow-list">
+                          <li
+                            v-for="(person, index) in hiddenContributors(note)"
+                            :key="person.username || person.display_name || index"
+                            class="contributor-overflow-item"
+                          >
+                            <UserAvatar
+                              :username="person.username || person.display_name || '?'"
+                              :avatar-url="person.avatar_url"
+                              :size="20"
+                            />
+                            <span class="contributor-overflow-name">
+                              {{ contributorLabel(person) }}
+                            </span>
+                          </li>
+                        </ul>
+                      </div>
                     </el-popover>
                   </li>
                 </ul>
@@ -1993,6 +2051,30 @@ function contributorsOf(note: ReleaseNote): ReleaseNoteContributor[] {
 /** The login a release is credited under, or the name when the commits carry none. */
 function contributorLabel(person: ReleaseNoteContributor): string {
   return person.username ? `@${person.username}` : person.display_name || ''
+}
+
+/**
+ * Whether the credits no longer fit one row of names.
+ *
+ * Up to six people are drawn as a face over a handle each; past that the faces
+ * overlap in a single line and the rest are counted, so a release written by a
+ * whole team takes no more room than one written by a few.
+ */
+const CROWDED_CONTRIBUTORS = 6
+
+function isCrowded(note: ReleaseNote): boolean {
+  return contributorsOf(note).length > CROWDED_CONTRIBUTORS
+}
+
+/** The credits drawn on the release: everyone, or the first faces of a crowd. */
+function visibleContributors(note: ReleaseNote): ReleaseNoteContributor[] {
+  const people = contributorsOf(note)
+  return isCrowded(note) ? people.slice(0, CROWDED_CONTRIBUTORS) : people
+}
+
+/** The credits a crowded release only counts; empty for everyone else. */
+function hiddenContributors(note: ReleaseNote): ReleaseNoteContributor[] {
+  return isCrowded(note) ? contributorsOf(note).slice(CROWDED_CONTRIBUTORS) : []
 }
 
 /**
@@ -3312,6 +3394,96 @@ onBeforeUnmount(() => {
 
 .contributor:hover .contributor-name {
   color: var(--el-color-primary);
+}
+
+/* More people than one row of handles holds: the faces overlap in a single line
+   and the rest are counted, the way a team is drawn beside a repository. The ring
+   is the colour of the sheet, so the circles read as separate faces */
+.contributor-list.is-stacked {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0;
+}
+
+.contributor-list.is-stacked .contributor-item + .contributor-item {
+  margin-left: -10px;
+}
+
+/* The face under the pointer comes forward, so its ring is not covered by the
+   neighbour drawn over it */
+.contributor-list.is-stacked .contributor-item {
+  position: relative;
+}
+
+.contributor-list.is-stacked .contributor-item:hover {
+  z-index: 1;
+}
+
+.contributor-list.is-stacked .contributor {
+  width: 32px;
+}
+
+.contributor-list.is-stacked .contributor-avatar {
+  border: 2px solid var(--el-card-bg-color, var(--el-bg-color));
+}
+
+.contributor-overflow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--el-card-bg-color, var(--el-bg-color));
+  border-radius: 50%;
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: default;
+}
+
+.contributor-overflow:hover {
+  background: var(--el-fill-color-darker);
+  color: var(--el-color-primary);
+}
+
+.contributor-overflow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.contributor-overflow-title {
+  margin: 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.contributor-overflow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.contributor-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.contributor-overflow-name {
+  overflow: hidden;
+  color: var(--el-text-color-regular);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .detail-pagination {

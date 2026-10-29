@@ -552,6 +552,35 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(credits.findAllComponents({ name: 'ElPopover' })).toHaveLength(2)
   })
 
+  it('draws a crowded release as one line of overlapping faces', async () => {
+    const people = Array.from({ length: 9 }, (_, i) => ({
+      username: `dev${i + 1}`,
+      display_name: `Developer ${i + 1}`,
+      avatar_url: `/api/v1/users/avatars/${i + 1}.png`,
+      profile_url: `https://github.local/dev${i + 1}`,
+      commit_count: 9 - i,
+    }))
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ contributors: people })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const credits = wrapper.find('[data-test="note-contributors"]')
+    // past six people the handles give way to faces on a single line
+    expect(wrapper.find('[data-test="contributor-list"]').classes()).toContain('is-stacked')
+    expect(credits.findAll('.contributor')).toHaveLength(6)
+    expect(credits.find('.contributor-avatar').attributes('style')).toContain('width: 32px')
+    // no handle under a face that has none beside it: the card on hover says who it is
+    expect(credits.findAll('.contributor-name')).toHaveLength(0)
+    // and the rest are counted, with a card naming them
+    expect(wrapper.find('[data-test="contributor-overflow"]').text()).toBe('+3')
+    expect(credits.findAllComponents({ name: 'ElPopover' })).toHaveLength(7)
+  })
+
   it('credits nobody before the release is published', async () => {
     vi.mocked(releaseNotesApi.list).mockResolvedValue({
       total: 1,
