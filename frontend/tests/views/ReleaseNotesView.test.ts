@@ -637,7 +637,8 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await flushPromises()
     await selectRepository(wrapper)
 
-    const chip = wrapper.find('[data-test="note-reactions"]').findAll('.reaction-chip')[0]
+    const row = wrapper.find('[data-test="note-reactions"]')
+    const chip = row.findAll('.reaction-chip:not(.reaction-add)')[0]
     expect(chip.text()).toContain('🎉')
     expect(chip.text()).toContain('2')
     // the reader has not given this one yet, so the chip is not filled in
@@ -648,9 +649,13 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
 
     expect(releaseNotesApi.toggleReaction).toHaveBeenCalledWith(1, '🎉')
     // the count comes back from the server, and the chip says the reader is one of them
-    const updated = wrapper.find('[data-test="note-reactions"]').findAll('.reaction-chip')[0]
+    const updated = wrapper
+      .find('[data-test="note-reactions"]')
+      .findAll('.reaction-chip:not(.reaction-add)')[0]
     expect(updated.text()).toContain('3')
     expect(updated.classes()).toContain('is-mine')
+    // the control to react with has not moved: the emoji joined it on the right
+    expect(wrapper.find('.reaction-add').element).toBe(row.element.firstElementChild)
   })
 
   it('offers the emojis a release can be given', async () => {
@@ -664,8 +669,10 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await selectRepository(wrapper)
 
     const row = wrapper.find('[data-test="note-reactions"]')
-    // no kudos yet: only the way to give the first one
+    // no kudos yet: only the way to give the first one, and it is the first thing
     expect(row.findAll('.reaction-chip')).toHaveLength(1)
+    expect(row.find('.reaction-add').text()).toBe('😊')
+    expect(row.find('.reaction-add').element).toBe(row.element.firstElementChild)
 
     await row.find('.reaction-add').trigger('click')
     await flushPromises()

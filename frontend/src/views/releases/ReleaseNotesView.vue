@@ -1042,20 +1042,9 @@
                 class="release-reactions"
                 data-test="note-reactions"
               >
-                <button
-                  v-for="reaction in note.reactions ?? []"
-                  :key="reaction.emoji"
-                  type="button"
-                  class="reaction-chip"
-                  :class="{ 'is-mine': reaction.reacted }"
-                  :disabled="isReacting(note)"
-                  :title="reactionTitle(reaction)"
-                  @click.stop="toggleReaction(note, reaction.emoji)"
-                >
-                  <span class="reaction-emoji">{{ reaction.emoji }}</span>
-                  <span class="reaction-count">{{ reaction.count }}</span>
-                </button>
-
+                <!-- The way to react comes first and stays there: the emojis a
+                     release collects grow to its right, so the control a reader
+                     reaches for does not move under the pointer -->
                 <el-popover trigger="click" placement="top" :width="196" :offset="8">
                   <template #reference>
                     <button
@@ -1065,7 +1054,7 @@
                       :title="t('releaseNotes.reaction_add')"
                       :aria-label="t('releaseNotes.reaction_add')"
                     >
-                      <el-icon><Plus /></el-icon>
+                      <span class="reaction-emoji">😊</span>
                     </button>
                   </template>
                   <div class="reaction-picker">
@@ -1081,6 +1070,20 @@
                     </button>
                   </div>
                 </el-popover>
+
+                <button
+                  v-for="reaction in note.reactions ?? []"
+                  :key="reaction.emoji"
+                  type="button"
+                  class="reaction-chip"
+                  :class="{ 'is-mine': reaction.reacted }"
+                  :disabled="isReacting(note)"
+                  :title="reactionTitle(reaction)"
+                  @click.stop="toggleReaction(note, reaction.emoji)"
+                >
+                  <span class="reaction-emoji">{{ reaction.emoji }}</span>
+                  <span class="reaction-count">{{ reaction.count }}</span>
+                </button>
               </div>
             </article>
 
@@ -1171,7 +1174,6 @@ import {
   Link,
   MagicStick,
   MoreFilled,
-  Plus,
   Refresh,
   Search,
 } from '@element-plus/icons-vue'
@@ -3578,6 +3580,16 @@ onBeforeUnmount(() => {
 .reaction-add {
   padding: 0 8px;
   color: var(--el-text-color-secondary);
+}
+
+.reaction-add .reaction-emoji {
+  font-size: 14px;
+  filter: grayscale(0.4);
+  transition: filter 0.15s ease;
+}
+
+.reaction-add:hover .reaction-emoji {
+  filter: none;
 }
 
 .reaction-picker {
