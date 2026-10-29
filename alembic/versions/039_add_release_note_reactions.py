@@ -8,6 +8,13 @@ A release can be given kudos by the people who read it: one row per person and
 emoji, so the same person cannot count twice and clicking the emoji again takes
 the kudos back.
 
+The emoji is declared with a binary collation on MySQL, because "one row per
+person and emoji" is decided by that collation: the legacy ``utf8mb4`` ones
+carry no weights for characters outside the Basic Multilingual Plane, so 👍, 🎉
+and 🚀 compare equal there - the unique key would refuse the second and the
+aggregate would count them as one. The other dialects compare these strings
+exactly already, so the collation is applied to MySQL alone.
+
 The table is new and the release rows are untouched, so the migration is additive.
 """
 
@@ -32,7 +39,13 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("note_id", sa.Integer(), nullable=False),
         sa.Column("user_id", sa.Integer(), nullable=False),
-        sa.Column("emoji", sa.String(length=16), nullable=False),
+        sa.Column(
+            "emoji",
+            sa.String(length=16).with_variant(
+                sa.String(length=16, collation="utf8mb4_bin"), "mysql"
+            ),
+            nullable=False,
+        ),
         sa.Column("created_date", sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(["note_id"], ["release_note.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["auth_user.id"], ondelete="CASCADE"),

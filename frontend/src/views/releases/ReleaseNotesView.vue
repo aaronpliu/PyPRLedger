@@ -1056,17 +1056,27 @@
                     >
                       <!-- Drawn instead of being another emoji: this control adds
                            a reaction, it is not one. A face here read as a
-                           reaction already given, next to the real chips -->
+                           reaction already given, next to the real chips. The
+                           stroke travels with the drawing rather than with a
+                           style rule: an icon that paints only when a stylesheet
+                           happens to load leaves an empty chip behind -->
                       <svg
                         class="reaction-add-icon"
+                        width="16"
+                        height="16"
                         viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
                         aria-hidden="true"
                         focusable="false"
                       >
                         <circle cx="6.6" cy="9.4" r="5" />
                         <path d="M4.55 10.15c.42.8 1.14 1.25 2.05 1.25s1.63-.45 2.05-1.25" />
-                        <circle class="reaction-add-dot" cx="4.75" cy="7.7" r=".6" />
-                        <circle class="reaction-add-dot" cx="8.45" cy="7.7" r=".6" />
+                        <circle cx="4.75" cy="7.7" r=".7" fill="currentColor" stroke="none" />
+                        <circle cx="8.45" cy="7.7" r=".7" fill="currentColor" stroke="none" />
                         <path d="M12.6 2.4v4M10.6 4.4h4" />
                       </svg>
                     </button>
@@ -3593,7 +3603,7 @@ onBeforeUnmount(() => {
 
 .reaction-add {
   padding: 0 8px;
-  color: var(--el-text-color-secondary);
+  color: var(--el-text-color-regular);
   transition: color 0.15s ease;
 }
 
@@ -3601,21 +3611,10 @@ onBeforeUnmount(() => {
   color: var(--el-color-primary);
 }
 
-/* One thin outline at the weight of the text around it: the control reads as a
-   way to add something, not as a reaction somebody already gave */
+/* The drawing carries its own stroke and size (see the template); this only
+   keeps the flex row from squeezing it */
 .reaction-add-icon {
-  width: 15px;
-  height: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.reaction-add-dot {
-  fill: currentColor;
-  stroke: none;
+  flex: none;
 }
 
 .reaction-picker {

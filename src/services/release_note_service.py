@@ -882,7 +882,12 @@ class ReleaseNoteService:
     async def toggle_reaction(
         self, note_id: int, user_id: int, emoji: str
     ) -> list[ReleaseNoteReactionCount]:
-        """Give an emoji, or take back the one the caller gave before."""
+        """Give an emoji, or take back the one the caller gave before.
+
+        The comparison is the column's, which is why it carries a binary
+        collation: under a legacy ``utf8mb4`` one the four-byte emojis compare
+        equal and giving a second emoji would take the first away.
+        """
         existing = (
             await self.db.execute(
                 select(ReleaseNoteReaction).where(

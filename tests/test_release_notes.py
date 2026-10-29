@@ -11,7 +11,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from sqlalchemy.dialects import mysql
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.schema import CreateTable
 
 from src.api.v1.endpoints.release_notes import get_rbac_service, get_release_note_service
 from src.core.config import settings
@@ -22,6 +24,7 @@ from src.core.permissions import get_current_user_with_token
 from src.main import app
 from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
+from src.models.release_note_reaction import ReleaseNoteReaction
 from src.models.user import User
 from src.schemas.release_diff import CommitInfo
 from src.schemas.release_note import (
@@ -888,6 +891,20 @@ async def test_reactions_are_listed_in_the_order_they_are_offered(
 
     # the reader finds an emoji where it was offered, not where it was clicked
     assert [item.emoji for item in summaries[note.id]] == ["👍", "❤️", "🚀"]
+
+
+def test_reaction_emojis_are_compared_exactly_on_mysql() -> None:
+    """The column must not inherit a collation that weighs every emoji the same.
+
+    MySQL's legacy utf8mb4 collations carry no weights outside the Basic
+    Multilingual Plane, so 👍, 🎉 and 🚀 compare equal there: the unique key
+    refuses the second one and the aggregate merges them into a single chip. The
+    unique key and the GROUP BY both read their notion of "the same emoji" from
+    this collation, so it is part of the schema, not a formatting detail.
+    """
+    ddl = str(CreateTable(ReleaseNoteReaction.__table__).compile(dialect=mysql.dialect()))
+
+    assert "COLLATE utf8mb4_bin" in ddl
 
 
 async def test_reactions_of_several_releases_are_read_at_once(db_session: AsyncSession) -> None:
@@ -1862,9 +1879,7 @@ async def test_endpoint_lets_one_reader_give_every_emoji(
 
     # and taking one back leaves the other five alone
     remaining = (
-        await async_client.post(
-            f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "❤️"}
-        )
+        await async_client.post(f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "❤️"})
     ).json()
     assert [item["emoji"] for item in remaining] == ["👍", "🎉", "🚀", "👀", "😄"]
 
@@ -1898,9 +1913,7 @@ async def test_endpoint_404s_for_the_kudos_of_a_missing_release(
 class TagUrlProvider(StubProvider):
     """Provider whose tags have a browsable page, for the tag badge."""
 
-    def web_tag_url(
-        self, project_key: str, repository_slug: str, tag_name: str
-    ) -> str | None:
+    def web_tag_url(self, project_key: str, repository_slug: str, tag_name: str) -> str | None:
         return f"https://git.local/{project_key}/{repository_slug}/tree/{tag_name}"
 
 
@@ -1929,9 +1942,7 @@ async def test_endpoint_links_a_release_to_its_tag_page(
         "/api/v1/release/notes", params={"project_key": "PROJ", "repository_slug": "my-repo"}
     )
     assert listed.status_code == 200
-    assert listed.json()["items"][0]["tag_url"] == (
-        "https://git.local/PROJ/my-repo/tree/v1.0.0"
-    )
+    assert listed.json()["items"][0]["tag_url"] == ("https://git.local/PROJ/my-repo/tree/v1.0.0")
 
 
 async def test_endpoint_returns_the_author_avatar_url(

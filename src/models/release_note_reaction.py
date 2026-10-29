@@ -5,6 +5,13 @@ written for them: a reaction is one such reader saying the release was welcome,
 as one of a small set of emojis. One person gives each emoji at most once, which
 is what the unique key says - clicking the same emoji again takes the kudos back
 rather than adding a second one.
+
+The emoji is compared exactly rather than by the collation the table happens to
+inherit: MySQL's legacy ``utf8mb4`` collations carry no weights for characters
+outside the Basic Multilingual Plane, so there 👍, 🎉, 🚀, 👀 and 😄 all compare
+equal - the unique key refused the second one and the aggregate merged them into
+a single chip. A binary collation compares the stored text code point by code
+point, which is what "one row per emoji" and "counted once per emoji" mean.
 """
 
 from __future__ import annotations
@@ -45,7 +52,12 @@ class ReleaseNoteReaction(Base):
         nullable=False,
         index=True,
     )
-    emoji: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Compared exactly on MySQL, whose legacy collations cannot tell four-byte
+    # emojis apart - see the module docstring
+    emoji: Mapped[str] = mapped_column(
+        String(16).with_variant(String(16, collation="utf8mb4_bin"), "mysql"),
+        nullable=False,
+    )
 
     created_date: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: get_current_time()
