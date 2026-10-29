@@ -35,11 +35,21 @@ export interface ReleaseNote {
   confluence_url?: string | null
   confluence_synced_date?: string | null
   confluence_sync_error?: string | null
+  /** The kudos the release was given, one entry per emoji in use */
+  reactions?: ReleaseNoteReaction[]
   /**
    * The people the release was written by, stored when its notes were generated
    * (empty for notes written by hand).
    */
   contributors?: ReleaseNoteContributor[]
+}
+
+export interface ReleaseNoteReaction {
+  emoji: string
+  /** Readers who gave this emoji */
+  count: number
+  /** Whether the caller is one of them */
+  reacted: boolean
 }
 
 export interface ReleaseNoteListResponse {
@@ -309,6 +319,17 @@ export const releaseNotesApi = {
   /** Write one release to Confluence (or try again after a failure). */
   async syncToConfluence(noteId: number): Promise<ReleaseNoteConfluenceSyncResult> {
     const response = await request.post(`/release/notes/${noteId}/confluence-sync`)
+    return response.data || response
+  },
+
+  /**
+   * Give a release one emoji, or take back the one the caller gave before.
+   *
+   * The server answers with the release's reactions as they stand afterwards, so
+   * the chips redraw from the count rather than guessing at it.
+   */
+  async toggleReaction(noteId: number, emoji: string): Promise<ReleaseNoteReaction[]> {
+    const response = await request.post(`/release/notes/${noteId}/reactions`, { emoji })
     return response.data || response
   },
 }

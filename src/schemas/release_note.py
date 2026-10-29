@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -28,6 +28,11 @@ EXPORT_MAX_RELEASES = 200
 SOURCE_EXPLICIT = "explicit"
 SOURCE_ANCESTOR = "ancestor"
 SOURCE_NAME_ORDER = "name_order"
+
+# The kudos a release can be given, in the order they are offered. A fixed set keeps
+# a reaction a word the release page knows how to draw, and a count beside it.
+REACTION_EMOJIS: tuple[str, ...] = ("👍", "🎉", "❤️", "🚀", "👀", "😄")
+ReactionEmoji = Literal["👍", "🎉", "❤️", "🚀", "👀", "😄"]
 SOURCE_NEAREST = "nearest"
 SOURCE_NONE = "none"
 
@@ -113,6 +118,20 @@ class ReleaseNoteContributor(BaseModel):
             "lets their card say how recently they were seen here."
         ),
     )
+
+
+class ReleaseNoteReactionRequest(BaseModel):
+    """The emoji a reader is adding - or taking back, when they added it before."""
+
+    emoji: ReactionEmoji = Field(..., description="One of the emojis the release page offers")
+
+
+class ReleaseNoteReactionCount(BaseModel):
+    """How many readers gave one emoji, and whether the caller is one of them."""
+
+    emoji: str = Field(..., description="The emoji given")
+    count: int = Field(default=0, description="Readers who gave it")
+    reacted: bool = Field(default=False, description="Whether the caller is one of them")
 
 
 class ReleaseNoteCreateRequest(ReleaseNoteCoordinates):
@@ -227,6 +246,14 @@ class ReleaseNoteResponse(BaseModel):
         description=(
             "The people the release was written by, stored when the notes were "
             "generated. Empty for a release written by hand."
+        ),
+    )
+
+    reactions: list[ReleaseNoteReactionCount] = Field(
+        default_factory=list,
+        description=(
+            "The kudos the release was given, one entry per emoji in use, in the order "
+            "they are offered."
         ),
     )
 

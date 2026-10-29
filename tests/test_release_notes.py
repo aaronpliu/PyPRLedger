@@ -855,6 +855,54 @@ async def test_an_update_without_credits_keeps_the_ones_already_stored(
     ]
 
 
+async def test_a_release_counts_each_reader_once_per_emoji(db_session: AsyncSession) -> None:
+    service = build_service(db_session, StubDiffService())
+    note = await service.create_note(create_payload(status="published"), author="alice")
+
+    given = await service.toggle_reaction(note.id, 1, "👍")
+    assert [(r.emoji, r.count, r.reacted) for r in given] == [("👍", 1, True)]
+
+    # a second reader adds the same emoji: the count is readers, not clicks
+    shared = await service.toggle_reaction(note.id, 2, "👍")
+    assert [(r.emoji, r.count, r.reacted) for r in shared] == [("👍", 2, True)]
+
+    # and the first reader is still one of them
+    for_reader_one = await service.reactions_for([note.id], 1)
+    assert [(r.emoji, r.count, r.reacted) for r in for_reader_one[note.id]] == [("👍", 2, True)]
+
+    # clicking again takes that reader's kudos back, the other is untouched
+    removed = await service.toggle_reaction(note.id, 1, "👍")
+    assert [(r.emoji, r.count, r.reacted) for r in removed] == [("👍", 1, False)]
+
+
+async def test_reactions_are_listed_in_the_order_they_are_offered(
+    db_session: AsyncSession,
+) -> None:
+    service = build_service(db_session, StubDiffService())
+    note = await service.create_note(create_payload(status="published"), author="alice")
+
+    for emoji in ("🚀", "👍", "❤️"):
+        await service.toggle_reaction(note.id, 1, emoji)
+
+    summaries = await service.reactions_for([note.id], 1)
+
+    # the reader finds an emoji where it was offered, not where it was clicked
+    assert [item.emoji for item in summaries[note.id]] == ["👍", "❤️", "🚀"]
+
+
+async def test_reactions_of_several_releases_are_read_at_once(db_session: AsyncSession) -> None:
+    service = build_service(db_session, StubDiffService())
+    first = await service.create_note(create_payload(tag_name="v1.0.0"), author="alice")
+    second = await service.create_note(create_payload(tag_name="v1.1.0"), author="alice")
+    await service.toggle_reaction(first.id, 1, "🎉")
+
+    summaries = await service.reactions_for([first.id, second.id], 1)
+
+    assert [item.emoji for item in summaries[first.id]] == ["🎉"]
+    # a release nobody reacted to is part of the answer, with nothing in it
+    assert summaries[second.id] == []
+
+
 async def test_preview_names_the_account_behind_an_author_email(
     db_session: AsyncSession,
 ) -> None:
@@ -1746,6 +1794,65 @@ async def test_endpoint_create_list_and_publish(async_client, authenticated_clie
     assert listed.status_code == 200
     assert listed.json()["total"] == 1
     assert listed.json()["items"][0]["is_latest"] is True
+
+
+async def test_endpoint_gives_and_takes_back_kudos(async_client, authenticated_client) -> None:
+    created = await async_client.post(
+        "/api/v1/release/notes",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "tag_name": "v1.0.0",
+            "name": "First release",
+            "body": "notes",
+            "status": "published",
+        },
+    )
+    note_id = created.json()["id"]
+
+    given = await async_client.post(
+        f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "🎉"}
+    )
+    assert given.status_code == 200
+    assert given.json() == [{"emoji": "🎉", "count": 1, "reacted": True}]
+
+    # the release carries the kudos wherever it is read, flagged for this reader
+    listed = await async_client.get(
+        "/api/v1/release/notes", params={"project_key": "PROJ", "repository_slug": "my-repo"}
+    )
+    assert listed.json()["items"][0]["reactions"] == [{"emoji": "🎉", "count": 1, "reacted": True}]
+
+    taken = await async_client.post(
+        f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "🎉"}
+    )
+    assert taken.status_code == 200
+    assert taken.json() == []
+
+
+async def test_endpoint_refuses_an_emoji_it_does_not_offer(
+    async_client, authenticated_client
+) -> None:
+    created = await async_client.post(
+        "/api/v1/release/notes",
+        json={"project_key": "PROJ", "repository_slug": "my-repo", "tag_name": "v1.0.0"},
+    )
+    note_id = created.json()["id"]
+
+    refused = await async_client.post(
+        f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "🍕"}
+    )
+
+    assert refused.status_code == 422
+
+
+async def test_endpoint_404s_for_the_kudos_of_a_missing_release(
+    async_client, authenticated_client
+) -> None:
+    missing = await async_client.post(
+        "/api/v1/release/notes/424242/reactions", json={"emoji": "👍"}
+    )
+
+    assert missing.status_code == 404
 
 
 class TagUrlProvider(StubProvider):

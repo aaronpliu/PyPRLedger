@@ -13,17 +13,19 @@ from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.exceptions import NotFoundException
 from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
+from src.models.release_note_reaction import ReleaseNoteReaction
 from src.models.user import User
 from src.schemas.release_diff import ReleaseCompareRequest
 from src.schemas.release_note import (
     EXPORT_MAX_RELEASES,
+    REACTION_EMOJIS,
     REASON_PROVIDED,
     REASON_UNRESOLVED,
     SOURCE_EXPLICIT,
@@ -37,6 +39,7 @@ from src.schemas.release_note import (
     ReleaseNotePreviewRequest,
     ReleaseNotePreviewResponse,
     ReleaseNotePushRequest,
+    ReleaseNoteReactionCount,
     ReleaseNoteUpdateRequest,
 )
 from src.services.git_providers import BaseGitProvider, get_git_provider
@@ -833,6 +836,70 @@ class ReleaseNoteService:
                 (person.username or person.display_name or "").casefold(),
             ),
         )
+
+    async def reactions_for(
+        self, note_ids: Sequence[int], user_id: int | None
+    ) -> dict[int, list[ReleaseNoteReactionCount]]:
+        """The kudos a page of releases has, counted once per emoji.
+
+        One query for the page rather than one per release, and ``reacted`` says
+        whether the caller is among the readers who gave that emoji - the release
+        page draws the same chips for everyone and highlights the caller's own.
+        """
+        ids = list(dict.fromkeys(note_ids))
+        summaries: dict[int, list[ReleaseNoteReactionCount]] = {note_id: [] for note_id in ids}
+        if not ids:
+            return summaries
+
+        mine = (
+            case((ReleaseNoteReaction.user_id == user_id, 1), else_=0)
+            if user_id is not None
+            else literal(0)
+        )
+        statement = (
+            select(
+                ReleaseNoteReaction.note_id,
+                ReleaseNoteReaction.emoji,
+                func.count(ReleaseNoteReaction.id),
+                func.max(mine),
+            )
+            .where(ReleaseNoteReaction.note_id.in_(ids))
+            .group_by(ReleaseNoteReaction.note_id, ReleaseNoteReaction.emoji)
+        )
+        rows = (await self.db.execute(statement)).all()
+
+        for note_id, emoji, count, reacted in rows:
+            summaries[note_id].append(
+                ReleaseNoteReactionCount(emoji=emoji, count=count, reacted=bool(reacted))
+            )
+
+        # A fixed order, so the chips of a release stay where the reader saw them
+        order = {emoji: index for index, emoji in enumerate(REACTION_EMOJIS)}
+        for reactions in summaries.values():
+            reactions.sort(key=lambda item: order.get(item.emoji, len(order)))
+        return summaries
+
+    async def toggle_reaction(
+        self, note_id: int, user_id: int, emoji: str
+    ) -> list[ReleaseNoteReactionCount]:
+        """Give an emoji, or take back the one the caller gave before."""
+        existing = (
+            await self.db.execute(
+                select(ReleaseNoteReaction).where(
+                    ReleaseNoteReaction.note_id == note_id,
+                    ReleaseNoteReaction.user_id == user_id,
+                    ReleaseNoteReaction.emoji == emoji,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if existing is None:
+            self.db.add(ReleaseNoteReaction(note_id=note_id, user_id=user_id, emoji=emoji))
+        else:
+            await self.db.delete(existing)
+        await self.db.flush()
+
+        return (await self.reactions_for([note_id], user_id))[note_id]
 
     async def get_note(self, note_id: int) -> ReleaseNote | None:
         """Fetch one release by id."""

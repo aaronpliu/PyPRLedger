@@ -64,6 +64,7 @@ vi.mock('@/api/releaseNotes', () => ({
     exportNotes: vi.fn(),
     confluenceStatus: vi.fn(),
     syncToConfluence: vi.fn(),
+    toggleReaction: vi.fn(),
   },
 }))
 
@@ -621,6 +622,75 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
       rows.map((row) => row.querySelector('.contributor-overflow-name')?.textContent?.trim()),
     ).toEqual(['@dev7', '@dev8', '@dev9'])
     expect(document.body.querySelector('.contributor-overflow-detail')).toBeNull()
+  })
+
+  it('gives kudos on a published release and takes them back', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ reactions: [{ emoji: '🎉', count: 2, reacted: false }] })],
+    })
+    vi.mocked(releaseNotesApi.toggleReaction).mockResolvedValue([
+      { emoji: '🎉', count: 3, reacted: true },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const chip = wrapper.find('[data-test="note-reactions"]').findAll('.reaction-chip')[0]
+    expect(chip.text()).toContain('🎉')
+    expect(chip.text()).toContain('2')
+    // the reader has not given this one yet, so the chip is not filled in
+    expect(chip.classes()).not.toContain('is-mine')
+
+    await chip.trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.toggleReaction).toHaveBeenCalledWith(1, '🎉')
+    // the count comes back from the server, and the chip says the reader is one of them
+    const updated = wrapper.find('[data-test="note-reactions"]').findAll('.reaction-chip')[0]
+    expect(updated.text()).toContain('3')
+    expect(updated.classes()).toContain('is-mine')
+  })
+
+  it('offers the emojis a release can be given', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({ total: 1, items: [release()] })
+    vi.mocked(releaseNotesApi.toggleReaction).mockResolvedValue([
+      { emoji: '🚀', count: 1, reacted: true },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const row = wrapper.find('[data-test="note-reactions"]')
+    // no kudos yet: only the way to give the first one
+    expect(row.findAll('.reaction-chip')).toHaveLength(1)
+
+    await row.find('.reaction-add').trigger('click')
+    await flushPromises()
+
+    const picks = Array.from(document.body.querySelectorAll('.reaction-pick')) as HTMLElement[]
+    expect(picks).toHaveLength(6)
+
+    picks[3].click()
+    await flushPromises()
+
+    expect(releaseNotesApi.toggleReaction).toHaveBeenCalledWith(1, '🚀')
+  })
+
+  it('keeps the kudos off a draft', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ status: 'draft', published_date: null })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // a draft is still being written: there is nothing to give kudos to yet
+    expect(wrapper.find('[data-test="note-reactions"]').exists()).toBe(false)
   })
 
   it('credits nobody before the release is published', async () => {

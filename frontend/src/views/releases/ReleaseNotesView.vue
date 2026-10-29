@@ -1034,6 +1034,54 @@
                   </li>
                 </ul>
               </div>
+
+              <!-- Kudos from whoever read the release: they belong to the release,
+                   so they sit under the credits rather than inside the notes -->
+              <div
+                v-if="note.status === 'published'"
+                class="release-reactions"
+                data-test="note-reactions"
+              >
+                <button
+                  v-for="reaction in note.reactions ?? []"
+                  :key="reaction.emoji"
+                  type="button"
+                  class="reaction-chip"
+                  :class="{ 'is-mine': reaction.reacted }"
+                  :disabled="isReacting(note)"
+                  :title="reactionTitle(reaction)"
+                  @click.stop="toggleReaction(note, reaction.emoji)"
+                >
+                  <span class="reaction-emoji">{{ reaction.emoji }}</span>
+                  <span class="reaction-count">{{ reaction.count }}</span>
+                </button>
+
+                <el-popover trigger="click" placement="top" :width="196" :offset="8">
+                  <template #reference>
+                    <button
+                      type="button"
+                      class="reaction-chip reaction-add"
+                      :disabled="isReacting(note)"
+                      :title="t('releaseNotes.reaction_add')"
+                      :aria-label="t('releaseNotes.reaction_add')"
+                    >
+                      <el-icon><Plus /></el-icon>
+                    </button>
+                  </template>
+                  <div class="reaction-picker">
+                    <button
+                      v-for="emoji in REACTION_EMOJIS"
+                      :key="emoji"
+                      type="button"
+                      class="reaction-pick"
+                      :class="{ 'is-mine': reactedWith(note, emoji) }"
+                      @click.stop="toggleReaction(note, emoji)"
+                    >
+                      {{ emoji }}
+                    </button>
+                  </div>
+                </el-popover>
+              </div>
             </article>
 
             <el-pagination
@@ -1123,6 +1171,7 @@ import {
   Link,
   MagicStick,
   MoreFilled,
+  Plus,
   Refresh,
   Search,
 } from '@element-plus/icons-vue'
@@ -1144,6 +1193,7 @@ import {
   releaseNotesApi,
   type ReleaseNote,
   type ReleaseNoteContributor,
+  type ReleaseNoteReaction,
 } from '@/api/releaseNotes'
 import type {
   ReleaseNoteExportRequest,
@@ -2057,6 +2107,46 @@ function visibleContributors(note: ReleaseNote): ReleaseNoteContributor[] {
 /** The credits a crowded release only counts; empty for everyone else. */
 function hiddenContributors(note: ReleaseNote): ReleaseNoteContributor[] {
   return isCrowded(note) ? contributorsOf(note).slice(CROWDED_CONTRIBUTORS) : []
+}
+
+/**
+ * The kudos a release can be given, in the order they are offered.
+ *
+ * Part of the interface rather than fetched: the server refuses anything outside
+ * this set, and the picker has to offer what the server accepts.
+ */
+const REACTION_EMOJIS = ['👍', '🎉', '❤️', '🚀', '👀', '😄'] as const
+
+// A release whose kudos are being saved: an impatient second click finds the first
+// request still in flight rather than sending another
+const reactingNotes = ref<Set<number>>(new Set())
+
+function isReacting(note: ReleaseNote): boolean {
+  return reactingNotes.value.has(note.id)
+}
+
+/** Whether this reader already gave that emoji - what fills the chip in. */
+function reactedWith(note: ReleaseNote, emoji: string): boolean {
+  return (note.reactions ?? []).some((reaction) => reaction.emoji === emoji && reaction.reacted)
+}
+
+function reactionTitle(reaction: ReleaseNoteReaction): string {
+  return `${reaction.emoji} ${t('releaseNotes.reaction_count', { count: reaction.count })}`
+}
+
+/** Give a release one emoji, or take back the one this reader gave before. */
+async function toggleReaction(note: ReleaseNote, emoji: string) {
+  if (reactingNotes.value.has(note.id)) return
+  reactingNotes.value.add(note.id)
+  try {
+    // The answer is the release's kudos as they now stand, so the chips are redrawn
+    // from the count instead of being guessed at
+    note.reactions = await releaseNotesApi.toggleReaction(note.id, emoji)
+  } catch {
+    ElMessage.error(t('releaseNotes.reaction_failed'))
+  } finally {
+    reactingNotes.value.delete(note.id)
+  }
 }
 
 /**
@@ -3428,6 +3518,90 @@ onBeforeUnmount(() => {
 .contributor-overflow:hover {
   background: var(--el-fill-color-darker);
   color: var(--el-color-primary);
+}
+
+/* Kudos: quiet chips under the credits, the reader's own filled in so the release
+   says who has already welcomed it */
+.release-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.reaction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 13px;
+  background: transparent;
+  color: var(--el-text-color-regular);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.reaction-chip:hover:not(:disabled) {
+  border-color: var(--el-color-primary-light-5);
+  background: var(--el-fill-color-light);
+}
+
+.reaction-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.reaction-chip.is-mine {
+  border-color: var(--el-color-primary-light-3);
+  background: var(--el-color-primary-light-9);
+}
+
+.reaction-chip.is-mine .reaction-count {
+  color: var(--el-color-primary);
+}
+
+.reaction-emoji {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.reaction-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.reaction-add {
+  padding: 0 8px;
+  color: var(--el-text-color-secondary);
+}
+
+.reaction-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.reaction-pick {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.reaction-pick:hover {
+  background: var(--el-fill-color);
+}
+
+.reaction-pick.is-mine {
+  background: var(--el-color-primary-light-9);
 }
 
 .detail-pagination {
