@@ -658,6 +658,33 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(wrapper.find('.reaction-add').element).toBe(row.element.firstElementChild)
   })
 
+  it('keeps every emoji one reader has given', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ reactions: [{ emoji: '🎉', count: 1, reacted: true }] })],
+    })
+    // the second emoji arrives beside the first, as GitHub keeps them
+    vi.mocked(releaseNotesApi.toggleReaction).mockResolvedValue([
+      { emoji: '🎉', count: 1, reacted: true },
+      { emoji: '👍', count: 1, reacted: true },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await wrapper.find('.reaction-add').trigger('click')
+    await flushPromises()
+    const picks = Array.from(document.body.querySelectorAll('.reaction-pick')) as HTMLElement[]
+    picks[0].click()
+    await flushPromises()
+
+    const chips = wrapper.findAll('[data-test="note-reactions"] .reaction-chip:not(.reaction-add)')
+    // the emoji given first is still there: nothing is replaced
+    expect(chips.map((chip) => chip.find('.reaction-emoji').text())).toEqual(['🎉', '👍'])
+    expect(chips.every((chip) => chip.classes().includes('is-mine'))).toBe(true)
+  })
+
   it('offers the emojis a release can be given', async () => {
     vi.mocked(releaseNotesApi.list).mockResolvedValue({ total: 1, items: [release()] })
     vi.mocked(releaseNotesApi.toggleReaction).mockResolvedValue([

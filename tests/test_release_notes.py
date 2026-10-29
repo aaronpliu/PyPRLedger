@@ -1829,6 +1829,46 @@ async def test_endpoint_gives_and_takes_back_kudos(async_client, authenticated_c
     assert taken.json() == []
 
 
+async def test_endpoint_lets_one_reader_give_every_emoji(
+    async_client, authenticated_client
+) -> None:
+    created = await async_client.post(
+        "/api/v1/release/notes",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "tag_name": "v1.0.0",
+            "status": "published",
+        },
+    )
+    note_id = created.json()["id"]
+
+    reactions: list[dict] = []
+    for emoji in ("👍", "🎉", "❤️", "🚀", "👀", "😄"):
+        response = await async_client.post(
+            f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": emoji}
+        )
+        reactions = response.json()
+
+    # six emojis from one reader: giving the next one never takes the last away
+    assert [(item["emoji"], item["count"], item["reacted"]) for item in reactions] == [
+        ("👍", 1, True),
+        ("🎉", 1, True),
+        ("❤️", 1, True),
+        ("🚀", 1, True),
+        ("👀", 1, True),
+        ("😄", 1, True),
+    ]
+
+    # and taking one back leaves the other five alone
+    remaining = (
+        await async_client.post(
+            f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "❤️"}
+        )
+    ).json()
+    assert [item["emoji"] for item in remaining] == ["👍", "🎉", "🚀", "👀", "😄"]
+
+
 async def test_endpoint_refuses_an_emoji_it_does_not_offer(
     async_client, authenticated_client
 ) -> None:
