@@ -921,6 +921,24 @@
               </div>
               <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
 
+              <!-- Collapsing is a reading aid for the notes, so it closes them
+                   before the credits start: the people below are credited by the
+                   release, not by the notes, and are never folded away -->
+              <el-button
+                v-if="isLongNote(note)"
+                link
+                type="primary"
+                size="small"
+                class="note-expand"
+                @click="toggleNoteExpanded(note.id)"
+              >
+                {{
+                  isNoteCollapsed(note)
+                    ? t('releaseNotes.show_more')
+                    : t('releaseNotes.show_less')
+                }}
+              </el-button>
+
               <!-- The people behind the commits, read from the repository rather
                    than written into the notes: a draft has none, a published
                    release is credited however its notes were written -->
@@ -1016,23 +1034,6 @@
                   </li>
                 </ul>
               </div>
-
-              <!-- Collapsing is a reading aid: the notes stay whole in the release
-                   and in an export -->
-              <el-button
-                v-if="isLongNote(note)"
-                link
-                type="primary"
-                size="small"
-                class="note-expand"
-                @click="toggleNoteExpanded(note.id)"
-              >
-                {{
-                  isNoteCollapsed(note)
-                    ? t('releaseNotes.show_more')
-                    : t('releaseNotes.show_less')
-                }}
-              </el-button>
             </article>
 
             <el-pagination

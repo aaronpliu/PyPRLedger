@@ -2571,7 +2571,13 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     vi.mocked(releaseNotesApi.list).mockResolvedValue({
       total: 2,
       items: [
-        release({ id: 1, tag_name: 'v2.0.0', name: 'Long', body: longBody }),
+        release({
+          id: 1,
+          tag_name: 'v2.0.0',
+          name: 'Long',
+          body: longBody,
+          contributors: [{ username: 'jdoe', display_name: 'John Doe', commit_count: 2 }],
+        }),
         release({
           id: 2,
           tag_name: 'v1.0.0',
@@ -2591,6 +2597,9 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
 
     expect(longEntry.find('.release-body').classes()).toContain('collapsed')
     expect(longEntry.find('.note-expand').text()).toBe(enMessages.releaseNotes.show_more)
+    // the control belongs to the notes, so it sits above the credits
+    const markup = longEntry.html()
+    expect(markup.indexOf('note-expand')).toBeLessThan(markup.indexOf('note-contributors'))
     // a note that fits needs no control
     expect(shortEntry.find('.note-expand').exists()).toBe(false)
     expect(shortEntry.find('.release-body').classes()).not.toContain('collapsed')
@@ -2600,6 +2609,8 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
 
     expect(longEntry.find('.release-body').classes()).not.toContain('collapsed')
     expect(longEntry.find('.note-expand').text()).toBe(enMessages.releaseNotes.show_less)
+    // the credits are never folded away with the notes
+    expect(longEntry.find('[data-test="note-contributors"]').exists()).toBe(true)
   })
 
   it('invites the reader to draft the first release of an empty repository', async () => {
