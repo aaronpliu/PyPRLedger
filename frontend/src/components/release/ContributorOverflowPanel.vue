@@ -5,11 +5,25 @@
     @mouseleave="activeIndex = null"
   >
     <!-- The people a crowded release only counts: a list short enough to scan, with
-         the card of whoever the pointer rests on underneath, so a name is never all
-         that is known about a person -->
+         the card of whoever the pointer rests on shown above it, so a name is never
+         all that is known about a person. The card sits above the list because the
+         popover is bottom-anchored: only the last child keeps its place, so opening
+         the card below the list would shift the list under the pointer and restart
+         the hover on a neighbour - the flicker this order avoids. -->
     <p class="contributor-overflow-title">
       {{ t('releaseNotes.contributor_more', { count: contributors.length }) }}
     </p>
+
+    <div v-if="active" class="contributor-overflow-detail">
+      <ContributorProfileCard
+        :username="active.username"
+        :display-name="active.display_name"
+        :avatar-url="active.avatar_url"
+        :profile-url="active.profile_url"
+        :commit-count="active.commit_count"
+        :last-committed="active.last_committed"
+      />
+    </div>
 
     <ul class="contributor-overflow-list">
       <li
@@ -33,17 +47,6 @@
         </span>
       </li>
     </ul>
-
-    <div v-if="active" class="contributor-overflow-detail">
-      <ContributorProfileCard
-        :username="active.username"
-        :display-name="active.display_name"
-        :avatar-url="active.avatar_url"
-        :profile-url="active.profile_url"
-        :commit-count="active.commit_count"
-        :last-committed="active.last_committed"
-      />
-    </div>
   </div>
 </template>
 
@@ -138,7 +141,7 @@ function label(person: ReleaseNoteContributor): string {
 }
 
 .contributor-overflow-detail {
-  padding-top: 8px;
-  border-top: 1px solid var(--el-border-color-lighter);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 </style>
