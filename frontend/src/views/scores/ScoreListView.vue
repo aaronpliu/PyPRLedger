@@ -194,11 +194,18 @@
             {{ formatDate(row.updated_date || row.created_date) }}
           </template>
         </el-table-column>
-        <el-table-column :label="t('scores.actions')" width="90" fixed="right">
+        <el-table-column :label="t('scores.actions')" width="90" align="center" header-align="center" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="danger" @click="confirmDelete(row)" :disabled="!canDeleteScore(row)">
-              {{ t('scores.delete') }}
-            </el-button>
+            <el-tooltip :content="t('scores.delete')" placement="top">
+              <el-button
+                size="small"
+                type="danger"
+                circle
+                :icon="Delete"
+                @click="confirmDelete(row)"
+                :disabled="!canDeleteScore(row)"
+              />
+            </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
@@ -244,6 +251,7 @@ import type { Score, ScoreStats } from '@/api/scores'
 import type { ProjectSummary } from '@/api/projects'
 import type { AppInfo } from '@/api/projectRegistry'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useAuthStore } from '@/stores/auth'
 import { GitProvider } from '@/constants/gitProvider'
