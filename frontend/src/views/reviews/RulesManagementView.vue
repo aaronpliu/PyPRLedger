@@ -12,7 +12,7 @@
               <el-icon><Plus /></el-icon>
               {{ t('auto_rules.create_rule') }}
             </el-button>
-            <el-button @click="loadRules">
+            <el-button type="primary" @click="loadRules">
               <el-icon><Refresh /></el-icon>
               {{ t('auto_rules.refresh') }}
             </el-button>

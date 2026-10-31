@@ -18,7 +18,7 @@
                 @change="toggleSse"
               />
             </div>
-            <el-button @click="loadReviews">
+            <el-button type="primary" @click="loadReviews">
               <el-icon><Refresh /></el-icon>
               {{ t('task_assignment.refresh') }}
             </el-button>

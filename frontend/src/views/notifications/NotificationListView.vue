@@ -136,14 +136,16 @@
               >
                 {{ t('notifications.mark_read') }}
               </el-button>
-              <el-button
-                size="small"
-                type="danger"
-                link
-                @click.stop="deleteNotification(notif.id)"
-              >
-                {{ t('common.delete') }}
-              </el-button>
+              <el-tooltip :content="t('common.delete')" placement="top">
+                <el-button
+                  size="small"
+                  type="danger"
+                  link
+                  @click.stop="deleteNotification(notif.id)"
+                >
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </el-tooltip>
             </div>
           </div>
 
@@ -170,7 +172,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, QuestionFilled } from '@element-plus/icons-vue'
+import { Refresh, QuestionFilled, Delete } from '@element-plus/icons-vue'
 import {
   notificationsApi,
   type Notification,
