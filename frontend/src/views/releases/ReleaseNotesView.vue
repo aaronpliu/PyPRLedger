@@ -983,7 +983,7 @@
                               class="contributor-avatar"
                               :username="person.username || person.display_name || '?'"
                               :avatar-url="person.avatar_url"
-                              :size="isCrowded(note) ? 32 : 40"
+                              :size="CONTRIBUTOR_AVATAR_SIZE"
                             />
                           </component>
                           <!-- A crowded release is drawn as one line of faces, so
@@ -2119,6 +2119,9 @@ function contributorLabel(person: ReleaseNoteContributor): string {
  * whole team takes no more room than one written by a few.
  */
 const CROWDED_CONTRIBUTORS = 6
+// One face is one size, whether a release was written by a few people or by a
+// whole team: folding the crowd changes the layout, not the picture
+const CONTRIBUTOR_AVATAR_SIZE = 32
 
 function isCrowded(note: ReleaseNote): boolean {
   return contributorsOf(note).length > CROWDED_CONTRIBUTORS

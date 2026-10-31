@@ -547,8 +547,8 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(credits.text()).toContain('Unlinked Author')
     // the picture of the account is shown next to the login
     expect(credits.find('img.avatar-img').attributes('src')).toBe('/api/v1/users/avatars/77_jd.png')
-    // a face over the handle: the picture is large enough to be read at a glance
-    expect(credits.find('.contributor-avatar').attributes('style')).toContain('width: 40px')
+    // a face over the handle: the picture is one size whether the release is crowded
+    expect(credits.find('.contributor-avatar').attributes('style')).toContain('width: 32px')
     // and each person opens a profile card on hover
     expect(credits.findAllComponents({ name: 'ElPopover' })).toHaveLength(2)
   })
