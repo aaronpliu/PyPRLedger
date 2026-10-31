@@ -841,14 +841,13 @@ const getRowClassName = ({ row }: { row: ReviewV2 }): string => {
 // Get cell style - applies inline styles to override stripe pattern
 const getCellStyle = ({ row }: { row: ReviewV2 }) => {
   if (!isUnassigned(row)) return { verticalAlign: 'middle' }
-  
-  // Use amber colors per project specification for "needs attention" status
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-  
-  // Amber-100 for light theme, Amber-800 for dark theme (better contrast with light text)
+
+  // Theme-aware "needs attention" tint from the Element Plus warning palette.
+  // --el-color-warning-light-9 auto-adapts between light (#fdf6ec) and dark
+  // (#292218), so no hardcoded colours or theme detection are required.
   return {
     verticalAlign: 'middle',
-    backgroundColor: isDark ? '#78350f' : '#fef3c7',
+    backgroundColor: 'var(--el-color-warning-light-9)',
   }
 }
 
@@ -1391,11 +1390,7 @@ function handleSSEOpen() {
 /* Unassigned task row highlighting - backup CSS in case inline styles don't apply */
 /* This ensures coverage even if Element Plus re-renders cells */
 :deep(.task-assignment-table.el-table--striped .el-table__body tr.unassigned-row td.el-table__cell) {
-  background-color: #fef3c7 !important; /* Amber-100 for light theme */
-}
-
-[data-theme='dark'] :deep(.task-assignment-table.el-table--striped .el-table__body tr.unassigned-row td.el-table__cell) {
-  background-color: #78350f !important; /* Amber-800 for dark theme - better contrast with light text */
+  background-color: var(--el-color-warning-light-9) !important;
 }
 
 /* Bulk Actions Toolbar */
