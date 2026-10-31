@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.35.1] - 2026-10-31
+
+**Backend Version**: 1.35.1
+**Frontend Version**: 1.30.1
+
+### Changed
+- [Style] Align refresh button color with theme accent color
+- [Style] Enhance action icon for rule's edit and deletion
+- [Style] Enhance background color of un-assinged task
+- [Style] Enhance table title of score management
+- [Refactor] Enhance user avatar display
+
+---
+
 ## [1.35.0] - 2026-10-31
 
 **Backend Version**: 1.35.0
