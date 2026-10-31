@@ -123,16 +123,28 @@
               </span>
             </template>
           </el-table-column>
-          <el-table-column :label="t('auto_rules.col_actions')" width="140" fixed="right" align="center">
+          <el-table-column :label="t('auto_rules.col_actions')" width="90" fixed="right" align="center">
             <template #default="{ row }">
-              <el-button size="small" type="primary" link @click="openEditDialog(row)">
-                <el-icon><Edit /></el-icon>
-                {{ t('auto_rules.edit') }}
-              </el-button>
-              <el-button size="small" type="danger" link @click="handleDelete(row)">
-                <el-icon><Delete /></el-icon>
-                {{ t('auto_rules.delete') }}
-              </el-button>
+              <div class="row-actions">
+                <el-tooltip :content="t('auto_rules.edit')" placement="top">
+                  <el-button
+                    size="small"
+                    type="primary"
+                    circle
+                    :icon="Edit"
+                    @click="openEditDialog(row)"
+                  />
+                </el-tooltip>
+                <el-tooltip :content="t('auto_rules.delete')" placement="top">
+                  <el-button
+                    size="small"
+                    type="danger"
+                    circle
+                    :icon="Delete"
+                    @click="handleDelete(row)"
+                  />
+                </el-tooltip>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -851,6 +863,13 @@ async function loadAppOptions() {
   color: var(--el-color-primary);
   font-family: 'Courier New', Courier, monospace;
   font-size: 12px;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .pagination-wrapper {
