@@ -84,21 +84,12 @@
                 placement="top"
                 :disabled="!row.pull_request_user_info?.display_name"
               >
-                <el-avatar 
-                  :size="32" 
-                  v-if="row.pull_request_user_info?.avatar_url"
+                <UserAvatar
                   class="user-avatar"
-                >
-                  <img :src="row.pull_request_user_info.avatar_url" alt="" />
-                </el-avatar>
-                <el-avatar 
-                  :size="32" 
-                  v-else
-                  class="user-avatar user-avatar-fallback"
-                  :style="{ background: getAvatarColor(row.pull_request_user) }"
-                >
-                  {{ getInitials(row.pull_request_user_info?.display_name || row.pull_request_user) }}
-                </el-avatar>
+                  :size="32"
+                  :username="row.pull_request_user_info?.display_name || row.pull_request_user"
+                  :avatar-url="row.pull_request_user_info?.avatar_url"
+                />
               </el-tooltip>
               <div class="user-info">
                 <span class="user-display-name">{{ row.pull_request_user_info?.display_name || row.pull_request_user }}</span>
@@ -115,21 +106,12 @@
                 placement="top"
                 :disabled="!row.reviewer_info?.display_name"
               >
-                <el-avatar 
-                  :size="36" 
-                  v-if="row.reviewer_info?.avatar_url"
+                <UserAvatar
                   class="reviewer-avatar"
-                >
-                  <img :src="row.reviewer_info.avatar_url" alt="" />
-                </el-avatar>
-                <el-avatar 
-                  :size="36" 
-                  v-else
-                  class="reviewer-avatar reviewer-avatar-fallback"
-                  :style="{ background: getAvatarColor(row.reviewer) }"
-                >
-                  {{ getInitials(row.reviewer_info?.display_name || row.reviewer) }}
-                </el-avatar>
+                  :size="36"
+                  :username="row.reviewer_info?.display_name || row.reviewer"
+                  :avatar-url="row.reviewer_info?.avatar_url"
+                />
               </el-tooltip>
               <div class="reviewer-info">
                 <span class="reviewer-display-name">{{ row.reviewer_info?.display_name || row.reviewer }}</span>
@@ -265,6 +247,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { useAuthStore } from '@/stores/auth'
 import { GitProvider } from '@/constants/gitProvider'
+import UserAvatar from '@/components/user/UserAvatar.vue'
 
 const { t } = useI18n()
 
@@ -291,41 +274,6 @@ const totalScores = ref(0)
 
 const formatDate = (dateStr: string) => {
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
-}
-
-const getInitials = (name: string) => {
-  if (!name) return '??'
-  // Get initials from display name (could be full name or username)
-  const parts = name.trim().split(/\s+/)
-  if (parts.length >= 2) {
-    // Full name: take first letter of first and last name
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-  }
-  // Single word: take first 2 characters
-  return name.substring(0, 2).toUpperCase()
-}
-
-const getAvatarColor = (username: string) => {
-  // Generate a consistent gradient color based on username
-  const colors = [
-    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-    'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-    'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-    'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-    'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
-    'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-    'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
-  ]
-  
-  // Use username to deterministically select a color
-  let hash = 0
-  for (let i = 0; i < username.length; i++) {
-    hash = ((hash << 5) - hash) + username.charCodeAt(i)
-    hash = hash & hash // Convert to 32-bit integer
-  }
-  
-  return colors[Math.abs(hash) % colors.length]
 }
 
 const truncateId = (id: string | undefined | null) => {
@@ -576,6 +524,7 @@ h2 {
 }
 
 .reviewer-avatar {
+  border: 1px solid var(--el-border-color-lighter);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   cursor: pointer;
 }
@@ -583,13 +532,6 @@ h2 {
 .reviewer-avatar:hover {
   transform: scale(1.1);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.reviewer-avatar-fallback {
-  color: white;
-  font-weight: 600;
-  font-size: 14px;
-  border: 2px solid var(--el-border-color-light);
 }
 
 .reviewer-info {
@@ -626,6 +568,7 @@ h2 {
 }
 
 .user-avatar {
+  border: 1px solid var(--el-border-color-lighter);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   cursor: pointer;
 }
@@ -633,13 +576,6 @@ h2 {
 .user-avatar:hover {
   transform: scale(1.1);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.user-avatar-fallback {
-  color: white;
-  font-weight: 600;
-  font-size: 12px;
-  border: 2px solid var(--el-border-color-light);
 }
 
 .user-info {

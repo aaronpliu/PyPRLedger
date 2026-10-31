@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import and_, func, or_, select
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.config import settings
+from src.models.auth_user import AuthUser
 from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import (
     PullRequestReviewAssignment,
@@ -284,10 +286,23 @@ class ReviewScoreService:
             f"project={project_key}, repo={repository_slug}, file={'ALL' if source_filename is None else source_filename}"
         )
 
-        # Enrich responses
+        # Enrich responses - the pictures are resolved once for all of them
+        user_ids: set[int] = set()
+        for score in scores:
+            reviewer = getattr(score, "reviewer_rel", None)
+            if reviewer:
+                user_ids.add(reviewer.id)
+            pr = getattr(score, "pull_request", None)
+            pr_user = pr.pull_request_user_rel if pr else None
+            if pr_user:
+                user_ids.add(pr_user.id)
+        avatars = await self._resolve_avatars(db, user_ids)
+
         enriched_scores = []
         for score in scores:
-            enriched = await self._enrich_score_response(score, db, include_details=True)
+            enriched = await self._enrich_score_response(
+                score, db, include_details=True, avatars=avatars
+            )
             enriched_scores.append(enriched)
 
         # Cache results - use mode='json' for proper datetime serialization
@@ -688,6 +703,20 @@ class ReviewScoreService:
                 key = (pr.pull_request_id, pr.project_key, pr.repository_slug)
                 pr_map[key] = pr
 
+        # Resolve the profile pictures of the page's reviewers and PR authors once,
+        # rather than once per score
+        user_ids: set[int] = set()
+        for score in scores:
+            reviewer = getattr(score, "reviewer_rel", None)
+            if reviewer:
+                user_ids.add(reviewer.id)
+            pr_key = (score.pull_request_id, score.project_key, score.repository_slug)
+            pr_obj = pr_map.get(pr_key)
+            pr_user = pr_obj.pull_request_user_rel if pr_obj else None
+            if pr_user:
+                user_ids.add(pr_user.id)
+        avatars = await self._resolve_avatars(db, user_ids)
+
         # Enrich scores with entity information
         enriched_scores = []
         for score in scores:
@@ -700,7 +729,9 @@ class ReviewScoreService:
                 if pr_obj and not hasattr(score, "_temp_pr"):
                     score._temp_pr = pr_obj
 
-                enriched = await self._enrich_score_response(score, db, include_details=True)
+                enriched = await self._enrich_score_response(
+                    score, db, include_details=True, avatars=avatars
+                )
                 enriched_scores.append(enriched)
 
                 # Clean up temp attribute
@@ -784,12 +815,31 @@ class ReviewScoreService:
 
         return score
 
+    async def _resolve_avatars(self, db: AsyncSession, user_ids: set[int]) -> Mapping[int, str]:
+        """Profile pictures for git users, keyed by their id.
+
+        A score is credited to a git user, whose picture lives on the local account
+        that links to it - and that link is the user id, not the login: the git
+        username and the account's own login can differ, so matching by name would
+        leave a picture unresolved.
+        """
+        if not user_ids:
+            return {}
+
+        statement = select(AuthUser.user_id, AuthUser.avatar_url).where(
+            AuthUser.user_id.in_(user_ids),
+            AuthUser.avatar_url.is_not(None),
+        )
+        rows = (await db.execute(statement)).all()
+        return {user_id: avatar_url for user_id, avatar_url in rows if user_id and avatar_url}
+
     async def _enrich_score_response(
         self,
         score: PullRequestScore,
         db: AsyncSession,
         include_details: bool = False,
         reviewer_obj: User | None = None,
+        avatars: Mapping[str, str] | None = None,
     ) -> ReviewScoreResponse:
         """Enrich score with entity information
 
@@ -798,6 +848,8 @@ class ReviewScoreService:
             db: Database session
             include_details: Whether to include reviewer details
             reviewer_obj: Optional pre-loaded reviewer object (to avoid lazy loading after commit)
+            avatars: Profile pictures resolved once for a whole page; one query
+                covers the identities here when it is not given
         """
         # Handle both ORM objects and dicts (from cache)
         if isinstance(score, dict):
@@ -827,13 +879,6 @@ class ReviewScoreService:
             if not reviewer and "reviewer_rel" in score.__dict__ and score.reviewer_rel:
                 reviewer = score.reviewer_rel
 
-            if reviewer:
-                score_dict["reviewer_info"] = {
-                    "username": reviewer.username,
-                    "display_name": reviewer.display_name,
-                    "email_address": reviewer.email_address,
-                }
-
             # Enrich with PR context if pull_request relationship is loaded
             # Check if relationship is already loaded to avoid lazy loading issues
             pr = None
@@ -843,6 +888,20 @@ class ReviewScoreService:
             if not pr and hasattr(score, "_temp_pr"):
                 pr = score._temp_pr
 
+            pr_user = pr.pull_request_user_rel if pr else None
+
+            if avatars is None:
+                user_ids = {user.id for user in (reviewer, pr_user) if user}
+                avatars = await self._resolve_avatars(db, user_ids)
+
+            if reviewer:
+                score_dict["reviewer_info"] = {
+                    "username": reviewer.username,
+                    "display_name": reviewer.display_name,
+                    "email_address": reviewer.email_address,
+                    "avatar_url": avatars.get(reviewer.id),
+                }
+
             if pr:
                 score_dict["pull_request_commit_id"] = pr.pull_request_commit_id
                 score_dict["pull_request_user"] = pr.pull_request_user
@@ -850,12 +909,12 @@ class ReviewScoreService:
                 score_dict["target_branch"] = pr.target_branch
 
                 # Get PR author info
-                if pr.pull_request_user_rel:
-                    pr_user = pr.pull_request_user_rel
+                if pr_user:
                     score_dict["pull_request_user_info"] = {
                         "username": pr_user.username,
                         "display_name": pr_user.display_name,
                         "email_address": pr_user.email_address,
+                        "avatar_url": avatars.get(pr_user.id),
                     }
 
             # Get project information

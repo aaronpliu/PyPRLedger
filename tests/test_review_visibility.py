@@ -89,12 +89,14 @@ async def _create_auth_user(
     *,
     username: str,
     linked_user: User | None,
+    avatar_url: str | None = None,
 ) -> AuthUser:
     auth_user = AuthUser(
         username=username,
         email=f"{username}@example.com",
         password_hash=hash_password("password123"),
         user_id=linked_user.id if linked_user else None,
+        avatar_url=avatar_url,
     )
     db.add(auth_user)
     await db.flush()
@@ -261,9 +263,7 @@ async def _test_review_service_lists_assigned_and_self_raised_reviews(
     # A row with nobody on it is an open task, a status of its own, rather than an
     # assignment that has not started.
     assert all(
-        review["assignment_status"] == "open"
-        for review in reviews
-        if review["reviewer"] is None
+        review["assignment_status"] == "open" for review in reviews if review["reviewer"] is None
     )
 
 
@@ -436,6 +436,64 @@ def test_score_submission_succeeds_for_assigned_self_raised_review():
     anyio.run(
         _run_with_test_session,
         _test_score_submission_succeeds_for_assigned_self_raised_review,
+    )
+
+
+async def _test_score_response_includes_the_linked_account_avatar(
+    db_session: AsyncSession,
+) -> None:
+    """A git login's picture is the linked local account's, whatever its own login."""
+    suffix = uuid4().hex[:8]
+    project, repository = await _create_project_repository(db_session, suffix)
+    alice = await _create_bitbucket_user(
+        db_session, suffix=suffix, username=f"alice-{suffix}", is_reviewer=True
+    )
+    avatar_url = f"/api/v1/users/avatars/77_{suffix}.png"
+    # the local account logs in under a name of its own, and still owns the picture
+    auth_user = await _create_auth_user(
+        db_session,
+        username=f"login-{suffix}",
+        linked_user=alice,
+        avatar_url=avatar_url,
+    )
+    role = await _create_reviewer_role(db_session)
+    await _assign_role(db_session, auth_user, role)
+
+    review_base = await _create_review_base(
+        db_session,
+        project=project,
+        repository=repository,
+        pull_request_id=f"avatar-{suffix}",
+        commit_id=f"a{suffix}1",
+        owner_username=alice.username,
+        source_filename="src/avatar.py",
+    )
+    await _assign_review(db_session, review_base=review_base, reviewer_username=alice.username)
+    await db_session.commit()
+
+    response = await upsert_score_endpoint(
+        score_data=ReviewScoreCreate(
+            pull_request_id=review_base.pull_request_id,
+            pull_request_commit_id=review_base.pull_request_commit_id or "",
+            project_key=project.project_key,
+            repository_slug=repository.repository_slug,
+            source_filename=review_base.source_filename,
+            reviewer=alice.username,
+            score=8.5,
+        ),
+        db=db_session,
+        score_service=ReviewScoreService(),
+        current_user=auth_user,
+    )
+
+    assert response.reviewer_info is not None
+    assert response.reviewer_info["avatar_url"] == avatar_url
+
+
+def test_score_response_includes_the_linked_account_avatar():
+    anyio.run(
+        _run_with_test_session,
+        _test_score_response_includes_the_linked_account_avatar,
     )
 
 

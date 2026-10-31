@@ -39,10 +39,23 @@ const getInitials = (name: string) => {
 }
 
 const getColorFromName = (name: string) => {
+  // Every tone is dark enough for the white initial to read on it: the earlier
+  // pastels put white on #F7DC6F (yellow) or #FFFFD2 (near white) at under
+  // 1.4:1 contrast, which is what made some letters hard to see. These all
+  // sit at 5:1 or better against white.
   const colors = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A',
-    '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
-    '#F38181', '#AA96DA', '#FCBAD3', '#FFFFD2'
+    '#B91C1C', // red
+    '#C2410C', // orange
+    '#B45309', // amber
+    '#15803D', // green
+    '#0E7490', // cyan
+    '#1D4ED8', // blue
+    '#4338CA', // indigo
+    '#6D28D9', // violet
+    '#BE185D', // pink
+    '#0F766E', // teal
+    '#A21CAF', // fuchsia
+    '#475569', // slate
   ]
   const index = name.charCodeAt(0) % colors.length
   return colors[index]
