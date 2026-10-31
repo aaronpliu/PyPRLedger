@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.35.0] - 2026-10-31
+
+**Backend Version**: 1.35.0
+**Frontend Version**: 1.30.0
+
+### Added
+- A published release can be given kudos, one reader at a time. The notes offer a fixed set of reactions - 👍 🎉 ❤️ 🚀 👀 😄 - and a reader gives each one at most once: clicking the same emoji again takes the kudos back rather than adding a second. The count sits beside each emoji and tells the reader whether it is theirs. A release is credited by whoever reads it, which is kept apart from the git authors of its commits.
+
+### Changed
+- The credits of a release fold when there are more than six people in them. Up to six are drawn as a face over a handle each; past that, the first six faces overlap in a single line and the rest are counted in a ``+N`` chip that opens a card listing every name, so a release written by a whole team takes no more room than one written by a few.
+- A contributor's face is one size everywhere - 32px, folded or not. Folding the crowd changes the layout, not the picture, so the avatars and the ``+N`` chip line up in the folded row.
+- The picture over a name is a link to the platform profile when one exists, and hovering it opens a card with the person's handle, name and commit count instead of leaving the release.
+- The fallback for a contributor without a picture is the account's initial, drawn without the underscore that once read as a stray mark.
+- The reaction emoji are stored with a binary collation on MySQL. Its legacy ``utf8mb4`` collations carry no weights for characters beyond the Basic Multilingual Plane, so the five emojis all compared equal - the unique key refused the second one and the aggregate merged them into one chip. The new ``utf8mb4_bin`` column compares them code point by code point, which is what "one row per emoji" and "counted once per emoji" mean.
+
+### Tests
+- [Test] Add unit test to cover reaction of release note
+- [Test] Update position of 'show more'
+
+---
+
 ## [1.34.1] - 2026-10-28
 
 **Backend Version**: 1.34.1
