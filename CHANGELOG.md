@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.35.1-frontend.1] - 2026-11-02
+
+**Backend Version**: 1.35.1 (unchanged)
+**Frontend Version**: 1.30.2
+
+### Changed
+- The initial of a person whose account has no picture now sits on a pale tone of one hue and is drawn in the deeper tone of that same hue, instead of a dark block with a white letter. Beside the panels of a light page the old tones were heavy, and on the dark theme the same blocks sank into the background. Each of the twelve tones is named twice - once per theme - so the initial follows whichever theme is in force, and a name still keeps the tone its first character earns it.
+- The card describing a contributor in the folded ``+N`` panel is drawn above the list instead of below it. The panel is anchored at its bottom, so the card opening underneath pushed the names down under the pointer and the hover restarted on a neighbour; above the list the names stay where the reader left them.
+
+### Tests
+- A unit test covers the avatar of an account without a picture: the initial it draws, the tone it gives a name (the same one every time, one of the twelve), and the fallback when a picture fails to load.
+
+---
+
 ## [1.35.1] - 2026-10-31
 
 **Backend Version**: 1.35.1
