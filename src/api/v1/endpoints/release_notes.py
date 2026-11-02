@@ -12,6 +12,7 @@ Mirrors the GitHub Releases workflow for the repositories tracked by PyPRLedger:
 * ``POST   /release/notes/import``      - import the releases of a repository
 * ``GET    /release/notes/confluence``  - whether Confluence sync is available here
 * ``POST   /release/notes/{id}/confluence-sync`` - write the release to Confluence
+* ``POST   /release/notes/{id}/reactions`` - give a release kudos, or take it back
 
 Confluence is an optional addition rather than a dependency. Publishing schedules
 a sync when the integration is configured and switched on, and that sync runs
@@ -51,6 +52,8 @@ from src.schemas.release_note import (
     ReleaseNotePreviewRequest,
     ReleaseNotePreviewResponse,
     ReleaseNotePushRequest,
+    ReleaseNoteReactionCount,
+    ReleaseNoteReactionRequest,
     ReleaseNoteResponse,
     ReleaseNoteUpdateRequest,
 )
@@ -129,10 +132,12 @@ def _serialize(
     latest_id: int | None,
     avatars: Mapping[str, str] | None = None,
     tag_url: str | None = None,
+    reactions: list[ReleaseNoteReactionCount] | None = None,
 ) -> ReleaseNoteResponse:
     """Serialize a release and flag it when it is the latest published version."""
     response = ReleaseNoteResponse.model_validate(note)
     response.is_latest = note.id == latest_id
+    response.reactions = reactions or []
     # Only authors with a local profile picture get one (imported releases keep
     # the provider login, which has no avatar here)
     if avatars and note.author:
@@ -183,22 +188,30 @@ async def serialize_note(
     service: ReleaseNoteService,
     note: ReleaseNote,
     latest_id: int | None,
+    viewer_id: int | None = None,
 ) -> ReleaseNoteResponse:
-    """Serialize one release, resolving its author picture and tag page."""
+    """Serialize one release, resolving its author picture, tag page and kudos."""
     avatars = await service.author_avatars([note.author])
     tag_urls = await _tag_urls(service, [note])
-    return _serialize(note, latest_id, avatars, tag_urls.get(note.id))
+    reactions = (await service.reactions_for([note.id], viewer_id)).get(note.id)
+    return _serialize(note, latest_id, avatars, tag_urls.get(note.id), reactions)
 
 
 async def serialize_notes(
     service: ReleaseNoteService,
     notes: list[ReleaseNote],
     latest_id: int | None,
+    viewer_id: int | None = None,
 ) -> list[ReleaseNoteResponse]:
-    """Serialize releases, resolving their author pictures and tag pages."""
+    """Serialize releases, resolving their author pictures, tag pages and kudos."""
     avatars = await service.author_avatars([note.author for note in notes])
     tag_urls = await _tag_urls(service, notes)
-    return [_serialize(note, latest_id, avatars, tag_urls.get(note.id)) for note in notes]
+    # One query for the whole page: the kudos are read with the releases, not per card
+    reactions = await service.reactions_for([note.id for note in notes], viewer_id)
+    return [
+        _serialize(note, latest_id, avatars, tag_urls.get(note.id), reactions.get(note.id))
+        for note in notes
+    ]
 
 
 async def schedule_confluence_sync(
@@ -354,7 +367,7 @@ async def list_release_notes(
 
     return ReleaseNoteListResponse(
         total=total,
-        items=await serialize_notes(service, notes, latest_id),
+        items=await serialize_notes(service, notes, latest_id, current_user.id),
     )
 
 
@@ -506,7 +519,7 @@ async def import_release_notes(
         imported=imported,
         updated=updated,
         skipped=skipped,
-        items=await serialize_notes(service, notes, latest_id),
+        items=await serialize_notes(service, notes, latest_id, current_user.id),
     )
 
 
@@ -545,7 +558,7 @@ async def create_release_note(
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug
     )
-    return await serialize_note(service, note, latest_id)
+    return await serialize_note(service, note, latest_id, current_user.id)
 
 
 @router.get(
@@ -573,7 +586,48 @@ async def get_release_note(
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug
     )
-    return await serialize_note(service, note, latest_id)
+    return await serialize_note(service, note, latest_id, current_user.id)
+
+
+@router.post(
+    "/{note_id}/reactions",
+    response_model=list[ReleaseNoteReactionCount],
+    summary="Give a release kudos",
+    description=(
+        "Toggle one emoji for the calling user: the first call gives the release the "
+        "kudos, calling it again takes it back. The response is the state of the "
+        "release's reactions after the change."
+    ),
+)
+async def toggle_release_reaction(
+    note_id: int,
+    payload: ReleaseNoteReactionRequest,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> list[ReleaseNoteReactionCount]:
+    """Give or take back one emoji on a release (reading access is enough)."""
+    await ensure_permission(rbac_service, current_user, "read")
+
+    note = await service.get_note(note_id)
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "NOT_FOUND", "message": f"Release {note_id} not found"},
+        )
+
+    reactions = await service.toggle_reaction(note.id, current_user.id, payload.emoji)
+
+    logger.info(
+        "Release reaction changed",
+        extra={
+            "note_id": note.id,
+            "user_id": current_user.id,
+            "emoji": payload.emoji,
+            "count": sum(item.count for item in reactions),
+        },
+    )
+    return reactions
 
 
 @router.put(
@@ -613,7 +667,7 @@ async def update_release_note(
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug
     )
-    return await serialize_note(service, note, latest_id)
+    return await serialize_note(service, note, latest_id, current_user.id)
 
 
 @router.delete(
@@ -696,7 +750,7 @@ async def push_release_note(
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug
     )
-    return await serialize_note(service, note, latest_id)
+    return await serialize_note(service, note, latest_id, current_user.id)
 
 
 @router.post(

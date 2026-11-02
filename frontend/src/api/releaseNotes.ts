@@ -35,11 +35,40 @@ export interface ReleaseNote {
   confluence_url?: string | null
   confluence_synced_date?: string | null
   confluence_sync_error?: string | null
+  /** The kudos the release was given, one entry per emoji in use */
+  reactions?: ReleaseNoteReaction[]
+  /**
+   * The people the release was written by, stored when its notes were generated
+   * (empty for notes written by hand).
+   */
+  contributors?: ReleaseNoteContributor[]
+}
+
+export interface ReleaseNoteReaction {
+  emoji: string
+  /** Readers who gave this emoji */
+  count: number
+  /** Whether the caller is one of them */
+  reacted: boolean
 }
 
 export interface ReleaseNoteListResponse {
   total: number
   items: ReleaseNote[]
+}
+
+/** One person credited for a published release, read from its commits. */
+export interface ReleaseNoteContributor {
+  /** Provider login, absent when the commits name only the author's name */
+  username?: string | null
+  display_name?: string | null
+  /** Profile picture of the account the login is bound to, when it has one */
+  avatar_url?: string | null
+  /** Browsable profile page, when the platform has one */
+  profile_url?: string | null
+  commit_count: number
+  /** When this person last committed in the release scope (ISO timestamp) */
+  last_committed?: string | null
 }
 
 export interface ReleaseNoteCoordinates {
@@ -56,6 +85,8 @@ export interface ReleaseNoteCreateRequest extends ReleaseNoteCoordinates {
   previous_tag?: string | null
   status?: ReleaseNoteStatus
   is_prerelease?: boolean
+  /** Credits of the notes being saved, as the note generator returned them */
+  contributors?: ReleaseNoteContributor[] | null
   /** Write the release to Confluence too when publishing it (ignored if not set up) */
   sync_to_confluence?: boolean
 }
@@ -66,6 +97,8 @@ export interface ReleaseNoteUpdateRequest {
   previous_tag?: string | null
   status?: ReleaseNoteStatus
   is_prerelease?: boolean
+  /** Credits of regenerated notes; omitted, the stored credits are kept */
+  contributors?: ReleaseNoteContributor[] | null
   /** Write the release to Confluence too when this update leaves it published */
   sync_to_confluence?: boolean
 }
@@ -141,6 +174,8 @@ export interface ReleaseNotePreviewResponse {
   /** Size of the release scope (a lower bound when a scan was capped) */
   commit_count: number
   commits: PreviewCommit[]
+  /** The people behind those commits, one entry per person */
+  contributors: ReleaseNoteContributor[]
   truncated: boolean
   /** Summary paragraph of the release, when one was written for it */
   summary?: string | null
@@ -284,6 +319,17 @@ export const releaseNotesApi = {
   /** Write one release to Confluence (or try again after a failure). */
   async syncToConfluence(noteId: number): Promise<ReleaseNoteConfluenceSyncResult> {
     const response = await request.post(`/release/notes/${noteId}/confluence-sync`)
+    return response.data || response
+  },
+
+  /**
+   * Give a release one emoji, or take back the one the caller gave before.
+   *
+   * The server answers with the release's reactions as they stand afterwards, so
+   * the chips redraw from the count rather than guessing at it.
+   */
+  async toggleReaction(noteId: number, emoji: string): Promise<ReleaseNoteReaction[]> {
+    const response = await request.post(`/release/notes/${noteId}/reactions`, { emoji })
     return response.data || response
   },
 }

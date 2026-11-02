@@ -921,8 +921,9 @@
               </div>
               <p v-else class="muted">{{ t('releaseNotes.notes_empty') }}</p>
 
-              <!-- Collapsing is a reading aid: the notes stay whole in the release
-                   and in an export -->
+              <!-- Collapsing is a reading aid for the notes, so it closes them
+                   before the credits start: the people below are credited by the
+                   release, not by the notes, and are never folded away -->
               <el-button
                 v-if="isLongNote(note)"
                 link
@@ -937,6 +938,177 @@
                     : t('releaseNotes.show_less')
                 }}
               </el-button>
+
+              <!-- The people behind the commits, read from the repository rather
+                   than written into the notes: a draft has none, a published
+                   release is credited however its notes were written -->
+              <div
+                v-if="note.status === 'published' && contributorsOf(note).length"
+                class="release-contributors"
+                data-test="note-contributors"
+              >
+                <span class="contributors-label">{{ t('releaseNotes.contributors') }}</span>
+                <ul
+                  class="contributor-list"
+                  :class="{ 'is-stacked': isCrowded(note) }"
+                  data-test="contributor-list"
+                >
+                  <li
+                    v-for="(person, index) in visibleContributors(note)"
+                    :key="person.username || person.display_name || index"
+                    class="contributor-item"
+                  >
+                    <!-- A picture over the name, as a face is read before the
+                         handle is; hovering it says who the person is without
+                         leaving the release -->
+                    <el-popover
+                      trigger="hover"
+                      placement="top"
+                      :width="260"
+                      :show-after="150"
+                      :hide-after="60"
+                      :offset="10"
+                    >
+                      <template #reference>
+                        <div class="contributor">
+                          <component
+                            :is="person.profile_url ? 'a' : 'div'"
+                            class="contributor-avatar-frame"
+                            :href="person.profile_url ?? undefined"
+                            :target="person.profile_url ? '_blank' : undefined"
+                            :rel="person.profile_url ? 'noopener' : undefined"
+                            @click.stop
+                          >
+                            <UserAvatar
+                              class="contributor-avatar"
+                              :username="person.username || person.display_name || '?'"
+                              :avatar-url="person.avatar_url"
+                              :size="CONTRIBUTOR_AVATAR_SIZE"
+                            />
+                          </component>
+                          <!-- A crowded release is drawn as one line of faces, so
+                               the names are left to the card each picture opens -->
+                          <span v-if="!isCrowded(note)" class="contributor-name">
+                            {{ contributorLabel(person) }}
+                          </span>
+                        </div>
+                      </template>
+                      <ContributorProfileCard
+                        :username="person.username"
+                        :display-name="person.display_name"
+                        :avatar-url="person.avatar_url"
+                        :profile-url="person.profile_url"
+                        :commit-count="person.commit_count"
+                        :last-committed="person.last_committed"
+                      />
+                    </el-popover>
+                  </li>
+
+                  <!-- The names not drawn, counted: a release with thirty people
+                       in it should still read as one line -->
+                  <li
+                    v-if="hiddenContributors(note).length"
+                    class="contributor-item"
+                    data-test="contributor-overflow"
+                  >
+                    <el-popover
+                      trigger="hover"
+                      placement="top"
+                      :width="260"
+                      :show-after="150"
+                      :hide-after="60"
+                      :offset="10"
+                    >
+                      <template #reference>
+                        <div class="contributor-overflow">
+                          <span class="contributor-overflow-count">
+                            +{{ hiddenContributors(note).length }}
+                          </span>
+                        </div>
+                      </template>
+                      <!-- Listed one line each, described in full for whoever the
+                           pointer rests on: a long list stays scannable and still
+                           says more than a name -->
+                      <ContributorOverflowPanel :contributors="hiddenContributors(note)" />
+                    </el-popover>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- Kudos from whoever read the release: they belong to the release,
+                   so they sit under the credits rather than inside the notes -->
+              <div
+                v-if="note.status === 'published'"
+                class="release-reactions"
+                data-test="note-reactions"
+              >
+                <!-- The way to react comes first and stays there: the emojis a
+                     release collects grow to its right, so the control a reader
+                     reaches for does not move under the pointer -->
+                <el-popover trigger="click" placement="top" :width="196" :offset="8">
+                  <template #reference>
+                    <button
+                      type="button"
+                      class="reaction-chip reaction-add"
+                      :disabled="isReacting(note)"
+                      :title="t('releaseNotes.reaction_add')"
+                      :aria-label="t('releaseNotes.reaction_add')"
+                    >
+                      <!-- Drawn instead of being another emoji: this control adds
+                           a reaction, it is not one. A face here read as a
+                           reaction already given, next to the real chips. The
+                           stroke travels with the drawing rather than with a
+                           style rule: an icon that paints only when a stylesheet
+                           happens to load leaves an empty chip behind -->
+                      <svg
+                        class="reaction-add-icon"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <circle cx="6.6" cy="9.4" r="5" />
+                        <path d="M4.55 10.15c.42.8 1.14 1.25 2.05 1.25s1.63-.45 2.05-1.25" />
+                        <circle cx="4.75" cy="7.7" r=".7" fill="currentColor" stroke="none" />
+                        <circle cx="8.45" cy="7.7" r=".7" fill="currentColor" stroke="none" />
+                        <path d="M12.6 2.4v4M10.6 4.4h4" />
+                      </svg>
+                    </button>
+                  </template>
+                  <div class="reaction-picker">
+                    <button
+                      v-for="emoji in REACTION_EMOJIS"
+                      :key="emoji"
+                      type="button"
+                      class="reaction-pick"
+                      :class="{ 'is-mine': reactedWith(note, emoji) }"
+                      @click.stop="toggleReaction(note, emoji)"
+                    >
+                      {{ emoji }}
+                    </button>
+                  </div>
+                </el-popover>
+
+                <button
+                  v-for="reaction in note.reactions ?? []"
+                  :key="reaction.emoji"
+                  type="button"
+                  class="reaction-chip"
+                  :class="{ 'is-mine': reaction.reacted }"
+                  :disabled="isReacting(note)"
+                  :title="reactionTitle(reaction)"
+                  @click.stop="toggleReaction(note, reaction.emoji)"
+                >
+                  <span class="reaction-emoji">{{ reaction.emoji }}</span>
+                  <span class="reaction-count">{{ reaction.count }}</span>
+                </button>
+              </div>
             </article>
 
             <el-pagination
@@ -1037,11 +1209,18 @@ import { releaseDiffApi } from '@/api/releaseDiff'
 import type { CommitInfo } from '@/api/releaseDiff'
 import CommitTable from '@/components/release/CommitTable.vue'
 import ContentLoader from '@/components/common/ContentLoader.vue'
+import ContributorOverflowPanel from '@/components/release/ContributorOverflowPanel.vue'
+import ContributorProfileCard from '@/components/release/ContributorProfileCard.vue'
 import UserAvatar from '@/components/user/UserAvatar.vue'
 import { useJira } from '@/composables/useJira'
 import { searchCandidates } from '@/composables/useRefCandidates'
 import { linkifyJiraMarkdown } from '@/utils/jira'
-import { releaseNotesApi, type ReleaseNote } from '@/api/releaseNotes'
+import {
+  releaseNotesApi,
+  type ReleaseNote,
+  type ReleaseNoteContributor,
+  type ReleaseNoteReaction,
+} from '@/api/releaseNotes'
 import type {
   ReleaseNoteExportRequest,
   ReleaseNotePreviewResponse,
@@ -1131,6 +1310,15 @@ const tagSearch = ref('')
 const notes = ref<ReleaseNote[]>([])
 const notesTotal = ref(0)
 const notesLoading = ref(false)
+/**
+ * Credits of the notes being written, as the generator returned them.
+ *
+ * The commits are read once, when the notes are generated, so the people behind
+ * them are known then: deduplicated by person and matched to the account that
+ * carries a picture. Saving the notes stores them with the release, and the
+ * release page reads them from there - nobody asks the git provider again.
+ */
+const previewContributors = ref<ReleaseNoteContributor[] | null>(null)
 // Export selection: either the releases ticked in the list, or every release of
 // the repository - the latter covers releases the paginated list has not loaded,
 // which is what "export the change log" means. The two are exclusive: ticking a
@@ -1910,6 +2098,87 @@ async function loadNotes() {
 }
 
 /**
+ * The credits stored with a release.
+ *
+ * A release that was never generated - written by hand or imported - carries none.
+ */
+function contributorsOf(note: ReleaseNote): ReleaseNoteContributor[] {
+  return note.contributors ?? []
+}
+
+/** The login a release is credited under, or the name when the commits carry none. */
+function contributorLabel(person: ReleaseNoteContributor): string {
+  return person.username ? `@${person.username}` : person.display_name || ''
+}
+
+/**
+ * Whether the credits no longer fit one row of names.
+ *
+ * Up to six people are drawn as a face over a handle each; past that the faces
+ * overlap in a single line and the rest are counted, so a release written by a
+ * whole team takes no more room than one written by a few.
+ */
+const CROWDED_CONTRIBUTORS = 6
+// One face is one size, whether a release was written by a few people or by a
+// whole team: folding the crowd changes the layout, not the picture
+const CONTRIBUTOR_AVATAR_SIZE = 32
+
+function isCrowded(note: ReleaseNote): boolean {
+  return contributorsOf(note).length > CROWDED_CONTRIBUTORS
+}
+
+/** The credits drawn on the release: everyone, or the first faces of a crowd. */
+function visibleContributors(note: ReleaseNote): ReleaseNoteContributor[] {
+  const people = contributorsOf(note)
+  return isCrowded(note) ? people.slice(0, CROWDED_CONTRIBUTORS) : people
+}
+
+/** The credits a crowded release only counts; empty for everyone else. */
+function hiddenContributors(note: ReleaseNote): ReleaseNoteContributor[] {
+  return isCrowded(note) ? contributorsOf(note).slice(CROWDED_CONTRIBUTORS) : []
+}
+
+/**
+ * The kudos a release can be given, in the order they are offered.
+ *
+ * Part of the interface rather than fetched: the server refuses anything outside
+ * this set, and the picker has to offer what the server accepts.
+ */
+const REACTION_EMOJIS = ['👍', '🎉', '❤️', '🚀', '👀', '😄'] as const
+
+// A release whose kudos are being saved: an impatient second click finds the first
+// request still in flight rather than sending another
+const reactingNotes = ref<Set<number>>(new Set())
+
+function isReacting(note: ReleaseNote): boolean {
+  return reactingNotes.value.has(note.id)
+}
+
+/** Whether this reader already gave that emoji - what fills the chip in. */
+function reactedWith(note: ReleaseNote, emoji: string): boolean {
+  return (note.reactions ?? []).some((reaction) => reaction.emoji === emoji && reaction.reacted)
+}
+
+function reactionTitle(reaction: ReleaseNoteReaction): string {
+  return `${reaction.emoji} ${t('releaseNotes.reaction_count', { count: reaction.count })}`
+}
+
+/** Give a release one emoji, or take back the one this reader gave before. */
+async function toggleReaction(note: ReleaseNote, emoji: string) {
+  if (reactingNotes.value.has(note.id)) return
+  reactingNotes.value.add(note.id)
+  try {
+    // The answer is the release's kudos as they now stand, so the chips are redrawn
+    // from the count instead of being guessed at
+    note.reactions = await releaseNotesApi.toggleReaction(note.id, emoji)
+  } catch {
+    ElMessage.error(t('releaseNotes.reaction_failed'))
+  } finally {
+    reactingNotes.value.delete(note.id)
+  }
+}
+
+/**
  * Load the commits of a tag's release scope (from the previous tag to the tag).
  *
  * This is the tag -> commits mapping shown in the tags tab; the generated note
@@ -2094,6 +2363,7 @@ function resetForm() {
   editingId.value = null
   editingStatus.value = 'draft'
   generatedCount.value = null
+  previewContributors.value = null
   clearSummaryState()
   clearEditorScope()
   form.value = {
@@ -2275,6 +2545,8 @@ function editNote(note: ReleaseNote) {
   editingId.value = note.id
   editingStatus.value = note.status
   generatedCount.value = null
+  // The stored credits stay as they are until the notes are generated again
+  previewContributors.value = null
   clearSummaryState()
   editorOpen.value = true
   form.value = {
@@ -2323,6 +2595,9 @@ async function generateNotes() {
       form.value.name = preview.suggested_name
     }
     generatedCount.value = preview.commit_count
+    // The people behind those commits came back with them, so the credits are saved
+    // with the notes instead of being read again when the release is shown
+    previewContributors.value = preview.contributors ?? []
     // The notes and the commits they were built from come out of the same answer, so
     // the panel beside them is what the body was made of - not a second reading of
     // the repository that could disagree with it.
@@ -2354,6 +2629,9 @@ async function saveRelease(status: 'draft' | 'published') {
 
   // Read before the form is reset: whether this save asked to write to Confluence.
   const willSyncToConfluence = asksForConfluenceSync.value
+  // Only notes generated in this session carry credits; an edit that changes the
+  // wording leaves the credits already stored with the release alone
+  const contributors = previewContributors.value ?? undefined
   saving.value = true
   let saved: ReleaseNote
   try {
@@ -2364,6 +2642,7 @@ async function saveRelease(status: 'draft' | 'published') {
         previous_tag: form.value.previous_tag.trim() || null,
         is_prerelease: form.value.is_prerelease,
         status,
+        contributors,
         sync_to_confluence: asksForConfluenceSync.value,
       })
     } else {
@@ -2375,6 +2654,7 @@ async function saveRelease(status: 'draft' | 'published') {
         previous_tag: form.value.previous_tag.trim() || null,
         is_prerelease: form.value.is_prerelease,
         status,
+        contributors,
         sync_to_confluence: asksForConfluenceSync.value,
       })
     }
@@ -3145,6 +3425,223 @@ onBeforeUnmount(() => {
 
 .note-expand {
   margin-top: 8px;
+}
+
+/* The credits sit under the notes and quieter than them: they are a reading of
+   the release, not part of what was written */
+.release-contributors {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.contributors-label {
+  font-weight: 600;
+}
+
+.contributor-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A face over the handle, one person per column: the picture is read first, the
+   name says who it is */
+.contributor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 76px;
+  text-decoration: none;
+}
+
+/* The frame is a link when the platform has a profile page: an underlined link
+   over a picture whose line box is collapsed draws a line across the avatar, so
+   the underline is dropped and the hover ring says the picture is clickable */
+.contributor-avatar-frame {
+  display: inline-flex;
+  border-radius: 50%;
+  line-height: 0;
+  text-decoration: none;
+}
+
+.contributor-avatar {
+  box-sizing: border-box;
+  border: 1px solid var(--el-border-color-lighter);
+  transition: box-shadow 0.15s ease;
+}
+
+.contributor:hover .contributor-avatar {
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-5);
+}
+
+.contributor-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--el-text-color-regular);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contributor:hover .contributor-name {
+  color: var(--el-color-primary);
+}
+
+/* More people than one row of handles holds: the faces overlap in a single line
+   and the rest are counted, the way a team is drawn beside a repository. The ring
+   is the colour of the sheet, so the circles read as separate faces */
+.contributor-list.is-stacked {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0;
+}
+
+.contributor-list.is-stacked .contributor-item + .contributor-item {
+  margin-left: -10px;
+}
+
+/* The face under the pointer comes forward, so its ring is not covered by the
+   neighbour drawn over it */
+.contributor-list.is-stacked .contributor-item {
+  position: relative;
+}
+
+.contributor-list.is-stacked .contributor-item:hover {
+  z-index: 1;
+}
+
+.contributor-list.is-stacked .contributor {
+  width: 32px;
+}
+
+.contributor-list.is-stacked .contributor-avatar {
+  border: 2px solid var(--el-card-bg-color, var(--el-bg-color));
+}
+
+.contributor-overflow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--el-card-bg-color, var(--el-bg-color));
+  border-radius: 50%;
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: default;
+}
+
+.contributor-overflow:hover {
+  background: var(--el-fill-color-darker);
+  color: var(--el-color-primary);
+}
+
+/* Kudos: quiet chips under the credits, the reader's own filled in so the release
+   says who has already welcomed it */
+.release-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.reaction-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 13px;
+  background: transparent;
+  color: var(--el-text-color-regular);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.reaction-chip:hover:not(:disabled) {
+  border-color: var(--el-color-primary-light-5);
+  background: var(--el-fill-color-light);
+}
+
+.reaction-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.reaction-chip.is-mine {
+  border-color: var(--el-color-primary-light-3);
+  background: var(--el-color-primary-light-9);
+}
+
+.reaction-chip.is-mine .reaction-count {
+  color: var(--el-color-primary);
+}
+
+.reaction-emoji {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.reaction-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.reaction-add {
+  padding: 0 8px;
+  color: var(--el-text-color-regular);
+  transition: color 0.15s ease;
+}
+
+.reaction-add:hover:not(:disabled) {
+  color: var(--el-color-primary);
+}
+
+/* The drawing carries its own stroke and size (see the template); this only
+   keeps the flex row from squeezing it */
+.reaction-add-icon {
+  flex: none;
+}
+
+.reaction-picker {
+  display: flex;
+  gap: 4px;
+}
+
+.reaction-pick {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.reaction-pick:hover {
+  background: var(--el-fill-color);
+}
+
+.reaction-pick.is-mine {
+  background: var(--el-color-primary-light-9);
 }
 
 .detail-pagination {

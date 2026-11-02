@@ -18,6 +18,7 @@ from src.models.pull_request import (
 )
 from src.models.rbac import UserRoleAssignment
 from src.models.release_note import ReleaseNote
+from src.models.release_note_reaction import ReleaseNoteReaction
 from src.models.repository import Repository
 from src.models.role import Role
 from src.models.system_setting import SystemSetting
@@ -44,4 +45,5 @@ __all__ = [
     "PersonalAccessToken",
     "UserCommentTemplate",
     "ReleaseNote",
+    "ReleaseNoteReaction",
 ]

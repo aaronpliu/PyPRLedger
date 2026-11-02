@@ -1,0 +1,89 @@
+"""Add reactions (kudos) to releases
+
+Revision ID: 039
+Revises: 038
+Create Date: 2026-10-29 10:20:00.000000
+
+A release can be given kudos by the people who read it: one row per person and
+emoji, so the same person cannot count twice and clicking the emoji again takes
+the kudos back.
+
+The emoji is declared with a binary collation on MySQL, because "one row per
+person and emoji" is decided by that collation: the legacy ``utf8mb4`` ones
+carry no weights for characters outside the Basic Multilingual Plane, so 👍, 🎉
+and 🚀 compare equal there - the unique key would refuse the second and the
+aggregate would count them as one. The other dialects compare these strings
+exactly already, so the collation is applied to MySQL alone.
+
+The table is new and the release rows are untouched, so the migration is additive.
+"""
+
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from alembic import op
+
+
+# revision identifiers, used by Alembic.
+revision: str = "039"
+down_revision: str | None = "038"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+
+def upgrade() -> None:
+    """Create the reaction table"""
+
+    op.create_table(
+        "release_note_reaction",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("note_id", sa.Integer(), nullable=False),
+        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "emoji",
+            sa.String(length=16).with_variant(
+                sa.String(length=16, collation="utf8mb4_bin"), "mysql"
+            ),
+            nullable=False,
+        ),
+        sa.Column("created_date", sa.DateTime(), nullable=False),
+        sa.ForeignKeyConstraint(["note_id"], ["release_note.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["user_id"], ["auth_user.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("note_id", "user_id", "emoji", name="uq_release_note_reaction"),
+    )
+    op.create_index(
+        op.f("ix_release_note_reaction_id"), "release_note_reaction", ["id"], unique=False
+    )
+    op.create_index(
+        op.f("ix_release_note_reaction_note_id"),
+        "release_note_reaction",
+        ["note_id"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_release_note_reaction_user_id"),
+        "release_note_reaction",
+        ["user_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_release_note_reaction_note_emoji",
+        "release_note_reaction",
+        ["note_id", "emoji"],
+        unique=False,
+    )
+
+
+def downgrade() -> None:
+    """Drop the reaction table.
+
+    The table goes in one statement rather than dropping its indexes first:
+    MySQL keeps the index behind each foreign key and refuses to remove it while
+    the constraint stands ("Cannot drop index ... needed in a foreign key
+    constraint"), and this table carries two of them. Dropping the table takes
+    its indexes and constraints with it, which is exactly what this migration
+    added.
+    """
+
+    op.drop_table("release_note_reaction")

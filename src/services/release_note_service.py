@@ -10,19 +10,22 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable, Iterable, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.exceptions import NotFoundException
 from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
+from src.models.release_note_reaction import ReleaseNoteReaction
+from src.models.user import User
 from src.schemas.release_diff import ReleaseCompareRequest
 from src.schemas.release_note import (
     EXPORT_MAX_RELEASES,
+    REACTION_EMOJIS,
     REASON_PROVIDED,
     REASON_UNRESOLVED,
     SOURCE_EXPLICIT,
@@ -30,11 +33,13 @@ from src.schemas.release_note import (
     SUMMARY_DETERMINISTIC,
     SUMMARY_LLM,
     SUMMARY_NOTICE_FAILED,
+    ReleaseNoteContributor,
     ReleaseNoteCreateRequest,
     ReleaseNoteImportRequest,
     ReleaseNotePreviewRequest,
     ReleaseNotePreviewResponse,
     ReleaseNotePushRequest,
+    ReleaseNoteReactionCount,
     ReleaseNoteUpdateRequest,
 )
 from src.services.git_providers import BaseGitProvider, get_git_provider
@@ -723,6 +728,184 @@ class ReleaseNoteService:
         rows = (await self.db.execute(statement)).all()
         return {username: avatar_url for username, avatar_url in rows if avatar_url}
 
+    async def contributor_avatars(self, commits: list[dict[str, Any]]) -> dict[str, str]:
+        """Pictures for the commit authors, keyed by the login a commit carries.
+
+        A contributor is a git account while a picture lives on an app account, so the
+        two are matched by login first and, where the logins differ, by the email the
+        commit carries. Accounts without a picture are simply absent.
+        """
+        logins = {
+            str(commit["author_username"]).strip()
+            for commit in commits
+            if commit.get("author_username")
+        }
+        pictures: dict[str, str] = {}
+        if logins:
+            rows = (
+                await self.db.execute(
+                    select(AuthUser.username, AuthUser.avatar_url).where(
+                        AuthUser.username.in_(logins),
+                        AuthUser.avatar_url.is_not(None),
+                    )
+                )
+            ).all()
+            pictures.update({username: url for username, url in rows if url})
+
+        emails = {
+            str(commit["author_email"]).strip().lower()
+            for commit in commits
+            if commit.get("author_email")
+            and str(commit.get("author_username") or "").strip() not in pictures
+        }
+        if not emails:
+            return pictures
+
+        rows = (
+            await self.db.execute(
+                select(func.lower(AuthUser.email), AuthUser.avatar_url).where(
+                    func.lower(AuthUser.email).in_(emails),
+                    AuthUser.avatar_url.is_not(None),
+                )
+            )
+        ).all()
+        by_email = {email: url for email, url in rows if email and url}
+        for commit in commits:
+            login = str(commit.get("author_username") or "").strip()
+            email = str(commit.get("author_email") or "").strip().lower()
+            if login and email and login not in pictures and by_email.get(email):
+                pictures[login] = by_email[email]
+        return pictures
+
+    @staticmethod
+    def _committed_at(commit: dict[str, Any]) -> datetime | None:
+        """When a commit was written, from the epoch milliseconds a provider reports."""
+        try:
+            milliseconds = int(commit.get("author_timestamp"))
+        except (TypeError, ValueError):
+            return None
+        return utc_to_local(datetime.fromtimestamp(milliseconds / 1000, UTC))
+
+    async def credits_for(self, commits: list[dict[str, Any]]) -> list[ReleaseNoteContributor]:
+        """The people behind a list of commits, one entry per person.
+
+        A person is credited once however many commits they wrote: the login is the
+        identity when the commits carry one, the name otherwise. Merge commits are not
+        writing, and the picture is the one of the account the login is bound to, so a
+        contributor without an account keeps the name and is shown as initials. When
+        they last committed is read from the commits as well: the newest of the scope,
+        which is how a face can say it has been seen here lately.
+        """
+        pictures = await self.contributor_avatars(commits)
+
+        people: dict[str, ReleaseNoteContributor] = {}
+        for commit in commits:
+            if is_merge_commit(commit.get("message")):
+                continue
+            username = str(commit.get("author_username") or "").strip() or None
+            name = str(commit.get("author_name") or "").strip() or None
+            if not username and not name:
+                continue
+
+            key = f"login:{username.casefold()}" if username else f"name:{name.casefold()}"
+            person = people.get(key)
+            if person is None:
+                person = ReleaseNoteContributor(
+                    username=username,
+                    display_name=name,
+                    avatar_url=pictures.get(username) if username else None,
+                    profile_url=commit.get("author_url"),
+                    commit_count=0,
+                )
+                people[key] = person
+
+            person.commit_count += 1
+            if person.display_name is None:
+                person.display_name = name
+            if person.profile_url is None:
+                person.profile_url = commit.get("author_url")
+
+            committed = self._committed_at(commit)
+            if committed and (person.last_committed is None or committed > person.last_committed):
+                person.last_committed = committed
+
+        return sorted(
+            people.values(),
+            key=lambda person: (
+                -person.commit_count,
+                (person.username or person.display_name or "").casefold(),
+            ),
+        )
+
+    async def reactions_for(
+        self, note_ids: Sequence[int], user_id: int | None
+    ) -> dict[int, list[ReleaseNoteReactionCount]]:
+        """The kudos a page of releases has, counted once per emoji.
+
+        One query for the page rather than one per release, and ``reacted`` says
+        whether the caller is among the readers who gave that emoji - the release
+        page draws the same chips for everyone and highlights the caller's own.
+        """
+        ids = list(dict.fromkeys(note_ids))
+        summaries: dict[int, list[ReleaseNoteReactionCount]] = {note_id: [] for note_id in ids}
+        if not ids:
+            return summaries
+
+        mine = (
+            case((ReleaseNoteReaction.user_id == user_id, 1), else_=0)
+            if user_id is not None
+            else literal(0)
+        )
+        statement = (
+            select(
+                ReleaseNoteReaction.note_id,
+                ReleaseNoteReaction.emoji,
+                func.count(ReleaseNoteReaction.id),
+                func.max(mine),
+            )
+            .where(ReleaseNoteReaction.note_id.in_(ids))
+            .group_by(ReleaseNoteReaction.note_id, ReleaseNoteReaction.emoji)
+        )
+        rows = (await self.db.execute(statement)).all()
+
+        for note_id, emoji, count, reacted in rows:
+            summaries[note_id].append(
+                ReleaseNoteReactionCount(emoji=emoji, count=count, reacted=bool(reacted))
+            )
+
+        # A fixed order, so the chips of a release stay where the reader saw them
+        order = {emoji: index for index, emoji in enumerate(REACTION_EMOJIS)}
+        for reactions in summaries.values():
+            reactions.sort(key=lambda item: order.get(item.emoji, len(order)))
+        return summaries
+
+    async def toggle_reaction(
+        self, note_id: int, user_id: int, emoji: str
+    ) -> list[ReleaseNoteReactionCount]:
+        """Give an emoji, or take back the one the caller gave before.
+
+        The comparison is the column's, which is why it carries a binary
+        collation: under a legacy ``utf8mb4`` one the four-byte emojis compare
+        equal and giving a second emoji would take the first away.
+        """
+        existing = (
+            await self.db.execute(
+                select(ReleaseNoteReaction).where(
+                    ReleaseNoteReaction.note_id == note_id,
+                    ReleaseNoteReaction.user_id == user_id,
+                    ReleaseNoteReaction.emoji == emoji,
+                )
+            )
+        ).scalar_one_or_none()
+
+        if existing is None:
+            self.db.add(ReleaseNoteReaction(note_id=note_id, user_id=user_id, emoji=emoji))
+        else:
+            await self.db.delete(existing)
+        await self.db.flush()
+
+        return (await self.reactions_for([note_id], user_id))[note_id]
+
     async def get_note(self, note_id: int) -> ReleaseNote | None:
         """Fetch one release by id."""
         return (
@@ -743,6 +926,19 @@ class ReleaseNoteService:
     # ------------------------------------------------------------------ #
     # Mutations
     # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _stored_credits(
+        credits: Sequence[ReleaseNoteContributor] | None,
+    ) -> list[dict[str, Any]] | None:
+        """The credits as the release stores them, or None when none were given.
+
+        Written the way JSON keeps them - timestamps as text - because the column
+        holds the snapshot as it was read, not Python objects.
+        """
+        if credits is None:
+            return None
+        return [credit.model_dump(mode="json") for credit in credits]
 
     async def create_note(
         self,
@@ -773,6 +969,7 @@ class ReleaseNoteService:
             status=request.status,
             is_prerelease=request.is_prerelease,
             author=author,
+            contributors=self._stored_credits(request.contributors),
         )
         if request.status == ReleaseNoteStatus.PUBLISHED:
             note.published_date = get_current_time()
@@ -805,6 +1002,10 @@ class ReleaseNoteService:
             note.previous_tag = request.previous_tag or None
         if request.is_prerelease is not None:
             note.is_prerelease = request.is_prerelease
+        if request.contributors is not None:
+            # Only a caller that generated the notes has credits to replace them with;
+            # an update that writes the body by hand leaves the stored ones alone
+            note.contributors = self._stored_credits(request.contributors)
         if request.status is not None:
             if request.status == ReleaseNoteStatus.PUBLISHED and not note.published_date:
                 note.published_date = get_current_time()
@@ -1024,6 +1225,43 @@ class ReleaseNoteService:
             logger.warning(f"Could not build the release tag link: {e}")
             return None
 
+    async def resolve_author_usernames(self, commits: list[dict[str, Any]]) -> None:
+        """Fill in the provider login of the authors that carry only an email.
+
+        A provider names the account behind a commit only when it knows one - GitHub
+        leaves ``author`` empty for a commit whose email belongs to no account of the
+        repository - and the note then falls back to the display name, which can be
+        neither mentioned nor linked. The instance knows the account an email belongs
+        to, so the login is read from there. Best effort: an author whose email matches
+        no account keeps the name the provider reported.
+        """
+        pending = [
+            commit
+            for commit in commits
+            if not commit.get("author_username") and commit.get("author_email")
+        ]
+        if not pending:
+            return
+
+        emails = {str(commit["author_email"]).strip().lower() for commit in pending}
+        try:
+            rows = (
+                await self.db.execute(
+                    select(func.lower(User.email_address), User.username).where(
+                        func.lower(User.email_address).in_(emails)
+                    )
+                )
+            ).all()
+        except Exception as e:  # noqa: BLE001 - a note must be drafted all the same
+            logger.warning(f"Could not resolve the commit author accounts: {e}")
+            return
+
+        by_email = {email: username for email, username in rows if email}
+        for commit in pending:
+            username = by_email.get(str(commit["author_email"]).strip().lower())
+            if username:
+                commit["author_username"] = username
+
     def resolve_author_urls(
         self,
         commits: list[dict[str, Any]],
@@ -1146,7 +1384,12 @@ class ReleaseNoteService:
             else None
         )
 
+        await self.resolve_author_usernames(commits)
         self.resolve_author_urls(commits, git_provider=request.git_provider)
+        # The commits are in hand, so the credits are read here once: deduplicated by
+        # person and matched to the accounts that carry a picture. They travel with the
+        # notes into the release instead of being rebuilt when it is shown.
+        credits = await self.credits_for(commits)
 
         summary, summary_source, summary_notice, summary_error = await self._summarize(
             request, commits, previous_ref
@@ -1178,6 +1421,7 @@ class ReleaseNoteService:
             body=body,
             commit_count=commit_count,
             commits=commits,
+            contributors=credits,
             truncated=truncated,
             summary=summary,
             summary_source=summary_source,

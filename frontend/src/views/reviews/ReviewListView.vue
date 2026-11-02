@@ -36,7 +36,7 @@
               :selected-ids="selectedReviews.map(r => r.id)"
               :fetch-all-data="fetchAllDataForExport"
             />
-            <el-button @click="loadReviews">
+            <el-button type="primary" @click="loadReviews">
               <el-icon><Refresh /></el-icon>
               {{ t('reviews.refresh') }}
             </el-button>

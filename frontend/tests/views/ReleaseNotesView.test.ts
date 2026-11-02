@@ -64,6 +64,7 @@ vi.mock('@/api/releaseNotes', () => ({
     exportNotes: vi.fn(),
     confluenceStatus: vi.fn(),
     syncToConfluence: vi.fn(),
+    toggleReaction: vi.fn(),
   },
 }))
 
@@ -188,6 +189,7 @@ function preview(
     body: '## What’s Changed',
     commit_count: commits.length,
     commits,
+    contributors: [],
     truncated: false,
     ...overrides,
   }
@@ -510,6 +512,280 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     expect(wrapper.find('.release-author-avatar').exists()).toBe(false)
   })
 
+  it('credits the people behind a published release under its notes', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({
+          contributors: [
+            {
+              username: 'jdoe',
+              display_name: 'John Doe',
+              avatar_url: '/api/v1/users/avatars/77_jd.png',
+              profile_url: 'https://github.local/jdoe',
+              commit_count: 3,
+            },
+            { username: null, display_name: 'Unlinked Author', commit_count: 1 },
+          ],
+        }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const credits = wrapper.find('[data-test="note-contributors"]')
+    expect(credits.exists()).toBe(true)
+    expect(credits.text()).toContain(enMessages.releaseNotes.contributors)
+    // the login is the credit, linked to the profile it belongs to
+    expect(credits.find('a.contributor-avatar-frame').attributes('href')).toBe(
+      'https://github.local/jdoe',
+    )
+    expect(credits.text()).toContain('@jdoe')
+    // an author the provider knows only by name is named, not linked
+    expect(credits.text()).toContain('Unlinked Author')
+    // the picture of the account is shown next to the login
+    expect(credits.find('img.avatar-img').attributes('src')).toBe('/api/v1/users/avatars/77_jd.png')
+    // a face over the handle: the picture is one size whether the release is crowded
+    expect(credits.find('.contributor-avatar').attributes('style')).toContain('width: 32px')
+    // and each person opens a profile card on hover
+    expect(credits.findAllComponents({ name: 'ElPopover' })).toHaveLength(2)
+  })
+
+  it('draws a crowded release as one line of overlapping faces', async () => {
+    const people = Array.from({ length: 9 }, (_, i) => ({
+      username: `dev${i + 1}`,
+      display_name: `Developer ${i + 1}`,
+      avatar_url: `/api/v1/users/avatars/${i + 1}.png`,
+      profile_url: `https://github.local/dev${i + 1}`,
+      commit_count: 9 - i,
+    }))
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ contributors: people })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const credits = wrapper.find('[data-test="note-contributors"]')
+    // past six people the handles give way to faces on a single line
+    expect(wrapper.find('[data-test="contributor-list"]').classes()).toContain('is-stacked')
+    expect(credits.findAll('.contributor')).toHaveLength(6)
+    expect(credits.find('.contributor-avatar').attributes('style')).toContain('width: 32px')
+    // no handle under a face that has none beside it: the card on hover says who it is
+    expect(credits.findAll('.contributor-name')).toHaveLength(0)
+    // and the rest are counted, with a card naming them
+    expect(wrapper.find('[data-test="contributor-overflow"]').text()).toBe('+3')
+    expect(credits.findAllComponents({ name: 'ElPopover' })).toHaveLength(7)
+  })
+
+  it('names the crowded release it only counts', async () => {
+    const people = Array.from({ length: 9 }, (_, i) => ({
+      username: `dev${i + 1}`,
+      display_name: `Developer ${i + 1}`,
+      commit_count: 1,
+    }))
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ contributors: people })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    vi.useFakeTimers()
+    try {
+      await wrapper.find('[data-test="contributor-overflow"] .contributor-overflow').trigger(
+        'mouseenter',
+      )
+      vi.advanceTimersByTime(400)
+      await flushPromises()
+    } finally {
+      vi.useRealTimers()
+    }
+
+    // the card is written in the reader's language, not by its key
+    const title = document.body.querySelector('.contributor-overflow-title')
+    expect(title?.textContent?.trim()).toBe(
+      enMessages.releaseNotes.contributor_more.replace('{count}', '3'),
+    )
+    // and the rest are listed one line each, nobody's card opened yet
+    const rows = Array.from(
+      document.body.querySelectorAll('[data-test="contributor-overflow-row"]'),
+    )
+    expect(rows).toHaveLength(3)
+    expect(
+      rows.map((row) => row.querySelector('.contributor-overflow-name')?.textContent?.trim()),
+    ).toEqual(['@dev7', '@dev8', '@dev9'])
+    expect(document.body.querySelector('.contributor-overflow-detail')).toBeNull()
+  })
+
+  it('gives kudos on a published release and takes them back', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ reactions: [{ emoji: '🎉', count: 2, reacted: false }] })],
+    })
+    vi.mocked(releaseNotesApi.toggleReaction).mockResolvedValue([
+      { emoji: '🎉', count: 3, reacted: true },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const row = wrapper.find('[data-test="note-reactions"]')
+    const chip = row.findAll('.reaction-chip:not(.reaction-add)')[0]
+    expect(chip.text()).toContain('🎉')
+    expect(chip.text()).toContain('2')
+    // the reader has not given this one yet, so the chip is not filled in
+    expect(chip.classes()).not.toContain('is-mine')
+
+    await chip.trigger('click')
+    await flushPromises()
+
+    expect(releaseNotesApi.toggleReaction).toHaveBeenCalledWith(1, '🎉')
+    // the count comes back from the server, and the chip says the reader is one of them
+    const updated = wrapper
+      .find('[data-test="note-reactions"]')
+      .findAll('.reaction-chip:not(.reaction-add)')[0]
+    expect(updated.text()).toContain('3')
+    expect(updated.classes()).toContain('is-mine')
+    // the control to react with has not moved: the emoji joined it on the right
+    expect(wrapper.find('.reaction-add').element).toBe(row.element.firstElementChild)
+  })
+
+  it('keeps every emoji one reader has given', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ reactions: [{ emoji: '🎉', count: 1, reacted: true }] })],
+    })
+    // the second emoji arrives beside the first, as GitHub keeps them
+    vi.mocked(releaseNotesApi.toggleReaction).mockResolvedValue([
+      { emoji: '🎉', count: 1, reacted: true },
+      { emoji: '👍', count: 1, reacted: true },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    await wrapper.find('.reaction-add').trigger('click')
+    await flushPromises()
+    const picks = Array.from(document.body.querySelectorAll('.reaction-pick')) as HTMLElement[]
+    picks[0].click()
+    await flushPromises()
+
+    const chips = wrapper.findAll('[data-test="note-reactions"] .reaction-chip:not(.reaction-add)')
+    // the emoji given first is still there: nothing is replaced
+    expect(chips.map((chip) => chip.find('.reaction-emoji').text())).toEqual(['🎉', '👍'])
+    expect(chips.every((chip) => chip.classes().includes('is-mine'))).toBe(true)
+  })
+
+  it('offers the emojis a release can be given', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({ total: 1, items: [release()] })
+    vi.mocked(releaseNotesApi.toggleReaction).mockResolvedValue([
+      { emoji: '🚀', count: 1, reacted: true },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const row = wrapper.find('[data-test="note-reactions"]')
+    // no kudos yet: only the way to give the first one, and it is the first thing
+    expect(row.findAll('.reaction-chip')).toHaveLength(1)
+    expect(row.find('.reaction-add').element).toBe(row.element.firstElementChild)
+    // the way in is drawn rather than being one of the emojis: it adds a reaction,
+    // so it cannot be mistaken for a reaction the release has already collected
+    expect(row.find('.reaction-add').text()).toBe('')
+    expect(row.find('.reaction-add .reaction-add-icon').exists()).toBe(true)
+    expect(row.find('.reaction-add').attributes('aria-label')).toBe(
+      enMessages.releaseNotes.reaction_add,
+    )
+
+    await row.find('.reaction-add').trigger('click')
+    await flushPromises()
+
+    const picks = Array.from(document.body.querySelectorAll('.reaction-pick')) as HTMLElement[]
+    expect(picks).toHaveLength(6)
+
+    picks[3].click()
+    await flushPromises()
+
+    expect(releaseNotesApi.toggleReaction).toHaveBeenCalledWith(1, '🚀')
+  })
+
+  it('keeps the kudos off a draft', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [release({ status: 'draft', published_date: null })],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // a draft is still being written: there is nothing to give kudos to yet
+    expect(wrapper.find('[data-test="note-reactions"]').exists()).toBe(false)
+  })
+
+  it('credits nobody before the release is published', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({
+          status: 'draft',
+          published_date: null,
+          contributors: [{ username: 'jdoe', display_name: 'John Doe', commit_count: 3 }],
+        }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // the credits of a draft are still being written: they are shown once published
+    expect(wrapper.find('[data-test="note-contributors"]').exists()).toBe(false)
+  })
+
+  it('saves the credits the notes were generated with', async () => {
+    const credits = [
+      {
+        username: 'jdoe',
+        display_name: 'John Doe',
+        avatar_url: null,
+        profile_url: 'https://github.local/jdoe',
+        commit_count: 3,
+      },
+    ]
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({ total: 0, items: [] })
+    vi.mocked(releaseNotesApi.preview).mockResolvedValue(
+      preview([PREVIEW_COMMIT], { version: 'v1.1.0', contributors: credits }),
+    )
+    vi.mocked(releaseNotesApi.create).mockResolvedValue(release({ contributors: credits }) as any)
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.draft_new)[0].trigger('click')
+    await flushPromises()
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.generate_notes)[0].trigger('click')
+    await flushPromises()
+    await buttonsByLabel(wrapper, enMessages.releaseNotes.save_draft)[0].trigger('click')
+    await flushPromises()
+
+    // the people behind the commits came back with the notes, so they are stored
+    // with the release instead of being read again when it is shown
+    expect(releaseNotesApi.create).toHaveBeenCalledWith(
+      expect.objectContaining({ contributors: credits }),
+    )
+  })
+
   it('refreshes the tag suggestions through the provider', async () => {
     const wrapper = mountView()
     await flushPromises()
@@ -731,6 +1007,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
       body: '## What\u2019s Changed\n\n### ✨ Added\n- add login page',
       commit_count: 3,
       commits: [],
+      contributors: [],
       truncated: false,
     })
 
@@ -2404,7 +2681,13 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     vi.mocked(releaseNotesApi.list).mockResolvedValue({
       total: 2,
       items: [
-        release({ id: 1, tag_name: 'v2.0.0', name: 'Long', body: longBody }),
+        release({
+          id: 1,
+          tag_name: 'v2.0.0',
+          name: 'Long',
+          body: longBody,
+          contributors: [{ username: 'jdoe', display_name: 'John Doe', commit_count: 2 }],
+        }),
         release({
           id: 2,
           tag_name: 'v1.0.0',
@@ -2424,6 +2707,9 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
 
     expect(longEntry.find('.release-body').classes()).toContain('collapsed')
     expect(longEntry.find('.note-expand').text()).toBe(enMessages.releaseNotes.show_more)
+    // the control belongs to the notes, so it sits above the credits
+    const markup = longEntry.html()
+    expect(markup.indexOf('note-expand')).toBeLessThan(markup.indexOf('note-contributors'))
     // a note that fits needs no control
     expect(shortEntry.find('.note-expand').exists()).toBe(false)
     expect(shortEntry.find('.release-body').classes()).not.toContain('collapsed')
@@ -2433,6 +2719,8 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
 
     expect(longEntry.find('.release-body').classes()).not.toContain('collapsed')
     expect(longEntry.find('.note-expand').text()).toBe(enMessages.releaseNotes.show_less)
+    // the credits are never folded away with the notes
+    expect(longEntry.find('[data-test="note-contributors"]').exists()).toBe(true)
   })
 
   it('invites the reader to draft the first release of an empty repository', async () => {

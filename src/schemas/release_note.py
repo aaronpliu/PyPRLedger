@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -28,6 +28,11 @@ EXPORT_MAX_RELEASES = 200
 SOURCE_EXPLICIT = "explicit"
 SOURCE_ANCESTOR = "ancestor"
 SOURCE_NAME_ORDER = "name_order"
+
+# The kudos a release can be given, in the order they are offered. A fixed set keeps
+# a reaction a word the release page knows how to draw, and a count beside it.
+REACTION_EMOJIS: tuple[str, ...] = ("👍", "🎉", "❤️", "🚀", "👀", "😄")
+ReactionEmoji = Literal["👍", "🎉", "❤️", "🚀", "👀", "😄"]
 SOURCE_NEAREST = "nearest"
 SOURCE_NONE = "none"
 
@@ -94,6 +99,41 @@ class ReleaseNoteCoordinates(BaseModel):
         return v
 
 
+class ReleaseNoteContributor(BaseModel):
+    """One person credited for a release."""
+
+    username: str | None = Field(
+        default=None, description="Provider login, when the commit names one"
+    )
+    display_name: str | None = Field(default=None, description="Name the provider reports")
+    avatar_url: str | None = Field(
+        default=None, description="Profile picture of the account the login is bound to"
+    )
+    profile_url: str | None = Field(default=None, description="Browsable profile page")
+    commit_count: int = Field(default=0, description="Commits this person wrote in the scope")
+    last_committed: datetime | None = Field(
+        default=None,
+        description=(
+            "When this person last committed in the scope, read from the commits: what "
+            "lets their card say how recently they were seen here."
+        ),
+    )
+
+
+class ReleaseNoteReactionRequest(BaseModel):
+    """The emoji a reader is adding - or taking back, when they added it before."""
+
+    emoji: ReactionEmoji = Field(..., description="One of the emojis the release page offers")
+
+
+class ReleaseNoteReactionCount(BaseModel):
+    """How many readers gave one emoji, and whether the caller is one of them."""
+
+    emoji: str = Field(..., description="The emoji given")
+    count: int = Field(default=0, description="Readers who gave it")
+    reacted: bool = Field(default=False, description="Whether the caller is one of them")
+
+
 class ReleaseNoteCreateRequest(ReleaseNoteCoordinates):
     """Payload for creating (drafting or publishing) a version release."""
 
@@ -113,6 +153,14 @@ class ReleaseNoteCreateRequest(ReleaseNoteCoordinates):
     )
     status: str = Field(default="draft", description="draft or published")
     is_prerelease: bool = Field(default=False, description="Mark the version as a pre-release")
+    contributors: list[ReleaseNoteContributor] | None = Field(
+        default=None,
+        description=(
+            "The people the notes were generated from, as the note generator returned "
+            "them. Stored with the release so the credits are not rebuilt from the git "
+            "provider on every view."
+        ),
+    )
     sync_to_confluence: bool = Field(
         default=True,
         description=(
@@ -137,6 +185,13 @@ class ReleaseNoteUpdateRequest(BaseModel):
     previous_tag: str | None = Field(default=None, max_length=255)
     status: str | None = Field(default=None, description="draft or published")
     is_prerelease: bool | None = Field(default=None)
+    contributors: list[ReleaseNoteContributor] | None = Field(
+        default=None,
+        description=(
+            "Replace the stored credits, as the note generator returned them. Omitted, "
+            "the credits of the release are left as they are."
+        ),
+    )
     sync_to_confluence: bool = Field(
         default=True,
         description=(
@@ -186,6 +241,22 @@ class ReleaseNoteResponse(BaseModel):
     created_date: datetime | None = None
     updated_date: datetime | None = None
 
+    contributors: list[ReleaseNoteContributor] = Field(
+        default_factory=list,
+        description=(
+            "The people the release was written by, stored when the notes were "
+            "generated. Empty for a release written by hand."
+        ),
+    )
+
+    reactions: list[ReleaseNoteReactionCount] = Field(
+        default_factory=list,
+        description=(
+            "The kudos the release was given, one entry per emoji in use, in the order "
+            "they are offered."
+        ),
+    )
+
     # Provider side release (set when pushed to / imported from GitHub Enterprise)
     external_provider: str | None = Field(
         default=None, description="Provider holding the published release"
@@ -206,6 +277,11 @@ class ReleaseNoteResponse(BaseModel):
     confluence_sync_error: str | None = Field(
         default=None, description="Why the last Confluence sync failed, if it did"
     )
+
+    @field_validator("contributors", mode="before")
+    def _credits_are_a_list(cls, v: Any) -> Any:
+        # A release that carries no credits stores none at all
+        return v or []
 
     model_config = {"from_attributes": True}
 
@@ -378,6 +454,14 @@ class ReleaseNotePreviewResponse(BaseModel):
         )
     )
     commits: list[dict[str, Any]] = Field(default_factory=list)
+    contributors: list[ReleaseNoteContributor] = Field(
+        default_factory=list,
+        description=(
+            "The people behind those commits, one entry per person however many commits "
+            "they wrote, with the picture of the account their login is bound to. Carried "
+            "into the release when the notes are saved."
+        ),
+    )
     truncated: bool = Field(
         default=False,
         description="True when the returned commits are only part of that scope",
@@ -467,3 +551,6 @@ class ReleaseNoteExportResponse(BaseModel):
             "carries the newest ones"
         ),
     )
+
+
+

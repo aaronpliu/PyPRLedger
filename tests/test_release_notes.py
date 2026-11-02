@@ -11,7 +11,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from sqlalchemy.dialects import mysql
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.schema import CreateTable
 
 from src.api.v1.endpoints.release_notes import get_rbac_service, get_release_note_service
 from src.core.config import settings
@@ -22,6 +24,8 @@ from src.core.permissions import get_current_user_with_token
 from src.main import app
 from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
+from src.models.release_note_reaction import ReleaseNoteReaction
+from src.models.user import User
 from src.schemas.release_diff import CommitInfo
 from src.schemas.release_note import (
     REASON_FIRST_RELEASE,
@@ -32,6 +36,7 @@ from src.schemas.release_note import (
     SOURCE_EXPLICIT,
     SOURCE_NAME_ORDER,
     SOURCE_NONE,
+    ReleaseNoteContributor,
     ReleaseNoteCreateRequest,
     ReleaseNoteImportRequest,
     ReleaseNotePreviewRequest,
@@ -714,6 +719,268 @@ async def test_author_avatars_only_returns_accounts_that_have_a_picture(
     assert avatars == {"alice": "/api/v1/users/avatars/1_ab.png"}
     assert await service.author_avatars([]) == {}
     assert await service.author_avatars([None]) == {}
+
+
+async def test_generating_the_notes_credits_the_people_behind_them(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        AuthUser(
+            username="jdoe",
+            email="john.doe@example.com",
+            password_hash="x",
+            avatar_url="/api/v1/users/avatars/jdoe.png",
+        )
+    )
+    await db_session.flush()
+
+    diff = StubDiffService(
+        [
+            CommitInfo(
+                id=C1,
+                display_id=C1[:7],
+                author_name="John Doe",
+                author_username="jdoe",
+                author_email="john.doe@example.com",
+                author_timestamp=1_700_000_000_000,
+                message="feat: add login page",
+            ),
+            CommitInfo(
+                id=C2,
+                display_id=C2[:7],
+                author_name="John Doe",
+                author_username="jdoe",
+                author_email="john.doe@example.com",
+                author_timestamp=1_700_100_000_000,
+                message="fix: crash on logout",
+            ),
+            CommitInfo(
+                id=C3,
+                display_id=C3[:7],
+                author_name="Jane Roe",
+                author_username="jroe",
+                author_timestamp=1_699_000_000_000,
+                message="docs: update readme",
+            ),
+            # the integration of work names nobody
+            CommitInfo(
+                id=C4,
+                display_id=C4[:7],
+                author_name="John Doe",
+                author_username="jdoe",
+                message="Merge pull request #12 from feature/login",
+            ),
+        ]
+    )
+    service = build_service(db_session, diff, provider=ComparingProvider())
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="PROJ",
+            repository_slug="my-repo",
+            version="v1.1.0",
+            previous_version="v0.9.0",
+        )
+    )
+
+    # every commit of the scope, merges aside, once per person and most active first
+    contributors = preview.contributors
+    assert [(c.username, c.commit_count) for c in contributors] == [("jdoe", 2), ("jroe", 1)]
+    assert contributors[0].display_name == "John Doe"
+    assert contributors[0].avatar_url == "/api/v1/users/avatars/jdoe.png"
+    assert contributors[0].profile_url == "https://github.local/jdoe"
+    assert contributors[1].avatar_url is None
+    # the newest commit of each says when they were last seen here
+    assert contributors[0].last_committed is not None
+    assert contributors[0].last_committed.timestamp() == 1_700_100_000
+    assert contributors[1].last_committed is not None
+    assert contributors[1].last_committed.timestamp() == 1_699_000_000
+    # the commits were read once, for the notes themselves: the credits come with them
+    assert len(diff.compare_calls) == 1
+
+
+async def test_the_credits_of_generated_notes_are_stored_with_the_release(
+    db_session: AsyncSession,
+) -> None:
+    service = build_service(db_session, StubDiffService())
+    credits = [
+        ReleaseNoteContributor(
+            username="jdoe",
+            display_name="John Doe",
+            avatar_url="/api/v1/users/avatars/jdoe.png",
+            profile_url="https://github.local/jdoe",
+            commit_count=2,
+        )
+    ]
+
+    note = await service.create_note(
+        create_payload(status="published", contributors=credits), author="alice"
+    )
+
+    assert note.contributors == [
+        {
+            "username": "jdoe",
+            "display_name": "John Doe",
+            "avatar_url": "/api/v1/users/avatars/jdoe.png",
+            "profile_url": "https://github.local/jdoe",
+            "commit_count": 2,
+            "last_committed": None,
+        }
+    ]
+
+
+async def test_an_update_without_credits_keeps_the_ones_already_stored(
+    db_session: AsyncSession,
+) -> None:
+    service = build_service(db_session, StubDiffService())
+    note = await service.create_note(
+        create_payload(
+            status="draft",
+            contributors=[ReleaseNoteContributor(username="jdoe", commit_count=3)],
+        ),
+        author="alice",
+    )
+
+    # rewriting the notes by hand says nothing about who wrote the commits
+    updated = await service.update_note(
+        note.id, ReleaseNoteUpdateRequest(body="## Hand written notes")
+    )
+
+    assert updated is not None
+    assert updated.contributors == [
+        {
+            "username": "jdoe",
+            "display_name": None,
+            "avatar_url": None,
+            "profile_url": None,
+            "commit_count": 3,
+            "last_committed": None,
+        }
+    ]
+
+
+async def test_a_release_counts_each_reader_once_per_emoji(db_session: AsyncSession) -> None:
+    service = build_service(db_session, StubDiffService())
+    note = await service.create_note(create_payload(status="published"), author="alice")
+
+    given = await service.toggle_reaction(note.id, 1, "👍")
+    assert [(r.emoji, r.count, r.reacted) for r in given] == [("👍", 1, True)]
+
+    # a second reader adds the same emoji: the count is readers, not clicks
+    shared = await service.toggle_reaction(note.id, 2, "👍")
+    assert [(r.emoji, r.count, r.reacted) for r in shared] == [("👍", 2, True)]
+
+    # and the first reader is still one of them
+    for_reader_one = await service.reactions_for([note.id], 1)
+    assert [(r.emoji, r.count, r.reacted) for r in for_reader_one[note.id]] == [("👍", 2, True)]
+
+    # clicking again takes that reader's kudos back, the other is untouched
+    removed = await service.toggle_reaction(note.id, 1, "👍")
+    assert [(r.emoji, r.count, r.reacted) for r in removed] == [("👍", 1, False)]
+
+
+async def test_reactions_are_listed_in_the_order_they_are_offered(
+    db_session: AsyncSession,
+) -> None:
+    service = build_service(db_session, StubDiffService())
+    note = await service.create_note(create_payload(status="published"), author="alice")
+
+    for emoji in ("🚀", "👍", "❤️"):
+        await service.toggle_reaction(note.id, 1, emoji)
+
+    summaries = await service.reactions_for([note.id], 1)
+
+    # the reader finds an emoji where it was offered, not where it was clicked
+    assert [item.emoji for item in summaries[note.id]] == ["👍", "❤️", "🚀"]
+
+
+def test_reaction_emojis_are_compared_exactly_on_mysql() -> None:
+    """The column must not inherit a collation that weighs every emoji the same.
+
+    MySQL's legacy utf8mb4 collations carry no weights outside the Basic
+    Multilingual Plane, so 👍, 🎉 and 🚀 compare equal there: the unique key
+    refuses the second one and the aggregate merges them into a single chip. The
+    unique key and the GROUP BY both read their notion of "the same emoji" from
+    this collation, so it is part of the schema, not a formatting detail.
+    """
+    ddl = str(CreateTable(ReleaseNoteReaction.__table__).compile(dialect=mysql.dialect()))
+
+    assert "COLLATE utf8mb4_bin" in ddl
+
+
+async def test_reactions_of_several_releases_are_read_at_once(db_session: AsyncSession) -> None:
+    service = build_service(db_session, StubDiffService())
+    first = await service.create_note(create_payload(tag_name="v1.0.0"), author="alice")
+    second = await service.create_note(create_payload(tag_name="v1.1.0"), author="alice")
+    await service.toggle_reaction(first.id, 1, "🎉")
+
+    summaries = await service.reactions_for([first.id, second.id], 1)
+
+    assert [item.emoji for item in summaries[first.id]] == ["🎉"]
+    # a release nobody reacted to is part of the answer, with nothing in it
+    assert summaries[second.id] == []
+
+
+async def test_preview_names_the_account_behind_an_author_email(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        User(
+            user_id=77,
+            username="jdoe",
+            display_name="John Doe",
+            email_address="john.doe@example.com",
+        )
+    )
+    await db_session.flush()
+
+    author = CommitInfo(
+        id=C1,
+        display_id=C1[:7],
+        author_name="John Doe",
+        author_email="John.Doe@Example.com",
+        message="feat: add login page",
+        url=f"https://git.local/commits/{C1[:7]}",
+    )
+    service = build_service(db_session, StubDiffService([author]), provider=ComparingProvider())
+
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="PROJ",
+            repository_slug="my-repo",
+            version="v1.1.0",
+            previous_version="v1.0.0",
+        )
+    )
+
+    # the account the instance holds for that email, mentioned and linked
+    assert preview.commits[0]["author_username"] == "jdoe"
+    assert "by [@jdoe](https://github.local/jdoe) in" in preview.body
+
+
+async def test_preview_keeps_the_display_name_of_an_author_no_account_holds(
+    db_session: AsyncSession,
+) -> None:
+    author = CommitInfo(
+        id=C1,
+        display_id=C1[:7],
+        author_name="Unlinked Author",
+        author_email="nobody@example.com",
+        message="feat: add login page",
+        url=f"https://git.local/commits/{C1[:7]}",
+    )
+    service = build_service(db_session, StubDiffService([author]))
+
+    preview = await service.generate_preview(
+        ReleaseNotePreviewRequest(
+            project_key="PROJ",
+            repository_slug="my-repo",
+            version="v1.1.0",
+            previous_version="v1.0.0",
+        )
+    )
+
+    assert preview.commits[0]["author_username"] is None
+    assert "by Unlinked Author in" in preview.body
 
 
 def test_build_markdown_renders_the_summary_above_the_sections() -> None:
@@ -1546,12 +1813,107 @@ async def test_endpoint_create_list_and_publish(async_client, authenticated_clie
     assert listed.json()["items"][0]["is_latest"] is True
 
 
+async def test_endpoint_gives_and_takes_back_kudos(async_client, authenticated_client) -> None:
+    created = await async_client.post(
+        "/api/v1/release/notes",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "tag_name": "v1.0.0",
+            "name": "First release",
+            "body": "notes",
+            "status": "published",
+        },
+    )
+    note_id = created.json()["id"]
+
+    given = await async_client.post(
+        f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "🎉"}
+    )
+    assert given.status_code == 200
+    assert given.json() == [{"emoji": "🎉", "count": 1, "reacted": True}]
+
+    # the release carries the kudos wherever it is read, flagged for this reader
+    listed = await async_client.get(
+        "/api/v1/release/notes", params={"project_key": "PROJ", "repository_slug": "my-repo"}
+    )
+    assert listed.json()["items"][0]["reactions"] == [{"emoji": "🎉", "count": 1, "reacted": True}]
+
+    taken = await async_client.post(
+        f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "🎉"}
+    )
+    assert taken.status_code == 200
+    assert taken.json() == []
+
+
+async def test_endpoint_lets_one_reader_give_every_emoji(
+    async_client, authenticated_client
+) -> None:
+    created = await async_client.post(
+        "/api/v1/release/notes",
+        json={
+            "project_key": "PROJ",
+            "repository_slug": "my-repo",
+            "tag_name": "v1.0.0",
+            "status": "published",
+        },
+    )
+    note_id = created.json()["id"]
+
+    reactions: list[dict] = []
+    for emoji in ("👍", "🎉", "❤️", "🚀", "👀", "😄"):
+        response = await async_client.post(
+            f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": emoji}
+        )
+        reactions = response.json()
+
+    # six emojis from one reader: giving the next one never takes the last away
+    assert [(item["emoji"], item["count"], item["reacted"]) for item in reactions] == [
+        ("👍", 1, True),
+        ("🎉", 1, True),
+        ("❤️", 1, True),
+        ("🚀", 1, True),
+        ("👀", 1, True),
+        ("😄", 1, True),
+    ]
+
+    # and taking one back leaves the other five alone
+    remaining = (
+        await async_client.post(f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "❤️"})
+    ).json()
+    assert [item["emoji"] for item in remaining] == ["👍", "🎉", "🚀", "👀", "😄"]
+
+
+async def test_endpoint_refuses_an_emoji_it_does_not_offer(
+    async_client, authenticated_client
+) -> None:
+    created = await async_client.post(
+        "/api/v1/release/notes",
+        json={"project_key": "PROJ", "repository_slug": "my-repo", "tag_name": "v1.0.0"},
+    )
+    note_id = created.json()["id"]
+
+    refused = await async_client.post(
+        f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "🍕"}
+    )
+
+    assert refused.status_code == 422
+
+
+async def test_endpoint_404s_for_the_kudos_of_a_missing_release(
+    async_client, authenticated_client
+) -> None:
+    missing = await async_client.post(
+        "/api/v1/release/notes/424242/reactions", json={"emoji": "👍"}
+    )
+
+    assert missing.status_code == 404
+
+
 class TagUrlProvider(StubProvider):
     """Provider whose tags have a browsable page, for the tag badge."""
 
-    def web_tag_url(
-        self, project_key: str, repository_slug: str, tag_name: str
-    ) -> str | None:
+    def web_tag_url(self, project_key: str, repository_slug: str, tag_name: str) -> str | None:
         return f"https://git.local/{project_key}/{repository_slug}/tree/{tag_name}"
 
 
@@ -1580,9 +1942,7 @@ async def test_endpoint_links_a_release_to_its_tag_page(
         "/api/v1/release/notes", params={"project_key": "PROJ", "repository_slug": "my-repo"}
     )
     assert listed.status_code == 200
-    assert listed.json()["items"][0]["tag_url"] == (
-        "https://git.local/PROJ/my-repo/tree/v1.0.0"
-    )
+    assert listed.json()["items"][0]["tag_url"] == ("https://git.local/PROJ/my-repo/tree/v1.0.0")
 
 
 async def test_endpoint_returns_the_author_avatar_url(

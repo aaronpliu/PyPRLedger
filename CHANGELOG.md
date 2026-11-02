@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.35.1-frontend.1] - 2026-11-02
+
+**Backend Version**: 1.35.1 (unchanged)
+**Frontend Version**: 1.30.2
+
+### Changed
+- The initial of a person whose account has no picture now sits on a pale tone of one hue and is drawn in the deeper tone of that same hue, instead of a dark block with a white letter. Beside the panels of a light page the old tones were heavy, and on the dark theme the same blocks sank into the background. Each of the twelve tones is named twice - once per theme - so the initial follows whichever theme is in force, and a name still keeps the tone its first character earns it.
+- The card describing a contributor in the folded ``+N`` panel is drawn above the list instead of below it. The panel is anchored at its bottom, so the card opening underneath pushed the names down under the pointer and the hover restarted on a neighbour; above the list the names stay where the reader left them.
+
+### Tests
+- A unit test covers the avatar of an account without a picture: the initial it draws, the tone it gives a name (the same one every time, one of the twelve), and the fallback when a picture fails to load.
+
+---
+
+## [1.35.1] - 2026-10-31
+
+**Backend Version**: 1.35.1
+**Frontend Version**: 1.30.1
+
+### Changed
+- [Style] Align refresh button color with theme accent color
+- [Style] Enhance action icon for rule's edit and deletion
+- [Style] Enhance background color of un-assinged task
+- [Style] Enhance table title of score management
+- [Refactor] Enhance user avatar display
+
+---
+
+## [1.35.0] - 2026-10-31
+
+**Backend Version**: 1.35.0
+**Frontend Version**: 1.30.0
+
+### Added
+- A published release can be given kudos, one reader at a time. The notes offer a fixed set of reactions - 👍 🎉 ❤️ 🚀 👀 😄 - and a reader gives each one at most once: clicking the same emoji again takes the kudos back rather than adding a second. The count sits beside each emoji and tells the reader whether it is theirs. A release is credited by whoever reads it, which is kept apart from the git authors of its commits.
+
+### Changed
+- The credits of a release fold when there are more than six people in them. Up to six are drawn as a face over a handle each; past that, the first six faces overlap in a single line and the rest are counted in a ``+N`` chip that opens a card listing every name, so a release written by a whole team takes no more room than one written by a few.
+- A contributor's face is one size everywhere - 32px, folded or not. Folding the crowd changes the layout, not the picture, so the avatars and the ``+N`` chip line up in the folded row.
+- The picture over a name is a link to the platform profile when one exists, and hovering it opens a card with the person's handle, name and commit count instead of leaving the release.
+- The fallback for a contributor without a picture is the account's initial, drawn without the underscore that once read as a stray mark.
+- The reaction emoji are stored with a binary collation on MySQL. Its legacy ``utf8mb4`` collations carry no weights for characters beyond the Basic Multilingual Plane, so the five emojis all compared equal - the unique key refused the second one and the aggregate merged them into one chip. The new ``utf8mb4_bin`` column compares them code point by code point, which is what "one row per emoji" and "counted once per emoji" mean.
+
+### Tests
+- [Test] Add unit test to cover reaction of release note
+- [Test] Update position of 'show more'
+
+---
+
+## [1.34.1] - 2026-10-28
+
+**Backend Version**: 1.34.1
+**Frontend Version**: 1.29.1
+
+### Added
+- A published release is credited under its notes: **Contributors** lists every person whose commits are in the release scope, once each - as `@login` linked to the profile the provider reports, by name where the commits name only an author - with the picture of the instance account that login (or, failing that, the commit's email) is bound to, and with the initial of the name in a circle where no account is bound. Merge commits are left out, as they are from the notes: the integration of work is credited through the commits it merged. A draft carries no credits - it is still being written
+- The credits are read once, while the notes are generated. The commits of the scope are already in hand there, so they are deduplicated by person and matched to their accounts before the notes are saved, and travel with them into the release (`release_note.contributors`, migration `038`). Showing a release no longer reads its commits from the git provider again, and a page of ten releases costs one reading of the scope, not ten
+
+### Changed
+- The credits sit beside the notes rather than inside them: the body ends with **Full Changelog** again, and the GitHub Enterprise release and the Confluence page carry what was written and nothing else. The `GET /release/notes/{id}/contributors` endpoint is gone with the paragraph it used to feed
+- A release generated before this version, written by hand or imported from a git provider carries no credits until its notes are generated again
+
+---
+
 ## [1.34.0] - 2026-10-28
 
 **Backend Version**: 1.34.0
@@ -20,6 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A rule's **Assign To** list is now exactly who reviews. **Max Assignments** is gone from the rule form and the rules table: it truncated the list to its first N names, so a rule naming three reviewers with a limit of one assigned whoever stood first and dropped the rest without a word. The truncation also ran before the usernames were checked, so a stale name in the first slots could leave a review with fewer reviewers than the rule named, or none at all. Existing rules keep their lists and now assign every name in them; migration `037` drops the column
 
 ### Fixed
+- A commit whose author the provider does not link - GitHub Enterprise leaves the account empty when the commit's email belongs to none of the repository's accounts - was credited by display name, which cannot be mentioned or linked. The note now reads the login the instance holds for that email, so the line reads `by @jdoe in …` with a link to the profile, and the contributors line credits the same account; an email no account holds keeps the display name
 - Reopening a rule for editing keeps the applications it was built from. The rule stores only `project_key` and `repository_slug` lists, and the dialog read them back by asking every application whether it contained *all* of the rule's project keys - which no single application does once two were chosen, so a rule written across several applications opened with **App Name** empty. The conditions are now read back the other way (the applications whose repositories the rule covers, offered only when together they reproduce the rule exactly), and opening a rule no longer rebuilds its conditions from that answer, so editing a rule cannot quietly widen or narrow what it matches
 - A package's commit comparison on the App Diff page is titled by the package's own versions rather than by the application's releases. The commits are read between those two versions in the package's own repository, so the release pair named a comparison the commits were never between - a reader looking for `1.0.0 → 1.0.1` was shown `v1.1.0 → v2.0.0` and could not tell which move the commits belonged to. The title is now also carried by a comparison that could not be read, so the versions it was between are named beside the reason it could not be read rather than left out
 
