@@ -1,23 +1,26 @@
 <template>
   <div class="page app-diff">
-    <header class="page-header">
-      <div class="header-start">
-        <h1>{{ t('appDiff.title') }}</h1>
-        <p v-if="appName && releases.length" class="subtitle" data-test="subtitle">
-          {{ t('appDiff.subtitle', { app: appName, count: releases.length }) }}
-        </p>
-      </div>
-      <div class="header-end">
-        <el-button
-          :disabled="!canCompare"
-          :loading="comparing"
-          data-test="refresh"
-          @click="refresh"
-        >
-          {{ t('appDiff.refresh') }}
-        </el-button>
-      </div>
-    </header>
+    <el-card shadow="never" class="context-card">
+      <template #header>
+        <div class="card-header">
+          <div>
+            <h2>{{ t('appDiff.title') }}</h2>
+            <p v-if="appName && releases.length" class="subtitle" data-test="subtitle">
+              {{ t('appDiff.subtitle', { app: appName, count: releases.length }) }}
+            </p>
+          </div>
+          <el-button
+            type="primary"
+            :disabled="!canCompare"
+            :loading="comparing"
+            data-test="refresh"
+            @click="refresh"
+          >
+            <el-icon><Refresh /></el-icon>
+            {{ t('appDiff.refresh') }}
+          </el-button>
+        </div>
+      </template>
 
     <!-- The same coordinates the repository comparison and the dependency graph
          ask for: the application is resolved from the repository, so the reader
@@ -385,6 +388,7 @@
     </template>
 
     <el-empty v-else :description="t('appDiff.no_result')" />
+    </el-card>
   </div>
 </template>
 
@@ -392,7 +396,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, Refresh } from '@element-plus/icons-vue'
 import ContentLoader from '@/components/common/ContentLoader.vue'
 import CommitComparison from '@/components/release/CommitComparison.vue'
 import { projectsApi } from '@/api/projects'
@@ -951,15 +955,15 @@ watch(depth, () => {
   padding: 20px;
 }
 
-.page-header {
+.card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.page-header h1 {
+.card-header h2 {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
