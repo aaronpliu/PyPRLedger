@@ -495,6 +495,26 @@
               </div>
             </div>
             <span v-else class="text-secondary">{{ t('reviews.no_scores') }}</span>
+            <div v-if="getCriticalCount(row) > 0" class="critical-flag">
+              <el-tooltip
+                placement="top"
+                effect="dark"
+                :disabled="getCriticalIssues(row).length === 0"
+              >
+                <template #content>
+                  <div v-for="(issue, idx) in getCriticalIssues(row).slice(0, 3)" :key="idx" class="critical-tooltip-item">
+                    <b>{{ issue.file }}</b>
+                    <div>{{ issue.description }}</div>
+                  </div>
+                  <div v-if="getCriticalCount(row) > 3" class="critical-tooltip-more">
+                    ...and {{ getCriticalCount(row) - 3 }} more
+                  </div>
+                </template>
+                <el-tag type="danger" effect="dark" size="small" class="critical-badge">
+                  {{ getCriticalCount(row) }} Critical
+                </el-tag>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
         
@@ -697,7 +717,7 @@ import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Search, CircleCheck, Delete, Close, Document, Refresh, Cpu, Link, QuestionFilled, Loading, Star, StarFilled } from '@element-plus/icons-vue'
 import { reviewsApi } from '@/api/reviews'
-import type { Review } from '@/api/reviews'
+import type { Review, AIReviewIssue } from '@/api/reviews'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
@@ -1069,6 +1089,18 @@ const getStatusType = (status: string) => {
     pending: 'info',
   }
   return types[status] || 'info'
+}
+
+const getCriticalIssues = (row: any): AIReviewIssue[] => {
+  const suggestions = row.ai_suggestions
+  if (!suggestions?.issues) return []
+  return suggestions.issues.filter((issue: AIReviewIssue) => issue.severity === 'critical')
+}
+
+const getCriticalCount = (row: any): number => {
+  const summaryCount = row.ai_suggestions?.summary?.critical_count
+  if (typeof summaryCount === 'number') return summaryCount
+  return getCriticalIssues(row).length
 }
 
 // Get primary reviewer for multi-reviewer display
@@ -2238,6 +2270,25 @@ html.dark .el-tag--danger {
 
 [data-theme='dark'] .score-critical {
   color: #ef4444;
+}
+
+.critical-flag {
+  margin-top: 4px;
+}
+
+.critical-badge {
+  font-weight: 600;
+}
+
+.critical-tooltip-item {
+  max-width: 320px;
+  white-space: normal;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.critical-tooltip-more {
+  opacity: 0.8;
 }
 
 /* Associate Dialog Styles */
