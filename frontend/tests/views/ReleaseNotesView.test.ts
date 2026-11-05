@@ -627,10 +627,26 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
   it('gives kudos on a published release and takes them back', async () => {
     vi.mocked(releaseNotesApi.list).mockResolvedValue({
       total: 1,
-      items: [release({ reactions: [{ emoji: '🎉', count: 2, reacted: false }] })],
+      items: [
+        release({
+          reactions: [
+            {
+              emoji: '🎉',
+              count: 2,
+              reacted: false,
+              reactors: [{ username: 'alice' }, { username: 'bob', avatar_url: null }],
+            },
+          ],
+        }),
+      ],
     })
     vi.mocked(releaseNotesApi.toggleReaction).mockResolvedValue([
-      { emoji: '🎉', count: 3, reacted: true },
+      {
+        emoji: '🎉',
+        count: 3,
+        reacted: true,
+        reactors: [{ username: 'alice' }, { username: 'bob' }, { username: 'carol' }],
+      },
     ])
 
     const wrapper = mountView()
@@ -640,7 +656,11 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     const row = wrapper.find('[data-test="note-reactions"]')
     const chip = row.findAll('.reaction-chip:not(.reaction-add)')[0]
     expect(chip.text()).toContain('🎉')
-    expect(chip.text()).toContain('2')
+    // who gave it, as faces, rather than how many gave it
+    expect(chip.findAll('.reaction-avatar')).toHaveLength(2)
+    expect(chip.find('.reaction-count').exists()).toBe(false)
+    // and the release says how many people that is, once
+    expect(row.find('[data-test="reaction-total"]').text()).toBe('2 people reacted')
     // the reader has not given this one yet, so the chip is not filled in
     expect(chip.classes()).not.toContain('is-mine')
 
@@ -648,14 +668,73 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await flushPromises()
 
     expect(releaseNotesApi.toggleReaction).toHaveBeenCalledWith(1, '🎉')
-    // the count comes back from the server, and the chip says the reader is one of them
+    // the readers come back from the server, and the chip says the reader is one of them
     const updated = wrapper
       .find('[data-test="note-reactions"]')
       .findAll('.reaction-chip:not(.reaction-add)')[0]
-    expect(updated.text()).toContain('3')
+    expect(updated.findAll('.reaction-avatar')).toHaveLength(3)
     expect(updated.classes()).toContain('is-mine')
+    expect(wrapper.find('[data-test="reaction-total"]').text()).toBe('3 people reacted')
     // the control to react with has not moved: the emoji joined it on the right
     expect(wrapper.find('.reaction-add').element).toBe(row.element.firstElementChild)
+  })
+
+  it('counts a reader who gave several emojis once', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({
+          reactions: [
+            { emoji: '🎉', count: 2, reacted: false, reactors: [{ username: 'alice' }, { username: 'bob' }] },
+            { emoji: '🚀', count: 1, reacted: false, reactors: [{ username: 'alice' }] },
+          ],
+        }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // two emojis, two chips, but alice is one person
+    expect(
+      wrapper.findAll('[data-test="note-reactions"] .reaction-chip:not(.reaction-add)'),
+    ).toHaveLength(2)
+    expect(wrapper.find('[data-test="reaction-total"]').text()).toBe('2 people reacted')
+  })
+
+  it('counts the readers a chip cannot show', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({
+          reactions: [
+            {
+              emoji: '👍',
+              count: 5,
+              reacted: true,
+              reactors: [
+                { username: 'alice' },
+                { username: 'bob' },
+                { username: 'carol' },
+                { username: 'dave' },
+                { username: 'erin' },
+              ],
+            },
+          ],
+        }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    const chip = wrapper.find('[data-test="note-reactions"] .reaction-chip:not(.reaction-add)')
+    // three faces fit in the chip; the rest are counted beside them
+    expect(chip.findAll('.reaction-avatar')).toHaveLength(3)
+    expect(chip.find('.reaction-more').text()).toBe('+2')
+    expect(wrapper.find('[data-test="reaction-total"]').text()).toBe('5 people reacted')
   })
 
   it('keeps every emoji one reader has given', async () => {

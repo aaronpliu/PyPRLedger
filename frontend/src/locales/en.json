@@ -1234,6 +1234,8 @@
     "contributor_active_older": "Committed to this repository over a year ago",
     "reaction_add": "Add reaction",
     "reaction_count": "{count} reaction(s)",
+    "reaction_total_one": "1 person reacted",
+    "reaction_total_other": "{count} people reacted",
     "reaction_failed": "Could not save the reaction",
     "updated_at": "updated {date}",
     "range": "{from}...{to}",

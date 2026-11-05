@@ -1234,6 +1234,8 @@
     "contributor_active_older": "一年多以前在這個倉庫提交過程式碼",
     "reaction_add": "新增表情回應",
     "reaction_count": "{count} 個回應",
+    "reaction_total_one": "1 人回應",
+    "reaction_total_other": "{count} 人回應",
     "reaction_failed": "表情回應儲存失敗",
     "updated_at": "更新於 {date}",
     "range": "{from}...{to}",

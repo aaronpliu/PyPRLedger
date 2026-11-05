@@ -1106,8 +1106,36 @@
                   @click.stop="toggleReaction(note, reaction.emoji)"
                 >
                   <span class="reaction-emoji">{{ reaction.emoji }}</span>
-                  <span class="reaction-count">{{ reaction.count }}</span>
+                  <!-- Who gave it rather than how many gave it: the faces say what
+                       a count could not. The total under the row still gives the
+                       number of people -->
+                  <span v-if="shownReactors(reaction).length" class="reaction-people">
+                    <UserAvatar
+                      v-for="reactor in shownReactors(reaction)"
+                      :key="reactor.username"
+                      :username="reactor.username"
+                      :avatar-url="reactor.avatar_url"
+                      :size="18"
+                      class="reaction-avatar"
+                    />
+                    <span v-if="hiddenReactorCount(reaction)" class="reaction-more">
+                      +{{ hiddenReactorCount(reaction) }}
+                    </span>
+                  </span>
+                  <!-- A release reacted to before this page could name the readers
+                       keeps its count rather than showing an empty chip -->
+                  <span v-else class="reaction-count">{{ reaction.count }}</span>
                 </button>
+
+                <!-- One reader may have given several emojis and is still one
+                     person, so the number is counted once for the whole release -->
+                <span
+                  v-if="reactedPeople(note)"
+                  class="reaction-total"
+                  data-test="reaction-total"
+                >
+                  {{ reactionTotalLabel(note) }}
+                </span>
               </div>
             </article>
 
@@ -1220,6 +1248,7 @@ import {
   type ReleaseNote,
   type ReleaseNoteContributor,
   type ReleaseNoteReaction,
+  type ReleaseNoteReactor,
 } from '@/api/releaseNotes'
 import type {
   ReleaseNoteExportRequest,
@@ -2159,8 +2188,47 @@ function reactedWith(note: ReleaseNote, emoji: string): boolean {
   return (note.reactions ?? []).some((reaction) => reaction.emoji === emoji && reaction.reacted)
 }
 
+// Faces a chip shows before it counts the rest: three fit in the chip without
+// pushing the emoji away from the eye that is scanning the row
+const REACTION_AVATAR_LIMIT = 3
+
+/** The readers a chip shows as faces. */
+function shownReactors(reaction: ReleaseNoteReaction): ReleaseNoteReactor[] {
+  return (reaction.reactors ?? []).slice(0, REACTION_AVATAR_LIMIT)
+}
+
+/** The readers a chip only counts, when there are more than it can show. */
+function hiddenReactorCount(reaction: ReleaseNoteReaction): number {
+  return Math.max(reaction.count - REACTION_AVATAR_LIMIT, 0)
+}
+
+/** The people who reacted, counted once however many emojis each of them gave. */
+function reactedPeople(note: ReleaseNote): number {
+  const names = new Set<string>()
+  for (const reaction of note.reactions ?? []) {
+    for (const reactor of reaction.reactors ?? []) names.add(reactor.username)
+  }
+  return names.size
+}
+
+function reactionTotalLabel(note: ReleaseNote): string {
+  const count = reactedPeople(note)
+  // Two keys rather than a suffix: English turns "person" into "people"
+  return count === 1
+    ? t('releaseNotes.reaction_total_one')
+    : t('releaseNotes.reaction_total_other', { count })
+}
+
 function reactionTitle(reaction: ReleaseNoteReaction): string {
-  return `${reaction.emoji} ${t('releaseNotes.reaction_count', { count: reaction.count })}`
+  const names = (reaction.reactors ?? []).map((reactor) => reactor.username)
+  // A release reacted to before its readers could be named still explains itself
+  if (!names.length) {
+    return `${reaction.emoji} ${t('releaseNotes.reaction_count', { count: reaction.count })}`
+  }
+  // The names the chip cannot show are still counted in the title
+  const shown = names.slice(0, REACTION_AVATAR_LIMIT).join(', ')
+  const rest = names.length - REACTION_AVATAR_LIMIT
+  return `${reaction.emoji} ${shown}${rest > 0 ? ` +${rest}` : ''}`
 }
 
 /** Give a release one emoji, or take back the one this reader gave before. */
@@ -3602,6 +3670,37 @@ onBeforeUnmount(() => {
 
 .reaction-count {
   font-variant-numeric: tabular-nums;
+}
+
+/* The readers who gave the emoji, as faces: the emoji already says what they
+   did, so the row stays narrow and the names live in the chip's title */
+.reaction-people {
+  display: inline-flex;
+  align-items: center;
+}
+
+.reaction-avatar {
+  flex: none;
+  /* A ring in the card colour keeps two overlapping faces apart */
+  box-shadow: 0 0 0 1px var(--el-bg-color);
+}
+
+.reaction-avatar + .reaction-avatar {
+  margin-left: -5px;
+}
+
+.reaction-more {
+  margin-left: 3px;
+  color: var(--el-text-color-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* How many people, said once for the release: one reader may have given several
+   emojis and is still one person */
+.reaction-total {
+  margin-left: 2px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .reaction-add {

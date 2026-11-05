@@ -126,12 +126,28 @@ class ReleaseNoteReactionRequest(BaseModel):
     emoji: ReactionEmoji = Field(..., description="One of the emojis the release page offers")
 
 
+class ReleaseNoteReactor(BaseModel):
+    """One reader who gave a release an emoji."""
+
+    username: str = Field(..., description="Account name of the reader")
+    avatar_url: str | None = Field(
+        default=None, description="Profile picture of the account, when one is set"
+    )
+
+
 class ReleaseNoteReactionCount(BaseModel):
-    """How many readers gave one emoji, and whether the caller is one of them."""
+    """How many readers gave one emoji, who they are, and whether the caller is one."""
 
     emoji: str = Field(..., description="The emoji given")
     count: int = Field(default=0, description="Readers who gave it")
     reacted: bool = Field(default=False, description="Whether the caller is one of them")
+    reactors: list[ReleaseNoteReactor] = Field(
+        default_factory=list,
+        description=(
+            "The readers who gave it, in the order they gave it. The page shows them "
+            "as faces rather than as a number."
+        ),
+    )
 
 
 class ReleaseNoteCreateRequest(ReleaseNoteCoordinates):

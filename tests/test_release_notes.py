@@ -858,16 +858,42 @@ async def test_an_update_without_credits_keeps_the_ones_already_stored(
     ]
 
 
+def add_reader(
+    db_session: AsyncSession,
+    reader_id: int,
+    username: str,
+    avatar_url: str | None = None,
+) -> None:
+    """An account a reaction can be attributed to."""
+    db_session.add(
+        AuthUser(
+            id=reader_id,
+            username=username,
+            email=f"{username}@example.com",
+            password_hash="x",
+            avatar_url=avatar_url,
+        )
+    )
+
+
 async def test_a_release_counts_each_reader_once_per_emoji(db_session: AsyncSession) -> None:
     service = build_service(db_session, StubDiffService())
     note = await service.create_note(create_payload(status="published"), author="alice")
+    add_reader(db_session, 1, "alice", avatar_url="https://img.local/alice.png")
+    add_reader(db_session, 2, "bob")
+    await db_session.flush()
 
     given = await service.toggle_reaction(note.id, 1, "👍")
     assert [(r.emoji, r.count, r.reacted) for r in given] == [("👍", 1, True)]
+    assert [(r.username, r.avatar_url) for r in given[0].reactors] == [
+        ("alice", "https://img.local/alice.png")
+    ]
 
     # a second reader adds the same emoji: the count is readers, not clicks
     shared = await service.toggle_reaction(note.id, 2, "👍")
     assert [(r.emoji, r.count, r.reacted) for r in shared] == [("👍", 2, True)]
+    # the chip can name both, in the order they gave it
+    assert [r.username for r in shared[0].reactors] == ["alice", "bob"]
 
     # and the first reader is still one of them
     for_reader_one = await service.reactions_for([note.id], 1)
@@ -876,6 +902,7 @@ async def test_a_release_counts_each_reader_once_per_emoji(db_session: AsyncSess
     # clicking again takes that reader's kudos back, the other is untouched
     removed = await service.toggle_reaction(note.id, 1, "👍")
     assert [(r.emoji, r.count, r.reacted) for r in removed] == [("👍", 1, False)]
+    assert [r.username for r in removed[0].reactors] == ["bob"]
 
 
 async def test_reactions_are_listed_in_the_order_they_are_offered(
@@ -1813,7 +1840,13 @@ async def test_endpoint_create_list_and_publish(async_client, authenticated_clie
     assert listed.json()["items"][0]["is_latest"] is True
 
 
-async def test_endpoint_gives_and_takes_back_kudos(async_client, authenticated_client) -> None:
+async def test_endpoint_gives_and_takes_back_kudos(
+    async_client, authenticated_client, db_session
+) -> None:
+    # the account the reaction is attributed to, so the release can name it
+    add_reader(db_session, 1, "tester", avatar_url="https://img.local/tester.png")
+    await db_session.flush()
+
     created = await async_client.post(
         "/api/v1/release/notes",
         json={
@@ -1831,13 +1864,19 @@ async def test_endpoint_gives_and_takes_back_kudos(async_client, authenticated_c
         f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "🎉"}
     )
     assert given.status_code == 200
-    assert given.json() == [{"emoji": "🎉", "count": 1, "reacted": True}]
+    expected_emoji = {
+        "emoji": "🎉",
+        "count": 1,
+        "reacted": True,
+        "reactors": [{"username": "tester", "avatar_url": "https://img.local/tester.png"}],
+    }
+    assert given.json() == [expected_emoji]
 
     # the release carries the kudos wherever it is read, flagged for this reader
     listed = await async_client.get(
         "/api/v1/release/notes", params={"project_key": "PROJ", "repository_slug": "my-repo"}
     )
-    assert listed.json()["items"][0]["reactions"] == [{"emoji": "🎉", "count": 1, "reacted": True}]
+    assert listed.json()["items"][0]["reactions"] == [expected_emoji]
 
     taken = await async_client.post(
         f"/api/v1/release/notes/{note_id}/reactions", json={"emoji": "🎉"}

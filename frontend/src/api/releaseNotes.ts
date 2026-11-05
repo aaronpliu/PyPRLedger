@@ -44,12 +44,21 @@ export interface ReleaseNote {
   contributors?: ReleaseNoteContributor[]
 }
 
+export interface ReleaseNoteReactor {
+  /** Account name of the reader, shown on their avatar */
+  username: string
+  /** Profile picture of the account, when it has one */
+  avatar_url?: string | null
+}
+
 export interface ReleaseNoteReaction {
   emoji: string
   /** Readers who gave this emoji */
   count: number
   /** Whether the caller is one of them */
   reacted: boolean
+  /** The readers who gave it, in the order they gave it */
+  reactors?: ReleaseNoteReactor[]
 }
 
 export interface ReleaseNoteListResponse {
