@@ -118,6 +118,12 @@
     "releaseDependencyGraph": "发布依赖关系图",
     "appDiff": "应用版本对比"
   },
+  "festival": {
+    "greeting_christmas": "🎄 圣诞快乐！",
+    "greeting_spring_festival": "🏮 新春快乐！",
+    "greeting_mid_autumn": "🌕 中秋快乐！",
+    "greeting_new_year": "🎊 新年快乐！"
+  },
   "auth": {
     "login_title": "登录到 PR Ledger",
     "login_subtitle": "跟踪和管理您的代码审查",

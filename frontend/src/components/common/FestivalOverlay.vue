@@ -4,22 +4,51 @@
       <canvas v-if="playing" ref="canvasRef" class="festival-overlay" aria-hidden="true" />
     </transition>
     <transition name="festival-greeting">
-      <div v-if="playing && greeting" class="festival-greeting" aria-hidden="true">
-        {{ greeting }}
+      <div
+        v-if="playing && greeting"
+        class="festival-greeting"
+        :class="`festival-greeting--${greetingEffect}`"
+        aria-hidden="true"
+      >
+        <span class="festival-greeting-deco">{{ decoEmoji }}</span>
+        <span class="festival-greeting-text">{{ greeting }}</span>
+        <span class="festival-greeting-deco">{{ decoEmoji }}</span>
       </div>
     </transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { rbacApi } from '@/api/rbac'
 import type { FestivalConfig, FestivalEffect } from '@/api/rbac'
 import { useTheme } from '@/composables/useTheme'
 
+const { t } = useI18n()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const playing = ref(false)
 const greeting = ref('')
+const greetingEffect = ref<FestivalEffect>('christmas')
+
+/** The emoji that frames the greeting, per festival. */
+const DECO_EMOJI: Record<FestivalEffect, string> = {
+  christmas: '❄️',
+  spring_festival: '🏮',
+  mid_autumn: '🌕',
+  new_year: '🎊',
+  custom: '✨',
+}
+const decoEmoji = computed(() => DECO_EMOJI[greetingEffect.value])
+
+/** Every festival pops its own greeting; the custom effect uses the admin's text. */
+const DEFAULT_GREETINGS: Record<FestivalEffect, string> = {
+  christmas: 'festival.greeting_christmas',
+  spring_festival: 'festival.greeting_spring_festival',
+  mid_autumn: 'festival.greeting_mid_autumn',
+  new_year: 'festival.greeting_new_year',
+  custom: '',
+}
 
 const { isDark } = useTheme()
 
@@ -273,10 +302,13 @@ function play(config: FestivalConfig): void {
   cleanup()
   currentEffect = config.effect
   currentConfig = config
+  greetingEffect.value = config.effect
   const durationSeconds = clamp(config.duration_seconds, 5, 120, DEFAULT_DURATION_SECONDS)
   speedMultiplier = clamp(config.speed, 0.2, 3, DEFAULT_SPEED)
-  if (config.effect === 'custom' && config.custom_name) {
-    greeting.value = config.custom_name
+  const greetingText =
+    config.effect === 'custom' ? config.custom_name : t(DEFAULT_GREETINGS[config.effect])
+  if (greetingText) {
+    greeting.value = greetingText
     greetingTimer = setTimeout(() => {
       greeting.value = ''
     }, Math.min(GREETING_MS, durationSeconds * 1000))
@@ -350,14 +382,89 @@ onBeforeUnmount(cleanup)
   transform: translateX(-50%);
   z-index: 10000;
   pointer-events: none;
-  padding: 10px 28px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 32px;
   border-radius: 999px;
-  background: rgba(239, 68, 68, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background-size: 200% 200%;
+  animation: festival-greeting-shift 6s ease-in-out infinite,
+    festival-greeting-float 3s ease-in-out infinite;
   color: #fff;
   font-size: 20px;
   font-weight: 600;
   letter-spacing: 2px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.festival-greeting-deco {
+  font-size: 22px;
+  animation: festival-greeting-spin 4s ease-in-out infinite;
+}
+
+.festival-greeting-text {
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes festival-greeting-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes festival-greeting-float {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-5px);
+  }
+}
+
+@keyframes festival-greeting-spin {
+  0%,
+  100% {
+    transform: rotate(-12deg) scale(1);
+  }
+  50% {
+    transform: rotate(12deg) scale(1.15);
+  }
+}
+
+/* One palette per festival, matching the particles that fall behind it. */
+.festival-greeting--christmas {
+  background-image: linear-gradient(120deg, #b91c1c, #166534, #14532d);
+}
+
+.festival-greeting--spring_festival {
+  background-image: linear-gradient(120deg, #dc2626, #ea580c, #b45309);
+  border-color: #fbbf24;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), 0 0 18px rgba(251, 191, 36, 0.45);
+}
+
+.festival-greeting--spring_festival .festival-greeting-text {
+  text-shadow: 0 0 10px rgba(253, 230, 138, 0.9), 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.festival-greeting--mid_autumn {
+  background-image: linear-gradient(120deg, #1e3a8a, #3730a3, #4338ca);
+  border-color: rgba(253, 230, 138, 0.6);
+  color: #fef3c7;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), 0 0 18px rgba(253, 230, 138, 0.35);
+}
+
+.festival-greeting--new_year {
+  background-image: linear-gradient(120deg, #7c3aed, #db2777, #e11d48);
+}
+
+.festival-greeting--custom {
+  background-image: linear-gradient(120deg, #dc2626, #ef4444, #f59e0b);
 }
 
 .festival-fade-enter-active,

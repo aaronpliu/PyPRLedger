@@ -118,6 +118,12 @@
     "releaseDependencyGraph": "Release Dependency Graph",
     "appDiff": "App Diff"
   },
+  "festival": {
+    "greeting_christmas": "🎄 Merry Christmas!",
+    "greeting_spring_festival": "🏮 Happy Chinese New Year!",
+    "greeting_mid_autumn": "🌕 Happy Mid-Autumn Festival!",
+    "greeting_new_year": "🎊 Happy New Year!"
+  },
   "auth": {
     "login_title": "Login to PR Ledger",
     "login_subtitle": "Track and manage your code reviews",
