@@ -288,6 +288,17 @@
       <template #header>
         <div class="card-header">
           <span>{{ t('admin.systemSettings.festival') }}</span>
+          <el-tag
+            :type="festival.enabled ? 'success' : 'info'"
+            size="small"
+            data-test="festival-state"
+          >
+            {{
+              festival.enabled
+                ? t('admin.systemSettings.festivalStateOn')
+                : t('admin.systemSettings.festivalStateOff')
+            }}
+          </el-tag>
         </div>
       </template>
       <div class="setting-description">
@@ -301,8 +312,8 @@
           <el-select
             v-model="festival.effect"
             :disabled="!festival.enabled"
+            class="festival-control"
             data-test="festival-effect"
-            style="width: 260px;"
           >
             <el-option label="Christmas (Snowfall)" value="christmas" />
             <el-option label="Spring Festival (Lanterns)" value="spring_festival" />
@@ -319,8 +330,8 @@
               maxlength="60"
               :disabled="!festival.enabled"
               :placeholder="t('admin.systemSettings.festivalCustomNamePlaceholder')"
+              class="festival-control"
               data-test="festival-custom-name"
-              style="width: 320px;"
             />
             <div class="setting-description">
               {{ t('admin.systemSettings.festivalCustomNameDesc') }}
@@ -380,46 +391,46 @@
             type="daterange"
             value-format="YYYY-MM-DD"
             :disabled="!festival.enabled"
+            class="festival-control"
             data-test="festival-window"
-            style="width: 320px;"
           />
           <div class="setting-description">
             {{ t('admin.systemSettings.festivalWindowDesc') }}
           </div>
         </el-form-item>
-        <el-form-item :label="t('admin.systemSettings.festivalDuration')">
-          <el-slider
-            v-model="festival.duration_seconds"
-            :min="5"
-            :max="120"
-            :step="1"
-            :disabled="!festival.enabled"
-            show-input
-            input-size="small"
-            data-test="festival-duration"
-            style="width: 320px;"
-          />
-          <div class="setting-description">
-            {{ t('admin.systemSettings.festivalDurationDesc') }}
-          </div>
-        </el-form-item>
-        <el-form-item :label="t('admin.systemSettings.festivalSpeed')">
-          <el-slider
-            v-model="festival.speed"
-            :min="0.2"
-            :max="3"
-            :step="0.1"
-            :disabled="!festival.enabled"
-            show-input
-            input-size="small"
-            data-test="festival-speed"
-            style="width: 320px;"
-          />
-          <div class="setting-description">
-            {{ t('admin.systemSettings.festivalSpeedDesc') }}
-          </div>
-        </el-form-item>
-        <el-form-item>
+        <div class="festival-pair">
+          <el-form-item :label="t('admin.systemSettings.festivalDuration')">
+            <el-slider
+              v-model="festival.duration_seconds"
+              :min="5"
+              :max="120"
+              :step="1"
+              :disabled="!festival.enabled"
+              show-input
+              input-size="small"
+              data-test="festival-duration"
+            />
+            <div class="setting-description">
+              {{ t('admin.systemSettings.festivalDurationDesc') }}
+            </div>
+          </el-form-item>
+          <el-form-item :label="t('admin.systemSettings.festivalSpeed')">
+            <el-slider
+              v-model="festival.speed"
+              :min="0.2"
+              :max="3"
+              :step="0.1"
+              :disabled="!festival.enabled"
+              show-input
+              input-size="small"
+              data-test="festival-speed"
+            />
+            <div class="setting-description">
+              {{ t('admin.systemSettings.festivalSpeedDesc') }}
+            </div>
+          </el-form-item>
+        </div>
+        <el-form-item class="festival-actions">
           <el-button
             type="primary"
             :loading="festivalSaving"
@@ -1571,6 +1582,27 @@ const loadConfluenceSettings = async () => {
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+/* Festival animation card layout */
+.festival-control {
+  width: 100%;
+  max-width: 420px;
+}
+
+.festival-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 32px;
+}
+
+.festival-pair .el-form-item {
+  flex: 1;
+  min-width: 340px;
+}
+
+.festival-actions :deep(.el-button--danger:last-child) {
+  margin-left: auto;
 }
 
 .banner-preview-box {

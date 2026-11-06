@@ -804,6 +804,8 @@
       "festivalSpeed": "Falling Speed",
       "festivalSpeedDesc": "Scale for how fast the particles move. 1 is the default; lower values fall more gently.",
       "festivalPreview": "Preview",
+      "festivalStateOn": "Enabled",
+      "festivalStateOff": "Disabled",
       "festivalRemove": "Remove Festival",
       "festivalRemoveConfirm": "This clears the festival animation config for everyone. No animation will play until a new one is saved. Continue?",
       "festivalRemoved": "Festival animation removed",
