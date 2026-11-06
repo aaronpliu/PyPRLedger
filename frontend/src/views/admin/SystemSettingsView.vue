@@ -305,11 +305,75 @@
             style="width: 260px;"
           >
             <el-option label="Christmas (Snowfall)" value="christmas" />
-            <el-option label="Spring Festival" value="spring_festival" disabled />
-            <el-option label="Mid-Autumn" value="mid_autumn" disabled />
-            <el-option label="New Year" value="new_year" disabled />
+            <el-option label="Spring Festival (Lanterns)" value="spring_festival" />
+            <el-option label="Mid-Autumn (Moon & Petals)" value="mid_autumn" />
+            <el-option label="New Year (Confetti)" value="new_year" />
+            <el-option :label="t('admin.systemSettings.festivalCustomEffect')" value="custom" />
           </el-select>
         </el-form-item>
+
+        <template v-if="festival.effect === 'custom'">
+          <el-form-item :label="t('admin.systemSettings.festivalCustomName')">
+            <el-input
+              v-model="festival.custom_name"
+              maxlength="60"
+              :disabled="!festival.enabled"
+              :placeholder="t('admin.systemSettings.festivalCustomNamePlaceholder')"
+              data-test="festival-custom-name"
+              style="width: 320px;"
+            />
+            <div class="setting-description">
+              {{ t('admin.systemSettings.festivalCustomNameDesc') }}
+            </div>
+          </el-form-item>
+          <el-form-item :label="t('admin.systemSettings.festivalCustomEmoji')">
+            <el-input
+              v-model="festival.custom_emoji"
+              maxlength="8"
+              :disabled="!festival.enabled"
+              placeholder="🎉"
+              data-test="festival-custom-emoji"
+              style="width: 120px;"
+            />
+            <div class="setting-description">
+              {{ t('admin.systemSettings.festivalCustomEmojiDesc') }}
+            </div>
+          </el-form-item>
+          <el-form-item :label="t('admin.systemSettings.festivalCustomColors')">
+            <div class="custom-colors">
+              <div
+                v-for="(_, idx) in festival.custom_colors"
+                :key="idx"
+                class="custom-color-row"
+              >
+                <el-color-picker
+                  v-model="festival.custom_colors[idx]"
+                  :disabled="!festival.enabled"
+                  :data-test="`festival-custom-color-${idx}`"
+                />
+                <el-button
+                  link
+                  type="danger"
+                  :disabled="!festival.enabled"
+                  @click="festival.custom_colors.splice(idx, 1)"
+                >
+                  ✕
+                </el-button>
+              </div>
+              <el-button
+                size="small"
+                :disabled="!festival.enabled || festival.custom_colors.length >= 6"
+                data-test="festival-custom-color-add"
+                @click="festival.custom_colors.push('#ef4444')"
+              >
+                {{ t('admin.systemSettings.festivalCustomColorsAdd') }}
+              </el-button>
+            </div>
+            <div class="setting-description">
+              {{ t('admin.systemSettings.festivalCustomColorsDesc') }}
+            </div>
+          </el-form-item>
+        </template>
         <el-form-item :label="t('admin.systemSettings.festivalWindow')">
           <el-date-picker
             v-model="festivalRange"
@@ -852,6 +916,9 @@ const festival = ref<FestivalConfig>({
   end_date: '',
   duration_seconds: 15,
   speed: 1.0,
+  custom_name: '',
+  custom_emoji: '',
+  custom_colors: [],
 })
 const festivalSaving = ref(false)
 const festivalRange = computed<[string, string] | undefined>({
@@ -1444,6 +1511,20 @@ const loadConfluenceSettings = async () => {
   color: var(--el-text-color-secondary);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.custom-colors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.custom-color-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .banner-preview-box {

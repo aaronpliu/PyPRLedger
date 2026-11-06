@@ -235,13 +235,20 @@ export interface BannersConfig {
   banners: BannerItem[]
 }
 
-export type FestivalEffect = 'christmas' | 'spring_festival' | 'mid_autumn' | 'new_year'
+export type FestivalEffect =
+  | 'christmas'
+  | 'spring_festival'
+  | 'mid_autumn'
+  | 'new_year'
+  | 'custom'
 
 /**
  * The festival animation config. `start_date`/`end_date` are `YYYY-MM-DD` and
  * both are required when enabled; the animation plays while today is inside
  * the window. `duration_seconds` caps how long one play lasts (5-120), and
- * `speed` scales how fast the particles move (0.2x - 3x, 1 = default).
+ * `speed` scales how fast the particles move (0.2x - 3x, 1 = default). The
+ * `custom_*` fields only matter for the `custom` effect: a greeting name, the
+ * emoji used as particles, and up to six confetti colors.
  */
 export interface FestivalConfig {
   enabled: boolean
@@ -250,6 +257,9 @@ export interface FestivalConfig {
   end_date: string
   duration_seconds: number
   speed: number
+  custom_name: string
+  custom_emoji: string
+  custom_colors: string[]
 }
 
 /** A banner with the fields an empty one starts from. */

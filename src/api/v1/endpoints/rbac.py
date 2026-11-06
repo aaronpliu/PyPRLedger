@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime
 from typing import Annotated
 
@@ -441,9 +442,10 @@ MAX_BANNER_CONTENT_LENGTH = 500
 MAX_BANNER_LINK_LENGTH = 500
 
 FESTIVAL_SETTING_KEY = "festival_animation"
-FESTIVAL_EFFECTS = ("christmas", "spring_festival", "mid_autumn", "new_year")
+FESTIVAL_EFFECTS = ("christmas", "spring_festival", "mid_autumn", "new_year", "custom")
 FESTIVAL_DURATION_RANGE = (5, 120)
 FESTIVAL_SPEED_RANGE = (0.2, 3.0)
+FESTIVAL_MAX_CUSTOM_COLORS = 6
 
 
 def _clamp_number(value: object, low: float, high: float, default: float) -> float:
@@ -469,6 +471,16 @@ def _normalize_festival(raw: dict) -> dict:
         raise ValueError("start_date and end_date are required when enabled")
     if start_date and end_date and start_date > end_date:
         raise ValueError("start_date must not be after end_date")
+
+    custom_name = str(raw.get("custom_name", "") or "").strip()[:60]
+    custom_emoji = str(raw.get("custom_emoji", "") or "").strip()[:8]
+    raw_colors = raw.get("custom_colors")
+    custom_colors = []
+    if isinstance(raw_colors, list):
+        for color in raw_colors[:FESTIVAL_MAX_CUSTOM_COLORS]:
+            if isinstance(color, str) and re.fullmatch(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})", color):
+                custom_colors.append(color.lower())
+
     duration_low, duration_high = FESTIVAL_DURATION_RANGE
     speed_low, speed_high = FESTIVAL_SPEED_RANGE
     return {
@@ -480,6 +492,9 @@ def _normalize_festival(raw: dict) -> dict:
             raw.get("duration_seconds"), duration_low, duration_high, 15
         ),
         "speed": _clamp_number(raw.get("speed"), speed_low, speed_high, 1.0),
+        "custom_name": custom_name,
+        "custom_emoji": custom_emoji or ("🎉" if effect == "custom" else ""),
+        "custom_colors": custom_colors,
     }
 
 
@@ -719,6 +734,9 @@ async def get_festival_settings(
                 "end_date": "",
                 "duration_seconds": 15,
                 "speed": 1.0,
+                "custom_name": "",
+                "custom_emoji": "",
+                "custom_colors": [],
             }
         return {"festival": _normalize_festival(config)}
     except Exception as e:
