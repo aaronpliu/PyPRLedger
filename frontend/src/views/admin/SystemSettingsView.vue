@@ -435,6 +435,9 @@
           >
             {{ t('admin.systemSettings.festivalPreview') }}
           </el-button>
+          <el-button type="danger" plain data-test="festival-remove" @click="removeFestival">
+            {{ t('admin.systemSettings.festivalRemove') }}
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -1466,10 +1469,53 @@ const saveFestivalSettings = async () => {
   }
   festivalSaving.value = true
   try {
-    await rbacApi.updateFestivalAnimation(festival.value)
+    // A cleared color picker hands back null; the config only carries real colors.
+    const payload: FestivalConfig = {
+      ...festival.value,
+      custom_colors: (festival.value.custom_colors ?? []).filter(
+        (color): color is string => typeof color === 'string' && color.length > 0
+      ),
+    }
+    const response = await rbacApi.updateFestivalAnimation(payload)
+    // The server fills defaults (e.g. a missing custom emoji); show what is stored.
+    if (response?.festival) festival.value = { ...festival.value, ...response.festival }
     ElMessage.success(t('admin.systemSettings.festivalSaved'))
   } catch (error: any) {
     console.error('Failed to save festival settings:', error)
+    ElMessage.error(error.response?.data?.detail || t('admin.systemSettings.saveFailed'))
+  } finally {
+    festivalSaving.value = false
+  }
+}
+
+/** Clear the config for everyone: no animation plays until a new one is saved. */
+const removeFestival = async () => {
+  try {
+    await ElMessageBox.confirm(
+      t('admin.systemSettings.festivalRemoveConfirm'),
+      t('admin.systemSettings.festivalRemove'),
+      { type: 'warning', confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel') }
+    )
+  } catch {
+    return
+  }
+  festivalSaving.value = true
+  try {
+    const response = await rbacApi.updateFestivalAnimation({
+      enabled: false,
+      effect: 'christmas',
+      start_date: '',
+      end_date: '',
+      duration_seconds: 15,
+      speed: 1.0,
+      custom_name: '',
+      custom_emoji: '',
+      custom_colors: [],
+    })
+    if (response?.festival) festival.value = { ...festival.value, ...response.festival }
+    ElMessage.success(t('admin.systemSettings.festivalRemoved'))
+  } catch (error: any) {
+    console.error('Failed to remove festival settings:', error)
     ElMessage.error(error.response?.data?.detail || t('admin.systemSettings.saveFailed'))
   } finally {
     festivalSaving.value = false
