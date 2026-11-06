@@ -440,6 +440,48 @@ MAX_BANNERS = 20
 MAX_BANNER_CONTENT_LENGTH = 500
 MAX_BANNER_LINK_LENGTH = 500
 
+FESTIVAL_SETTING_KEY = "festival_animation"
+FESTIVAL_EFFECTS = ("christmas", "spring_festival", "mid_autumn", "new_year")
+FESTIVAL_DURATION_RANGE = (5, 120)
+FESTIVAL_SPEED_RANGE = (0.2, 3.0)
+
+
+def _clamp_number(value: object, low: float, high: float, default: float) -> float:
+    """Read one numeric knob, falling back to the default when it is absent or junk."""
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(low, min(high, number))
+
+
+def _normalize_festival(raw: dict) -> dict:
+    """Validate one festival animation config and fill the defaults it omits."""
+    if not isinstance(raw, dict):
+        raise ValueError("festival config must be an object")
+    enabled = bool(raw.get("enabled", False))
+    effect = raw.get("effect", "christmas")
+    if effect not in FESTIVAL_EFFECTS:
+        raise ValueError(f"effect must be one of {', '.join(FESTIVAL_EFFECTS)}")
+    start_date = str(raw.get("start_date", "") or "").strip()
+    end_date = str(raw.get("end_date", "") or "").strip()
+    if enabled and (not start_date or not end_date):
+        raise ValueError("start_date and end_date are required when enabled")
+    if start_date and end_date and start_date > end_date:
+        raise ValueError("start_date must not be after end_date")
+    duration_low, duration_high = FESTIVAL_DURATION_RANGE
+    speed_low, speed_high = FESTIVAL_SPEED_RANGE
+    return {
+        "enabled": enabled,
+        "effect": effect,
+        "start_date": start_date,
+        "end_date": end_date,
+        "duration_seconds": _clamp_number(
+            raw.get("duration_seconds"), duration_low, duration_high, 15
+        ),
+        "speed": _clamp_number(raw.get("speed"), speed_low, speed_high, 1.0),
+    }
+
 
 def _stable_id(*parts: str) -> str:
     """A short id that is the same every time it is derived from the same parts."""
@@ -650,6 +692,80 @@ async def update_banner_settings(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update banner settings: {str(e)}",
+        ) from e
+
+
+@router.get(
+    "/settings/festival",
+    response_model=dict,
+    summary="Get festival animation config",
+    description="Returns the festival animation config shown to every visitor. Public endpoint, no auth required.",
+)
+async def get_festival_settings(
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict:
+    """Get festival animation configuration"""
+    try:
+        stored = await rbac_service.get_setting(FESTIVAL_SETTING_KEY, default_value="")
+        try:
+            config = json.loads(stored) if stored else None
+        except json.JSONDecodeError:
+            config = None
+        if not isinstance(config, dict):
+            config = {
+                "enabled": False,
+                "effect": "christmas",
+                "start_date": "",
+                "end_date": "",
+                "duration_seconds": 15,
+                "speed": 1.0,
+            }
+        return {"festival": _normalize_festival(config)}
+    except Exception as e:
+        logger.error(f"Failed to get festival settings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get festival settings",
+        ) from e
+
+
+@router.put(
+    "/settings/festival",
+    response_model=dict,
+    summary="Update festival animation config",
+    description="Replace the festival animation config. Requires manage settings permission.",
+)
+async def update_festival_settings(
+    setting_data: dict,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict:
+    """Replace the festival animation configuration"""
+    await rbac_service.require_permission(current_user.id, "manage", "settings")
+
+    try:
+        raw = setting_data.get("festival") if isinstance(setting_data.get("festival"), dict) else setting_data
+        config = _normalize_festival(raw)
+
+        await rbac_service.get_setting(FESTIVAL_SETTING_KEY, default_value="")
+
+        await rbac_service.update_setting(
+            setting_key=FESTIVAL_SETTING_KEY,
+            setting_value=json.dumps(config, ensure_ascii=False),
+            updated_by=current_user.id,
+            description="Festival animation config, as a JSON object",
+        )
+        return {"message": "Festival settings updated successfully", "festival": config}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        logger.error(f"Failed to update festival settings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update festival settings: {str(e)}",
         ) from e
 
 

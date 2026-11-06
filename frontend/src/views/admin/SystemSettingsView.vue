@@ -287,6 +287,97 @@
     <el-card shadow="hover" style="margin-top: 20px;">
       <template #header>
         <div class="card-header">
+          <span>{{ t('admin.systemSettings.festival') }}</span>
+        </div>
+      </template>
+      <div class="setting-description">
+        {{ t('admin.systemSettings.festivalDesc') }}
+      </div>
+      <el-form label-width="150px" data-test="festival-form">
+        <el-form-item :label="t('admin.systemSettings.festivalEnabled')">
+          <el-switch v-model="festival.enabled" data-test="festival-enabled" />
+        </el-form-item>
+        <el-form-item :label="t('admin.systemSettings.festivalEffect')">
+          <el-select
+            v-model="festival.effect"
+            :disabled="!festival.enabled"
+            data-test="festival-effect"
+            style="width: 260px;"
+          >
+            <el-option label="Christmas (Snowfall)" value="christmas" />
+            <el-option label="Spring Festival" value="spring_festival" disabled />
+            <el-option label="Mid-Autumn" value="mid_autumn" disabled />
+            <el-option label="New Year" value="new_year" disabled />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('admin.systemSettings.festivalWindow')">
+          <el-date-picker
+            v-model="festivalRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            :disabled="!festival.enabled"
+            data-test="festival-window"
+            style="width: 320px;"
+          />
+          <div class="setting-description">
+            {{ t('admin.systemSettings.festivalWindowDesc') }}
+          </div>
+        </el-form-item>
+        <el-form-item :label="t('admin.systemSettings.festivalDuration')">
+          <el-slider
+            v-model="festival.duration_seconds"
+            :min="5"
+            :max="120"
+            :step="1"
+            :disabled="!festival.enabled"
+            show-input
+            input-size="small"
+            data-test="festival-duration"
+            style="width: 320px;"
+          />
+          <div class="setting-description">
+            {{ t('admin.systemSettings.festivalDurationDesc') }}
+          </div>
+        </el-form-item>
+        <el-form-item :label="t('admin.systemSettings.festivalSpeed')">
+          <el-slider
+            v-model="festival.speed"
+            :min="0.2"
+            :max="3"
+            :step="0.1"
+            :disabled="!festival.enabled"
+            show-input
+            input-size="small"
+            data-test="festival-speed"
+            style="width: 320px;"
+          />
+          <div class="setting-description">
+            {{ t('admin.systemSettings.festivalSpeedDesc') }}
+          </div>
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            type="primary"
+            :loading="festivalSaving"
+            data-test="festival-save"
+            @click="saveFestivalSettings"
+          >
+            {{ t('common.save') }}
+          </el-button>
+          <el-button
+            :disabled="!festival.enabled"
+            data-test="festival-preview"
+            @click="previewFestival"
+          >
+            {{ t('admin.systemSettings.festivalPreview') }}
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <el-card shadow="hover" style="margin-top: 20px;">
+      <template #header>
+        <div class="card-header">
           <span>{{ t('admin.systemSettings.confluence') }}</span>
         </div>
       </template>
@@ -725,6 +816,7 @@ import {
   rbacApi,
   type BannerItem,
   type BannerLevel,
+  type FestivalConfig,
   type ConfluenceProjectTarget,
   type ConfluenceRepositoryTarget,
   type ConfluenceResolvedTarget,
@@ -752,6 +844,27 @@ const llmSaving = ref(false)
 
 const banners = ref<BannerItem[]>([])
 const bannerSaving = ref(false)
+
+const festival = ref<FestivalConfig>({
+  enabled: false,
+  effect: 'christmas',
+  start_date: '',
+  end_date: '',
+  duration_seconds: 15,
+  speed: 1.0,
+})
+const festivalSaving = ref(false)
+const festivalRange = computed<[string, string] | undefined>({
+  get: () =>
+    festival.value.start_date && festival.value.end_date
+      ? ([festival.value.start_date, festival.value.end_date] as [string, string])
+      : undefined,
+  set: (value: unknown) => {
+    const range = value as [string, string] | null | undefined
+    festival.value.start_date = range?.[0] ?? ''
+    festival.value.end_date = range?.[1] ?? ''
+  },
+})
 
 // Adding and editing share one dialog, so the list stays the only thing on the page.
 const editorVisible = ref(false)
@@ -1186,6 +1299,7 @@ onMounted(async () => {
     loadSettings(),
     loadLlmSettings(),
     loadBannerSettings(),
+    loadFestivalSettings(),
     loadConfluenceSettings(),
   ])
 })
@@ -1265,6 +1379,39 @@ const loadBannerSettings = async () => {
     console.error('Failed to load banner settings:', error)
     ElMessage.error(t('admin.systemSettings.loadFailed'))
   }
+}
+
+const loadFestivalSettings = async () => {
+  try {
+    const config = await rbacApi.getFestivalAnimation()
+    // Older stored configs predate the knobs; the defaults fill them in.
+    if (config?.festival) festival.value = { ...festival.value, ...config.festival }
+  } catch (error) {
+    console.error('Failed to load festival settings:', error)
+    ElMessage.error(t('admin.systemSettings.loadFailed'))
+  }
+}
+
+const saveFestivalSettings = async () => {
+  if (festival.value.enabled && (!festival.value.start_date || !festival.value.end_date)) {
+    ElMessage.warning(t('admin.systemSettings.festivalWindowRequired'))
+    return
+  }
+  festivalSaving.value = true
+  try {
+    await rbacApi.updateFestivalAnimation(festival.value)
+    ElMessage.success(t('admin.systemSettings.festivalSaved'))
+  } catch (error: any) {
+    console.error('Failed to save festival settings:', error)
+    ElMessage.error(error.response?.data?.detail || t('admin.systemSettings.saveFailed'))
+  } finally {
+    festivalSaving.value = false
+  }
+}
+
+/** Play the animation right here with the form's parameters, without saving first. */
+const previewFestival = () => {
+  window.dispatchEvent(new CustomEvent('festival-preview', { detail: festival.value }))
 }
 
 const loadConfluenceSettings = async () => {

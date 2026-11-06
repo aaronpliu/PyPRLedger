@@ -180,6 +180,20 @@ export const rbacApi = {
     return request.put('/rbac/settings/banner', data)
   },
 
+  // ===== Festival Animation APIs =====
+
+  /** Get the festival animation config (public, no auth required) */
+  getFestivalAnimation(): Promise<{ festival: FestivalConfig }> {
+    return request.get('/rbac/settings/festival')
+  },
+
+  /** Replace the festival animation config (admin only) */
+  updateFestivalAnimation(
+    data: FestivalConfig
+  ): Promise<{ message: string; festival: FestivalConfig }> {
+    return request.put('/rbac/settings/festival', data)
+  },
+
   // ===== Confluence Publishing Target APIs =====
 
   /** Get where each project and repository publishes, and what each resolves to */
@@ -219,6 +233,23 @@ export interface BannerItem {
 
 export interface BannersConfig {
   banners: BannerItem[]
+}
+
+export type FestivalEffect = 'christmas' | 'spring_festival' | 'mid_autumn' | 'new_year'
+
+/**
+ * The festival animation config. `start_date`/`end_date` are `YYYY-MM-DD` and
+ * both are required when enabled; the animation plays while today is inside
+ * the window. `duration_seconds` caps how long one play lasts (5-120), and
+ * `speed` scales how fast the particles move (0.2x - 3x, 1 = default).
+ */
+export interface FestivalConfig {
+  enabled: boolean
+  effect: FestivalEffect
+  start_date: string
+  end_date: string
+  duration_seconds: number
+  speed: number
 }
 
 /** A banner with the fields an empty one starts from. */
