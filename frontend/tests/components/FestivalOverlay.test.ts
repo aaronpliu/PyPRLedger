@@ -12,8 +12,16 @@ vi.mock('@/api/rbac', () => ({
 
 const mountedWrappers: any[] = []
 
+/** The overlay compares dates in local time; toISOString would be UTC. */
+function localToday(): string {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
 function config(patch: Partial<FestivalConfig> = {}): FestivalConfig {
   return {
+    id: 'festival-1',
     enabled: false,
     effect: 'christmas',
     start_date: '',
@@ -36,18 +44,39 @@ async function mountOverlay() {
 }
 
 beforeEach(() => {
-  vi.mocked(rbacApi.getFestivalAnimation).mockResolvedValue({ festival: config() })
+  vi.mocked(rbacApi.getFestivalAnimation).mockResolvedValue({ festivals: [] })
 })
 
 afterEach(() => {
   while (mountedWrappers.length) {
     mountedWrappers.pop()?.unmount()
   }
-  window.dispatchEvent(new Event('festival-unmount-helper'))
 })
 
 describe('FestivalOverlay', () => {
-  it('stays hidden when the festival is disabled', async () => {
+  it('stays hidden when no festival is configured', async () => {
+    const wrapper = await mountOverlay()
+    expect(wrapper.find('canvas').exists()).toBe(false)
+  })
+
+  it('plays the first entry whose window contains today', async () => {
+    const today = localToday()
+    vi.mocked(rbacApi.getFestivalAnimation).mockResolvedValue({
+      festivals: [
+        config({ id: 'off', enabled: false }),
+        config({ id: 'in-window', enabled: true, start_date: today, end_date: today }),
+      ],
+    })
+    const wrapper = await mountOverlay()
+    await flushPromises()
+    expect(wrapper.find('canvas').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Merry Christmas')
+  })
+
+  it('skips entries whose window does not contain today', async () => {
+    vi.mocked(rbacApi.getFestivalAnimation).mockResolvedValue({
+      festivals: [config({ enabled: true, start_date: '2000-01-01', end_date: '2000-01-02' })],
+    })
     const wrapper = await mountOverlay()
     expect(wrapper.find('canvas').exists()).toBe(false)
   })

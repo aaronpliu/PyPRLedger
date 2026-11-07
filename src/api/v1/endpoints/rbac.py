@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import re
+import uuid
 from datetime import datetime
 from typing import Annotated
 
@@ -446,6 +447,7 @@ FESTIVAL_EFFECTS = ("christmas", "spring_festival", "mid_autumn", "new_year", "c
 FESTIVAL_DURATION_RANGE = (5, 120)
 FESTIVAL_SPEED_RANGE = (0.2, 3.0)
 FESTIVAL_MAX_CUSTOM_COLORS = 6
+FESTIVAL_MAX_ITEMS = 10
 
 
 def _clamp_number(value: object, low: float, high: float, default: float) -> float:
@@ -484,6 +486,9 @@ def _normalize_festival(raw: dict) -> dict:
     duration_low, duration_high = FESTIVAL_DURATION_RANGE
     speed_low, speed_high = FESTIVAL_SPEED_RANGE
     return {
+        # A saved-without-id item gets one so the admin list and the overlay's
+        # per-config replay mark can tell the entries apart.
+        "id": str(raw.get("id") or "").strip() or f"festival-{uuid.uuid4().hex[:8]}",
         "enabled": enabled,
         "effect": effect,
         "start_date": start_date,
@@ -496,6 +501,37 @@ def _normalize_festival(raw: dict) -> dict:
         "custom_emoji": custom_emoji or ("🎉" if effect == "custom" else ""),
         "custom_colors": custom_colors,
     }
+
+
+def _parse_stored_festivals(value: str) -> list[dict]:
+    """Read the stored config as a list, tolerating every shape it has had.
+
+    The setting started as a single object; anything unreadable is reported and
+    treated as absent so a hand-edited row cannot take the settings page down.
+    """
+    if not value or not value.strip():
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        logger.warning("Festival settings are not valid JSON; treating them as absent")
+        return []
+    # A stored single object is the pre-list shape; fold it into a one-item list.
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    if not isinstance(parsed, list):
+        logger.warning("Festival settings are not a list; treating them as absent")
+        return []
+
+    festivals: list[dict] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        try:
+            festivals.append(_normalize_festival(item))
+        except ValueError as exc:
+            logger.warning("Skipping an unusable stored festival: %s", exc)
+    return festivals
 
 
 def _stable_id(*parts: str) -> str:
@@ -713,32 +749,16 @@ async def update_banner_settings(
 @router.get(
     "/settings/festival",
     response_model=dict,
-    summary="Get festival animation config",
-    description="Returns the festival animation config shown to every visitor. Public endpoint, no auth required.",
+    summary="Get festival animation configs",
+    description="Returns the festival animation configs shown to every visitor. Public endpoint, no auth required.",
 )
 async def get_festival_settings(
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> dict:
-    """Get festival animation configuration"""
+    """Get festival animation configurations"""
     try:
         stored = await rbac_service.get_setting(FESTIVAL_SETTING_KEY, default_value="")
-        try:
-            config = json.loads(stored) if stored else None
-        except json.JSONDecodeError:
-            config = None
-        if not isinstance(config, dict):
-            config = {
-                "enabled": False,
-                "effect": "christmas",
-                "start_date": "",
-                "end_date": "",
-                "duration_seconds": 15,
-                "speed": 1.0,
-                "custom_name": "",
-                "custom_emoji": "",
-                "custom_colors": [],
-            }
-        return {"festival": _normalize_festival(config)}
+        return {"festivals": _parse_stored_festivals(stored)}
     except Exception as e:
         logger.error(f"Failed to get festival settings: {e}")
         raise HTTPException(
@@ -750,30 +770,46 @@ async def get_festival_settings(
 @router.put(
     "/settings/festival",
     response_model=dict,
-    summary="Update festival animation config",
-    description="Replace the festival animation config. Requires manage settings permission.",
+    summary="Update festival animation configs",
+    description="Replace the festival animation config list. Requires manage settings permission.",
 )
 async def update_festival_settings(
     setting_data: dict,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> dict:
-    """Replace the festival animation configuration"""
+    """Replace the festival animation configuration list"""
     await rbac_service.require_permission(current_user.id, "manage", "settings")
 
     try:
-        raw = setting_data.get("festival") if isinstance(setting_data.get("festival"), dict) else setting_data
-        config = _normalize_festival(raw)
+        raw_items = setting_data.get("festivals")
+        if raw_items is None:
+            # A page that predates the list shape sends one festival's fields.
+            # Only a complete one is accepted, so a partial write cannot wipe
+            # the list.
+            if "effect" not in setting_data:
+                raise ValueError("festivals is required")
+            raw_items = [setting_data]
 
+        if not isinstance(raw_items, list):
+            raise ValueError("festivals must be a list")
+        if len(raw_items) > FESTIVAL_MAX_ITEMS:
+            raise ValueError(f"at most {FESTIVAL_MAX_ITEMS} festival entries are supported")
+
+        festivals = [_normalize_festival(item) for item in raw_items]
+
+        # The settings store only updates a row it already has, and reading one
+        # is how it comes into existence (`RBACService.get_setting` creates it
+        # on a miss). Without this, the first save on a fresh install fails.
         await rbac_service.get_setting(FESTIVAL_SETTING_KEY, default_value="")
 
         await rbac_service.update_setting(
             setting_key=FESTIVAL_SETTING_KEY,
-            setting_value=json.dumps(config, ensure_ascii=False),
+            setting_value=json.dumps(festivals, ensure_ascii=False),
             updated_by=current_user.id,
-            description="Festival animation config, as a JSON object",
+            description="Festival animation configs, as a JSON array",
         )
-        return {"message": "Festival settings updated successfully", "festival": config}
+        return {"message": "Festival settings updated successfully", "festivals": festivals}
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

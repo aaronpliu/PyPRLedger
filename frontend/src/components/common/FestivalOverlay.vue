@@ -106,6 +106,7 @@ function clamp(value: number | undefined, low: number, high: number, fallback: n
 /** What defines one play: a changed config reads as a play the visitor has not seen. */
 function fingerprint(config: FestivalConfig): string {
   return [
+    config.id,
     config.effect,
     config.start_date,
     config.end_date,
@@ -352,11 +353,16 @@ onMounted(async () => {
 
   let config: FestivalConfig | null = null
   try {
-    config = (await rbacApi.getFestivalAnimation()).festival
+    // Several festivals can be configured; the first enabled one whose window
+    // contains today wins (the admin's list order is the priority).
+    config =
+      (await rbacApi.getFestivalAnimation()).festivals.find(
+        (item) => item.enabled && withinWindow(item)
+      ) ?? null
   } catch {
     return
   }
-  if (!config?.enabled || !withinWindow(config)) return
+  if (!config) return
 
   const mark = `${todayIso()}|${fingerprint(config)}`
   if (sessionStorage.getItem(SESSION_KEY) === mark) return

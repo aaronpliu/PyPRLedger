@@ -288,169 +288,255 @@
       <template #header>
         <div class="card-header">
           <span>{{ t('admin.systemSettings.festival') }}</span>
-          <el-tag
-            :type="festival.enabled ? 'success' : 'info'"
-            size="small"
-            data-test="festival-state"
-          >
-            {{
-              festival.enabled
-                ? t('admin.systemSettings.festivalStateOn')
-                : t('admin.systemSettings.festivalStateOff')
-            }}
+          <el-tag v-if="festivalActiveToday" type="success" size="small" data-test="festival-state">
+            {{ t('admin.systemSettings.festivalActiveToday') }}
           </el-tag>
         </div>
       </template>
       <div class="setting-description">
         {{ t('admin.systemSettings.festivalDesc') }}
       </div>
-      <el-form label-width="150px" data-test="festival-form">
-        <el-form-item :label="t('admin.systemSettings.festivalEnabled')">
-          <el-switch v-model="festival.enabled" data-test="festival-enabled" />
-        </el-form-item>
-        <el-form-item :label="t('admin.systemSettings.festivalEffect')">
-          <el-select
-            v-model="festival.effect"
-            :disabled="!festival.enabled"
-            class="festival-control"
-            data-test="festival-effect"
-          >
-            <el-option label="Christmas (Snowfall)" value="christmas" />
-            <el-option label="Spring Festival (Lanterns)" value="spring_festival" />
-            <el-option label="Mid-Autumn (Moon & Petals)" value="mid_autumn" />
-            <el-option label="New Year (Confetti)" value="new_year" />
-            <el-option :label="t('admin.systemSettings.festivalCustomEffect')" value="custom" />
-          </el-select>
-        </el-form-item>
 
-        <template v-if="festival.effect === 'custom'">
-          <el-form-item :label="t('admin.systemSettings.festivalCustomName')">
-            <el-input
-              v-model="festival.custom_name"
-              maxlength="60"
-              :disabled="!festival.enabled"
-              :placeholder="t('admin.systemSettings.festivalCustomNamePlaceholder')"
-              class="festival-control"
-              data-test="festival-custom-name"
+      <!-- Every festival in one list, so several can play across the year;
+           adding and editing happen in a dialog. -->
+      <div class="banner-toolbar">
+        <el-button
+          type="primary"
+          :disabled="festivals.length >= 10"
+          data-test="festival-add"
+          @click="openFestivalEditor()"
+        >
+          {{ t('admin.systemSettings.festivalAdd') }}
+        </el-button>
+      </div>
+
+      <el-empty
+        v-if="festivals.length === 0"
+        :description="t('admin.systemSettings.festivalEmpty')"
+        :image-size="60"
+      />
+
+      <el-table v-else :data="festivals" row-key="id">
+        <el-table-column :label="t('admin.systemSettings.festivalEffect')" min-width="170">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.effect === 'custom' ? 'warning' : 'info'">
+              {{ effectLabel(row.effect) }}
+            </el-tag>
+            <span v-if="row.effect === 'custom' && row.custom_name" class="festival-name-cell">
+              {{ row.custom_name }}
+            </span>
+          </template>
+        </el-table-column>
+
+        <el-table-column :label="t('admin.systemSettings.festivalWindow')" min-width="190">
+          <template #default="{ row }">
+            <span class="banner-window-text">{{ festivalWindowLabel(row) }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column :label="t('admin.systemSettings.festivalPlayback')" width="130" align="center">
+          <template #default="{ row }">{{ row.duration_seconds }}s × {{ row.speed }}x</template>
+        </el-table-column>
+
+        <el-table-column :label="t('admin.systemSettings.bannerStatus')" width="210">
+          <template #default="{ row }">
+            <!-- One-way bound on purpose: the switch shows the stored state, so a
+                 write that fails leaves it where it was instead of lying. -->
+            <el-switch
+              :model-value="row.enabled"
+              :disabled="festivalSaving"
+              :active-text="t('common.enabled')"
+              :inactive-text="t('common.disabled')"
+              data-test="festival-enabled"
+              @change="(value: string | number | boolean) => toggleFestivalEnabled(row, value as boolean)"
             />
-            <div class="setting-description">
-              {{ t('admin.systemSettings.festivalCustomNameDesc') }}
-            </div>
-          </el-form-item>
-          <el-form-item :label="t('admin.systemSettings.festivalCustomEmoji')">
-            <el-input
-              v-model="festival.custom_emoji"
-              maxlength="8"
-              :disabled="!festival.enabled"
-              placeholder="🎉"
-              data-test="festival-custom-emoji"
-              style="width: 120px;"
-            />
-            <div class="setting-description">
-              {{ t('admin.systemSettings.festivalCustomEmojiDesc') }}
-            </div>
-          </el-form-item>
-          <el-form-item :label="t('admin.systemSettings.festivalCustomColors')">
-            <div class="custom-colors">
-              <div
-                v-for="(_, idx) in festival.custom_colors"
-                :key="idx"
-                class="custom-color-row"
+          </template>
+        </el-table-column>
+
+        <el-table-column
+          :label="t('admin.systemSettings.bannerActions')"
+          width="120"
+          align="right"
+        >
+          <!-- Icon-only buttons with tooltips: they stay on one line where text
+               buttons wrapped. -->
+          <template #default="{ row }">
+            <el-tooltip :content="t('admin.systemSettings.festivalPreview')" placement="top">
+              <el-button
+                link
+                type="primary"
+                :disabled="!row.enabled"
+                data-test="festival-preview"
+                @click="previewFestival(row)"
               >
-                <el-color-picker
-                  v-model="festival.custom_colors[idx]"
-                  :disabled="!festival.enabled"
-                  :data-test="`festival-custom-color-${idx}`"
-                />
-                <el-button
-                  link
-                  type="danger"
-                  :disabled="!festival.enabled"
-                  @click="festival.custom_colors.splice(idx, 1)"
+                <el-icon><VideoPlay /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="t('common.edit')" placement="top">
+              <el-button link type="primary" data-test="festival-edit" @click="openFestivalEditor(row)">
+                <el-icon><Edit /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="t('common.delete')" placement="top">
+              <el-button link type="danger" data-test="festival-delete" @click="confirmFestivalRemove(row)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- Add and edit share one dialog -->
+      <el-dialog
+        v-model="festivalEditorVisible"
+        :title="
+          festivalEditingId
+            ? t('admin.systemSettings.festivalEdit')
+            : t('admin.systemSettings.festivalAdd')
+        "
+        width="560px"
+        :close-on-click-modal="false"
+      >
+        <el-form v-if="festivalEditing" label-width="150px" data-test="festival-form">
+          <el-form-item :label="t('admin.systemSettings.festivalEnabled')">
+            <el-switch v-model="festivalEditing.enabled" data-test="festival-enabled" />
+          </el-form-item>
+          <el-form-item :label="t('admin.systemSettings.festivalEffect')">
+            <el-select
+              v-model="festivalEditing.effect"
+              :disabled="!festivalEditing.enabled"
+              class="festival-control"
+              data-test="festival-effect"
+            >
+              <el-option :label="t('admin.systemSettings.festivalEffectChristmas')" value="christmas" />
+              <el-option :label="t('admin.systemSettings.festivalEffectSpringFestival')" value="spring_festival" />
+              <el-option :label="t('admin.systemSettings.festivalEffectMidAutumn')" value="mid_autumn" />
+              <el-option :label="t('admin.systemSettings.festivalEffectNewYear')" value="new_year" />
+              <el-option :label="t('admin.systemSettings.festivalCustomEffect')" value="custom" />
+            </el-select>
+          </el-form-item>
+
+          <template v-if="festivalEditing.effect === 'custom'">
+            <el-form-item :label="t('admin.systemSettings.festivalCustomName')">
+              <el-input
+                v-model="festivalEditing.custom_name"
+                maxlength="60"
+                :disabled="!festivalEditing.enabled"
+                :placeholder="t('admin.systemSettings.festivalCustomNamePlaceholder')"
+                class="festival-control"
+                data-test="festival-custom-name"
+              />
+              <div class="setting-description">
+                {{ t('admin.systemSettings.festivalCustomNameDesc') }}
+              </div>
+            </el-form-item>
+            <el-form-item :label="t('admin.systemSettings.festivalCustomEmoji')">
+              <el-input
+                v-model="festivalEditing.custom_emoji"
+                maxlength="8"
+                :disabled="!festivalEditing.enabled"
+                placeholder="🎉"
+                data-test="festival-custom-emoji"
+                style="width: 120px;"
+              />
+              <div class="setting-description">
+                {{ t('admin.systemSettings.festivalCustomEmojiDesc') }}
+              </div>
+            </el-form-item>
+            <el-form-item :label="t('admin.systemSettings.festivalCustomColors')">
+              <div class="custom-colors">
+                <div
+                  v-for="(_, idx) in festivalEditing.custom_colors"
+                  :key="idx"
+                  class="custom-color-row"
                 >
-                  ✕
+                  <el-color-picker
+                    v-model="festivalEditing.custom_colors[idx]"
+                    :disabled="!festivalEditing.enabled"
+                    :data-test="`festival-custom-color-${idx}`"
+                  />
+                  <el-button
+                    link
+                    type="danger"
+                    :disabled="!festivalEditing.enabled"
+                    @click="festivalEditing.custom_colors.splice(idx, 1)"
+                  >
+                    ✕
+                  </el-button>
+                </div>
+                <el-button
+                  size="small"
+                  :disabled="!festivalEditing.enabled || festivalEditing.custom_colors.length >= 6"
+                  data-test="festival-custom-color-add"
+                  @click="festivalEditing.custom_colors.push('#ef4444')"
+                >
+                  {{ t('admin.systemSettings.festivalCustomColorsAdd') }}
                 </el-button>
               </div>
-              <el-button
-                size="small"
-                :disabled="!festival.enabled || festival.custom_colors.length >= 6"
-                data-test="festival-custom-color-add"
-                @click="festival.custom_colors.push('#ef4444')"
-              >
-                {{ t('admin.systemSettings.festivalCustomColorsAdd') }}
-              </el-button>
-            </div>
+              <div class="setting-description">
+                {{ t('admin.systemSettings.festivalCustomColorsDesc') }}
+              </div>
+            </el-form-item>
+          </template>
+          <el-form-item :label="t('admin.systemSettings.festivalWindow')">
+            <el-date-picker
+              v-model="festivalRange"
+              type="daterange"
+              value-format="YYYY-MM-DD"
+              :disabled="!festivalEditing.enabled"
+              class="festival-control"
+              data-test="festival-window"
+            />
             <div class="setting-description">
-              {{ t('admin.systemSettings.festivalCustomColorsDesc') }}
+              {{ t('admin.systemSettings.festivalWindowDesc') }}
             </div>
           </el-form-item>
-        </template>
-        <el-form-item :label="t('admin.systemSettings.festivalWindow')">
-          <el-date-picker
-            v-model="festivalRange"
-            type="daterange"
-            value-format="YYYY-MM-DD"
-            :disabled="!festival.enabled"
-            class="festival-control"
-            data-test="festival-window"
-          />
-          <div class="setting-description">
-            {{ t('admin.systemSettings.festivalWindowDesc') }}
+          <div class="festival-pair">
+            <el-form-item :label="t('admin.systemSettings.festivalDuration')">
+              <el-slider
+                v-model="festivalEditing.duration_seconds"
+                :min="5"
+                :max="120"
+                :step="1"
+                :disabled="!festivalEditing.enabled"
+                show-input
+                input-size="small"
+                data-test="festival-duration"
+              />
+              <div class="setting-description">
+                {{ t('admin.systemSettings.festivalDurationDesc') }}
+              </div>
+            </el-form-item>
+            <el-form-item :label="t('admin.systemSettings.festivalSpeed')">
+              <el-slider
+                v-model="festivalEditing.speed"
+                :min="0.2"
+                :max="3"
+                :step="0.1"
+                :disabled="!festivalEditing.enabled"
+                show-input
+                input-size="small"
+                data-test="festival-speed"
+              />
+              <div class="setting-description">
+                {{ t('admin.systemSettings.festivalSpeedDesc') }}
+              </div>
+            </el-form-item>
           </div>
-        </el-form-item>
-        <div class="festival-pair">
-          <el-form-item :label="t('admin.systemSettings.festivalDuration')">
-            <el-slider
-              v-model="festival.duration_seconds"
-              :min="5"
-              :max="120"
-              :step="1"
-              :disabled="!festival.enabled"
-              show-input
-              input-size="small"
-              data-test="festival-duration"
-            />
-            <div class="setting-description">
-              {{ t('admin.systemSettings.festivalDurationDesc') }}
-            </div>
-          </el-form-item>
-          <el-form-item :label="t('admin.systemSettings.festivalSpeed')">
-            <el-slider
-              v-model="festival.speed"
-              :min="0.2"
-              :max="3"
-              :step="0.1"
-              :disabled="!festival.enabled"
-              show-input
-              input-size="small"
-              data-test="festival-speed"
-            />
-            <div class="setting-description">
-              {{ t('admin.systemSettings.festivalSpeedDesc') }}
-            </div>
-          </el-form-item>
-        </div>
-        <el-form-item class="festival-actions">
+        </el-form>
+
+        <template #footer>
+          <el-button @click="festivalEditorVisible = false">{{ t('common.cancel') }}</el-button>
           <el-button
             type="primary"
             :loading="festivalSaving"
             data-test="festival-save"
-            @click="saveFestivalSettings"
+            @click="saveFestivalEditor"
           >
             {{ t('common.save') }}
           </el-button>
-          <el-button
-            :disabled="!festival.enabled"
-            data-test="festival-preview"
-            @click="previewFestival"
-          >
-            {{ t('admin.systemSettings.festivalPreview') }}
-          </el-button>
-          <el-button type="danger" plain data-test="festival-remove" @click="removeFestival">
-            {{ t('admin.systemSettings.festivalRemove') }}
-          </el-button>
-        </el-form-item>
-      </el-form>
+        </template>
+      </el-dialog>
     </el-card>
 
     <el-card shadow="hover" style="margin-top: 20px;">
@@ -884,10 +970,12 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete, Edit, VideoPlay } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import {
   createBanner,
+  createFestivalItem,
   createProjectTarget,
   createRepositoryTarget,
   emptyConfluenceSettings,
@@ -895,6 +983,7 @@ import {
   type BannerItem,
   type BannerLevel,
   type FestivalConfig,
+  type FestivalEffect,
   type ConfluenceProjectTarget,
   type ConfluenceRepositoryTarget,
   type ConfluenceResolvedTarget,
@@ -923,29 +1012,54 @@ const llmSaving = ref(false)
 const banners = ref<BannerItem[]>([])
 const bannerSaving = ref(false)
 
-const festival = ref<FestivalConfig>({
-  enabled: false,
-  effect: 'christmas',
-  start_date: '',
-  end_date: '',
-  duration_seconds: 15,
-  speed: 1.0,
-  custom_name: '',
-  custom_emoji: '',
-  custom_colors: [],
-})
+const festivals = ref<FestivalConfig[]>([])
 const festivalSaving = ref(false)
+
+// Adding and editing share one dialog, so the list stays the only thing on the page.
+const festivalEditorVisible = ref(false)
+const festivalEditing = ref<FestivalConfig | null>(null)
+const festivalEditingId = ref<string | null>(null)
+
 const festivalRange = computed<[string, string] | undefined>({
-  get: () =>
-    festival.value.start_date && festival.value.end_date
-      ? ([festival.value.start_date, festival.value.end_date] as [string, string])
-      : undefined,
+  get: () => {
+    const item = festivalEditing.value
+    return item && item.start_date && item.end_date
+      ? ([item.start_date, item.end_date] as [string, string])
+      : undefined
+  },
   set: (value: unknown) => {
     const range = value as [string, string] | null | undefined
-    festival.value.start_date = range?.[0] ?? ''
-    festival.value.end_date = range?.[1] ?? ''
+    if (festivalEditing.value) {
+      festivalEditing.value.start_date = range?.[0] ?? ''
+      festivalEditing.value.end_date = range?.[1] ?? ''
+    }
   },
 })
+
+const FESTIVAL_EFFECT_LABEL_KEYS: Record<FestivalEffect, string> = {
+  christmas: 'admin.systemSettings.festivalEffectChristmas',
+  spring_festival: 'admin.systemSettings.festivalEffectSpringFestival',
+  mid_autumn: 'admin.systemSettings.festivalEffectMidAutumn',
+  new_year: 'admin.systemSettings.festivalEffectNewYear',
+  custom: 'admin.systemSettings.festivalCustomEffect',
+}
+const effectLabel = (effect: FestivalEffect) => t(FESTIVAL_EFFECT_LABEL_KEYS[effect])
+
+/** The first enabled entry whose window contains today; list order is priority. */
+const festivalActiveToday = computed(() =>
+  festivals.value.some((item) => item.enabled && festivalWithinWindow(item))
+)
+
+function festivalWithinWindow(item: FestivalConfig): boolean {
+  const today = dayjs().format('YYYY-MM-DD')
+  if (item.start_date && today < item.start_date) return false
+  if (item.end_date && today > item.end_date) return false
+  return true
+}
+
+function festivalWindowLabel(item: FestivalConfig): string {
+  return `${item.start_date || '—'} → ${item.end_date || '—'}`
+}
 
 // Adding and editing share one dialog, so the list stays the only thing on the page.
 const editorVisible = ref(false)
@@ -1465,77 +1579,96 @@ const loadBannerSettings = async () => {
 const loadFestivalSettings = async () => {
   try {
     const config = await rbacApi.getFestivalAnimation()
-    // Older stored configs predate the knobs; the defaults fill them in.
-    if (config?.festival) festival.value = { ...festival.value, ...config.festival }
+    festivals.value = config.festivals ?? []
   } catch (error) {
     console.error('Failed to load festival settings:', error)
     ElMessage.error(t('admin.systemSettings.loadFailed'))
   }
 }
 
-const saveFestivalSettings = async () => {
-  if (festival.value.enabled && (!festival.value.start_date || !festival.value.end_date)) {
-    ElMessage.warning(t('admin.systemSettings.festivalWindowRequired'))
-    return
-  }
+function openFestivalEditor(item?: FestivalConfig) {
+  festivalEditingId.value = item ? item.id : null
+  // Edit a copy: the list must not change until the save goes through.
+  festivalEditing.value = item ? { ...item, custom_colors: [...(item.custom_colors ?? [])] } : createFestivalItem()
+  festivalEditorVisible.value = true
+}
+
+/**
+ * Write the whole collection, which is the shape the endpoint takes.
+ *
+ * The list on screen is only replaced once the write went through, so a failed
+ * save leaves what is shown matching what is stored.
+ */
+async function persistFestivals(next: FestivalConfig[]): Promise<boolean> {
   festivalSaving.value = true
   try {
     // A cleared color picker hands back null; the config only carries real colors.
-    const payload: FestivalConfig = {
-      ...festival.value,
-      custom_colors: (festival.value.custom_colors ?? []).filter(
-        (color): color is string => typeof color === 'string' && color.length > 0
-      ),
-    }
-    const response = await rbacApi.updateFestivalAnimation(payload)
-    // The server fills defaults (e.g. a missing custom emoji); show what is stored.
-    if (response?.festival) festival.value = { ...festival.value, ...response.festival }
-    ElMessage.success(t('admin.systemSettings.festivalSaved'))
+    const response = await rbacApi.updateFestivalAnimation({
+      festivals: next.map((item) => ({
+        ...item,
+        custom_colors: (item.custom_colors ?? []).filter(
+          (color): color is string => typeof color === 'string' && color.length > 0
+        ),
+      })),
+    })
+    festivals.value = response.festivals
+    return true
   } catch (error: any) {
     console.error('Failed to save festival settings:', error)
     ElMessage.error(error.response?.data?.detail || t('admin.systemSettings.saveFailed'))
+    return false
   } finally {
     festivalSaving.value = false
   }
 }
 
-/** Clear the config for everyone: no animation plays until a new one is saved. */
-const removeFestival = async () => {
+async function saveFestivalEditor() {
+  const item = festivalEditing.value
+  if (!item) return
+  if (item.enabled && (!item.start_date || !item.end_date)) {
+    ElMessage.warning(t('admin.systemSettings.festivalWindowRequired'))
+    return
+  }
+  // The server fills defaults (e.g. a missing custom emoji); the response list
+  // is what the page shows afterwards.
+  const next = festivalEditingId.value
+    ? festivals.value.map((existing) =>
+        existing.id === festivalEditingId.value ? { ...item } : existing
+      )
+    : [...festivals.value, { ...item }]
+
+  if (await persistFestivals(next)) {
+    festivalEditorVisible.value = false
+    ElMessage.success(t('admin.systemSettings.festivalSaved'))
+  }
+}
+
+async function toggleFestivalEnabled(row: FestivalConfig, value: boolean) {
+  await persistFestivals(
+    festivals.value.map((item) => (item.id === row.id ? { ...item, enabled: value } : item))
+  )
+}
+
+async function confirmFestivalRemove(row: FestivalConfig) {
   try {
     await ElMessageBox.confirm(
-      t('admin.systemSettings.festivalRemoveConfirm'),
+      t('admin.systemSettings.festivalRemoveConfirm', {
+        name: row.effect === 'custom' && row.custom_name ? row.custom_name : effectLabel(row.effect),
+      }),
       t('admin.systemSettings.festivalRemove'),
       { type: 'warning', confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel') }
     )
   } catch {
     return
   }
-  festivalSaving.value = true
-  try {
-    const response = await rbacApi.updateFestivalAnimation({
-      enabled: false,
-      effect: 'christmas',
-      start_date: '',
-      end_date: '',
-      duration_seconds: 15,
-      speed: 1.0,
-      custom_name: '',
-      custom_emoji: '',
-      custom_colors: [],
-    })
-    if (response?.festival) festival.value = { ...festival.value, ...response.festival }
+  if (await persistFestivals(festivals.value.filter((item) => item.id !== row.id))) {
     ElMessage.success(t('admin.systemSettings.festivalRemoved'))
-  } catch (error: any) {
-    console.error('Failed to remove festival settings:', error)
-    ElMessage.error(error.response?.data?.detail || t('admin.systemSettings.saveFailed'))
-  } finally {
-    festivalSaving.value = false
   }
 }
 
-/** Play the animation right here with the form's parameters, without saving first. */
-const previewFestival = () => {
-  window.dispatchEvent(new CustomEvent('festival-preview', { detail: festival.value }))
+/** Play the animation right here with the row's parameters, without saving first. */
+const previewFestival = (item: FestivalConfig) => {
+  window.dispatchEvent(new CustomEvent('festival-preview', { detail: item }))
 }
 
 const loadConfluenceSettings = async () => {
@@ -1601,8 +1734,10 @@ const loadConfluenceSettings = async () => {
   min-width: 340px;
 }
 
-.festival-actions :deep(.el-button--danger:last-child) {
-  margin-left: auto;
+.festival-name-cell {
+  margin-left: 8px;
+  color: var(--el-text-color-regular);
+  font-size: 13px;
 }
 
 .banner-preview-box {

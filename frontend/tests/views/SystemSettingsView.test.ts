@@ -82,8 +82,10 @@ async function mountView(banners: BannerItem[], confluence: ConfluenceSettings =
   return {
     wrapper,
     dialog: () => wrapper.findComponent({ name: 'ElDialog' }),
-    // The second dialog on the page: the banner card's comes first.
-    targetDialog: () => wrapper.findAllComponents({ name: 'ElDialog' })[1],
+    // The confluence card is the last one, so its dialog is the last on the page
+    // (banner and festival cards each contribute one earlier).
+    targetDialog: () =>
+      wrapper.findAllComponents({ name: 'ElDialog' }).slice(-1)[0],
   }
 }
 
