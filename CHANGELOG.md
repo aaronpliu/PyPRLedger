@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.36.1] - 2026-11-07
+
+**Backend Version**: 1.36.1
+**Frontend Version**: 1.31.1
+
+### Changed
+- Release notes kudos: chips show a pure reaction icon + count again; hovering a chip lists the readers who gave kudos (up to 8 names, then a "+N more" line)
+- System settings layout: "System Setting" and "AI Assistant" now sit side by side, stacking on narrow screens
+- System settings buttons: Edit/Delete in the Reviews Banner list are icon-only with tooltips; all three "Add" buttons share one style (primary + Plus icon + short "Add" label)
+- AI Assistant toggle description moved to its own line below the switch, with wording that no longer repeats "Enable"/"Enabled"
+
+### Tests
+- Updated release notes reaction tests (chip count display, hover tooltip listing readers)
+- Updated system settings tests for the new dialog order and button labels
+
+---
+
 ## [1.36.0] - 2026-11-07
 
 **Backend Version**: 1.36.0
