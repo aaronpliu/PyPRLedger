@@ -1,13 +1,15 @@
 <template>
   <div class="system-settings">
-    <el-card shadow="hover">
+    <!-- Two short setting groups share a row; the wider lists below stay full width. -->
+    <div class="settings-top-row">
+    <el-card shadow="hover" class="settings-top-card">
       <template #header>
         <div class="card-header">
           <span>{{ t('admin.systemSettings.title') }}</span>
         </div>
       </template>
 
-      <el-form label-width="200px" style="max-width: 600px;">
+      <el-form label-width="180px" class="settings-top-form">
         <!-- Registration Enabled Setting -->
         <el-form-item :label="t('admin.systemSettings.registrationEnabled')">
           <el-switch
@@ -17,21 +19,21 @@
             :loading="saving"
             @change="handleRegistrationToggle"
           />
-          <div class="setting-description">
+          <div class="setting-description setting-description--below">
             {{ t('admin.systemSettings.registrationEnabledDesc') }}
           </div>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <el-card shadow="hover" style="margin-top: 20px;">
+    <el-card shadow="hover" class="settings-top-card">
       <template #header>
         <div class="card-header">
           <span>{{ t('admin.systemSettings.llmSettings') }}</span>
         </div>
       </template>
 
-      <el-form label-width="200px" style="max-width: 600px;">
+      <el-form label-width="180px" class="settings-top-form">
         <!-- LLM Enabled Toggle -->
         <el-form-item :label="t('admin.systemSettings.llmEnabled')">
           <el-switch
@@ -41,7 +43,7 @@
             :loading="llmSaving"
             @change="handleLlmSave"
           />
-          <div class="setting-description">
+          <div class="setting-description setting-description--below">
             {{ t('admin.systemSettings.llmEnabledDesc') }}
           </div>
         </el-form-item>
@@ -88,6 +90,7 @@
         </el-form-item>
       </el-form>
     </el-card>
+    </div>
 
     <el-card shadow="hover" style="margin-top: 20px;">
       <template #header>
@@ -100,7 +103,8 @@
            many there are; adding and editing happen in a dialog. -->
       <div class="banner-toolbar">
         <el-button type="primary" data-test="banner-add" @click="openEditor()">
-          {{ t('admin.systemSettings.bannerAdd') }}
+          <el-icon><Plus /></el-icon>
+          {{ t('admin.systemSettings.bannerAddShort') }}
         </el-button>
       </div>
 
@@ -156,16 +160,20 @@
 
         <el-table-column
           :label="t('admin.systemSettings.bannerActions')"
-          width="140"
+          width="90"
           align="right"
         >
           <template #default="{ row, $index }">
-            <el-button link type="primary" data-test="banner-edit" @click="openEditor(row)">
-              {{ t('common.edit') }}
-            </el-button>
-            <el-button link type="danger" data-test="banner-remove" @click="confirmRemove($index)">
-              {{ t('common.delete') }}
-            </el-button>
+            <el-tooltip :content="t('common.edit')" placement="top">
+              <el-button link type="primary" data-test="banner-edit" @click="openEditor(row)">
+                <el-icon><Edit /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="t('common.delete')" placement="top">
+              <el-button link type="danger" data-test="banner-remove" @click="confirmRemove($index)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
@@ -306,7 +314,8 @@
           data-test="festival-add"
           @click="openFestivalEditor()"
         >
-          {{ t('admin.systemSettings.festivalAdd') }}
+          <el-icon><Plus /></el-icon>
+          {{ t('admin.systemSettings.festivalAddShort') }}
         </el-button>
       </div>
 
@@ -605,13 +614,9 @@
       <div class="target-section">
         <div class="target-section-head">
           <span class="target-section-title">{{ t('admin.systemSettings.confluenceProjects') }}</span>
-          <el-button
-            size="small"
-            type="primary"
-            data-test="confluence-project-add"
-            @click="openProjectEditor()"
-          >
-            {{ t('admin.systemSettings.confluenceTargetAdd') }}
+          <el-button type="primary" data-test="confluence-project-add" @click="openProjectEditor()">
+            <el-icon><Plus /></el-icon>
+            {{ t('admin.systemSettings.confluenceTargetAddShort') }}
           </el-button>
         </div>
         <div class="setting-description">
@@ -970,7 +975,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Edit, VideoPlay } from '@element-plus/icons-vue'
+import { Delete, Edit, Plus, VideoPlay } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import {
@@ -1688,6 +1693,29 @@ const loadConfluenceSettings = async () => {
   padding: 20px;
 }
 
+/* Two short setting groups share the width; the list cards below stay full width. */
+.settings-top-row {
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
+}
+
+.settings-top-card {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.settings-top-form {
+  width: 100%;
+}
+
+/* Narrow screens cannot give a 180px label and its control enough room each. */
+@media (max-width: 1100px) {
+  .settings-top-row {
+    flex-direction: column;
+  }
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -1701,6 +1729,14 @@ const loadConfluenceSettings = async () => {
   color: var(--el-text-color-secondary);
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* el-form-item__content is a flex row. A description next to a switch would
+   otherwise sit against its Enabled/Disabled label; give it a row of its own. */
+.setting-description--below {
+  flex: 0 0 100%;
+  width: 100%;
+  margin-top: 6px;
 }
 
 .custom-colors {
