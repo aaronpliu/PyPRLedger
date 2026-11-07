@@ -656,9 +656,9 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     const row = wrapper.find('[data-test="note-reactions"]')
     const chip = row.findAll('.reaction-chip:not(.reaction-add)')[0]
     expect(chip.text()).toContain('🎉')
-    // who gave it, as faces, rather than how many gave it
-    expect(chip.findAll('.reaction-avatar')).toHaveLength(2)
-    expect(chip.find('.reaction-count').exists()).toBe(false)
+    // a pure emoji and how many gave it; the faces moved into the hover tooltip
+    expect(chip.find('.reaction-count').text()).toBe('2')
+    expect(chip.find('.reaction-avatar').exists()).toBe(false)
     // and the release says how many people that is, once
     expect(row.find('[data-test="reaction-total"]').text()).toBe('2 people reacted')
     // the reader has not given this one yet, so the chip is not filled in
@@ -672,7 +672,7 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     const updated = wrapper
       .find('[data-test="note-reactions"]')
       .findAll('.reaction-chip:not(.reaction-add)')[0]
-    expect(updated.findAll('.reaction-avatar')).toHaveLength(3)
+    expect(updated.find('.reaction-count').text()).toBe('3')
     expect(updated.classes()).toContain('is-mine')
     expect(wrapper.find('[data-test="reaction-total"]').text()).toBe('3 people reacted')
     // the control to react with has not moved: the emoji joined it on the right
@@ -731,10 +731,55 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     await selectRepository(wrapper)
 
     const chip = wrapper.find('[data-test="note-reactions"] .reaction-chip:not(.reaction-add)')
-    // three faces fit in the chip; the rest are counted beside them
-    expect(chip.findAll('.reaction-avatar')).toHaveLength(3)
-    expect(chip.find('.reaction-more').text()).toBe('+2')
+    // the chip keeps the pure count; the tooltip lists the readers by name
+    expect(chip.find('.reaction-count').text()).toBe('5')
     expect(wrapper.find('[data-test="reaction-total"]').text()).toBe('5 people reacted')
+  })
+
+  it('names the readers a tooltip can show and counts the rest', async () => {
+    vi.mocked(releaseNotesApi.list).mockResolvedValue({
+      total: 1,
+      items: [
+        release({
+          reactions: [
+            {
+              emoji: '👍',
+              count: 10,
+              reacted: false,
+              reactors: [
+                { username: 'r1' },
+                { username: 'r2' },
+                { username: 'r3' },
+                { username: 'r4' },
+                { username: 'r5' },
+                { username: 'r6' },
+                { username: 'r7' },
+                { username: 'r8' },
+                { username: 'r9' },
+                { username: 'r10' },
+              ],
+            },
+          ],
+        }),
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+    await selectRepository(wrapper)
+
+    // the tooltip mounts on hover (after Element Plus' show timer) and teleports
+    // to the document body
+    const chip = wrapper.find('[data-test="note-reactions"] .reaction-chip:not(.reaction-add)')
+    await chip.trigger('mouseenter')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await flushPromises()
+
+    const tooltip = document.body.querySelector('.reaction-tooltip')
+    const names = tooltip?.querySelectorAll('.reaction-tooltip-name') ?? []
+    expect(names).toHaveLength(8)
+    expect(names[0].textContent).toBe('r1')
+    expect(tooltip?.querySelector('.reaction-tooltip-more')?.textContent).toContain('2')
   })
 
   it('keeps every emoji one reader has given', async () => {

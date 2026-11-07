@@ -1095,37 +1095,36 @@
                   </div>
                 </el-popover>
 
-                <button
+                <el-tooltip
                   v-for="reaction in note.reactions ?? []"
                   :key="reaction.emoji"
-                  type="button"
-                  class="reaction-chip"
-                  :class="{ 'is-mine': reaction.reacted }"
-                  :disabled="isReacting(note)"
-                  :title="reactionTitle(reaction)"
-                  @click.stop="toggleReaction(note, reaction.emoji)"
+                  placement="top"
+                  popper-class="reaction-tooltip"
+                  :disabled="!reaction.reactors?.length"
                 >
-                  <span class="reaction-emoji">{{ reaction.emoji }}</span>
-                  <!-- Who gave it rather than how many gave it: the faces say what
-                       a count could not. The total under the row still gives the
-                       number of people -->
-                  <span v-if="shownReactors(reaction).length" class="reaction-people">
-                    <UserAvatar
-                      v-for="reactor in shownReactors(reaction)"
+                  <template #content>
+                    <div
+                      v-for="reactor in tooltipReactors(reaction)"
                       :key="reactor.username"
-                      :username="reactor.username"
-                      :avatar-url="reactor.avatar_url"
-                      :size="18"
-                      class="reaction-avatar"
-                    />
-                    <span v-if="hiddenReactorCount(reaction)" class="reaction-more">
-                      +{{ hiddenReactorCount(reaction) }}
-                    </span>
-                  </span>
-                  <!-- A release reacted to before this page could name the readers
-                       keeps its count rather than showing an empty chip -->
-                  <span v-else class="reaction-count">{{ reaction.count }}</span>
-                </button>
+                      class="reaction-tooltip-name"
+                    >
+                      {{ reactor.username }}
+                    </div>
+                    <div v-if="tooltipMoreCount(reaction)" class="reaction-tooltip-more">
+                      ...and {{ tooltipMoreCount(reaction) }} more
+                    </div>
+                  </template>
+                  <button
+                    type="button"
+                    class="reaction-chip"
+                    :class="{ 'is-mine': reaction.reacted }"
+                    :disabled="isReacting(note)"
+                    @click.stop="toggleReaction(note, reaction.emoji)"
+                  >
+                    <span class="reaction-emoji">{{ reaction.emoji }}</span>
+                    <span class="reaction-count">{{ reaction.count }}</span>
+                  </button>
+                </el-tooltip>
 
                 <!-- One reader may have given several emojis and is still one
                      person, so the number is counted once for the whole release -->
@@ -2188,18 +2187,18 @@ function reactedWith(note: ReleaseNote, emoji: string): boolean {
   return (note.reactions ?? []).some((reaction) => reaction.emoji === emoji && reaction.reacted)
 }
 
-// Faces a chip shows before it counts the rest: three fit in the chip without
-// pushing the emoji away from the eye that is scanning the row
-const REACTION_AVATAR_LIMIT = 3
+// Names a tooltip lists before it counts the rest: eight fit without turning a
+// hover hint into a wall of text
+const REACTION_TOOLTIP_LIMIT = 8
 
-/** The readers a chip shows as faces. */
-function shownReactors(reaction: ReleaseNoteReaction): ReleaseNoteReactor[] {
-  return (reaction.reactors ?? []).slice(0, REACTION_AVATAR_LIMIT)
+/** The readers a tooltip names. */
+function tooltipReactors(reaction: ReleaseNoteReaction): ReleaseNoteReactor[] {
+  return (reaction.reactors ?? []).slice(0, REACTION_TOOLTIP_LIMIT)
 }
 
-/** The readers a chip only counts, when there are more than it can show. */
-function hiddenReactorCount(reaction: ReleaseNoteReaction): number {
-  return Math.max(reaction.count - REACTION_AVATAR_LIMIT, 0)
+/** The readers a tooltip only counts, when there are more than it can name. */
+function tooltipMoreCount(reaction: ReleaseNoteReaction): number {
+  return Math.max(reaction.count - REACTION_TOOLTIP_LIMIT, 0)
 }
 
 /** The people who reacted, counted once however many emojis each of them gave. */
@@ -2217,18 +2216,6 @@ function reactionTotalLabel(note: ReleaseNote): string {
   return count === 1
     ? t('releaseNotes.reaction_total_one')
     : t('releaseNotes.reaction_total_other', { count })
-}
-
-function reactionTitle(reaction: ReleaseNoteReaction): string {
-  const names = (reaction.reactors ?? []).map((reactor) => reactor.username)
-  // A release reacted to before its readers could be named still explains itself
-  if (!names.length) {
-    return `${reaction.emoji} ${t('releaseNotes.reaction_count', { count: reaction.count })}`
-  }
-  // The names the chip cannot show are still counted in the title
-  const shown = names.slice(0, REACTION_AVATAR_LIMIT).join(', ')
-  const rest = names.length - REACTION_AVATAR_LIMIT
-  return `${reaction.emoji} ${shown}${rest > 0 ? ` +${rest}` : ''}`
 }
 
 /** Give a release one emoji, or take back the one this reader gave before. */
@@ -3672,29 +3659,6 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 
-/* The readers who gave the emoji, as faces: the emoji already says what they
-   did, so the row stays narrow and the names live in the chip's title */
-.reaction-people {
-  display: inline-flex;
-  align-items: center;
-}
-
-.reaction-avatar {
-  flex: none;
-  /* A ring in the card colour keeps two overlapping faces apart */
-  box-shadow: 0 0 0 1px var(--el-bg-color);
-}
-
-.reaction-avatar + .reaction-avatar {
-  margin-left: -5px;
-}
-
-.reaction-more {
-  margin-left: 3px;
-  color: var(--el-text-color-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
 /* How many people, said once for the release: one reader may have given several
    emojis and is still one person */
 .reaction-total {
@@ -3987,5 +3951,18 @@ onBeforeUnmount(() => {
   .note-entry-name {
     font-size: 22px;
   }
+}
+</style>
+
+<!-- The tooltip teleports to the body, outside this component's scope, so its
+     popper classes live here, unscoped. -->
+<style>
+.reaction-tooltip .reaction-tooltip-name {
+  line-height: 1.5;
+}
+
+.reaction-tooltip .reaction-tooltip-more {
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
 }
 </style>
