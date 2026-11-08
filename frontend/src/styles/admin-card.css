@@ -1,0 +1,95 @@
+/*
+ * Card language shared by every page under /myadmin.
+ *
+ * Scoped to `.admin-page` (set on AdminLayout's page-wrapper) so releases,
+ * reviews and scores keep their own card conventions. Dashboard draws its
+ * stat-card/panel directly and carries no el-card, so it is unaffected.
+ */
+
+.admin-page .el-card {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 16px;
+  background: var(--el-bg-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.admin-page .el-card__header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.admin-page .el-card__body {
+  padding: 16px 20px;
+}
+
+.admin-page .el-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
+}
+
+/* Element Plus' shadow="hover" adds its own hover shadow; keep one shadow. */
+.admin-page .el-card.is-hover-shadow {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.admin-page .el-card.is-hover-shadow:hover {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
+}
+
+/* Nested cards (Review Validation's metric cards): no second lift, smaller
+   radius and a flatter surface, so a card inside a card reads as a section. */
+.admin-page .el-card .el-card {
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.admin-page .el-card .el-card:hover {
+  transform: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+/* App.vue pins a hardcoded dark card colour globally; admin cards follow the
+   variable system instead, and need a deeper shadow on a dark surface. */
+[data-theme='dark'] .admin-page .el-card {
+  background: var(--el-bg-color);
+  border-color: var(--el-border-color-lighter);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme='dark'] .admin-page .el-card:hover {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme='dark'] .admin-page .el-card.is-hover-shadow:hover {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme='dark'] .admin-page .el-card .el-card,
+[data-theme='dark'] .admin-page .el-card .el-card:hover {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* The admin sidebar is a fixed 200px, so these breakpoints are wider than the
+   ones the full-width dashboard uses. */
+@media (max-width: 1200px) {
+  .admin-page .el-card__header,
+  .admin-page .el-card__body {
+    padding: 14px 16px;
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-page .el-card {
+    border-radius: 12px;
+  }
+
+  .admin-page .el-card:hover {
+    transform: none;
+  }
+
+  .admin-page .el-card__header,
+  .admin-page .el-card__body {
+    padding: 12px 14px;
+  }
+}

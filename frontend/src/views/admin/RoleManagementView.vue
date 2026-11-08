@@ -6,7 +6,7 @@
           <h2>{{ t('admin.role_management') }}</h2>
           <el-button type="primary" @click="showCreateDialog = true">
             <el-icon><Plus /></el-icon>
-            Add Role
+            {{ t('common.add') }}
           </el-button>
         </div>
       </template>
@@ -21,14 +21,18 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="200" fixed="right">
+        <el-table-column label="Actions" width="100" fixed="right" align="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="editRole(row)">
-              Edit
-            </el-button>
-            <el-button size="small" type="danger" @click="confirmDelete(row)">
-              Delete
-            </el-button>
+            <el-tooltip :content="t('common.edit')" placement="top">
+              <el-button link type="primary" @click="editRole(row)">
+                <el-icon><Edit /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip :content="t('common.delete')" placement="top">
+              <el-button link type="danger" @click="confirmDelete(row)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
@@ -77,7 +81,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Delete, Edit, Plus } from '@element-plus/icons-vue'
 import { rbacApi } from '@/api/rbac'
 import type { Role } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'

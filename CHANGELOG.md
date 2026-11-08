@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.36.1] - 2026-11-07
+
+**Backend Version**: 1.36.1
+**Frontend Version**: 1.31.1
+
+### Changed
+- Release notes kudos: chips show a pure reaction icon + count again; hovering a chip lists the readers who gave kudos (up to 8 names, then a "+N more" line)
+- System settings layout: "System Setting" and "AI Assistant" now sit side by side, stacking on narrow screens
+- System settings buttons: Edit/Delete in the Reviews Banner list are icon-only with tooltips; all three "Add" buttons share one style (primary + Plus icon + short "Add" label)
+- AI Assistant toggle description moved to its own line below the switch, with wording that no longer repeats "Enable"/"Enabled"
+
+### Tests
+- Updated release notes reaction tests (chip count display, hover tooltip listing readers)
+- Updated system settings tests for the new dialog order and button labels
+
+---
+
+## [1.36.0] - 2026-11-07
+
+**Backend Version**: 1.36.0
+**Frontend Version**: 1.31.0
+
+### Added
+- Festival animation system: admin-configurable fullscreen effects (Christmas snowfall, Spring Festival lanterns, Mid-Autumn moon & petals, New Year confetti) with per-festival greeting banners, playing for all visitors within a configured date window
+- Multiple festival/special-day entries: config upgraded to a list (up to 10) so several festivals coexist with independent date windows, effects and playback parameters; legacy single-entry configs are migrated automatically
+- Custom festival support with greeting text, particle emoji and up to 6 custom colors
+- Animation control parameters: duration (5-120s) and falling speed (0.2x-3.0x) sliders, plus admin Preview to play the effect on demand
+- Per-entry enable/disable switches, edit dialog and deletion with confirmation in the festival list
+- Critical issue badge on the Reviews list with a tooltip summarizing critical issues per record
+- Card container for the App Diff page, consistent with other Releases pages
+
+### Changed
+- Festival admin card redesigned as a list manager (add/edit in a shared dialog, icon-only row actions with tooltips, "playing today" status tag)
+- App Diff refresh button aligned with Dashboard/Reviews style (primary + icon)
+- UI layout and color palette adjustments; contributor card display enhanced
+
+### Fixed
+- Spring Festival lanterns rendering "#ffffff" as text
+- Custom festival save leaving null color entries; form now syncs with the server-normalized config after save
+
+---
+
 ## [1.35.1-frontend.1] - 2026-11-02
 
 **Backend Version**: 1.35.1 (unchanged)

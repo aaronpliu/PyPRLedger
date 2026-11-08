@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import case, func, literal, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -40,6 +40,7 @@ from src.schemas.release_note import (
     ReleaseNotePreviewResponse,
     ReleaseNotePushRequest,
     ReleaseNoteReactionCount,
+    ReleaseNoteReactor,
     ReleaseNoteUpdateRequest,
 )
 from src.services.git_providers import BaseGitProvider, get_git_provider
@@ -840,43 +841,60 @@ class ReleaseNoteService:
     async def reactions_for(
         self, note_ids: Sequence[int], user_id: int | None
     ) -> dict[int, list[ReleaseNoteReactionCount]]:
-        """The kudos a page of releases has, counted once per emoji.
+        """The kudos a page of releases has, and who gave each one.
 
         One query for the page rather than one per release, and ``reacted`` says
         whether the caller is among the readers who gave that emoji - the release
-        page draws the same chips for everyone and highlights the caller's own.
+        page draws the same chips for everyone, lists the readers who gave one as
+        faces, and highlights the caller's own.
+
+        The rows are read one per reader rather than aggregated, because the page
+        names them: an account that no longer exists cannot be named, so the join is
+        outer and such a row still counts towards ``count``.
         """
         ids = list(dict.fromkeys(note_ids))
         summaries: dict[int, list[ReleaseNoteReactionCount]] = {note_id: [] for note_id in ids}
         if not ids:
             return summaries
 
-        mine = (
-            case((ReleaseNoteReaction.user_id == user_id, 1), else_=0)
-            if user_id is not None
-            else literal(0)
-        )
         statement = (
             select(
                 ReleaseNoteReaction.note_id,
                 ReleaseNoteReaction.emoji,
-                func.count(ReleaseNoteReaction.id),
-                func.max(mine),
+                ReleaseNoteReaction.user_id,
+                AuthUser.username,
+                AuthUser.avatar_url,
             )
+            .outerjoin(AuthUser, AuthUser.id == ReleaseNoteReaction.user_id)
             .where(ReleaseNoteReaction.note_id.in_(ids))
-            .group_by(ReleaseNoteReaction.note_id, ReleaseNoteReaction.emoji)
+            .order_by(
+                ReleaseNoteReaction.note_id,
+                ReleaseNoteReaction.created_date,
+                ReleaseNoteReaction.id,
+            )
         )
         rows = (await self.db.execute(statement)).all()
 
-        for note_id, emoji, count, reacted in rows:
-            summaries[note_id].append(
-                ReleaseNoteReactionCount(emoji=emoji, count=count, reacted=bool(reacted))
-            )
+        grouped: dict[int, dict[str, ReleaseNoteReactionCount]] = {note_id: {} for note_id in ids}
+        for note_id, emoji, reactor_id, username, avatar_url in rows:
+            reaction = grouped[note_id].get(emoji)
+            if reaction is None:
+                reaction = ReleaseNoteReactionCount(emoji=emoji)
+                grouped[note_id][emoji] = reaction
+            reaction.count += 1
+            if user_id is not None and reactor_id == user_id:
+                reaction.reacted = True
+            if username is not None:
+                reaction.reactors.append(
+                    ReleaseNoteReactor(username=username, avatar_url=avatar_url)
+                )
 
         # A fixed order, so the chips of a release stay where the reader saw them
         order = {emoji: index for index, emoji in enumerate(REACTION_EMOJIS)}
-        for reactions in summaries.values():
-            reactions.sort(key=lambda item: order.get(item.emoji, len(order)))
+        for note_id, reactions in grouped.items():
+            summaries[note_id] = sorted(
+                reactions.values(), key=lambda item: order.get(item.emoji, len(order))
+            )
         return summaries
 
     async def toggle_reaction(

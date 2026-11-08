@@ -180,6 +180,21 @@ export const rbacApi = {
     return request.put('/rbac/settings/banner', data)
   },
 
+  // ===== Festival Animation APIs =====
+
+  /** Get the festival animation configs (public, no auth required) */
+  getFestivalAnimation(): Promise<FestivalSettings> {
+    return request.get('/rbac/settings/festival')
+  },
+
+  /** Replace the festival animation config list (admin only) */
+  updateFestivalAnimation(data: FestivalSettings): Promise<{
+    message: string
+    festivals: FestivalConfig[]
+  }> {
+    return request.put('/rbac/settings/festival', data)
+  },
+
   // ===== Confluence Publishing Target APIs =====
 
   /** Get where each project and repository publishes, and what each resolves to */
@@ -219,6 +234,57 @@ export interface BannerItem {
 
 export interface BannersConfig {
   banners: BannerItem[]
+}
+
+export type FestivalEffect =
+  | 'christmas'
+  | 'spring_festival'
+  | 'mid_autumn'
+  | 'new_year'
+  | 'custom'
+
+/**
+ * The festival animation config. `start_date`/`end_date` are `YYYY-MM-DD` and
+ * both are required when enabled; the animation plays while today is inside
+ * the window. `duration_seconds` caps how long one play lasts (5-120), and
+ * `speed` scales how fast the particles move (0.2x - 3x, 1 = default). The
+ * `custom_*` fields only matter for the `custom` effect: a greeting name, the
+ * emoji used as particles, and up to six confetti colors.
+ */
+export interface FestivalConfig {
+  /** Server-assigned when missing; identifies the entry in the admin list. */
+  id: string
+  enabled: boolean
+  effect: FestivalEffect
+  start_date: string
+  end_date: string
+  duration_seconds: number
+  speed: number
+  custom_name: string
+  custom_emoji: string
+  custom_colors: string[]
+}
+
+/** The whole festival animation config: several entries can play in parallel. */
+export interface FestivalSettings {
+  festivals: FestivalConfig[]
+}
+
+/** A festival entry with the fields an empty one starts from. */
+export function createFestivalItem(patch: Partial<FestivalConfig> = {}): FestivalConfig {
+  return {
+    id: `festival-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    enabled: true,
+    effect: 'christmas',
+    start_date: '',
+    end_date: '',
+    duration_seconds: 15,
+    speed: 1.0,
+    custom_name: '',
+    custom_emoji: '',
+    custom_colors: [],
+    ...patch,
+  }
 }
 
 /** A banner with the fields an empty one starts from. */

@@ -1,6 +1,7 @@
 <template>
   <div id="app">
     <GlobalProgress />
+    <FestivalOverlay />
     <router-view />
     <ServiceUnavailableNotice
       v-if="backendSuspect || backendUnavailable"
@@ -20,6 +21,7 @@ import { watch } from 'vue'
 import PWAInstallPrompt from '@/components/common/PWAInstallPrompt.vue'
 import PageAgentLauncher from '@/components/common/PageAgentLauncher.vue'
 import GlobalProgress from '@/components/common/GlobalProgress.vue'
+import FestivalOverlay from '@/components/common/FestivalOverlay.vue'
 import ServiceUnavailableNotice from '@/components/common/ServiceUnavailableNotice.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useIdleSessionHeartbeat } from '@/composables/useIdleSessionHeartbeat'

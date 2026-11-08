@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
+import uuid
 from datetime import datetime
 from typing import Annotated
 
@@ -440,6 +442,97 @@ MAX_BANNERS = 20
 MAX_BANNER_CONTENT_LENGTH = 500
 MAX_BANNER_LINK_LENGTH = 500
 
+FESTIVAL_SETTING_KEY = "festival_animation"
+FESTIVAL_EFFECTS = ("christmas", "spring_festival", "mid_autumn", "new_year", "custom")
+FESTIVAL_DURATION_RANGE = (5, 120)
+FESTIVAL_SPEED_RANGE = (0.2, 3.0)
+FESTIVAL_MAX_CUSTOM_COLORS = 6
+FESTIVAL_MAX_ITEMS = 10
+
+
+def _clamp_number(value: object, low: float, high: float, default: float) -> float:
+    """Read one numeric knob, falling back to the default when it is absent or junk."""
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(low, min(high, number))
+
+
+def _normalize_festival(raw: dict) -> dict:
+    """Validate one festival animation config and fill the defaults it omits."""
+    if not isinstance(raw, dict):
+        raise ValueError("festival config must be an object")
+    enabled = bool(raw.get("enabled", False))
+    effect = raw.get("effect", "christmas")
+    if effect not in FESTIVAL_EFFECTS:
+        raise ValueError(f"effect must be one of {', '.join(FESTIVAL_EFFECTS)}")
+    start_date = str(raw.get("start_date", "") or "").strip()
+    end_date = str(raw.get("end_date", "") or "").strip()
+    if enabled and (not start_date or not end_date):
+        raise ValueError("start_date and end_date are required when enabled")
+    if start_date and end_date and start_date > end_date:
+        raise ValueError("start_date must not be after end_date")
+
+    custom_name = str(raw.get("custom_name", "") or "").strip()[:60]
+    custom_emoji = str(raw.get("custom_emoji", "") or "").strip()[:8]
+    raw_colors = raw.get("custom_colors")
+    custom_colors = []
+    if isinstance(raw_colors, list):
+        for color in raw_colors[:FESTIVAL_MAX_CUSTOM_COLORS]:
+            if isinstance(color, str) and re.fullmatch(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})", color):
+                custom_colors.append(color.lower())
+
+    duration_low, duration_high = FESTIVAL_DURATION_RANGE
+    speed_low, speed_high = FESTIVAL_SPEED_RANGE
+    return {
+        # A saved-without-id item gets one so the admin list and the overlay's
+        # per-config replay mark can tell the entries apart.
+        "id": str(raw.get("id") or "").strip() or f"festival-{uuid.uuid4().hex[:8]}",
+        "enabled": enabled,
+        "effect": effect,
+        "start_date": start_date,
+        "end_date": end_date,
+        "duration_seconds": _clamp_number(
+            raw.get("duration_seconds"), duration_low, duration_high, 15
+        ),
+        "speed": _clamp_number(raw.get("speed"), speed_low, speed_high, 1.0),
+        "custom_name": custom_name,
+        "custom_emoji": custom_emoji or ("🎉" if effect == "custom" else ""),
+        "custom_colors": custom_colors,
+    }
+
+
+def _parse_stored_festivals(value: str) -> list[dict]:
+    """Read the stored config as a list, tolerating every shape it has had.
+
+    The setting started as a single object; anything unreadable is reported and
+    treated as absent so a hand-edited row cannot take the settings page down.
+    """
+    if not value or not value.strip():
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        logger.warning("Festival settings are not valid JSON; treating them as absent")
+        return []
+    # A stored single object is the pre-list shape; fold it into a one-item list.
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    if not isinstance(parsed, list):
+        logger.warning("Festival settings are not a list; treating them as absent")
+        return []
+
+    festivals: list[dict] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        try:
+            festivals.append(_normalize_festival(item))
+        except ValueError as exc:
+            logger.warning("Skipping an unusable stored festival: %s", exc)
+    return festivals
+
 
 def _stable_id(*parts: str) -> str:
     """A short id that is the same every time it is derived from the same parts."""
@@ -650,6 +743,83 @@ async def update_banner_settings(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update banner settings: {str(e)}",
+        ) from e
+
+
+@router.get(
+    "/settings/festival",
+    response_model=dict,
+    summary="Get festival animation configs",
+    description="Returns the festival animation configs shown to every visitor. Public endpoint, no auth required.",
+)
+async def get_festival_settings(
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict:
+    """Get festival animation configurations"""
+    try:
+        stored = await rbac_service.get_setting(FESTIVAL_SETTING_KEY, default_value="")
+        return {"festivals": _parse_stored_festivals(stored)}
+    except Exception as e:
+        logger.error(f"Failed to get festival settings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get festival settings",
+        ) from e
+
+
+@router.put(
+    "/settings/festival",
+    response_model=dict,
+    summary="Update festival animation configs",
+    description="Replace the festival animation config list. Requires manage settings permission.",
+)
+async def update_festival_settings(
+    setting_data: dict,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
+) -> dict:
+    """Replace the festival animation configuration list"""
+    await rbac_service.require_permission(current_user.id, "manage", "settings")
+
+    try:
+        raw_items = setting_data.get("festivals")
+        if raw_items is None:
+            # A page that predates the list shape sends one festival's fields.
+            # Only a complete one is accepted, so a partial write cannot wipe
+            # the list.
+            if "effect" not in setting_data:
+                raise ValueError("festivals is required")
+            raw_items = [setting_data]
+
+        if not isinstance(raw_items, list):
+            raise ValueError("festivals must be a list")
+        if len(raw_items) > FESTIVAL_MAX_ITEMS:
+            raise ValueError(f"at most {FESTIVAL_MAX_ITEMS} festival entries are supported")
+
+        festivals = [_normalize_festival(item) for item in raw_items]
+
+        # The settings store only updates a row it already has, and reading one
+        # is how it comes into existence (`RBACService.get_setting` creates it
+        # on a miss). Without this, the first save on a fresh install fails.
+        await rbac_service.get_setting(FESTIVAL_SETTING_KEY, default_value="")
+
+        await rbac_service.update_setting(
+            setting_key=FESTIVAL_SETTING_KEY,
+            setting_value=json.dumps(festivals, ensure_ascii=False),
+            updated_by=current_user.id,
+            description="Festival animation configs, as a JSON array",
+        )
+        return {"message": "Festival settings updated successfully", "festivals": festivals}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        logger.error(f"Failed to update festival settings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update festival settings: {str(e)}",
         ) from e
 
 

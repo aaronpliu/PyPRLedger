@@ -1095,19 +1095,46 @@
                   </div>
                 </el-popover>
 
-                <button
+                <el-tooltip
                   v-for="reaction in note.reactions ?? []"
                   :key="reaction.emoji"
-                  type="button"
-                  class="reaction-chip"
-                  :class="{ 'is-mine': reaction.reacted }"
-                  :disabled="isReacting(note)"
-                  :title="reactionTitle(reaction)"
-                  @click.stop="toggleReaction(note, reaction.emoji)"
+                  placement="top"
+                  popper-class="reaction-tooltip"
+                  :disabled="!reaction.reactors?.length"
                 >
-                  <span class="reaction-emoji">{{ reaction.emoji }}</span>
-                  <span class="reaction-count">{{ reaction.count }}</span>
-                </button>
+                  <template #content>
+                    <div
+                      v-for="reactor in tooltipReactors(reaction)"
+                      :key="reactor.username"
+                      class="reaction-tooltip-name"
+                    >
+                      {{ reactor.username }}
+                    </div>
+                    <div v-if="tooltipMoreCount(reaction)" class="reaction-tooltip-more">
+                      ...and {{ tooltipMoreCount(reaction) }} more
+                    </div>
+                  </template>
+                  <button
+                    type="button"
+                    class="reaction-chip"
+                    :class="{ 'is-mine': reaction.reacted }"
+                    :disabled="isReacting(note)"
+                    @click.stop="toggleReaction(note, reaction.emoji)"
+                  >
+                    <span class="reaction-emoji">{{ reaction.emoji }}</span>
+                    <span class="reaction-count">{{ reaction.count }}</span>
+                  </button>
+                </el-tooltip>
+
+                <!-- One reader may have given several emojis and is still one
+                     person, so the number is counted once for the whole release -->
+                <span
+                  v-if="reactedPeople(note)"
+                  class="reaction-total"
+                  data-test="reaction-total"
+                >
+                  {{ reactionTotalLabel(note) }}
+                </span>
               </div>
             </article>
 
@@ -1220,6 +1247,7 @@ import {
   type ReleaseNote,
   type ReleaseNoteContributor,
   type ReleaseNoteReaction,
+  type ReleaseNoteReactor,
 } from '@/api/releaseNotes'
 import type {
   ReleaseNoteExportRequest,
@@ -2159,8 +2187,35 @@ function reactedWith(note: ReleaseNote, emoji: string): boolean {
   return (note.reactions ?? []).some((reaction) => reaction.emoji === emoji && reaction.reacted)
 }
 
-function reactionTitle(reaction: ReleaseNoteReaction): string {
-  return `${reaction.emoji} ${t('releaseNotes.reaction_count', { count: reaction.count })}`
+// Names a tooltip lists before it counts the rest: eight fit without turning a
+// hover hint into a wall of text
+const REACTION_TOOLTIP_LIMIT = 8
+
+/** The readers a tooltip names. */
+function tooltipReactors(reaction: ReleaseNoteReaction): ReleaseNoteReactor[] {
+  return (reaction.reactors ?? []).slice(0, REACTION_TOOLTIP_LIMIT)
+}
+
+/** The readers a tooltip only counts, when there are more than it can name. */
+function tooltipMoreCount(reaction: ReleaseNoteReaction): number {
+  return Math.max(reaction.count - REACTION_TOOLTIP_LIMIT, 0)
+}
+
+/** The people who reacted, counted once however many emojis each of them gave. */
+function reactedPeople(note: ReleaseNote): number {
+  const names = new Set<string>()
+  for (const reaction of note.reactions ?? []) {
+    for (const reactor of reaction.reactors ?? []) names.add(reactor.username)
+  }
+  return names.size
+}
+
+function reactionTotalLabel(note: ReleaseNote): string {
+  const count = reactedPeople(note)
+  // Two keys rather than a suffix: English turns "person" into "people"
+  return count === 1
+    ? t('releaseNotes.reaction_total_one')
+    : t('releaseNotes.reaction_total_other', { count })
 }
 
 /** Give a release one emoji, or take back the one this reader gave before. */
@@ -3604,6 +3659,14 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 
+/* How many people, said once for the release: one reader may have given several
+   emojis and is still one person */
+.reaction-total {
+  margin-left: 2px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
 .reaction-add {
   padding: 0 8px;
   color: var(--el-text-color-regular);
@@ -3888,5 +3951,18 @@ onBeforeUnmount(() => {
   .note-entry-name {
     font-size: 22px;
   }
+}
+</style>
+
+<!-- The tooltip teleports to the body, outside this component's scope, so its
+     popper classes live here, unscoped. -->
+<style>
+.reaction-tooltip .reaction-tooltip-name {
+  line-height: 1.5;
+}
+
+.reaction-tooltip .reaction-tooltip-more {
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
 }
 </style>

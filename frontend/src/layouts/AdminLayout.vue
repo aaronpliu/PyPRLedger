@@ -98,7 +98,7 @@
       </el-header>
 
       <el-main class="admin-main">
-        <div class="page-wrapper">
+        <div class="page-wrapper admin-page">
           <router-view />
           
           <!-- Page-level version info (shown at bottom of each page) -->
