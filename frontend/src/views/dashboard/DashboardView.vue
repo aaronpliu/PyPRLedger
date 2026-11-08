@@ -534,15 +534,13 @@ const renderActivityChart = () => {
         },
       },
     },
-    // Add dataZoom for cases with many data points
+    // Only an explicit slider can change the visible range. An "inside" dataZoom
+    // would treat a wheel/trackpad scroll over the chart as a zoom gesture (and
+    // block the page from scrolling), so hovering and scrolling silently changed
+    // what the chart showed. The slider keeps zooming available on long ranges.
     dataZoom: [
       {
-        type: 'inside', // Enable mouse wheel zoom
-        start: 0,
-        end: 100,
-      },
-      {
-        type: 'slider', // Show slider at bottom
+        type: 'slider',
         show: totalData.length > 30, // Only show if more than 30 data points
         start: 0,
         end: 100,
@@ -575,7 +573,9 @@ const renderActivityChart = () => {
     ],
   }
 
-  activityChart.setOption(option)
+  // Replace the option wholesale: a merged option can keep a zoom range the
+  // user set earlier, so a theme/locale/period refresh must start at 0–100.
+  activityChart.setOption(option, { notMerge: true })
 }
 
 // Load score trends
