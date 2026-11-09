@@ -109,6 +109,9 @@
             <el-button size="small" type="primary" @click="viewRoles(row)">
               Roles
             </el-button>
+            <el-button size="small" @click="openAccess(row)">
+              Projects
+            </el-button>
             <el-dropdown trigger="click" @command="(command: string) => handleAction(command, row)">
               <el-button size="small">
                 More<el-icon class="el-icon--right"><arrow-down /></el-icon>
@@ -280,6 +283,14 @@
         </span>
       </template>
     </el-dialog>
+
+    <RepositoryAccessDialog
+      v-model="showAccessDialog"
+      subject-type="auth_user"
+      :subject-id="accessUserId"
+      :username="accessUsername"
+      @saved="loadUsers"
+    />
   </div>
 </template>
 
@@ -295,6 +306,16 @@ import { rbacApi } from '@/api/rbac'
 import { usersApi } from '@/api/users'
 import type { ResourceType, Role, RoleAssignment } from '@/types'
 import UserAvatar from '@/components/user/UserAvatar.vue'
+import RepositoryAccessDialog from '@/components/admin/RepositoryAccessDialog.vue'
+
+const showAccessDialog = ref(false)
+const accessUserId = ref<number | null>(null)
+const accessUsername = ref('')
+const openAccess = (row: any) => {
+  accessUserId.value = row.id
+  accessUsername.value = row.username
+  showAccessDialog.value = true
+}
 
 const { t } = useI18n()
 const loading = ref(false)

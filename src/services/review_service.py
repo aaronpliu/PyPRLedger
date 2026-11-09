@@ -35,6 +35,7 @@ from src.schemas.pull_request import (
 from src.services.auto_assign_service import AutoTaskAssignmentService
 from src.services.entity_sync_service import EntitySyncService
 from src.services.project_registry_service import ProjectRegistryService
+from src.services.repository_access_service import RepositoryAccessService
 from src.services.review_score_service import ReviewScoreService
 from src.utils.ai_review_utils import generate_ai_review_id
 from src.utils.metrics import MetricsCollector, metrics
@@ -660,6 +661,13 @@ class ReviewService:
 
             pr_user = await entity_sync_service.sync_user(
                 username=review_data.pull_request_user, is_reviewer=False
+            )
+
+            # A PR author is always allowed to see the repository the PR belongs to.
+            await RepositoryAccessService(db).ensure_author_grants(
+                project_key=project.project_key,
+                repository_slug=repository.repository_slug,
+                username=review_data.pull_request_user,
             )
 
             # Sync reviewer if provided, otherwise set to None

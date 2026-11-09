@@ -83,6 +83,9 @@
                 <el-icon><Edit /></el-icon>
                 Edit
               </el-button>
+              <el-button size="small" @click="openAccess(row)">
+                Projects
+              </el-button>
               <el-dropdown trigger="click" @command="(command: string) => handleAction(command, row)">
                 <el-button size="small">
                   More<el-icon class="el-icon--right"><ArrowDown /></el-icon>
@@ -171,6 +174,14 @@
         </span>
       </template>
     </el-dialog>
+
+    <RepositoryAccessDialog
+      v-model="showAccessDialog"
+      subject-type="git_user"
+      :subject-id="accessUserId"
+      :username="accessUsername"
+      @saved="loadUsers"
+    />
   </div>
 </template>
 
@@ -182,6 +193,16 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import { usersApi } from '@/api/users'
+import RepositoryAccessDialog from '@/components/admin/RepositoryAccessDialog.vue'
+
+const showAccessDialog = ref(false)
+const accessUserId = ref<number | null>(null)
+const accessUsername = ref('')
+const openAccess = (row: any) => {
+  accessUserId.value = row.id
+  accessUsername.value = row.username
+  showAccessDialog.value = true
+}
 
 interface GitUser {
   id: number
