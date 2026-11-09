@@ -44,13 +44,13 @@ class RoleAssignmentRequest(BaseModel):
 
     role_id: int = Field(..., description="Role ID to assign")
     resource_type: str = Field(
-        ...,
-        description="Resource scope (global, project, repository)",
-        pattern="^(global|project|repository)$",
+        "global",
+        description="Resource scope (global only; project visibility is managed by repository access grants)",
+        pattern="^global$",
     )
     resource_id: str | None = Field(
         None,
-        description="Resource identifier (project_key or repository_slug, NULL for global)",
+        description="Deprecated and always null; kept for response compatibility",
     )
     expires_at: datetime | None = Field(
         None, description="Optional expiration time for temporary permissions"

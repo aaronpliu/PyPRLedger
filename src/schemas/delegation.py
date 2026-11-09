@@ -13,13 +13,13 @@ class DelegationCreate(BaseModel):
     delegatee_id: int = Field(..., description="User ID to delegate role to")
     role_id: int = Field(..., description="Role ID to delegate")
     resource_type: str = Field(
-        ...,
-        description="Resource type (must match delegator's resource type)",
-        pattern="^(global|project|repository)$",
+        "global",
+        description="Resource scope (global only; project visibility is managed by repository access grants)",
+        pattern="^global$",
     )
     resource_id: str | None = Field(
         None,
-        description="Resource identifier (NULL for global, project_key or repository_slug otherwise)",
+        description="Deprecated and always null; kept for response compatibility",
     )
     delegation_scope: dict = Field(
         ...,

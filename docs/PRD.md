@@ -127,10 +127,10 @@ system_admin
 
 ### 3.3 Resource Scope
 
-Permissions can be scoped at three levels:
-- **Global**: Applies to all resources in the system
-- **Project**: Applies to a specific project (identified by `project_key`)
-- **Repository**: Applies to a specific repository (identified by `repository_slug`)
+Role assignments are global only. The `project` and `repository` scope values are
+deprecated: they were never enforced on the read path, and new assignments no
+longer accept them. Project visibility is a separate concern and is not derived
+from role scope.
 
 ### 3.4 Delegation
 
@@ -521,7 +521,7 @@ Request: GET /reviews?app_names=member,tv
 |---|---|---|
 | FR-5.8.11 | Roles define permissions as JSON: `{"reviews": ["read", "create"]}` | P0 |
 | FR-5.8.12 | Predefined roles: viewer, reviewer, review_admin, system_admin | P0 |
-| FR-5.8.13 | Role assignments support resource scope (global/project/repository) | P0 |
+| FR-5.8.13 | Role assignments are global only; project/repository scope is deprecated | P0 |
 | FR-5.8.14 | Custom roles can be created by system_admin | P1 |
 | FR-5.8.15 | Permission checks at endpoint level via `Depends()` | P0 |
 | FR-5.8.16 | RBAC manages runtime settings: LLM config, registration toggle, reviews page banner | P1 |

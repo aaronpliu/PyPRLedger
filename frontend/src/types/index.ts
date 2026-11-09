@@ -108,7 +108,7 @@ export interface RoleAssignmentRequest {
 }
 
 // Define a common type for resource types
-export type ResourceType = 'global' | 'project' | 'repository';
+export type ResourceType = 'global';
 
 // Audit types
 export interface AuditLog {

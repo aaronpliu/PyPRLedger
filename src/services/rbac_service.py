@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.exceptions import ForbiddenException
+from src.core.exceptions import ForbiddenException, ValidationException
 from src.models.rbac import UserRoleAssignment
 from src.models.role import Role
 from src.models.system_setting import SystemSetting
@@ -37,16 +37,14 @@ class RBACService:
     ) -> bool:
         """Check if user has permission to perform action on resource
 
-        Permission check order (highest priority first):
-        1. Repository-level permissions
-        2. Project-level permissions
-        3. Global-level permissions
+        Only global role assignments grant permissions. Project and repository
+        visibility is decided by the repository access grants instead.
 
         Args:
             auth_user_id: User ID
             action: Action to check (read, create, update, delete, manage)
             resource_type: Resource type (reviews, scores, projects, repositories, users, etc.)
-            resource_id: Resource identifier (project_key or repository_slug)
+            resource_id: Deprecated; retained for signature compatibility
 
         Returns:
             True if user has permission, False otherwise
@@ -119,56 +117,44 @@ class RBACService:
             logger.warning(f"User {auth_user_id} has no active role assignments")
             return False
 
-        # Check permissions by level (repository > project > global)
-        for level in ["repository", "project", "global"]:
-            if level == "global":
-                # For global level, match assignments where resource_id is NULL or empty string
-                level_assignments = [
-                    a
-                    for a in active_assignments
-                    if a.resource_type == level and (a.resource_id is None or a.resource_id == "")
-                ]
-            else:
-                # For project/repository level, match specific resource_id
-                level_assignments = [
-                    a
-                    for a in active_assignments
-                    if a.resource_type == level and a.resource_id == resource_id
-                ]
+        # Only global role assignments grant permissions. Project and repository
+        # visibility is decided by the repository access grants instead.
+        global_assignments = [
+            a
+            for a in active_assignments
+            if a.resource_type == "global" and (a.resource_id is None or a.resource_id == "")
+        ]
 
-            logger.debug(f"Level {level}: found {len(level_assignments)} assignments")
+        logger.debug(f"Global assignments: found {len(global_assignments)}")
 
-            for assignment in level_assignments:
-                # Get role permissions
-                role_stmt = select(Role).where(Role.id == assignment.role_id)
-                role_result = await self.db.execute(role_stmt)
-                role = role_result.scalar_one_or_none()
+        for assignment in global_assignments:
+            role_stmt = select(Role).where(Role.id == assignment.role_id)
+            role_result = await self.db.execute(role_stmt)
+            role = role_result.scalar_one_or_none()
 
-                if not role:
-                    continue
+            if not role:
+                continue
 
-                # Parse permissions (may be string or dict depending on DB driver)
-                permissions = role.permissions
-                if isinstance(permissions, str):
-                    import json
+            permissions = role.permissions
+            if isinstance(permissions, str):
+                import json
 
-                    permissions = json.loads(permissions)
+                permissions = json.loads(permissions)
 
-                logger.debug(
-                    f"Checking role '{role.name}' (ID: {role.id}): "
-                    f"permissions={list(permissions.keys())}"
+            logger.debug(
+                f"Checking role '{role.name}' (ID: {role.id}): "
+                f"permissions={list(permissions.keys())}"
+            )
+
+            resource_permissions = permissions.get(resource_type, [])
+
+            if action in resource_permissions:
+                logger.info(
+                    f"✓ Permission granted: user={auth_user_id}, "
+                    f"action={action}, resource_type={resource_type}, "
+                    f"role={role.name}"
                 )
-
-                # Check if action is allowed for this resource type
-                resource_permissions = permissions.get(resource_type, [])
-
-                if action in resource_permissions:
-                    logger.info(
-                        f"✓ Permission granted: user={auth_user_id}, "
-                        f"action={action}, resource_type={resource_type}, "
-                        f"role={role.name}"
-                    )
-                    return True
+                return True
 
         logger.warning(
             f"✗ Permission denied: user={auth_user_id}, action={action}, "
@@ -308,8 +294,12 @@ class RBACService:
         Raises:
             ForbiddenException: If assignment already exists
         """
-        # Normalize resource_id: treat empty string as None for consistent matching
-        normalized_resource_id = resource_id if resource_id else None
+        if resource_type != "global":
+            raise ValidationException(
+                message="Only global role assignments are supported; manage project visibility through repository access grants"
+            )
+
+        normalized_resource_id = None
 
         # Check if assignment already exists
         stmt = select(UserRoleAssignment).where(
@@ -455,6 +445,12 @@ class RBACService:
         from datetime import datetime as dt
 
         now = dt.now(UTC)
+
+        if resource_type != "global" or resource_id:
+            raise ValidationException(
+                message="Only global role delegations are supported; manage project visibility through repository access grants"
+            )
+        resource_id = None
 
         # 1. Validate time range
         if starts_at >= expires_at:

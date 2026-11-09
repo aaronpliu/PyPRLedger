@@ -248,7 +248,7 @@ async def get_user_roles(
     "/users/{auth_user_id}/roles",
     response_model=RoleAssignmentResponse,
     summary="Assign role to user",
-    description="Assign a role to a user with specific resource scope",
+    description="Assign a global role to a user",
     status_code=status.HTTP_201_CREATED,
 )
 async def assign_role_to_user(
@@ -264,8 +264,8 @@ async def assign_role_to_user(
         assignment = await rbac_service.assign_role(
             auth_user_id=auth_user_id,
             role_id=assignment_data.role_id,
-            resource_type=assignment_data.resource_type,
-            resource_id=assignment_data.resource_id,
+            resource_type="global",
+            resource_id=None,
             granted_by=current_user.id,
             expires_at=assignment_data.expires_at,
         )

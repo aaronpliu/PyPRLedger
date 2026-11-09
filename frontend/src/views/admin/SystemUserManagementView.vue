@@ -184,12 +184,6 @@
         <h5 style="margin-top: 16px;">Current Roles:</h5>
         <el-table :data="currentRoles" size="small" border>
           <el-table-column prop="role_name" label="Role" width="150" />
-          <el-table-column prop="resource_type" label="Scope" width="120" />
-          <el-table-column prop="resource_id" label="Resource" min-width="150">
-            <template #default="{ row }">
-              {{ row.resource_id || '-' }}
-            </template>
-          </el-table-column>
           <el-table-column label="Actions" width="100">
             <template #default="{ row }">
               <el-button 
@@ -220,21 +214,10 @@
           <el-form-item label="Scope">
             <el-radio-group v-model="roleForm.resource_type">
               <el-radio value="global">Global</el-radio>
-              <el-radio value="project">Project</el-radio>
-              <el-radio value="repository">Repository</el-radio>
             </el-radio-group>
           </el-form-item>
           
-          <el-form-item 
-            v-if="roleForm.resource_type !== 'global'" 
-            label="Resource ID"
-          >
-            <el-input 
-              v-model="roleForm.resource_id" 
-              :placeholder="roleForm.resource_type === 'project' ? 'Project Key (e.g., PROJ)' : 'Repository Slug (e.g., my-repo)'"
-            />
-          </el-form-item>
-          
+
           <el-form-item>
             <el-button type="primary" @click="assignRole">
               Assign Role
