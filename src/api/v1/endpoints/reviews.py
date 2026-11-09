@@ -15,7 +15,8 @@ from src.core.exceptions import (
     ReviewStatusException,
     UserNotFoundException,
 )
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import CurrentRepositoryAccess, get_current_user_with_token
+from src.core.repository_access import allowed_project_keys
 from src.models.auth_user import AuthUser
 from src.models.pull_request import (
     PullRequestReviewAssignment,
@@ -587,6 +588,7 @@ async def list_reviews(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    access: CurrentRepositoryAccess,
     pull_request_id: str | None = Query(None, description="Filter by pull request ID"),
     project_key: str | None = Query(
         None, min_length=1, max_length=32, description="Filter by project key"
@@ -672,6 +674,17 @@ async def list_reviews(
         ReviewListResponse: List of reviews with full entity information, app_name, and pagination info
     """
     try:
+        if not access:
+            return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
+        if project_key and project_key not in allowed_project_keys(access):
+            return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
+        if (
+            project_key
+            and repository_slug
+            and (project_key, repository_slug) not in access
+        ):
+            return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
+
         rbac_service = RBACService(db)
 
         # Check if user has review_admin role (by checking 'assign' permission)
@@ -724,7 +737,13 @@ async def list_reviews(
 
         # Get enriched reviews with full entity information and app_name resolution
         enriched_reviews, total = await review_service.list_reviews_with_entities(
-            filters, db, page, page_size, app_names=app_names_list, current_user_id=current_user.id
+            filters,
+            db,
+            page,
+            page_size,
+            app_names=app_names_list,
+            current_user_id=current_user.id,
+            allowed_pairs=access,
         )
 
         # Convert dict reviews to ReviewResponse objects

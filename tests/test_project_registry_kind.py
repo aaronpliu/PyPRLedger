@@ -33,6 +33,36 @@ class AllowingRbac:
         return True
 
 
+@pytest.fixture(autouse=True)
+def _visibility_overrides():
+    """These tests predate repository visibility: grant them a user and all pairs."""
+    from fastapi import Depends
+    from sqlalchemy import select
+
+    from src.core.permissions import get_current_user_with_token, get_repository_access
+
+    async def _current_user():
+        return AuthUser(id=1, username="tester", email="tester@example.com")
+
+    async def _access(db: AsyncSession = Depends(get_db_session)):
+        rows = await db.execute(
+            select(Project.project_key, Repository.repository_slug).join(
+                Repository, Repository.project_id == Project.project_id
+            )
+        )
+        # The invalid-kind test seeds no data at all; it still needs a grant for
+        # CORE so that the request reaches the endpoint's parameter validation.
+        return {(project_key, slug) for project_key, slug in rows.all()} | {
+            ("CORE", "unknown")
+        }
+
+    app.dependency_overrides[get_current_user_with_token] = _current_user
+    app.dependency_overrides[get_repository_access] = _access
+    yield
+    app.dependency_overrides.pop(get_current_user_with_token, None)
+    app.dependency_overrides.pop(get_repository_access, None)
+
+
 # --------------------------------------------------------------------------- #
 # What a registration says it is
 # --------------------------------------------------------------------------- #

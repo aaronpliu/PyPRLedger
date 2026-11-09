@@ -31,6 +31,7 @@ class SSEClient:
     client_id: str
     git_username: str | None
     is_admin: bool
+    allowed_pairs: set[tuple[str, str]] | None = None
     queue: asyncio.Queue[str | None] = field(
         default_factory=lambda: asyncio.Queue(maxsize=QUEUE_MAX_SIZE)
     )
@@ -41,7 +42,13 @@ def _is_user_involved_in_review(
     review: dict,
     git_username: str | None,
     is_admin: bool = False,
+    allowed_pairs: set[tuple[str, str]] | None = None,
 ) -> bool:
+    if allowed_pairs is not None and (
+        review.get("project_key"),
+        review.get("repository_slug"),
+    ) not in allowed_pairs:
+        return False
     if is_admin:
         return True
     if not git_username:
@@ -139,7 +146,11 @@ class SSEBroker:
             logger.info("SSEBroker stopped")
 
     async def register(
-        self, client_id: str, git_username: str | None, is_admin: bool
+        self,
+        client_id: str,
+        git_username: str | None,
+        is_admin: bool,
+        allowed_pairs: set[tuple[str, str]] | None = None,
     ) -> asyncio.Queue[str | None]:
         await self.start()
 
@@ -147,6 +158,7 @@ class SSEBroker:
             client_id=client_id,
             git_username=git_username,
             is_admin=is_admin,
+            allowed_pairs=allowed_pairs,
         )
         self._clients[client_id] = client
 
@@ -261,7 +273,12 @@ class SSEBroker:
         event_str = f"event: review_created\ndata: {json.dumps(minimal_payload)}\n\n"
 
         for client in list(self._clients.values()):
-            if _is_user_involved_in_review(review, client.git_username, client.is_admin):
+            if _is_user_involved_in_review(
+                review,
+                client.git_username,
+                client.is_admin,
+                client.allowed_pairs,
+            ):
                 try:
                     client.queue.put_nowait(event_str)
                     metrics.sse_events_filtered_total.labels(filtered="false").inc()

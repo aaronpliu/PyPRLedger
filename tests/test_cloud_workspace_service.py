@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.git_provider import GitProvider
@@ -18,6 +19,26 @@ from src.services.cloud_workspace_service import (
     workspace_from_repository_url,
 )
 from src.services.git_providers.base import BaseGitProvider
+
+
+@pytest.fixture(autouse=True)
+def _visibility_overrides():
+    """These tests predate repository visibility: give the request a user and grants."""
+    from src.core.permissions import get_current_user_with_token, get_repository_access
+    from src.main import app
+    from src.models.auth_user import AuthUser
+
+    async def _current_user():
+        return AuthUser(id=1, username="tester", email="tester@example.com")
+
+    async def _access():
+        return {("TEST", "repo")}
+
+    app.dependency_overrides[get_current_user_with_token] = _current_user
+    app.dependency_overrides[get_repository_access] = _access
+    yield
+    app.dependency_overrides.pop(get_current_user_with_token, None)
+    app.dependency_overrides.pop(get_repository_access, None)
 
 
 class StubProvider(BaseGitProvider):

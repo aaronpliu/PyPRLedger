@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
+from src.core.exceptions import ForbiddenException
 from src.core.git_provider import GitProvider
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import CurrentRepositoryAccess, get_current_user_with_token
 from src.models.auth_user import AuthUser
 from src.models.project_registry import ProjectRegistry
 from src.schemas.project_registry import ProjectRegistryListResponse, ProjectRegistryResponse
@@ -36,16 +37,30 @@ def get_rbac_service(db: Annotated[AsyncSession, Depends(get_db_session)]) -> RB
 async def list_all_apps(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     registry_service: Annotated[ProjectRegistryService, Depends(get_registry_service)],
+    access: CurrentRepositoryAccess,
 ):
-    """
-    List all registered applications with their project counts
+    """List applications the user has granted repositories in."""
+    from collections import Counter
 
-    Returns:
-        List of apps with app_name and project_count
-    """
+    from sqlalchemy import select
+
     try:
-        apps = await registry_service.list_all_apps(db)
-        return apps
+        rows = await db.execute(
+            select(
+                ProjectRegistry.app_name,
+                ProjectRegistry.project_key,
+                ProjectRegistry.repository_slug,
+            )
+        )
+        counts = Counter(
+            app_name
+            for app_name, project_key, repository_slug in rows.all()
+            if (project_key, repository_slug) in access
+        )
+        return [
+            {"app_name": app_name, "project_count": count}
+            for app_name, count in sorted(counts.items())
+        ]
     except Exception as e:
         logger.error(f"Failed to list apps: {str(e)}")
         raise HTTPException(
@@ -59,6 +74,7 @@ async def list_projects_by_app(
     app_name: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     registry_service: Annotated[ProjectRegistryService, Depends(get_registry_service)],
+    access: CurrentRepositoryAccess,
 ):
     """
     List all projects registered to a specific application
@@ -82,6 +98,7 @@ async def list_projects_by_app(
                 "updated_date": p.updated_date.isoformat(),
             }
             for p in projects
+            if (p.project_key, p.repository_slug) in access
         ]
     except Exception as e:
         logger.error(f"Failed to list projects for app {app_name}: {str(e)}")
@@ -177,6 +194,7 @@ async def list_registry_projects_paginated(
 async def list_all_registered_projects(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     registry_service: Annotated[ProjectRegistryService, Depends(get_registry_service)],
+    access: CurrentRepositoryAccess,
 ):
     """
     List all registered projects across all applications
@@ -203,6 +221,7 @@ async def list_all_registered_projects(
                 "updated_date": p.updated_date.isoformat(),
             }
             for p in projects
+            if (p.project_key, p.repository_slug) in access
         ]
     except Exception as e:
         logger.error(f"Failed to list all registered projects: {str(e)}")
@@ -221,6 +240,7 @@ async def get_project_app_name(
     repository_slug: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     registry_service: Annotated[ProjectRegistryService, Depends(get_registry_service)],
+    access: CurrentRepositoryAccess,
 ):
     """
     Get the application name for a specific project-repository pair
@@ -232,6 +252,9 @@ async def get_project_app_name(
     Returns:
         Dict with app_name field
     """
+    if (project_key, repository_slug) not in access:
+        raise ForbiddenException(message="No access to this repository")
+
     try:
         app_name = await registry_service.get_app_name(project_key, repository_slug, db)
         return {"app_name": app_name}

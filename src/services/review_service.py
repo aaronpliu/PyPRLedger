@@ -15,6 +15,11 @@ from src.core.exceptions import (
     ReviewNotFoundException,
     ReviewStatusException,
 )
+from src.core.repository_access import (
+    RepositoryPair,
+    access_scope,
+    repository_pair_condition,
+)
 from src.models.project import Project
 from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import (
@@ -983,6 +988,7 @@ class ReviewService:
         use_cache: bool = True,
         app_names: list[str] | None = None,
         current_user_id: int | None = None,
+        allowed_pairs: set[RepositoryPair] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """
         List pull request reviews with filtering and pagination
@@ -1027,6 +1033,14 @@ class ReviewService:
                 query = query.where(or_(*app_conditions))
             else:
                 return [], 0
+
+        pair_condition = repository_pair_condition(
+            PullRequestReviewBase.project_key,
+            PullRequestReviewBase.repository_slug,
+            allowed_pairs,
+        )
+        if pair_condition is not None:
+            query = query.where(pair_condition)
 
         if filters.pull_request_id:
             query = query.where(PullRequestReviewBase.pull_request_id == filters.pull_request_id)
@@ -1206,6 +1220,7 @@ class ReviewService:
         if not app_names and use_cache:
             try:
                 filter_dict = filters.model_dump(exclude_unset=True)
+                filter_dict["_access"] = access_scope(allowed_pairs)
                 cache_key = self._get_list_cache_key(filter_dict, page, page_size)
                 cached = await self.redis_client.get(cache_key)
                 if cached:
@@ -1265,6 +1280,7 @@ class ReviewService:
         if not app_names and use_cache and reviews:
             try:
                 filter_dict = filters.model_dump(exclude_unset=True)
+                filter_dict["_access"] = access_scope(allowed_pairs)
                 cache_key = self._get_list_cache_key(filter_dict, page, page_size)
                 cache_data = {"reviews": reviews, "total": total}
                 await self.redis_client.setex(
@@ -2401,6 +2417,7 @@ class ReviewService:
         use_cache: bool = False,
         app_names: list[str] | None = None,
         current_user_id: int | None = None,
+        allowed_pairs: set[RepositoryPair] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """
         List pull request reviews with full entity information
@@ -2426,6 +2443,7 @@ class ReviewService:
             use_cache=False,
             app_names=app_names,
             current_user_id=current_user_id,
+            allowed_pairs=allowed_pairs,
         )
 
         # Collect unique project-repo pairs for batch app_name resolution
