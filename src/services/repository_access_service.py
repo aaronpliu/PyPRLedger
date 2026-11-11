@@ -170,7 +170,11 @@ class RepositoryAccessService:
         return targets
 
     async def ensure_author_grants(
-        self, project_key: str, repository_slug: str, username: str | None
+        self,
+        project_key: str,
+        repository_slug: str,
+        username: str | None,
+        granted_by: int | None = None,
     ) -> None:
         """Grant a PR author its repository, together with any linked system user.
 
@@ -211,7 +215,7 @@ class RepositoryAccessService:
                     subject_username=git_user.username,
                     project_key=project_key,
                     repository_slug=repository_slug,
-                    granted_by=None,
+                    granted_by=granted_by,
                     created_at=now,
                     updated_at=now,
                 )

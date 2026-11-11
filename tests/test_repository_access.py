@@ -140,6 +140,52 @@ async def test_replace_access_syncs_the_linked_subject(db: AsyncSession, access_
 
 
 @pytest.mark.asyncio
+async def test_assign_reviewer_auto_grants_the_repository(db: AsyncSession, access_data: dict):
+    """Assigning a task grants the reviewer's linked subjects the repository."""
+    from src.models.pull_request import PullRequestReviewBase
+    from src.schemas.review import AssignReviewerRequest
+    from src.services.multi_reviewer_service import MultiReviewerService
+
+    review = PullRequestReviewBase(
+        pull_request_id="PR-1",
+        project_key="PROJ",
+        repository_slug="repo-one",
+        source_branch="feature",
+        target_branch="main",
+        pull_request_status="OPEN",
+        pull_request_user="alice",
+    )
+    db.add(review)
+    await db.commit()
+
+    service = MultiReviewerService()
+    result = await service.assign_reviewer(
+        db=db,
+        review_base_id=review.id,
+        assignment_data=AssignReviewerRequest(reviewer="alice"),
+        assigned_by="admin",
+        granted_by_id=999,
+    )
+    assert result["message"] == "Reviewer assigned successfully"
+
+    access = RepositoryAccessService(db)
+    assert ("PROJ", "repo-one") in await access.allowed_pairs(access_data["linked"].id)
+    git_rows = await access.list_access("git_user", access_data["git_user"].id)
+    assert {(r["project_key"], r["repository_slug"]) for r in git_rows} == {
+        ("PROJ", "repo-one")
+    }
+    assert git_rows[0]["granted_by"] == 999
+
+    # a repeat assign is a no-op on the assignment but keeps the grant in place
+    await service.assign_reviewer(
+        db=db,
+        review_base_id=review.id,
+        assignment_data=AssignReviewerRequest(reviewer="alice"),
+    )
+    assert ("PROJ", "repo-one") in await access.allowed_pairs(access_data["linked"].id)
+
+
+@pytest.mark.asyncio
 async def test_author_auto_bind_is_idempotent_and_links_system_user(
     db: AsyncSession, access_data: dict
 ):
