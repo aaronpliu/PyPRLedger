@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import CurrentRepositoryAccess, get_current_user_with_token
 from src.models.auth_user import AuthUser
 from src.models.pull_request import PullRequestReviewAssignment
 from src.models.user import User
@@ -26,9 +26,11 @@ from src.services.rbac_service import RBACService
 router = APIRouter(prefix="/task-assignment", tags=["task-assignment"])
 
 
-def get_multi_reviewer_service() -> MultiReviewerService:
-    """Dependency to get multi-reviewer service instance"""
-    return MultiReviewerService()
+async def get_multi_reviewer_service(
+    access: CurrentRepositoryAccess,
+) -> MultiReviewerService:
+    """Dependency to get multi-reviewer service instance scoped to the caller's grants"""
+    return MultiReviewerService(allowed_pairs=access)
 
 
 @router.get("/", response_model=ReviewListResponse)

@@ -204,6 +204,28 @@ async def test_review_statistics_without_grants_are_zero(db: AsyncSession, catal
 
 
 @pytest.mark.asyncio
+async def test_project_statistics_scoped_to_grants(db: AsyncSession, catalog):
+    from src.services.project_service import ProjectService
+
+    stats = await ProjectService(allowed_project_keys={"ONE"}).get_project_statistics(
+        db, use_cache=False
+    )
+    assert stats.total_projects == 1
+    empty = await ProjectService(allowed_project_keys=set()).get_project_statistics(
+        db, use_cache=False
+    )
+    assert empty.total_projects == 0
+
+
+@pytest.mark.asyncio
+async def test_multi_reviewer_listing_scoped_to_grants(db: AsyncSession, catalog):
+    from src.services.multi_reviewer_service import MultiReviewerService
+
+    reviews, total = await MultiReviewerService(allowed_pairs=set()).get_reviews(db)
+    assert (reviews, total) == ([], 0)
+
+
+@pytest.mark.asyncio
 async def test_scores_endpoint_rejects_ungranted_repository(
     scoped_client: AsyncClient, db_session: AsyncSession, catalog
 ):

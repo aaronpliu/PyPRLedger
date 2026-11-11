@@ -478,7 +478,7 @@ class ProjectService:
             ProjectStats: Project statistics
         """
         # Try cache first
-        cache_key = f"stats:projects:{project_id or 'all'}"
+        cache_key = f"stats:projects:{project_id or 'all'}:{access_scope(self._allowed_project_keys)}"
         if use_cache:
             try:
                 cached = await self.redis_client.get(cache_key)
@@ -491,6 +491,8 @@ class ProjectService:
         base_query = select(Project)
         if project_id:
             base_query = base_query.where(Project.id == project_id)
+        if self._allowed_project_keys is not None:
+            base_query = base_query.where(Project.project_key.in_(self._allowed_project_keys))
 
         # Get total projects
         total_query = select(func.count()).select_from(base_query.subquery())
@@ -911,6 +913,8 @@ class ProjectService:
             .order_by(desc("review_count"))
             .limit(limit)
         )
+        if self._allowed_project_keys is not None:
+            query = query.where(Project.project_key.in_(self._allowed_project_keys))
 
         result = await db.execute(query)
         projects = []
@@ -968,6 +972,8 @@ class ProjectService:
             .order_by(desc("active_reviewer_count"))
             .limit(limit)
         )
+        if self._allowed_project_keys is not None:
+            query = query.where(Project.project_key.in_(self._allowed_project_keys))
 
         result = await db.execute(query)
         projects = []

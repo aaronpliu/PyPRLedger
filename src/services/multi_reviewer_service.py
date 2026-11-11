@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.exceptions import ReviewNotFoundException
+from src.core.repository_access import repository_pair_condition
 from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import (
     PullRequestReviewAssignment,
@@ -42,9 +43,14 @@ logger = logging.getLogger(__name__)
 class MultiReviewerService:
     """Service for managing reviews with multiple reviewers"""
 
-    def __init__(self, metrics_collector: MetricsCollector | None = None):
+    def __init__(
+        self,
+        metrics_collector: MetricsCollector | None = None,
+        allowed_pairs: set[tuple[str, str]] | None = None,
+    ):
         self.metrics = metrics_collector or metrics
         self._notification_service: NotificationService | None = None
+        self._allowed_pairs = allowed_pairs
 
     @property
     def notification_service(self) -> NotificationService:
@@ -139,6 +145,13 @@ class MultiReviewerService:
             ),
             selectinload(PullRequestReviewBase.pull_request_user_rel),
         )
+        pair_condition = repository_pair_condition(
+            PullRequestReviewBase.project_key,
+            PullRequestReviewBase.repository_slug,
+            self._allowed_pairs,
+        )
+        if pair_condition is not None:
+            stmt = stmt.where(pair_condition)
 
         # Handle app_name filtering via registry lookup
         if app_names:
@@ -623,6 +636,11 @@ class MultiReviewerService:
         base = result.scalar_one_or_none()
 
         if not base:
+            raise ReviewNotFoundException(review_id=str(review_id))
+        if self._allowed_pairs is not None and (
+            base.project_key,
+            base.repository_slug,
+        ) not in self._allowed_pairs:
             raise ReviewNotFoundException(review_id=str(review_id))
 
         response = self._base_to_response(base)
