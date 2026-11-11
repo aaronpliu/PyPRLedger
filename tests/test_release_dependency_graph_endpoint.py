@@ -15,7 +15,7 @@ from src.api.v1.endpoints.release_dependency_graph import (
     get_registry_service,
 )
 from src.core.database import get_db_session
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import get_current_user_with_token, get_repository_access
 from src.main import app
 from src.models.auth_user import AuthUser
 from src.services.dependency_graph_service import DependencyGraphService
@@ -71,6 +71,10 @@ def authenticated_client(db_session):
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_registry_service] = lambda: FakeRegistry()
+    app.dependency_overrides[get_repository_access] = lambda: {
+        ("CORE", "app"),
+        ("CORE", "unregistered"),
+    }
     app.dependency_overrides[get_dependency_graph_service] = lambda: DependencyGraphService(
         cache=FakeCache()
     )

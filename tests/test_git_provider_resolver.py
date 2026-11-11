@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from src.api.v1.endpoints.release_diff import get_release_diff_service
 from src.core.database import get_db_session
 from src.core.git_provider import GitProvider
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import get_current_user_with_token, get_repository_access
 from src.main import app
 from src.models.auth_user import AuthUser
 from src.models.project import Project
@@ -257,6 +257,10 @@ def override(provider: StubProvider, db_session: Any) -> list[str]:
     app.dependency_overrides[get_release_diff_service] = lambda: ReleaseDiffService(
         cache=FakeCache(), provider_factory=_factory
     )
+    app.dependency_overrides[get_repository_access] = lambda: {
+        ("AI", "pylang"),
+        ("AI", "unregistered"),
+    }
     return names
 
 

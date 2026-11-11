@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import CurrentRepositoryAccess, get_current_user_with_token
+from src.core.repository_access import ensure_pair_granted
 from src.models.auth_user import AuthUser
 from src.schemas.dependency_graph import DependencyGraphRequest, DependencyGraphResponse
 from src.services.dependency_graph_service import DependencyGraphService
@@ -40,11 +41,13 @@ def get_registry_service() -> ProjectRegistryService:
 )
 async def read_dependency_graph(
     payload: DependencyGraphRequest,
+    access: CurrentRepositoryAccess,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[DependencyGraphService, Depends(get_dependency_graph_service)],
     registry: Annotated[ProjectRegistryService, Depends(get_registry_service)],
 ) -> DependencyGraphResponse:
+    ensure_pair_granted(access, payload.project_key, payload.repository_slug)
     # the dependency database is asked for the repository's alias when it has one
     app_name = await registry.get_dependency_app_name(
         payload.project_key, payload.repository_slug, db

@@ -164,6 +164,18 @@ def test_sse_events_require_a_granted_repository():
     assert not _is_user_involved_in_review(review, None, True, {("TWO", "b")})
 
 
+@pytest.mark.asyncio
+async def test_release_diff_rejects_ungranted_repository(
+    scoped_client: AsyncClient, db_session: AsyncSession, catalog
+):
+    app.dependency_overrides[get_repository_access] = lambda: {("ONE", "a")}
+    response = await scoped_client.post(
+        "/api/v1/release/diff/refs",
+        json={"project_key": "TWO", "repository_slug": "b"},
+    )
+    assert response.status_code == 403
+
+
 def test_access_scope_separates_cache_entries():
     assert access_scope(None) == "all"
     assert access_scope(set()) == "none"

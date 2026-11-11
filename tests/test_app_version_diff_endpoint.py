@@ -16,7 +16,7 @@ from src.api.v1.endpoints.app_version_diff import (
 )
 from src.core.config import settings
 from src.core.database import get_db_session
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import get_current_user_with_token, get_repository_access
 from src.main import app
 from src.models.auth_user import AuthUser
 from src.schemas.app_version_diff import MAX_PACKAGE_BATCH
@@ -98,6 +98,7 @@ def authenticated_client(db_session, fake_diff):
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_registry_service] = lambda: FakeRegistry()
+    app.dependency_overrides[get_repository_access] = lambda: {("CORE", "app")}
     app.dependency_overrides[get_app_version_diff_service] = lambda: AppVersionDiffService(
         cache=FakeCache(),
         graph_service=DependencyGraphService(cache=FakeCache()),

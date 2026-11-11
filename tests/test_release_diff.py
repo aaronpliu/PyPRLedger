@@ -14,7 +14,7 @@ from src.api.v1.endpoints.release_diff import get_release_diff_service
 from src.core.config import settings
 from src.core.database import get_db_session
 from src.core.exceptions import GitServiceException
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import get_current_user_with_token, get_repository_access
 from src.main import app
 from src.models.auth_user import AuthUser
 from src.schemas.release_diff import (
@@ -808,11 +808,13 @@ def authenticated_client(fake_provider, db_session):
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_release_diff_service] = lambda: build_service(fake_provider)
+    app.dependency_overrides[get_repository_access] = lambda: {("PROJ", "my-repo")}
     yield
     for dependency in (
         get_current_user_with_token,
         get_db_session,
         get_release_diff_service,
+        get_repository_access,
     ):
         app.dependency_overrides.pop(dependency, None)
 
@@ -884,6 +886,7 @@ async def test_endpoint_refs_returns_502_on_git_failure(async_client, db_session
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_release_diff_service] = lambda: build_service(FailingProvider())
+    app.dependency_overrides[get_repository_access] = lambda: {("PROJ", "my-repo")}
     try:
         response = await async_client.post(
             "/api/v1/release/diff/refs",
@@ -895,6 +898,7 @@ async def test_endpoint_refs_returns_502_on_git_failure(async_client, db_session
     finally:
         app.dependency_overrides.pop(get_current_user_with_token, None)
         app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_repository_access, None)
         app.dependency_overrides.pop(get_release_diff_service, None)
 
     assert response.status_code == 502
@@ -1026,6 +1030,7 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_release_diff_service] = lambda: ReleaseDiffService()
+    app.dependency_overrides[get_repository_access] = lambda: {("PROJ", "my-repo")}
     try:
         compare_response = await async_client.post(
             "/api/v1/release/diff/compare",
@@ -1055,6 +1060,7 @@ async def test_endpoint_end_to_end_with_mocked_bitbucket_api(
     finally:
         app.dependency_overrides.pop(get_current_user_with_token, None)
         app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_repository_access, None)
         app.dependency_overrides.pop(get_release_diff_service, None)
 
     assert compare_response.status_code == 200
@@ -1147,6 +1153,7 @@ async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider, 
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_release_diff_service] = lambda: build_service(FailingProvider())
+    app.dependency_overrides[get_repository_access] = lambda: {("PROJ", "my-repo")}
     try:
         response = await async_client.post(
             "/api/v1/release/diff/compare",
@@ -1160,6 +1167,7 @@ async def test_endpoint_returns_502_on_git_failure(async_client, fake_provider, 
     finally:
         app.dependency_overrides.pop(get_current_user_with_token, None)
         app.dependency_overrides.pop(get_db_session, None)
+        app.dependency_overrides.pop(get_repository_access, None)
         app.dependency_overrides.pop(get_release_diff_service, None)
 
     assert response.status_code == 502
