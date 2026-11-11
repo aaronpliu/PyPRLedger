@@ -76,22 +76,18 @@
             {{ formatDate(row.updated_date) }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="200" fixed="right">
+        <el-table-column label="Actions" width="150" fixed="right">
           <template #default="{ row }">
             <div class="action-btns">
               <el-button size="small" type="primary" @click="handleEdit(row)">
                 <el-icon><Edit /></el-icon>
                 Edit
               </el-button>
-              <el-button size="small" @click="openAccess(row)">
-                Projects
-              </el-button>
               <el-dropdown trigger="click" @command="(command: string) => handleAction(command, row)">
-                <el-button size="small">
-                  More<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                </el-button>
+                <el-button size="small" :icon="MoreFilled" title="More" />
                 <template #dropdown>
                   <el-dropdown-menu>
+                    <el-dropdown-item :command="'projects'">Projects</el-dropdown-item>
                     <el-dropdown-item :command="'toggle'">
                       {{ row.is_reviewer ? 'Unset Reviewer' : 'Set Reviewer' }}
                     </el-dropdown-item>
@@ -187,7 +183,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { Plus, Search, Edit, ArrowDown, Delete } from '@element-plus/icons-vue'
+import { Plus, Search, Edit, MoreFilled, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -414,6 +410,8 @@ const handleAction = (command: string, user: GitUser) => {
     handleToggleReviewer(user)
   } else if (command === 'delete') {
     handleDelete(user)
+  } else if (command === 'projects') {
+    openAccess(user)
   }
 }
 
@@ -476,8 +474,14 @@ onMounted(() => {
 .action-btns {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
   white-space: nowrap;
+}
+
+/* icon-only buttons: drop Element Plus' sibling margin, the gap handles spacing */
+.action-btns .el-button + .el-button {
+  margin-left: 0;
 }
 
 .dialog-footer {
