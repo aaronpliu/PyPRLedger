@@ -69,7 +69,14 @@ def scoped_client(async_client: AsyncClient, db_session: AsyncSession):
     app.dependency_overrides[get_db_session] = _db
     app.dependency_overrides[get_current_user_with_token] = _user
     yield async_client
-    for dependency in (get_db_session, get_current_user_with_token, get_repository_access):
+    from src.api.v1.endpoints.reviews import get_review_service
+
+    for dependency in (
+        get_db_session,
+        get_current_user_with_token,
+        get_repository_access,
+        get_review_service,
+    ):
         app.dependency_overrides.pop(dependency, None)
 
 
@@ -136,7 +143,11 @@ async def test_project_repositories_endpoint_hides_ungranted_slugs(
 async def test_reviews_endpoint_without_grants_returns_empty_list(
     scoped_client: AsyncClient, db_session: AsyncSession, catalog
 ):
+    from src.api.v1.endpoints.reviews import get_review_service
+    from src.services.review_service import ReviewService
+
     app.dependency_overrides[get_repository_access] = lambda: set()
+    app.dependency_overrides[get_review_service] = lambda: ReviewService(allowed_pairs=set())
     response = await scoped_client.get("/api/v1/reviews")
     assert response.status_code == 200
     assert response.json()["total"] == 0
@@ -170,3 +181,39 @@ def test_pair_condition_restricts_both_columns():
     assert "project_key" in statement
     assert "repository_slug" in statement
     assert {"ONE", "TWO", "a", "b"} <= {str(value) for value in compiled.params.values()}
+
+
+@pytest.mark.asyncio
+async def test_project_review_lookup_inherits_service_grants(db: AsyncSession, catalog):
+    from src.services.review_service import ReviewService
+
+    service = ReviewService(allowed_pairs=set())
+    reviews, total = await service.get_reviews_by_project("ONE", db)
+    assert (reviews, total) == ([], 0)
+
+
+@pytest.mark.asyncio
+async def test_review_statistics_without_grants_are_zero(db: AsyncSession, catalog):
+    from src.services.review_service import ReviewService
+
+    stats = await ReviewService(allowed_pairs=set()).get_review_statistics(
+        db=db, use_cache=False
+    )
+    assert stats.total_reviews == 0
+    assert stats.average_score == 0.0
+
+
+@pytest.mark.asyncio
+async def test_scores_endpoint_rejects_ungranted_repository(
+    scoped_client: AsyncClient, db_session: AsyncSession, catalog
+):
+    app.dependency_overrides[get_repository_access] = lambda: {("ONE", "a")}
+    response = await scoped_client.get(
+        "/api/v1/reviews/scores",
+        params={
+            "pull_request_id": "1",
+            "project_key": "TWO",
+            "repository_slug": "b",
+        },
+    )
+    assert response.status_code == 403

@@ -54,10 +54,15 @@ logger = logging.getLogger(__name__)
 class ReviewService:
     """Service for managing pull request reviews"""
 
-    def __init__(self, metrics_collector: MetricsCollector | None = None):
+    def __init__(
+        self,
+        metrics_collector: MetricsCollector | None = None,
+        allowed_pairs: set[RepositoryPair] | None = None,
+    ):
         """Initialize the review service"""
         self.redis_client = get_redis_client()
         self.metrics = metrics_collector or metrics
+        self._allowed_pairs = allowed_pairs
 
     @staticmethod
     def _get_cache_key(project_key: str, repository_slug: str, pull_request_id: str) -> str:
@@ -908,6 +913,14 @@ class ReviewService:
             DatabaseException: If database query fails
         """
         try:
+            if (
+                self._allowed_pairs is not None
+                and project_key
+                and repository_slug
+                and (project_key, repository_slug) not in self._allowed_pairs
+            ):
+                return []
+
             logger.info(f"Querying database for reviews: {pull_request_id}")
 
             query = (
@@ -1034,6 +1047,8 @@ class ReviewService:
             else:
                 return [], 0
 
+        if allowed_pairs is None:
+            allowed_pairs = self._allowed_pairs
         pair_condition = repository_pair_condition(
             PullRequestReviewBase.project_key,
             PullRequestReviewBase.repository_slug,
@@ -1558,7 +1573,11 @@ class ReviewService:
             ReviewStats: Review statistics
         """
         # Try cache first
-        cache_key = f"stats:reviews:{project_key or 'all'}:{reviewer_username or 'all'}:{','.join(sorted(app_names)) if app_names else 'all'}"
+        cache_key = (
+            f"stats:reviews:{project_key or 'all'}:{reviewer_username or 'all'}:"
+            f"{','.join(sorted(app_names)) if app_names else 'all'}:"
+            f"{access_scope(self._allowed_pairs)}"
+        )
         if use_cache:
             try:
                 cached = await self.redis_client.get(cache_key)
@@ -1575,6 +1594,32 @@ class ReviewService:
         # Resolve app_names to (project_key, repository_slug) pairs
         app_conditions = None
         score_app_conditions = None
+        if self._allowed_pairs is not None and not app_names:
+            if not self._allowed_pairs:
+                return ReviewStats(
+                    total_reviews=0,
+                    open_reviews=0,
+                    merged_reviews=0,
+                    closed_reviews=0,
+                    average_score=0.0,
+                    reviews_today=0,
+                    reviews_this_week=0,
+                    reviews_this_month=0,
+                )
+            app_conditions = [
+                and_(
+                    PullRequestReviewBase.project_key == pk,
+                    PullRequestReviewBase.repository_slug == rs,
+                )
+                for pk, rs in self._allowed_pairs
+            ]
+            score_app_conditions = [
+                and_(
+                    PullRequestScore.project_key == pk,
+                    PullRequestScore.repository_slug == rs,
+                )
+                for pk, rs in self._allowed_pairs
+            ]
         if app_names:
             registry_query = select(
                 ProjectRegistry.project_key,
@@ -2375,6 +2420,11 @@ class ReviewService:
             result = await db.execute(query)
             base = result.scalars().first()
             if not base:
+                return None
+            if self._allowed_pairs is not None and (
+                base.project_key,
+                base.repository_slug,
+            ) not in self._allowed_pairs:
                 return None
 
             reviews = self._flatten_reviews([base], reviewer=None, visible_to_username=None)

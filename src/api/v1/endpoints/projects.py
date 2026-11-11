@@ -38,12 +38,28 @@ logger = logging.getLogger(__name__)
 REGISTRY_KIND_UNCLASSIFIED = "unclassified"
 
 async def enforce_project_visibility(
-    request: Request, access: CurrentRepositoryAccess
+    request: Request,
+    access: CurrentRepositoryAccess,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> None:
     """Reject direct reads of a project or repository the user has no grant for."""
+    from sqlalchemy import or_, select
+
+    from src.models.project import Project
+
     params = dict(request.query_params)
     params.update(request.path_params)
     project_key = params.get("project_key")
+    if not project_key:
+        identifier = params.get("project_id") or params.get("id") or params.get("project_name")
+        if identifier:
+            conditions = [Project.project_id == identifier, Project.project_name == identifier]
+            if str(identifier).isdigit():
+                conditions.insert(0, Project.id == int(identifier))
+            result = await db.execute(
+                select(Project.project_key).where(or_(*conditions)).limit(1)
+            )
+            project_key = result.scalar_one_or_none()
     if not project_key:
         return
     if project_key not in allowed_project_keys(access):

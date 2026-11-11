@@ -3,13 +3,14 @@ import traceback
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.database import get_db_session
 from src.core.exceptions import (
+    ForbiddenException,
     ProjectNotFoundException,
     ReviewNotFoundException,
     ReviewStatusException,
@@ -54,9 +55,39 @@ router = APIRouter()
 
 
 # Get a review service instance with metrics
-def get_review_service() -> ReviewService:
-    """Get a review service instance"""
-    return ReviewService(metrics_collector=metrics)
+async def get_review_service(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ReviewService:
+    """Build a review service carrying the caller's repository grants.
+
+    Read requests are authenticated; write endpoints stay open so git providers
+    can keep posting PR information without a user token.
+    """
+    from src.services.repository_access_service import RepositoryAccessService
+
+    if request.method not in ("GET", "HEAD"):
+        return ReviewService(metrics_collector=metrics)
+
+    user = await get_current_user_with_token(request, db)
+    pairs = await RepositoryAccessService(db).allowed_pairs(user.id)
+    return ReviewService(metrics_collector=metrics, allowed_pairs=pairs)
+
+
+async def require_granted_pair(request: Request, access: CurrentRepositoryAccess) -> None:
+    """Reject score reads for a repository outside the caller's grants."""
+    project_key = request.query_params.get("project_key") or request.path_params.get("project_key")
+    repository_slug = request.query_params.get("repository_slug") or request.path_params.get(
+        "repository_slug"
+    )
+    if project_key and project_key not in allowed_project_keys(access):
+        raise ForbiddenException(message="No access to this project")
+    if (
+        project_key
+        and repository_slug
+        and (project_key, repository_slug) not in access
+    ):
+        raise ForbiddenException(message="No access to this repository")
 
 
 # Get a score service instance with metrics
@@ -1764,7 +1795,11 @@ async def upsert_score(
         )
 
 
-@router.get("/scores", response_model=list[ReviewScoreResponse])
+@router.get(
+    "/scores",
+    response_model=list[ReviewScoreResponse],
+    dependencies=[Depends(require_granted_pair)],
+)
 async def get_scores(
     pull_request_id: str = Query(..., description="Pull request ID"),
     project_key: str = Query(..., min_length=1, max_length=32, description="Project key"),
@@ -1820,7 +1855,11 @@ async def get_scores(
         )
 
 
-@router.get("/scores/summary", response_model=ReviewScoreSummary)
+@router.get(
+    "/scores/summary",
+    response_model=ReviewScoreSummary,
+    dependencies=[Depends(require_granted_pair)],
+)
 async def get_score_summary(
     pull_request_id: str = Query(..., description="Pull request ID"),
     project_key: str = Query(..., min_length=1, max_length=32, description="Project key"),
@@ -1977,7 +2016,11 @@ async def list_scores(
         )
 
 
-@router.get("/score/{reviewer}", response_model=ReviewScoreResponse)
+@router.get(
+    "/score/{reviewer}",
+    response_model=ReviewScoreResponse,
+    dependencies=[Depends(require_granted_pair)],
+)
 async def get_score_by_reviewer(
     reviewer: Annotated[str, Path(min_length=1, max_length=64, description="Reviewer username")],
     pull_request_id: str = Query(..., description="Pull request ID"),
