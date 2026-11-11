@@ -99,35 +99,43 @@ class RepositoryAccessService:
         pairs: set[tuple[str, str]],
         granted_by: int | None,
     ) -> list[dict]:
-        """Replace the complete grant list of one subject inside one transaction."""
-        username = await self.resolve_subject(subject_type, subject_id)
+        """Replace the grant list of one subject and the subject linked to it.
+
+        A git user and the system user it is linked to share one visibility
+        union, so saving either side must rewrite both; otherwise the unedited
+        side keeps stale grants (e.g. automatic PR-author grants) and the union
+        keeps showing repositories the user just revoked.
+        """
+        await self.resolve_subject(subject_type, subject_id)
         catalog = await self.list_catalog()
         known = {(item["project_key"], item["repository_slug"]) for item in catalog}
         unknown = sorted(pairs - known)
         if unknown:
             raise ValidationException(message=f"Unknown repositories: {unknown[:10]}")
 
-        await self.db.execute(
-            delete(UserRepositoryAccess).where(
-                UserRepositoryAccess.subject_type == subject_type,
-                UserRepositoryAccess.subject_id == subject_id,
-            )
-        )
-
+        targets = await self._linked_subjects(subject_type, subject_id)
         now = get_current_time()
-        for project_key, repository_slug in sorted(pairs):
-            self.db.add(
-                UserRepositoryAccess(
-                    subject_type=subject_type,
-                    subject_id=subject_id,
-                    subject_username=username,
-                    project_key=project_key,
-                    repository_slug=repository_slug,
-                    granted_by=granted_by,
-                    created_at=now,
-                    updated_at=now,
+        for target_type, target_id in targets:
+            target_username = await self.resolve_subject(target_type, target_id)
+            await self.db.execute(
+                delete(UserRepositoryAccess).where(
+                    UserRepositoryAccess.subject_type == target_type,
+                    UserRepositoryAccess.subject_id == target_id,
                 )
             )
+            for project_key, repository_slug in sorted(pairs):
+                self.db.add(
+                    UserRepositoryAccess(
+                        subject_type=target_type,
+                        subject_id=target_id,
+                        subject_username=target_username,
+                        project_key=project_key,
+                        repository_slug=repository_slug,
+                        granted_by=granted_by,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
 
         await self.db.commit()
         logger.info(
@@ -135,11 +143,31 @@ class RepositoryAccessService:
             extra={
                 "subject_type": subject_type,
                 "subject_id": subject_id,
+                "linked_subjects": [f"{t}:{i}" for t, i in targets],
                 "granted_by": granted_by,
                 "granted_repositories": len(pairs),
             },
         )
         return await self.list_access(subject_type, subject_id)
+
+    async def _linked_subjects(
+        self, subject_type: str, subject_id: int
+    ) -> list[tuple[str, int]]:
+        """The subject itself plus every counterpart it is linked to."""
+        targets = [(subject_type, subject_id)]
+        if subject_type == SUBJECT_GIT_USER:
+            linked = await self.db.execute(
+                select(AuthUser.id).where(AuthUser.user_id == subject_id)
+            )
+            targets.extend((SUBJECT_AUTH_USER, row[0]) for row in linked.all())
+        else:
+            result = await self.db.execute(
+                select(AuthUser.user_id).where(AuthUser.id == subject_id)
+            )
+            git_user_id = result.scalar_one_or_none()
+            if git_user_id is not None:
+                targets.append((SUBJECT_GIT_USER, git_user_id))
+        return targets
 
     async def ensure_author_grants(
         self, project_key: str, repository_slug: str, username: str | None

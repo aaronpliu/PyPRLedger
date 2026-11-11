@@ -113,19 +113,30 @@ async def test_replace_access_is_idempotent_and_rejects_unknown_repositories(
 
 
 @pytest.mark.asyncio
-async def test_allowed_pairs_is_union_of_system_user_and_git_user(
-    db: AsyncSession, access_data: dict
-):
+async def test_replace_access_syncs_the_linked_subject(db: AsyncSession, access_data: dict):
+    """Saving either side of a linked pair rewrites the other side too."""
     service = RepositoryAccessService(db)
+
     await service.replace_access(
         "git_user", access_data["git_user"].id, {("PROJ", "repo-one")}, 1
     )
+    assert await service.allowed_pairs(access_data["linked"].id) == {("PROJ", "repo-one")}
+
+    # stale grants on the git user must not survive a system-user save
     await service.replace_access(
         "auth_user", access_data["linked"].id, {("PROJ", "repo-two")}, 1
     )
+    assert await service.allowed_pairs(access_data["linked"].id) == {("PROJ", "repo-two")}
+    git_rows = await service.list_access("git_user", access_data["git_user"].id)
+    assert {(r["project_key"], r["repository_slug"]) for r in git_rows} == {
+        ("PROJ", "repo-two")
+    }
 
-    pairs = await service.allowed_pairs(access_data["linked"].id)
-    assert pairs == {("PROJ", "repo-one"), ("PROJ", "repo-two")}
+    # a system user without a linked git user is untouched by other subjects
+    await service.replace_access(
+        "auth_user", access_data["unlinked"].id, {("PROJ", "repo-one")}, 1
+    )
+    assert await service.allowed_pairs(access_data["linked"].id) == {("PROJ", "repo-two")}
 
 
 @pytest.mark.asyncio
