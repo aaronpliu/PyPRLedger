@@ -15,6 +15,11 @@ from src.core.exceptions import (
     ReviewNotFoundException,
     ReviewStatusException,
 )
+from src.core.repository_access import (
+    RepositoryPair,
+    access_scope,
+    repository_pair_condition,
+)
 from src.models.project import Project
 from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import (
@@ -35,6 +40,7 @@ from src.schemas.pull_request import (
 from src.services.auto_assign_service import AutoTaskAssignmentService
 from src.services.entity_sync_service import EntitySyncService
 from src.services.project_registry_service import ProjectRegistryService
+from src.services.repository_access_service import RepositoryAccessService
 from src.services.review_score_service import ReviewScoreService
 from src.utils.ai_review_utils import generate_ai_review_id
 from src.utils.metrics import MetricsCollector, metrics
@@ -48,10 +54,15 @@ logger = logging.getLogger(__name__)
 class ReviewService:
     """Service for managing pull request reviews"""
 
-    def __init__(self, metrics_collector: MetricsCollector | None = None):
+    def __init__(
+        self,
+        metrics_collector: MetricsCollector | None = None,
+        allowed_pairs: set[RepositoryPair] | None = None,
+    ):
         """Initialize the review service"""
         self.redis_client = get_redis_client()
         self.metrics = metrics_collector or metrics
+        self._allowed_pairs = allowed_pairs
 
     @staticmethod
     def _get_cache_key(project_key: str, repository_slug: str, pull_request_id: str) -> str:
@@ -662,6 +673,13 @@ class ReviewService:
                 username=review_data.pull_request_user, is_reviewer=False
             )
 
+            # A PR author is always allowed to see the repository the PR belongs to.
+            await RepositoryAccessService(db).ensure_author_grants(
+                project_key=project.project_key,
+                repository_slug=repository.repository_slug,
+                username=review_data.pull_request_user,
+            )
+
             # Sync reviewer if provided, otherwise set to None
             reviewer = None
             if review_data.reviewer:
@@ -895,6 +913,14 @@ class ReviewService:
             DatabaseException: If database query fails
         """
         try:
+            if (
+                self._allowed_pairs is not None
+                and project_key
+                and repository_slug
+                and (project_key, repository_slug) not in self._allowed_pairs
+            ):
+                return []
+
             logger.info(f"Querying database for reviews: {pull_request_id}")
 
             query = (
@@ -975,6 +1001,7 @@ class ReviewService:
         use_cache: bool = True,
         app_names: list[str] | None = None,
         current_user_id: int | None = None,
+        allowed_pairs: set[RepositoryPair] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """
         List pull request reviews with filtering and pagination
@@ -1019,6 +1046,16 @@ class ReviewService:
                 query = query.where(or_(*app_conditions))
             else:
                 return [], 0
+
+        if allowed_pairs is None:
+            allowed_pairs = self._allowed_pairs
+        pair_condition = repository_pair_condition(
+            PullRequestReviewBase.project_key,
+            PullRequestReviewBase.repository_slug,
+            allowed_pairs,
+        )
+        if pair_condition is not None:
+            query = query.where(pair_condition)
 
         if filters.pull_request_id:
             query = query.where(PullRequestReviewBase.pull_request_id == filters.pull_request_id)
@@ -1198,6 +1235,7 @@ class ReviewService:
         if not app_names and use_cache:
             try:
                 filter_dict = filters.model_dump(exclude_unset=True)
+                filter_dict["_access"] = access_scope(allowed_pairs)
                 cache_key = self._get_list_cache_key(filter_dict, page, page_size)
                 cached = await self.redis_client.get(cache_key)
                 if cached:
@@ -1257,6 +1295,7 @@ class ReviewService:
         if not app_names and use_cache and reviews:
             try:
                 filter_dict = filters.model_dump(exclude_unset=True)
+                filter_dict["_access"] = access_scope(allowed_pairs)
                 cache_key = self._get_list_cache_key(filter_dict, page, page_size)
                 cache_data = {"reviews": reviews, "total": total}
                 await self.redis_client.setex(
@@ -1534,7 +1573,11 @@ class ReviewService:
             ReviewStats: Review statistics
         """
         # Try cache first
-        cache_key = f"stats:reviews:{project_key or 'all'}:{reviewer_username or 'all'}:{','.join(sorted(app_names)) if app_names else 'all'}"
+        cache_key = (
+            f"stats:reviews:{project_key or 'all'}:{reviewer_username or 'all'}:"
+            f"{','.join(sorted(app_names)) if app_names else 'all'}:"
+            f"{access_scope(self._allowed_pairs)}"
+        )
         if use_cache:
             try:
                 cached = await self.redis_client.get(cache_key)
@@ -1551,6 +1594,32 @@ class ReviewService:
         # Resolve app_names to (project_key, repository_slug) pairs
         app_conditions = None
         score_app_conditions = None
+        if self._allowed_pairs is not None and not app_names:
+            if not self._allowed_pairs:
+                return ReviewStats(
+                    total_reviews=0,
+                    open_reviews=0,
+                    merged_reviews=0,
+                    closed_reviews=0,
+                    average_score=0.0,
+                    reviews_today=0,
+                    reviews_this_week=0,
+                    reviews_this_month=0,
+                )
+            app_conditions = [
+                and_(
+                    PullRequestReviewBase.project_key == pk,
+                    PullRequestReviewBase.repository_slug == rs,
+                )
+                for pk, rs in self._allowed_pairs
+            ]
+            score_app_conditions = [
+                and_(
+                    PullRequestScore.project_key == pk,
+                    PullRequestScore.repository_slug == rs,
+                )
+                for pk, rs in self._allowed_pairs
+            ]
         if app_names:
             registry_query = select(
                 ProjectRegistry.project_key,
@@ -2352,6 +2421,11 @@ class ReviewService:
             base = result.scalars().first()
             if not base:
                 return None
+            if self._allowed_pairs is not None and (
+                base.project_key,
+                base.repository_slug,
+            ) not in self._allowed_pairs:
+                return None
 
             reviews = self._flatten_reviews([base], reviewer=None, visible_to_username=None)
             if not reviews:
@@ -2393,6 +2467,7 @@ class ReviewService:
         use_cache: bool = False,
         app_names: list[str] | None = None,
         current_user_id: int | None = None,
+        allowed_pairs: set[RepositoryPair] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """
         List pull request reviews with full entity information
@@ -2418,6 +2493,7 @@ class ReviewService:
             use_cache=False,
             app_names=app_names,
             current_user_id=current_user_id,
+            allowed_pairs=allowed_pairs,
         )
 
         # Collect unique project-repo pairs for batch app_name resolution

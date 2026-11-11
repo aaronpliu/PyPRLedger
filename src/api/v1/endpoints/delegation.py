@@ -103,17 +103,15 @@ async def create_delegation(
             },
         )
 
-    # Normalize resource_id for global scope (empty string -> None)
-    resource_id = data.resource_id
-    if data.resource_type == "global":
-        resource_id = None
+    # Role delegations are global; project visibility is managed by repository access grants
+    resource_id = None
 
     # Create delegation
     assignment = await rbac_service.delegate_role(
         delegator_id=current_user.id,
         delegatee_id=data.delegatee_id,
         role_id=data.role_id,
-        resource_type=data.resource_type,
+        resource_type="global",
         resource_id=resource_id,
         delegation_scope=data.delegation_scope,
         starts_at=data.starts_at,

@@ -3,19 +3,24 @@ import traceback
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.database import get_db_session
 from src.core.exceptions import (
+    ForbiddenException,
     ProjectNotFoundException,
     ReviewNotFoundException,
     ReviewStatusException,
     UserNotFoundException,
 )
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import (
+    CurrentRepositoryAccess,
+    get_current_user_with_token,
+)
+from src.core.repository_access import allowed_project_keys
 from src.models.auth_user import AuthUser
 from src.models.pull_request import (
     PullRequestReviewAssignment,
@@ -53,9 +58,57 @@ router = APIRouter()
 
 
 # Get a review service instance with metrics
-def get_review_service() -> ReviewService:
-    """Get a review service instance"""
-    return ReviewService(metrics_collector=metrics)
+async def get_review_service(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ReviewService:
+    """Build a review service carrying the caller's repository grants.
+
+    Read requests are authenticated; write endpoints stay open so git providers
+    can keep posting PR information without a user token.
+    """
+    from src.services.repository_access_service import RepositoryAccessService
+
+    if request.method not in ("GET", "HEAD"):
+        return ReviewService(metrics_collector=metrics)
+
+    user = await get_current_user_with_token(request, db)
+    pairs = await RepositoryAccessService(db).allowed_pairs(user.id)
+    return ReviewService(metrics_collector=metrics, allowed_pairs=pairs)
+
+
+async def require_granted_pair(request: Request, access: CurrentRepositoryAccess) -> None:
+    """Reject score reads for a repository outside the caller's grants."""
+    project_key = request.query_params.get("project_key") or request.path_params.get("project_key")
+    repository_slug = request.query_params.get("repository_slug") or request.path_params.get(
+        "repository_slug"
+    )
+    if project_key and project_key not in allowed_project_keys(access):
+        raise ForbiddenException(message="No access to this project")
+    if (
+        project_key
+        and repository_slug
+        and (project_key, repository_slug) not in access
+    ):
+        raise ForbiddenException(message="No access to this repository")
+
+
+async def _ensure_review_visible(
+    db: AsyncSession, review_id: int, access: set[tuple[str, str]]
+) -> None:
+    """Raise 404 unless the review belongs to a repository the caller may see."""
+    result = await db.execute(
+        select(
+            PullRequestReviewBase.project_key,
+            PullRequestReviewBase.repository_slug,
+        ).where(PullRequestReviewBase.id == review_id)
+    )
+    row = result.first()
+    if not row or (row.project_key, row.repository_slug) not in access:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "NOT_FOUND", "message": "Review not found"},
+        )
 
 
 # Get a score service instance with metrics
@@ -587,6 +640,7 @@ async def list_reviews(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     review_service: Annotated[ReviewService, Depends(get_review_service)],
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    access: CurrentRepositoryAccess,
     pull_request_id: str | None = Query(None, description="Filter by pull request ID"),
     project_key: str | None = Query(
         None, min_length=1, max_length=32, description="Filter by project key"
@@ -672,6 +726,17 @@ async def list_reviews(
         ReviewListResponse: List of reviews with full entity information, app_name, and pagination info
     """
     try:
+        if not access:
+            return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
+        if project_key and project_key not in allowed_project_keys(access):
+            return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
+        if (
+            project_key
+            and repository_slug
+            and (project_key, repository_slug) not in access
+        ):
+            return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
+
         rbac_service = RBACService(db)
 
         # Check if user has review_admin role (by checking 'assign' permission)
@@ -724,7 +789,13 @@ async def list_reviews(
 
         # Get enriched reviews with full entity information and app_name resolution
         enriched_reviews, total = await review_service.list_reviews_with_entities(
-            filters, db, page, page_size, app_names=app_names_list, current_user_id=current_user.id
+            filters,
+            db,
+            page,
+            page_size,
+            app_names=app_names_list,
+            current_user_id=current_user.id,
+            allowed_pairs=access,
         )
 
         # Convert dict reviews to ReviewResponse objects
@@ -748,6 +819,7 @@ async def list_reviews(
 @router.get("/ai-review/{ai_review_id}")
 async def get_review_by_ai_review_id(
     ai_review_id: str,
+    access: CurrentRepositoryAccess,
     source_filename: str | None = Query(
         None,
         alias="file",
@@ -794,6 +866,11 @@ async def get_review_by_ai_review_id(
     review_base = result.scalar_one_or_none()
 
     if not review_base:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No review found with AI review ID: {ai_review_id}",
+        )
+    if (review_base.project_key, review_base.repository_slug) not in access:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No review found with AI review ID: {ai_review_id}",
@@ -1745,7 +1822,11 @@ async def upsert_score(
         )
 
 
-@router.get("/scores", response_model=list[ReviewScoreResponse])
+@router.get(
+    "/scores",
+    response_model=list[ReviewScoreResponse],
+    dependencies=[Depends(require_granted_pair)],
+)
 async def get_scores(
     pull_request_id: str = Query(..., description="Pull request ID"),
     project_key: str = Query(..., min_length=1, max_length=32, description="Project key"),
@@ -1801,7 +1882,11 @@ async def get_scores(
         )
 
 
-@router.get("/scores/summary", response_model=ReviewScoreSummary)
+@router.get(
+    "/scores/summary",
+    response_model=ReviewScoreSummary,
+    dependencies=[Depends(require_granted_pair)],
+)
 async def get_score_summary(
     pull_request_id: str = Query(..., description="Pull request ID"),
     project_key: str = Query(..., min_length=1, max_length=32, description="Project key"),
@@ -1862,6 +1947,7 @@ async def get_score_summary(
 @router.get("/scores/list", response_model=ReviewScoreListResponse)
 async def list_scores(
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    access: CurrentRepositoryAccess,
     db: Annotated[AsyncSession, Depends(get_db_session)] = None,
     score_service: Annotated[ReviewScoreService, Depends(get_score_service)] = None,
     reviewer: str | None = Query(None, description="Filter by reviewer username"),
@@ -1939,6 +2025,7 @@ async def list_scores(
             app_names=app_names_list,
             page=page,
             page_size=page_size,
+            allowed_pairs=access,
         )
 
         return ReviewScoreListResponse(**result)
@@ -1958,7 +2045,11 @@ async def list_scores(
         )
 
 
-@router.get("/score/{reviewer}", response_model=ReviewScoreResponse)
+@router.get(
+    "/score/{reviewer}",
+    response_model=ReviewScoreResponse,
+    dependencies=[Depends(require_granted_pair)],
+)
 async def get_score_by_reviewer(
     reviewer: Annotated[str, Path(min_length=1, max_length=64, description="Reviewer username")],
     pull_request_id: str = Query(..., description="Pull request ID"),
@@ -2244,9 +2335,11 @@ async def pin_review_by_public_id(
     public_id: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    access: CurrentRepositoryAccess,
 ) -> dict:
     """Pin/bookmark a review by its public ID."""
     review_id = _decode_public_id(public_id)
+    await _ensure_review_visible(db, review_id, access)
     try:
         stmt = select(UserPinnedReview).where(
             UserPinnedReview.user_id == current_user.id,
@@ -2424,6 +2517,7 @@ async def pin_review(
     review_id: int,
     db: Annotated[AsyncSession, Depends(get_db_session)],
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    access: CurrentRepositoryAccess,
 ) -> dict:
     """
     Pin/bookmark a review for the current user.
@@ -2431,6 +2525,7 @@ async def pin_review(
     Creates a private pin so the user can quickly find this review later.
     If already pinned, returns success without creating a duplicate.
     """
+    await _ensure_review_visible(db, review_id, access)
     try:
         # Check if already pinned
         stmt = select(UserPinnedReview).where(

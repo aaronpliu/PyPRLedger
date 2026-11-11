@@ -466,20 +466,13 @@ class TestRoleDelegation:
         assert delegation.delegation_status == "active"
 
         # Now test manual pending -> active transition
-        # Create a delegation and manually set it to pending
-        await rbac_service.assign_role(
-            auth_user_id=admin_user.id,
-            role_id=reviewer_role.id,
-            resource_type="project",
-            resource_id="TEST-PROJ",
-        )
         future_start = datetime.now(UTC) + timedelta(days=1)
         delegation2 = await rbac_service.delegate_role(
             delegator_id=admin_user.id,
-            delegatee_id=junior_user.id,
+            delegatee_id=test_users["senior_user"].id,
             role_id=reviewer_role.id,
-            resource_type="project",
-            resource_id="TEST-PROJ",
+            resource_type="global",
+            resource_id=None,
             delegation_scope={"reviews": ["read"]},
             starts_at=future_start,
             expires_at=future_start + timedelta(days=30),

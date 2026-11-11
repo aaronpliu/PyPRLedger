@@ -109,6 +109,9 @@
             <el-button size="small" type="primary" @click="viewRoles(row)">
               Roles
             </el-button>
+            <el-button size="small" @click="openAccess(row)">
+              Projects
+            </el-button>
             <el-dropdown trigger="click" @command="(command: string) => handleAction(command, row)">
               <el-button size="small">
                 More<el-icon class="el-icon--right"><arrow-down /></el-icon>
@@ -184,12 +187,6 @@
         <h5 style="margin-top: 16px;">Current Roles:</h5>
         <el-table :data="currentRoles" size="small" border>
           <el-table-column prop="role_name" label="Role" width="150" />
-          <el-table-column prop="resource_type" label="Scope" width="120" />
-          <el-table-column prop="resource_id" label="Resource" min-width="150">
-            <template #default="{ row }">
-              {{ row.resource_id || '-' }}
-            </template>
-          </el-table-column>
           <el-table-column label="Actions" width="100">
             <template #default="{ row }">
               <el-button 
@@ -220,21 +217,10 @@
           <el-form-item label="Scope">
             <el-radio-group v-model="roleForm.resource_type">
               <el-radio value="global">Global</el-radio>
-              <el-radio value="project">Project</el-radio>
-              <el-radio value="repository">Repository</el-radio>
             </el-radio-group>
           </el-form-item>
           
-          <el-form-item 
-            v-if="roleForm.resource_type !== 'global'" 
-            label="Resource ID"
-          >
-            <el-input 
-              v-model="roleForm.resource_id" 
-              :placeholder="roleForm.resource_type === 'project' ? 'Project Key (e.g., PROJ)' : 'Repository Slug (e.g., my-repo)'"
-            />
-          </el-form-item>
-          
+
           <el-form-item>
             <el-button type="primary" @click="assignRole">
               Assign Role
@@ -297,6 +283,14 @@
         </span>
       </template>
     </el-dialog>
+
+    <RepositoryAccessDialog
+      v-model="showAccessDialog"
+      subject-type="auth_user"
+      :subject-id="accessUserId"
+      :username="accessUsername"
+      @saved="loadUsers"
+    />
   </div>
 </template>
 
@@ -312,6 +306,16 @@ import { rbacApi } from '@/api/rbac'
 import { usersApi } from '@/api/users'
 import type { ResourceType, Role, RoleAssignment } from '@/types'
 import UserAvatar from '@/components/user/UserAvatar.vue'
+import RepositoryAccessDialog from '@/components/admin/RepositoryAccessDialog.vue'
+
+const showAccessDialog = ref(false)
+const accessUserId = ref<number | null>(null)
+const accessUsername = ref('')
+const openAccess = (row: any) => {
+  accessUserId.value = row.id
+  accessUsername.value = row.username
+  showAccessDialog.value = true
+}
 
 const { t } = useI18n()
 const loading = ref(false)

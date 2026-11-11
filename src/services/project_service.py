@@ -10,6 +10,7 @@ from src.core.exceptions import (
     ProjectNotFoundException,
     ResourceAlreadyExistsException,
 )
+from src.core.repository_access import access_scope
 from src.models.project import Project
 from src.models.pull_request import PullRequestReviewAssignment, PullRequestReviewBase
 from src.models.repository import Repository
@@ -31,10 +32,15 @@ logger = logging.getLogger(__name__)
 class ProjectService:
     """Service for managing projects"""
 
-    def __init__(self, metrics_collector: MetricsCollector | None = None):
+    def __init__(
+        self,
+        metrics_collector: MetricsCollector | None = None,
+        allowed_project_keys: set[str] | None = None,
+    ):
         """Initialize the project service"""
         self.redis_client = get_redis_client()
         self.metrics = metrics_collector or metrics
+        self._allowed_project_keys = allowed_project_keys
 
     def _get_cache_key(self, project_id: int) -> str:
         """Generate cache key for a project"""
@@ -327,6 +333,8 @@ class ProjectService:
 
         # Build filter dictionary for cache key
         filter_dict = filters.model_dump(exclude_unset=True)
+        if self._allowed_project_keys is not None:
+            filter_dict["_access"] = access_scope(self._allowed_project_keys)
 
         # Try cache first for list results
         if use_cache:
@@ -354,6 +362,8 @@ class ProjectService:
             conditions.append(Project.created_date >= filters.date_from)
         if filters.date_to:
             conditions.append(Project.created_date <= filters.date_to)
+        if self._allowed_project_keys is not None:
+            conditions.append(Project.project_key.in_(self._allowed_project_keys))
 
         # Get total count
         count_query = select(func.count()).select_from(Project)
@@ -468,7 +478,7 @@ class ProjectService:
             ProjectStats: Project statistics
         """
         # Try cache first
-        cache_key = f"stats:projects:{project_id or 'all'}"
+        cache_key = f"stats:projects:{project_id or 'all'}:{access_scope(self._allowed_project_keys)}"
         if use_cache:
             try:
                 cached = await self.redis_client.get(cache_key)
@@ -481,6 +491,8 @@ class ProjectService:
         base_query = select(Project)
         if project_id:
             base_query = base_query.where(Project.id == project_id)
+        if self._allowed_project_keys is not None:
+            base_query = base_query.where(Project.project_key.in_(self._allowed_project_keys))
 
         # Get total projects
         total_query = select(func.count()).select_from(base_query.subquery())
@@ -545,12 +557,10 @@ class ProjectService:
         Returns:
             List[Dict]: List of active projects as dictionaries
         """
-        result = await db.execute(
-            select(Project)
-            .where(Project.is_active == True)
-            .order_by(Project.created_date)
-            .limit(limit)
-        )
+        statement = select(Project).where(Project.is_active == True)
+        if self._allowed_project_keys is not None:
+            statement = statement.where(Project.project_key.in_(self._allowed_project_keys))
+        result = await db.execute(statement.order_by(Project.created_date).limit(limit))
         projects = result.scalars().all()
         return [project.to_dict() for project in projects]
 
@@ -717,6 +727,8 @@ class ProjectService:
             Project.project_id.ilike(search_term_pattern),
             Project.project_key.ilike(search_term_pattern),
         )
+        if self._allowed_project_keys is not None:
+            conditions = and_(conditions, Project.project_key.in_(self._allowed_project_keys))
 
         # Get total count
         count_query = select(func.count()).select_from(Project).where(conditions)
@@ -901,6 +913,8 @@ class ProjectService:
             .order_by(desc("review_count"))
             .limit(limit)
         )
+        if self._allowed_project_keys is not None:
+            query = query.where(Project.project_key.in_(self._allowed_project_keys))
 
         result = await db.execute(query)
         projects = []
@@ -958,6 +972,8 @@ class ProjectService:
             .order_by(desc("active_reviewer_count"))
             .limit(limit)
         )
+        if self._allowed_project_keys is not None:
+            query = query.where(Project.project_key.in_(self._allowed_project_keys))
 
         result = await db.execute(query)
         projects = []

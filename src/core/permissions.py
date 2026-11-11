@@ -163,3 +163,16 @@ RequireUserRead = Depends(require_permission("read", "users"))
 RequireUserManage = Depends(require_permission("manage", "users"))
 
 RequireSystemAdmin = Depends(require_permission("manage", "settings"))
+
+
+async def get_repository_access(
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> set[tuple[str, str]]:
+    """Granted (project_key, repository_slug) pairs for the logged-in user."""
+    from src.services.repository_access_service import RepositoryAccessService
+
+    return await RepositoryAccessService(db).allowed_pairs(current_user.id)
+
+
+CurrentRepositoryAccess = Annotated[set[tuple[str, str]], Depends(get_repository_access)]

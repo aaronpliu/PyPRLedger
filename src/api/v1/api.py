@@ -16,6 +16,7 @@ from src.api.v1.endpoints import (
     release_dependency_graph,
     release_diff,
     release_notes,
+    repository_access,
     reviews,
     search,  # Global search endpoint
     sse,  # SSE streaming endpoint for real-time review notifications
@@ -54,6 +55,7 @@ api_router.include_router(users.auth_router, prefix="/users/auth", tags=["auth-u
 api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 
 api_router.include_router(project_registry.router, tags=["project-registry"])
+api_router.include_router(repository_access.router)
 
 # Notification management endpoints
 api_router.include_router(notifications.router, tags=["notifications"])

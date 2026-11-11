@@ -19,8 +19,8 @@ if TYPE_CHECKING:
 class UserRoleAssignment(Base):
     """User role assignment model for RBAC system
 
-    Links users to roles with specific resource scope (global/project/repository).
-    This enables hierarchical permission management.
+    Links users to global roles. Project and repository visibility is managed
+    by repository access grants rather than by role scope.
     """
 
     __tablename__ = "user_role_assignment"

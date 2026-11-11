@@ -7,10 +7,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.exceptions import HTTPException
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
+from src.core.permissions import CurrentRepositoryAccess
+from src.core.repository_access import repository_pair_condition
 from src.models.project import Project
 from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import PullRequestReviewBase
@@ -31,6 +33,7 @@ SEARCH_QUERY_TIMEOUT = 5
 @router.get("/")
 async def global_search(
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    access: CurrentRepositoryAccess,
     q: str = Query(..., min_length=1, max_length=100, description="Search query"),
     type: str | None = Query(None, description="Filter by type: review, user, project"),
     limit: int = Query(10, ge=1, le=50, description="Maximum results per type"),
@@ -49,13 +52,13 @@ async def global_search(
         }
 
         if not type or type == "review":
-            results["reviews"] = await _search_reviews(db, q, limit)
+            results["reviews"] = await _search_reviews(db, q, limit, access)
 
         if not type or type == "user":
             results["users"] = await _search_users(db, q, limit)
 
         if not type or type == "project":
-            results["projects"] = await _search_projects(db, q, limit)
+            results["projects"] = await _search_projects(db, q, limit, access)
 
         return results
 
@@ -68,15 +71,25 @@ async def global_search(
         )
 
 
-async def _search_reviews(db: AsyncSession, query: str, limit: int) -> list[dict]:
-    """Search pull request reviews by PR ID, project key, or repository slug."""
+async def _search_reviews(
+    db: AsyncSession, query: str, limit: int, pairs: set[tuple[str, str]]
+) -> list[dict]:
+    """Search pull request reviews visible to the user."""
     try:
+        scope = repository_pair_condition(
+            PullRequestReviewBase.project_key,
+            PullRequestReviewBase.repository_slug,
+            pairs,
+        )
         stmt = (
             select(PullRequestReviewBase)
             .where(
-                PullRequestReviewBase.pull_request_id.ilike(f"%{query}%")
-                | PullRequestReviewBase.project_key.ilike(f"%{query}%")
-                | PullRequestReviewBase.repository_slug.ilike(f"%{query}%")
+                and_(
+                    PullRequestReviewBase.pull_request_id.ilike(f"%{query}%")
+                    | PullRequestReviewBase.project_key.ilike(f"%{query}%")
+                    | PullRequestReviewBase.repository_slug.ilike(f"%{query}%"),
+                    scope,
+                )
             )
             .order_by(PullRequestReviewBase.created_date.desc())
             .limit(limit)
@@ -131,16 +144,26 @@ async def _search_users(db: AsyncSession, query: str, limit: int) -> list[dict]:
         return []
 
 
-async def _search_projects(db: AsyncSession, query: str, limit: int) -> list[dict]:
-    """Search projects by name, key, or app name."""
+async def _search_projects(
+    db: AsyncSession, query: str, limit: int, pairs: set[tuple[str, str]]
+) -> list[dict]:
+    """Search projects visible to the user."""
     try:
+        scope = repository_pair_condition(
+            ProjectRegistry.project_key,
+            ProjectRegistry.repository_slug,
+            pairs,
+        )
         stmt = (
             select(ProjectRegistry)
             .join(Project, ProjectRegistry.project_key == Project.project_key)
             .where(
-                ProjectRegistry.app_name.ilike(f"%{query}%")
-                | ProjectRegistry.project_key.ilike(f"%{query}%")
-                | Project.project_name.ilike(f"%{query}%")
+                and_(
+                    ProjectRegistry.app_name.ilike(f"%{query}%")
+                    | ProjectRegistry.project_key.ilike(f"%{query}%")
+                    | Project.project_name.ilike(f"%{query}%"),
+                    scope,
+                )
             )
             .limit(limit)
             .execution_options(max_execution_time=SEARCH_QUERY_TIMEOUT)

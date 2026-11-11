@@ -3,14 +3,17 @@ import traceback
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
 from src.core.exceptions import (
+    ForbiddenException,
     ProjectNotFoundException,
     ResourceAlreadyExistsException,
 )
+from src.core.permissions import CurrentRepositoryAccess, get_current_user_with_token
+from src.core.repository_access import allowed_project_keys
 from src.schemas.cloud_workspace import CloudWorkspaceListResponse
 from src.schemas.project import (
     ProjectCreate,
@@ -34,13 +37,49 @@ logger = logging.getLogger(__name__)
 # never been worked through keeps listing every repository it has.
 REGISTRY_KIND_UNCLASSIFIED = "unclassified"
 
-router = APIRouter()
+async def enforce_project_visibility(
+    request: Request,
+    access: CurrentRepositoryAccess,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> None:
+    """Reject direct reads of a project or repository the user has no grant for."""
+    from sqlalchemy import or_, select
+
+    from src.models.project import Project
+
+    params = dict(request.query_params)
+    params.update(request.path_params)
+    project_key = params.get("project_key")
+    if not project_key:
+        identifier = params.get("project_id") or params.get("id") or params.get("project_name")
+        if identifier:
+            conditions = [Project.project_id == identifier, Project.project_name == identifier]
+            if str(identifier).isdigit():
+                conditions.insert(0, Project.id == int(identifier))
+            result = await db.execute(
+                select(Project.project_key).where(or_(*conditions)).limit(1)
+            )
+            project_key = result.scalar_one_or_none()
+    if not project_key:
+        return
+    if project_key not in allowed_project_keys(access):
+        raise ForbiddenException(message="No access to this project")
+    repository_slug = params.get("repository_slug")
+    if repository_slug and (project_key, repository_slug) not in access:
+        raise ForbiddenException(message="No access to this repository")
 
 
-# Get a project service instance with metrics
-def get_project_service() -> ProjectService:
-    """Get a project service instance"""
-    return ProjectService(metrics_collector=metrics)
+router = APIRouter(
+    dependencies=[Depends(get_current_user_with_token), Depends(enforce_project_visibility)]
+)
+
+
+def get_project_service(access: CurrentRepositoryAccess) -> ProjectService:
+    """Project service scoped to the repositories the user may see."""
+    return ProjectService(
+        metrics_collector=metrics,
+        allowed_project_keys=allowed_project_keys(access),
+    )
 
 
 def get_cloud_workspace_service() -> CloudWorkspaceService:
@@ -545,6 +584,7 @@ async def get_project_by_key(
 async def get_project_repositories(
     project_key: str,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    access: CurrentRepositoryAccess,
     registry_kind: Annotated[
         str | None,
         Query(
@@ -639,6 +679,11 @@ async def get_project_repositories(
                 ),
             )
             .where(Repository.project_id == project.project_id)
+            .where(
+                Repository.repository_slug.in_(
+                    {slug for pk, slug in access if pk == project.project_key}
+                )
+            )
             .order_by(Repository.repository_slug)
         )
         if prefer_applications:

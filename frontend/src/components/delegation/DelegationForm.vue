@@ -94,20 +94,10 @@
     <el-form-item label="Resource Type" prop="resource_type">
       <el-select v-model="form.resource_type" style="width: 100%">
         <el-option label="Global (All Resources)" value="global" />
-        <el-option label="Project Specific" value="project" />
-        <el-option label="Repository Specific" value="repository" />
       </el-select>
     </el-form-item>
     
-    <!-- Resource ID (conditional) -->
-    <el-form-item 
-      v-if="form.resource_type !== 'global'" 
-      label="Resource ID" 
-      prop="resource_id"
-    >
-      <el-input v-model="form.resource_id" placeholder="Enter project or repository ID" />
-    </el-form-item>
-    
+
     <!-- Time Range -->
     <el-form-item label="Valid Period" required>
       <el-row :gutter="10">

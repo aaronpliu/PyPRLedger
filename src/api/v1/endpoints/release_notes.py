@@ -37,7 +37,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
 from src.core.exceptions import GitServiceException
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import CurrentRepositoryAccess, get_current_user_with_token
+from src.core.repository_access import ensure_pair_granted
 from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
 from src.schemas.release_note import (
@@ -334,6 +335,7 @@ async def get_confluence_status(
 async def list_release_notes(
     project_key: Annotated[str, Query(min_length=1, max_length=32)],
     repository_slug: Annotated[str, Query(min_length=1, max_length=128)],
+    access: CurrentRepositoryAccess,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
@@ -347,6 +349,7 @@ async def list_release_notes(
 ) -> ReleaseNoteListResponse:
     """List version releases of a repository."""
     await ensure_permission(rbac_service, current_user, "read")
+    ensure_pair_granted(access, project_key, repository_slug)
 
     if status_filter and status_filter not in ReleaseNoteStatus.VALUES:
         raise HTTPException(
@@ -383,12 +386,14 @@ async def list_release_notes(
 )
 async def preview_release_notes(
     payload: ReleaseNotePreviewRequest,
+    access: CurrentRepositoryAccess,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> ReleaseNotePreviewResponse:
     """Generate release notes (markdown) without saving them."""
     await ensure_permission(rbac_service, current_user, "read")
+    ensure_pair_granted(access, payload.project_key, payload.repository_slug)
 
     try:
         return await service.generate_preview(payload)
@@ -430,12 +435,14 @@ async def preview_release_notes(
 )
 async def export_release_notes(
     payload: ReleaseNoteExportRequest,
+    access: CurrentRepositoryAccess,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
 ) -> ReleaseNoteExportResponse:
     """Export releases as one markdown document (reading, not changing)."""
     await ensure_permission(rbac_service, current_user, "read")
+    ensure_pair_granted(access, payload.project_key, payload.repository_slug)
 
     exported = await service.export_notes(
         project_key=payload.project_key,
@@ -569,6 +576,7 @@ async def create_release_note(
 )
 async def get_release_note(
     note_id: int,
+    access: CurrentRepositoryAccess,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     service: Annotated[ReleaseNoteService, Depends(get_release_note_service)],
     rbac_service: Annotated[RBACService, Depends(get_rbac_service)],
@@ -582,6 +590,7 @@ async def get_release_note(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"error": "NOT_FOUND", "message": f"Release {note_id} not found"},
         )
+    ensure_pair_granted(access, note.project_key, note.repository_slug)
 
     latest_id = await service.latest_published_id(
         project_key=note.project_key, repository_slug=note.repository_slug

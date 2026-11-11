@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import CurrentRepositoryAccess, get_current_user_with_token
+from src.core.repository_access import ensure_pair_granted
 from src.models.auth_user import AuthUser
 from src.schemas.app_version_diff import (
     AppVersionDiffCoordinates,
@@ -85,11 +86,13 @@ def _dependency_repository_resolver(
 )
 async def compare_app_releases(
     payload: AppVersionDiffRequest,
+    access: CurrentRepositoryAccess,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[AppVersionDiffService, Depends(get_app_version_diff_service)],
     registry: Annotated[ProjectRegistryService, Depends(get_registry_service)],
 ) -> AppVersionDiffResponse:
+    ensure_pair_granted(access, payload.project_key, payload.repository_slug)
     # The provider decides the shape of the rest of the read (only a Cloud request
     # carries a workspace), so it is filled in before the application is resolved.
     payload = await with_repository_provider(payload, db)
@@ -131,11 +134,13 @@ async def compare_app_releases(
 )
 async def compare_app_release_packages(
     payload: AppVersionDiffPackagesRequest,
+    access: CurrentRepositoryAccess,
     current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     service: Annotated[AppVersionDiffService, Depends(get_app_version_diff_service)],
     registry: Annotated[ProjectRegistryService, Depends(get_registry_service)],
 ) -> AppVersionDiffPackagesResponse:
+    ensure_pair_granted(access, payload.project_key, payload.repository_slug)
     payload = await with_repository_provider(payload, db)
     logger.info(
         "Comparing the deferred packages of an application release pair",

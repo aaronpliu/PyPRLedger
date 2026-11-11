@@ -1,6 +1,6 @@
 ## Context
 
-The product already tells people things — a reviewer is assigned, a review is added — but only inside the application. `NotificationService.create_notification()` (`src/services/notification_service.py:35`) writes a row and returns; the browser polls or receives the row through the notification API. Nothing leaves the process.
+The product already tells people things — a reviewer is assigned, a review is added — but only inside the application. `NotificationService.create_notification()` (`src/services/notification_service.py:35`) writes a row and returns; the bell menu polls the notification API for it (`frontend/src/components/common/NotificationBell.vue:85,92-114`). Nothing leaves the process.
 
 What exists today, and what it implies:
 
@@ -13,7 +13,7 @@ What exists today, and what it implies:
 | `SystemSetting` + RBAC | `src/models/system_setting.py`, `rbac_service.get_setting/update_setting`, `manage settings` permission, `/rbac/settings/*` endpoints, admin page `SystemSettingsView.vue` | The runtime-configuration mechanism, the permission and the admin UI pattern all exist. An endpoint registry belongs here, not in `.env`. |
 | LLM integration | `load_llm_config()` reads `SystemSetting` rows over environment defaults | Precedent for "DB overrides env, edited in the admin page". |
 | Confluence client | env credentials + `*_SYNC_ENABLED` gate + `VERIFY_SSL` + timeout (`config.py:317-363`) | Precedent for an outbound third-party client that must never break the primary flow. |
-| `SSEBroker` | Redis pubsub fan-out to browser streams (`src/services/sse_broker.py`) | In-app realtime already has a transport; the `in_app` connector can publish into it. |
+| Bell menu / `SSEBroker` | The bell polls the notification API (`frontend/src/components/common/NotificationBell.vue:85,92-114`). `SSEBroker` (`src/services/sse_broker.py`) is a Redis pubsub fan-out for the single `reviews:created` channel, hardcodes `event: review_created`, and exposes **no generic publish method** | In-app already has a working transport (polling); `in_app` only needs to keep writing `notification`. Realtime push is out of scope — it would require extending `SSEBroker` with a generic publish/event name and a bell listener (see tasks 1.5 / 8.2). |
 | Deployment | single `api` container, MySQL 8 + Redis, no broker, background work is `asyncio.create_task` in `src/main.py:169-175`; `./src` is bind-mounted so restarts are routine | In-process scheduling is the house style, but any queue **must be durable** and restart-safe. |
 | Metrics | `MetricsCollector` used by services | Per-endpoint counters and latency fit the existing collector. |
 
@@ -43,7 +43,9 @@ The constraint that shapes the whole design: **the instance lives on an intranet
 
 A dataclass event carries `type`, `occurred_at`, a stable `key` (what the event is about — PR id, release id), the payload, and the audience hints (`usernames`, `project_key`, `repository_slug`). Business code calls `notify(event)` and stops there.
 
-The two existing call sites drop their `NotificationCreate(channel="in_app", …)` construction. A candidate list of event types is fixed up front — `review.assigned`, `review.comment_added`, `release.published`, `release_note.mentioned`, `task.assigned` — and templates are keyed by them, so a typo becomes a validation error rather than a message nobody renders.
+The business call sites drop their `NotificationCreate(channel="in_app", …)` construction. The closed `EventType` list is `review.assigned`, `review.completed`, `review.comment_added`, `release.published`, `release_note.mentioned`, `task.assigned`, so a typo becomes a validation error rather than a message nobody renders.
+
+TREE (2026-11-08): the three live call sites write `type="review_assigned"` (`auto_assign_service.py:323`, `multi_reviewer_service.py:850`) and `type="review_completed"` (`multi_reviewer_service.py:910`). `review.completed` was missing from the original candidate list and is required for parity. The other four declared types have **no producer today**; they exist so subscriptions and templates can be authored ahead of their call sites, but they raise no events until a producer is added in a later change. Default templates are seeded for the two live types only (see tasks 5.5). The preference page's `delegation_expiry` / `system_alert` labels (`NotificationPreferenceView.vue:171-176`) have no producing code in `src/` and stay out of the gateway's event list.
 
 ### D2 - Durable outbox + in-process worker, not an in-memory queue
 
@@ -71,7 +73,7 @@ Three connectors cover the requirement:
 
 | kind | Covers | Notes |
 |---|---|---|
-| `in_app` | the existing bell menu | writes `notification`, then lets the dispatcher publish to `SSEBroker` |
+| `in_app` | the existing bell menu | writes `notification`; the bell menu keeps polling. No `SSEBroker` publish — it has no generic publish method (see tasks 1.5 / 8.2) |
 | `webhook` | any internal IM gateway, vendor webhook, relay that accepts an HTTP POST | URL + method + headers + body template + optional signing secret; the universal escape hatch |
 | `smtp` | internal mail relay, public SMTP, SES | `aiosmtplib`, TLS/SSL/STARTTLS as configured |
 
@@ -92,6 +94,8 @@ The API never returns a decrypted secret: reads return the placeholder, and a sa
 ### D5 - Templates are data with a closed variable set
 
 A template is `(event_type, channel_kind) → subject, body, format`. Rendering is a strict substitution over a whitelist derived from the event schema — no expression evaluation, no attribute traversal beyond the declared fields. A template naming an unknown variable is rejected **when saved**, so a broken template is an edit-time error rather than a runtime surprise at 2 a.m.
+
+Default templates ship for the two event types with live call sites (`review.assigned`, `review.completed`). The four declared-but-unproduced types (`review.comment_added`, `release.published`, `release_note.mentioned`, `task.assigned`) accept hand-authored templates but get no seed: a template for an event nothing raises cannot be exercised. Producers for those types belong to a later change; the save-time validation in D5 must not reject an administrator-authored template merely because no seed exists for that pair.
 
 Rendering happens per delivery, and a rendering failure parks that one row. It never fails the fan-out, and it never rolls back the in-app row.
 

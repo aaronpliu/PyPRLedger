@@ -20,7 +20,7 @@ from src.core.config import settings
 from src.core.database import get_db_session
 from src.core.exceptions import NotFoundException
 from src.core.git_provider import GitProvider
-from src.core.permissions import get_current_user_with_token
+from src.core.permissions import get_current_user_with_token, get_repository_access
 from src.main import app
 from src.models.auth_user import AuthUser
 from src.models.release_note import ReleaseNote, ReleaseNoteStatus
@@ -1763,9 +1763,11 @@ def authenticated_client(db_session):
     app.dependency_overrides[get_db_session] = _db_session
     app.dependency_overrides[get_release_note_service] = lambda: build_service(db_session)
     app.dependency_overrides[get_rbac_service] = lambda: rbac
+    app.dependency_overrides[get_repository_access] = lambda: {("PROJ", "my-repo")}
     yield rbac
     app.dependency_overrides.pop(get_current_user_with_token, None)
     app.dependency_overrides.pop(get_db_session, None)
+    app.dependency_overrides.pop(get_repository_access, None)
     app.dependency_overrides.pop(get_release_note_service, None)
     app.dependency_overrides.pop(get_rbac_service, None)
 

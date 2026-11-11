@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.36.2] - 2026-11-08
+
+**Backend Version**: 1.36.2
+**Frontend Version**: 1.31.2
+
+### Changed
+- Admin Dashboard rebuilt with a modern layout: page header (title, subtitle, refresh), semantic-colour stat cards with loading skeletons and hover lift, neutral quick-action card grid, and responsive panels for recent audit logs and active sessions
+- Admin Dashboard data loading: sessions are fetched once for both the count and the recent list, all panels reload together from the header refresh button, and the four headline numbers degrade gracefully when an API fails
+- A shared card style now applies across all admin pages (16px radius, semantic borders/background, subtle shadow, hover lift, dark-theme overrides, responsive padding). Scoped to `.admin-page`, so non-admin pages and the Dashboard's own stat/panel cards are untouched; nested cards and `shadow="hover"` cards are handled separately
+- Role Management: "Add Role" shortened to "Add"; Edit/Delete changed to icon-only buttons with tooltips, matching other admin pages
+
+### Added
+- `common.add` translations (en / zh-CN / zh-TW) and `admin.dashboard` labels for the page header and session table columns
+- `AdminDashboardView.test.ts`: 7 tests covering headline numbers, shortcuts, recent activity, empty state, API failure, request de-duplication and refresh
+
+---
+
 ## [1.36.1] - 2026-11-07
 
 **Backend Version**: 1.36.1

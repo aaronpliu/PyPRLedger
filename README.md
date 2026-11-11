@@ -9,7 +9,7 @@ A production-ready FastAPI + Vue 3 PR Code Review Result Storage System with MyS
 - **Auto-Assignment Rules**: Configurable rules to automatically assign reviewers based on project, repository, branch, PR author, and status conditions — with priority ordering, date ranges, and enable/disable toggling
 - **Multi-Reviewer System**: Support for multiple reviewers per pull request, each with independent assignments, status tracking (pending → in_progress → completed), and scoring
 - **Review Scores**: File-level and PR-level scoring with configurable 0-10 scale, auto-filled descriptions, and soft-delete support
-- **Role-Based Access Control** (RBAC): Hierarchical roles (viewer, reviewer, review_admin, system_admin) with resource-scoped permissions (global, project, repository) and time-limited delegation
+- **Role-Based Access Control** (RBAC): Hierarchical roles (viewer, reviewer, review_admin, system_admin) with global role assignments and time-limited delegation
 - **Multi-Project Management**: Virtual `app_name` architecture for organizing projects into logical applications via a project registry system
 - **Review Associations**: Bidirectional linking between reviews for tracking related/follow-up PRs
 - **Review Pinning**: Per-user private pin/flag for marking noteworthy reviews
@@ -512,7 +512,7 @@ The system uses MySQL with the following tables:
 | `pull_request_review_auto_assignment_rule` | Auto-assignment rule definitions |
 | `project_registry` | Project-to-application mappings with Git provider tracking |
 | `role` | RBAC roles with JSON permissions |
-| `user_role_assignment` | User-to-role assignments (global/project/repository scope) |
+| `user_role_assignment` | User-to-role assignments (global scope only) |
 | `notification` | In-app notifications |
 | `notification_preference` | Per-user notification channel preferences |
 | `personal_access_token` | API authentication tokens |

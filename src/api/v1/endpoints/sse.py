@@ -21,6 +21,7 @@ from src.models.auth_user import AuthUser
 from src.models.user import User
 from src.services.auth_service import AuthService
 from src.services.rbac_service import RBACService
+from src.services.repository_access_service import RepositoryAccessService
 from src.services.sse_broker import get_sse_broker
 from src.utils.metrics import metrics
 
@@ -225,7 +226,8 @@ async def stream_reviews(
     # Register with the shared broker — gets a personal asyncio.Queue
     broker = get_sse_broker()
     try:
-        queue = await broker.register(connection_id, git_username, is_admin)
+        allowed_pairs = await RepositoryAccessService(db).allowed_pairs(auth_user.id)
+        queue = await broker.register(connection_id, git_username, is_admin, allowed_pairs)
     except Exception as exc:
         logger.error(
             f"Failed to register with SSEBroker: {exc}",

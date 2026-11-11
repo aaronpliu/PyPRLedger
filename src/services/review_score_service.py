@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.config import settings
+from src.core.repository_access import repository_pair_condition
 from src.models.auth_user import AuthUser
 from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import (
@@ -559,6 +560,7 @@ class ReviewScoreService:
         app_names: list[str] | None = None,
         page: int = 1,
         page_size: int = 20,
+        allowed_pairs: set[tuple[str, str]] | None = None,
     ) -> dict[str, Any]:
         """
         List all scores with pagination and optional filtering
@@ -587,6 +589,13 @@ class ReviewScoreService:
         base_query = select(PullRequestScore).where(PullRequestScore.active == True)
 
         # Apply filters to base query
+        base_pair_condition = repository_pair_condition(
+            PullRequestScore.project_key,
+            PullRequestScore.repository_slug,
+            allowed_pairs,
+        )
+        if base_pair_condition is not None:
+            base_query = base_query.where(base_pair_condition)
         if reviewer:
             base_query = base_query.where(PullRequestScore.reviewer == reviewer)
 
@@ -634,6 +643,13 @@ class ReviewScoreService:
         )
 
         # Apply filters to full query
+        data_pair_condition = repository_pair_condition(
+            PullRequestScore.project_key,
+            PullRequestScore.repository_slug,
+            allowed_pairs,
+        )
+        if data_pair_condition is not None:
+            query = query.where(data_pair_condition)
         if reviewer:
             query = query.where(PullRequestScore.reviewer == reviewer)
 
