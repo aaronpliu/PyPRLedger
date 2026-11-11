@@ -248,7 +248,7 @@
               :class="{ active: sortState.prop === 'updated_date' }"
               @click="toggleSort('updated_date')"
             >
-              <span class="sort-header-label">Updated</span>
+              <span class="sort-header-label">{{ t('task_assignment.updated', 'Updated') }}</span>
               <div class="sort-header-icons">
                 <el-icon
                   class="sort-header-icon"
