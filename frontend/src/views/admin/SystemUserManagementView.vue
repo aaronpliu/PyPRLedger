@@ -188,9 +188,17 @@
           <el-table-column prop="role_name" label="Role" width="150" />
           <el-table-column label="Actions" width="100">
             <template #default="{ row }">
-              <el-button 
-                size="small" 
-                type="danger" 
+              <el-tooltip
+                v-if="isProtectedRole(row)"
+                content="The system_admin role cannot be revoked"
+                placement="top"
+              >
+                <el-button size="small" type="danger" disabled>Revoke</el-button>
+              </el-tooltip>
+              <el-button
+                v-else
+                size="small"
+                type="danger"
                 @click="revokeRole(row)"
               >
                 Revoke
@@ -596,6 +604,9 @@ const assignRole = async () => {
     ElMessage.error(error.response?.data?.detail || 'Failed to assign role')
   }
 }
+
+/** Protected roles keep the platform manageable and cannot be revoked here. */
+const isProtectedRole = (assignment: RoleAssignment) => assignment.role_name === 'system_admin'
 
 const revokeRole = async (assignment: RoleAssignment) => {
   if (!selectedUser.value) return
