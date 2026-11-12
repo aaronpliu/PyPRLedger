@@ -9,16 +9,26 @@
               {{ t('appDiff.subtitle', { app: appName, count: releases.length }) }}
             </p>
           </div>
-          <el-button
-            type="primary"
-            :disabled="!canCompare"
-            :loading="comparing"
-            data-test="refresh"
-            @click="refresh"
-          >
-            <el-icon><Refresh /></el-icon>
-            {{ t('appDiff.refresh') }}
-          </el-button>
+          <div class="header-actions">
+            <el-button
+              type="primary"
+              :disabled="!canCompare"
+              :loading="comparing"
+              data-test="refresh"
+              @click="refresh"
+            >
+              <el-icon><Refresh /></el-icon>
+              {{ t('appDiff.refresh') }}
+            </el-button>
+            <el-button
+              :disabled="!result"
+              :icon="Download"
+              data-test="export-report"
+              @click="exportReport"
+            >
+              {{ t('releaseDiff.report_export_html') }}
+            </el-button>
+          </div>
         </div>
       </template>
 
@@ -396,10 +406,16 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Loading, Refresh } from '@element-plus/icons-vue'
+import { Download, Loading, Refresh } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import ContentLoader from '@/components/common/ContentLoader.vue'
 import CommitComparison from '@/components/release/CommitComparison.vue'
 import { projectsApi } from '@/api/projects'
+import {
+  appDiffReportFilename,
+  buildAppDiffReportHtml,
+  downloadAppDiffReport,
+} from '@/utils/export/appDiffReport'
 import type {
   CloudWorkspaceOption,
   ProjectSummary,
@@ -650,6 +666,25 @@ async function compare(refresh = false) {
 
 function refresh() {
   void compare(true)
+}
+
+/** Standalone HTML report of the current comparison, saved from the browser. */
+function exportReport() {
+  if (!result.value) return
+
+  try {
+    const html = buildAppDiffReportHtml({
+      result: result.value,
+      context: {
+        ...coordinates(),
+        app_name: result.value.app_name,
+      },
+    })
+    downloadAppDiffReport(html, appDiffReportFilename(coordinates()))
+    ElMessage.success(t('releaseDiff.report_exported'))
+  } catch {
+    ElMessage.error(t('releaseDiff.report_failed'))
+  }
 }
 
 /** How many of one pair's package comparisons are still waiting to be read. */
@@ -959,6 +994,13 @@ watch(depth, () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
   gap: 12px;
   flex-wrap: wrap;
 }
