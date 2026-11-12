@@ -80,3 +80,43 @@ async def test_cleanup_keeps_recently_expired_and_active_tokens(db_session: Asyn
     assert await PATService(db_session).cleanup_expired_tokens() == 0
     remaining = await _remaining_names(db_session)
     assert remaining == ["active-far-future", "expired-yesterday"]
+
+
+async def test_validate_handles_naive_expires_at(db_session: AsyncSession) -> None:
+    """A MySQL database hands the expiry back naive; the comparison must not raise.
+
+    Reproduces "can't compare offset-naive and offset-aware datetimes": the
+    column is written timezone-aware but plain DATETIME storage returns it
+    naive, and PAT authentication crashed on every such comparison.
+    """
+    import secrets
+
+    service = PATService(db_session)
+    now = get_current_time().replace(tzinfo=None)
+
+    valid_raw = "pat_" + secrets.token_urlsafe(32)
+    expired_raw = "pat_" + secrets.token_urlsafe(32)
+    await _add_token(
+        db_session, "naive-valid", now + timedelta(days=30)
+    )
+    # rewrite the hash to match the raw token we will authenticate with
+    result = await db_session.execute(
+        select(PersonalAccessToken).where(PersonalAccessToken.name == "naive-valid")
+    )
+    valid_row = result.scalar_one()
+    valid_row.token_hash = service._hash_token(valid_raw)
+    valid_row.prefix = valid_raw[:12]
+
+    await _add_token(db_session, "naive-expired", now - timedelta(days=1))
+    result = await db_session.execute(
+        select(PersonalAccessToken).where(PersonalAccessToken.name == "naive-expired")
+    )
+    expired_row = result.scalar_one()
+    expired_row.token_hash = service._hash_token(expired_raw)
+    expired_row.prefix = expired_raw[:12]
+    await db_session.commit()
+
+    # naive expiry in the future: authentication goes through, no TypeError
+    assert await service.validate_token(valid_raw) is not None
+    # naive expiry in the past: reported as expired, no TypeError
+    assert await service.validate_token(expired_raw) is None

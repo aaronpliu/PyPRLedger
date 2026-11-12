@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Annotated
+import re
+from datetime import UTC, datetime
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db_session
@@ -16,6 +19,7 @@ from src.schemas.app_version_diff import (
     AppVersionDiffRequest,
     AppVersionDiffResponse,
 )
+from src.services.app_diff_report import render_app_diff_report
 from src.services.app_version_diff_service import (
     AppVersionDiffService,
     DependencyRepository,
@@ -92,6 +96,18 @@ async def compare_app_releases(
     service: Annotated[AppVersionDiffService, Depends(get_app_version_diff_service)],
     registry: Annotated[ProjectRegistryService, Depends(get_registry_service)],
 ) -> AppVersionDiffResponse:
+    return await _run_compare(payload, access, current_user, db, service, registry)
+
+
+async def _run_compare(
+    payload: AppVersionDiffRequest,
+    access: CurrentRepositoryAccess,
+    current_user: AuthUser,
+    db: AsyncSession,
+    service: AppVersionDiffService,
+    registry: ProjectRegistryService,
+) -> AppVersionDiffResponse:
+    """The comparison both the page and the report endpoint read through."""
     ensure_pair_granted(access, payload.project_key, payload.repository_slug)
     # The provider decides the shape of the rest of the read (only a Cloud request
     # carries a workspace), so it is filled in before the application is resolved.
@@ -158,3 +174,59 @@ async def compare_app_release_packages(
         payload,
         resolve_dependency_repository=_dependency_repository_resolver(registry, payload, db),
     )
+
+
+@router.post(
+    "/diff/report",
+    summary="Render the comparison as a standalone HTML report (for CI pipelines)",
+    response_class=Response,
+    responses={200: {"content": {"text/html": {}, "application/json": {}}}},
+)
+async def compare_app_releases_report(
+    payload: AppVersionDiffRequest,
+    access: CurrentRepositoryAccess,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[AppVersionDiffService, Depends(get_app_version_diff_service)],
+    registry: Annotated[ProjectRegistryService, Depends(get_registry_service)],
+    format: Literal["html", "json"] = Query(default="html"),
+    download: bool = Query(default=False),
+) -> Response:
+    """Run the comparison and return it as a self-contained HTML report.
+
+    Same request body and authorization as ``POST /release/apps/diff``; the
+    answer is the rendered document instead of the raw JSON. Built for CI: a
+    pipeline authenticates with a Personal Access Token (``Authorization:
+    Bearer pat_...``) whose user is granted the repository, runs the call after
+    a build, and keeps the file as an artifact or mails it on.
+
+    Query parameters:
+
+    - ``format``: ``html`` (default) for the rendered report, ``json`` for the
+      same structure ``/diff`` returns - useful when the pipeline wants to
+      post-process the data itself.
+    - ``download``: adds a ``Content-Disposition: attachment`` header with a
+      timestamped filename, so a browser saves instead of displays.
+
+    Example::
+
+        curl -X POST "$PRL_URL/api/v1/release/apps/diff/report" \\
+          -H "Authorization: Bearer $PRL_TOKEN" \\
+          -H "Content-Type: application/json" \\
+          -d '{"project_key":"CORE","repository_slug":"app","refs":["v1.0.0","v1.1.0"]}' \\
+          -o app-diff.html
+    """
+    result = await _run_compare(payload, access, current_user, db, service, registry)
+
+    if format == "json":
+        return JSONResponse(content=result.model_dump(mode="json"))
+
+    html = render_app_diff_report(result)
+    headers = {}
+    if download:
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        scope = re.sub(
+            r"[^A-Za-z0-9._-]+", "_", f"{result.project_key}-{result.repository_slug}"
+        )
+        headers["Content-Disposition"] = f'attachment; filename="app-diff-{scope}-{stamp}.html"'
+    return Response(content=html, media_type="text/html", headers=headers)
