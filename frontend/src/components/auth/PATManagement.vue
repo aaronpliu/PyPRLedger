@@ -188,13 +188,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, DocumentCopy, Refresh } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
 import { patApi, type PersonalAccessToken, type PATCreateRequest } from '@/api/pat'
-
-// Initialize dayjs plugins
-dayjs.extend(utc)
-dayjs.extend(timezone)
 
 const loading = ref(false)
 const creating = ref(false)
@@ -307,9 +301,12 @@ const handleTokenDialogClose = () => {
   createdToken.value = null
 }
 
-// Format date - converts UTC to local timezone
+// Format date. The backend stores local wall-clock time (USE_UTC_IN_DB=False),
+// and the API serializes it without a timezone suffix, so it must be parsed as
+// local time directly - treating it as UTC shifts the display by the local
+// offset (e.g. +8h for Asia/Shanghai).
 const formatDate = (dateStr: string) => {
-  return dayjs.utc(dateStr).local().format('YYYY-MM-DD HH:mm:ss')
+  return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
 }
 
 // Get expiry type for tag color
