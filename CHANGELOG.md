@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.37.0] - 2026-11-12
+
+**Backend Version**: 1.37.0
+**Frontend Version**: 1.32.0
+
+### Added
+- Repository access management: new `user_repository_access` table (migration `040`) binding users to `(project_key, repository_slug)` pairs, with backfill for existing PR authors
+- Project/review lists, score history, dependency graph, app diff, release notes and statistics are now filtered by the viewer's granted repository pairs
+- Task assignment auto-grants the repository to the reviewer (and linked system users) when a review admin assigns a task
+- PR authors are automatically granted their repository on `POST /reviews` (`ensure_author_grants`)
+- `replace_access` synchronizes grants across the git user and its linked system users, so manual edits no longer leave stale automatic grants
+- Release diff, release notes and dependency-graph endpoints validate the requested repository pair against the caller's grants (`ensure_pair_granted`)
+
+### Fixed
+- Reviews and Task Assignment pages translate the "Updated" table header (zh-CN / zh-TW)
+- Row actions on Git User / System User pages no longer overflow; Projects action moved into the More dropdown
+- More-button dropdown works when wrapped in a tooltip (native `title` used instead)
+
+### Changed
+- App Diff expanded rows: commit id links to the provider, author and date shown per commit, full message on hover; "Not contained" commits highlighted in red with a warning heading
+- Reviewer activity trend chart enhancements; filters on Git User / System User pages improved
+
+### Breaking Changes
+- Project visibility is now driven by explicit repository grants instead of role scope; admins are not exempted. After running `alembic upgrade head`, grant admin accounts and legacy reviewers/score submitters their repositories manually.
+
+---
+
 ## [1.36.2] - 2026-11-08
 
 **Backend Version**: 1.36.2
