@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.37.2] - 2026-11-14
+
+**Backend Version**: 1.37.2
+**Frontend Version**: 1.33.0
+
+### Changed
+- User Profile page redesigned as a left navigation panel (fixed 220px width, immune to language switching) with the content on the right, mirroring the admin section layout; the card header now shows the current panel label
+- Removed all nested horizontal tabs: the My Delegations Received/Sent switch is now an in-place radio label, and panels toggle without Element Plus tabs
+- User Info tab uses a two-column layout (avatar on the left, compact profile info on the right)
+- Unified header button styles across all profile tabs (Create Delegation / Refresh / Generate New Token / New Template: primary, default size, icon)
+- Element Plus locale now follows the UI language globally (pagination, date pickers, empty states, confirmation buttons in en / zh-CN / zh-TW)
+- [Style] Enhance user info page and navigation bar
+- [Style] Adjust profile page layout and UI styles
+- [Refactor] Continue to enhance i18n and styles for other tabs of user profile
+- [Refactor] Enhance i18n in all reviews related page
+
+### Fixed
+- App Diff page: repaired a broken CSS fragment that made the frontend build fail
+- Profile page: full i18n coverage for every tab including PAT management, My Comment Templates, My Sessions, Role Delegations, Appearance (new `profile` namespace, ~190 keys per language) and the password form validation messages
+- Profile navigation no longer shifts or flickers when switching languages
+
+---
+
 ## [1.37.1] - 2026-11-14
 
 **Backend Version**: 1.37.1
