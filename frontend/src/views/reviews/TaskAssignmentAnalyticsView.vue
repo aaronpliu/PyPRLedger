@@ -66,10 +66,10 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="App Name">
+        <el-form-item :label="t('scores.filters.app_name', 'App Name')">
           <el-select
             v-model="appNameFilter"
-            placeholder="All Apps"
+            :placeholder="t('scores.filters.all_applications', 'All Applications')"
             clearable
             style="width: 200px"
             @change="loadAnalytics"

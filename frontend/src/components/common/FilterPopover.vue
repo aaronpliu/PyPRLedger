@@ -23,7 +23,7 @@
         <el-input
           ref="searchInputRef"
           v-model="localSearchQuery"
-          :placeholder="placeholder"
+          :placeholder="placeholder || t('filters.search_placeholder', 'Search... (Click for more filters)')"
           clearable
           :style="{ width: searchWidth }"
         >
@@ -47,20 +47,20 @@
       <!-- Filter Panel Content -->
       <div class="filter-panel" @click.stop>
         <div class="filter-panel-header">
-          <h4>{{ panelTitle }}</h4>
+          <h4>{{ panelTitle || t('filters.panel_title', 'Advanced Filters') }}</h4>
           <el-button link @click="handleReset">
             <el-icon><RefreshLeft /></el-icon>
-            Reset All
+            {{ t('filters.reset_all', 'Reset All') }}
           </el-button>
         </div>
 
         <div class="filter-grid">
           <!-- App Name (Multi-select with search) -->
           <div v-if="showAppFilter" class="filter-item">
-            <label class="filter-label">App Name</label>
+            <label class="filter-label">{{ t('filters.app_name', 'App Name') }}</label>
             <el-select
               v-model="localAppFilter"
-              placeholder="Select or type name"
+              :placeholder="t('filters.select_or_type', 'Select or type name')"
               clearable
               multiple
               filterable
@@ -79,10 +79,10 @@
 
           <!-- Project Filter -->
           <div v-if="showProjectFilter" class="filter-item">
-            <label class="filter-label">Project</label>
+            <label class="filter-label">{{ t('filters.project', 'Project') }}</label>
             <el-select
               v-model="localProjectFilter"
-              placeholder="Select or type name"
+              :placeholder="t('filters.select_or_type', 'Select or type name')"
               clearable
               filterable
               style="width: 100%"
@@ -90,10 +90,10 @@
               <el-option
                 v-for="project in projectOptions"
                 :key="project.project_key"
-                :label="`${project.name || project.project_name || 'Unknown'} (${project.project_key})`"
+                :label="`${project.name || project.project_name || t('filters.unknown', 'Unknown')} (${project.project_key})`"
                 :value="project.project_key"
               >
-                <span>{{ project.name || project.project_name || 'Unknown' }}</span>
+                <span>{{ project.name || project.project_name || t('filters.unknown', 'Unknown') }}</span>
                 <span class="text-secondary" style="margin-left: 8px; font-size: 0.85em">
                   ({{ project.project_key }})
                 </span>
@@ -103,10 +103,10 @@
 
           <!-- PR User (Client-side Filter) -->
           <div v-if="showPRUserFilter" class="filter-item">
-            <label class="filter-label">PR User</label>
+            <label class="filter-label">{{ t('filters.pr_user', 'PR User') }}</label>
             <el-select
               v-model="localPRUserFilter"
-              placeholder="Select or type name"
+              :placeholder="t('filters.select_or_type', 'Select or type name')"
               clearable
               filterable
               style="width: 100%"
@@ -127,10 +127,10 @@
 
           <!-- Reviewer (Client-side Filter) -->
           <div v-if="showReviewerFilter" class="filter-item">
-            <label class="filter-label">Reviewer</label>
+            <label class="filter-label">{{ t('filters.reviewer', 'Reviewer') }}</label>
             <el-select
               v-model="localReviewerFilter"
-              placeholder="Select or type name"
+              :placeholder="t('filters.select_or_type', 'Select or type name')"
               clearable
               filterable
               style="width: 100%"
@@ -157,59 +157,59 @@
 
           <!-- Scored Filter -->
           <div v-if="showScoredFilter" class="filter-item">
-            <label class="filter-label">Scored</label>
+            <label class="filter-label">{{ t('filters.scored', 'Scored') }}</label>
             <el-select
               v-model="localScoredFilter"
-              placeholder="All"
+              :placeholder="t('filters.all', 'All')"
               clearable
               style="width: 100%"
             >
-              <el-option label="Scored" value="yes" />
-              <el-option label="Not Scored" value="no" />
+              <el-option :label="t('filters.scored_yes', 'Scored')" value="yes" />
+              <el-option :label="t('filters.scored_no', 'Not Scored')" value="no" />
             </el-select>
           </div>
 
           <!-- Severity Filter -->
           <div v-if="showSeverityFilter" class="filter-item">
-            <label class="filter-label">Severity</label>
+            <label class="filter-label">{{ t('filters.severity', 'Severity') }}</label>
             <el-select
               v-model="localSeverityFilter"
-              placeholder="All"
+              :placeholder="t('filters.all', 'All')"
               clearable
               style="width: 100%"
             >
-              <el-option label="Critical" value="critical" />
-              <el-option label="High" value="high" />
-              <el-option label="Medium" value="medium" />
-              <el-option label="Low" value="low" />
+              <el-option :label="t('filters.critical', 'Critical')" value="critical" />
+              <el-option :label="t('filters.high', 'High')" value="high" />
+              <el-option :label="t('filters.medium', 'Medium')" value="medium" />
+              <el-option :label="t('filters.low', 'Low')" value="low" />
             </el-select>
           </div>
 
           <!-- PR Status Filter -->
           <div v-if="showStatusFilter" class="filter-item">
-            <label class="filter-label">PR Status</label>
+            <label class="filter-label">{{ t('filters.pr_status', 'PR Status') }}</label>
             <el-select
               v-model="localStatusFilter"
-              placeholder="All Status"
+              :placeholder="t('filters.all_status', 'All Status')"
               clearable
               style="width: 100%"
             >
-              <el-option label="Open" value="open" />
-              <el-option label="Merged" value="merged" />
-              <el-option label="Closed" value="closed" />
-              <el-option label="Draft" value="draft" />
+              <el-option :label="t('filters.status_open', 'Open')" value="open" />
+              <el-option :label="t('filters.status_merged', 'Merged')" value="merged" />
+              <el-option :label="t('filters.status_closed', 'Closed')" value="closed" />
+              <el-option :label="t('filters.status_draft', 'Draft')" value="draft" />
             </el-select>
           </div>
         </div>
 
         <!-- Date Range Filter (full-width below grid) -->
         <div class="date-range-section">
-          <label class="filter-label">Date Range</label>
+          <label class="filter-label">{{ t('filters.date_range', 'Date Range') }}</label>
           <div class="date-range-pickers">
             <el-date-picker
               v-model="localDateFrom"
               type="date"
-              placeholder="Start date"
+              :placeholder="t('filters.start_date', 'Start date')"
               format="YYYY-MM-DD"
               value-format="YYYY-MM-DD"
               clearable
@@ -220,7 +220,7 @@
             <el-date-picker
               v-model="localDateTo"
               type="date"
-              placeholder="End date"
+              :placeholder="t('filters.end_date', 'End date')"
               format="YYYY-MM-DD"
               value-format="YYYY-MM-DD"
               clearable
@@ -232,10 +232,10 @@
 
         <!-- Action Buttons -->
         <div class="filter-actions">
-          <el-button @click="handleCancel">Cancel</el-button>
+          <el-button @click="handleCancel">{{ t('common.cancel', 'Cancel') }}</el-button>
           <el-button type="primary" @click="handleConfirm">
             <el-icon><Check /></el-icon>
-            Confirm
+            {{ t('common.confirm', 'Confirm') }}
           </el-button>
         </div>
       </div>
@@ -315,7 +315,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   searchQuery: '',
-  placeholder: 'Search... (Click for more filters)',
+  placeholder: '',
   searchWidth: '350px',
   appFilter: () => [],
   projectFilter: '',
@@ -339,7 +339,7 @@ const props = withDefaults(defineProps<Props>(), {
   reviewerOptions: () => [],
   prUsersLoading: false,
   reviewersLoading: false,
-  panelTitle: 'Advanced Filters',
+  panelTitle: '',
 })
 
 const emit = defineEmits<{

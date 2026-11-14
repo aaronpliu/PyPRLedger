@@ -1,23 +1,30 @@
 <template>
-  <div id="app">
-    <GlobalProgress />
-    <FestivalOverlay />
-    <router-view />
-    <ServiceUnavailableNotice
-      v-if="backendSuspect || backendUnavailable"
-      :confirmed="backendUnavailable"
-    />
-    <PWAInstallPrompt />
-    <PageAgentLauncher
-      v-if="pageAgentInitialized && !pageAgentVisible"
-      :visible="pageAgentVisible"
-      @toggle="pageAgentToggle"
-    />
-  </div>
+  <el-config-provider :locale="elementLocale">
+    <div id="app">
+      <GlobalProgress />
+      <FestivalOverlay />
+      <router-view />
+      <ServiceUnavailableNotice
+        v-if="backendSuspect || backendUnavailable"
+        :confirmed="backendUnavailable"
+      />
+      <PWAInstallPrompt />
+      <PageAgentLauncher
+        v-if="pageAgentInitialized && !pageAgentVisible"
+        :visible="pageAgentVisible"
+        @toggle="pageAgentToggle"
+      />
+    </div>
+  </el-config-provider>
 </template>
 
 <script setup lang="ts">
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { ElConfigProvider } from 'element-plus'
+import elementEn from 'element-plus/es/locale/lang/en'
+import elementZhCn from 'element-plus/es/locale/lang/zh-cn'
+import elementZhTw from 'element-plus/es/locale/lang/zh-tw'
 import PWAInstallPrompt from '@/components/common/PWAInstallPrompt.vue'
 import PageAgentLauncher from '@/components/common/PageAgentLauncher.vue'
 import GlobalProgress from '@/components/common/GlobalProgress.vue'
@@ -31,6 +38,16 @@ import {
   backendUnavailable,
   useBackendReachabilityProbe,
 } from '@/composables/useBackendAvailability'
+
+// The reader's chosen language drives Element Plus too, so pagination
+// ("Total", "10/page"), date pickers and empty states speak the same language
+// as the pages - Element Plus would otherwise fall back to its English copy.
+const { locale } = useI18n()
+const elementLocale = computed(() => {
+  if (locale.value === 'zh-CN') return elementZhCn
+  if (locale.value === 'zh-TW') return elementZhTw
+  return elementEn
+})
 
 // Theme is now managed globally by useTheme composable
 // The composable auto-initializes on import

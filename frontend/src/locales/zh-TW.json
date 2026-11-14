@@ -435,6 +435,24 @@
       "link_account_required": "請先將您的帳戶關聯到Git使用者後再提交評分。",
       "no_reviewer_assigned": "此審查尚未分配審查者，分配後方可進行評分。",
       "not_assigned_reviewer": "您只能對分配給您的關聯Git使用者的審查進行評分。"
+    },
+    "task": {
+      "assign_title": "指派審查人",
+      "bulk_assign_title": "批量指派審查人",
+      "bulk_assign_intro": "將 {count} 條審查指派給審查人：",
+      "bulk_assign_button": "指派 {count} 條",
+      "pr_id": "PR 編號",
+      "project_repo": "專案 / 儲存庫",
+      "branches": "分支",
+      "pr_status": "PR 狀態",
+      "reviewers": "已有審查人",
+      "reviewer": "審查人",
+      "select_reviewer": "選擇審查人",
+      "no_reviewers": "暫無審查人",
+      "no_available_reviewers": "沒有可指派的審查人",
+      "assign": "指派",
+      "items_selected": "已選擇 {count} 條審查 | 已選擇 {count} 條審查",
+      "clear_selection": "清除選擇"
     }
   },
   "scores": {
@@ -481,7 +499,9 @@
       "pr_level": "PR層級",
       "file_level": "檔案層級",
       "apply_filters": "套用篩選",
-      "reset_filters": "重設"
+      "reset_filters": "重設",
+      "app_name": "應用名稱",
+      "all_applications": "全部應用"
     },
     "statistics": {
       "average_score": "平均評分",
@@ -742,7 +762,12 @@
     "load_failed": "載入規則失敗。",
     "save_failed": "儲存規則失敗。",
     "delete_confirm_title": "刪除規則",
-    "delete_confirm_message": "確定要刪除規則'{name}'嗎？此操作無法復原。"
+    "delete_confirm_message": "確定要刪除規則'{name}'嗎？此操作無法復原。",
+    "f_app_name": "應用名稱",
+    "f_app_name_placeholder": "選擇應用",
+    "f_pr_status_placeholder": "選擇 PR 狀態",
+    "filter_hint": "顯示匹配 {app} 的規則",
+    "f_conditions_help": "條件將解析為 JSON 中的 project_key 和 repository_slug"
   },
   "admin": {
     "admin_panel": "管理面板",
@@ -822,9 +847,8 @@
       "festivalEffectSpringFestival": "春節（燈籠）",
       "festivalEffectMidAutumn": "中秋（明月花瓣）",
       "festivalEffectNewYear": "元旦（彩帶）",
-      "festivalRemoveConfirm": "確定移除「{name}」？所有使用者將不再播放該動畫。",
-      "festivalRemove": "移除節日",
       "festivalRemoveConfirm": "將清除所有使用者的節日動畫設定，移除後不再播放任何動畫，直到重新儲存。是否繼續？",
+      "festivalRemove": "移除節日",
       "festivalRemoved": "節日動畫已移除",
       "festivalCustomEffect": "自訂（Emoji 與彩帶）",
       "festivalCustomName": "問候語",
@@ -1333,7 +1357,7 @@
     "import_failed": "匯入版本失敗",
     "push_to_provider": "同時發佈到 GitHub",
     "sync_confluence_label": "同步到 Confluence",
-      "sync_confluence_prerelease": "預發佈版本不會自動寫入 Confluence。",
+    "sync_confluence_prerelease": "預發佈版本不會自動寫入 Confluence。",
     "sync_to_confluence": "同步到 Confluence",
     "view_on_confluence": "在 Confluence 檢視",
     "badge_confluence_failed": "Confluence 同步失敗",
@@ -1463,5 +1487,34 @@
     "restore": "還原",
     "reset_layout": "重設佈局",
     "layered": "分層佈局"
+  },
+  "filters": {
+    "panel_title": "進階篩選",
+    "search_placeholder": "搜尋...（點擊查看更多篩選）",
+    "reset_all": "全部重置",
+    "app_name": "應用名稱",
+    "project": "專案",
+    "pr_user": "PR 提交人",
+    "reviewer": "審查人",
+    "scored": "是否已評分",
+    "severity": "嚴重程度",
+    "pr_status": "PR 狀態",
+    "date_range": "日期範圍",
+    "select_or_type": "選擇或輸入名稱",
+    "all": "全部",
+    "all_status": "全部狀態",
+    "start_date": "開始日期",
+    "end_date": "結束日期",
+    "scored_yes": "已評分",
+    "scored_no": "未評分",
+    "critical": "嚴重",
+    "high": "高",
+    "medium": "中",
+    "low": "低",
+    "status_open": "打開",
+    "status_merged": "已合併",
+    "status_closed": "已關閉",
+    "status_draft": "草稿",
+    "unknown": "未知"
   }
 }

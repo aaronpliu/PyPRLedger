@@ -7,12 +7,12 @@
 
       <!-- Filters -->
       <el-form :inline="true" class="filter-form">
-        <el-form-item label="App Name">
+        <el-form-item :label="t('scores.filters.app_name', 'App Name')">
           <el-select
             v-model="appNameFilter"
             clearable
             filterable
-            placeholder="All Applications"
+            :placeholder="t('scores.filters.all_applications', 'All Applications')"
             style="width: 200px"
             @change="loadScores"
           >

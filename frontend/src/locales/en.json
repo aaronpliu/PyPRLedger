@@ -435,6 +435,24 @@
       "link_account_required": "Link your account to a Git user before submitting scores.",
       "no_reviewer_assigned": "This review has no assigned reviewer yet. Scoring is only available after a reviewer is assigned.",
       "not_assigned_reviewer": "You can only score reviews that are assigned to your linked Git user."
+    },
+    "task": {
+      "assign_title": "Assign Reviewer",
+      "bulk_assign_title": "Bulk Assign Reviewer",
+      "bulk_assign_intro": "Assign {count} review(s) to a reviewer:",
+      "bulk_assign_button": "Assign {count} Items",
+      "pr_id": "PR ID",
+      "project_repo": "Project / Repo",
+      "branches": "Branches",
+      "pr_status": "PR Status",
+      "reviewers": "Reviewers",
+      "reviewer": "Reviewer",
+      "select_reviewer": "Select reviewer",
+      "no_reviewers": "No reviewers assigned",
+      "no_available_reviewers": "No available reviewers to assign",
+      "assign": "Assign",
+      "items_selected": "{count} item selected | {count} items selected",
+      "clear_selection": "Clear Selection"
     }
   },
   "scores": {
@@ -481,7 +499,9 @@
       "pr_level": "PR-Level",
       "file_level": "File-Level",
       "apply_filters": "Apply Filters",
-      "reset_filters": "Reset"
+      "reset_filters": "Reset",
+      "app_name": "App Name",
+      "all_applications": "All Applications"
     },
     "statistics": {
       "average_score": "Average Score",
@@ -742,7 +762,12 @@
     "load_failed": "Failed to load rules.",
     "save_failed": "Failed to save rule.",
     "delete_confirm_title": "Delete Rule",
-    "delete_confirm_message": "Are you sure you want to delete rule '{name}'? This action cannot be undone."
+    "delete_confirm_message": "Are you sure you want to delete rule '{name}'? This action cannot be undone.",
+    "f_app_name": "App Name",
+    "f_app_name_placeholder": "Select applications",
+    "f_pr_status_placeholder": "Select PR statuses",
+    "filter_hint": "Showing rules matching {app}",
+    "f_conditions_help": "Conditions are resolved to project_key and repository_slug in JSON"
   },
   "admin": {
     "admin_panel": "Admin Panel",
@@ -822,9 +847,8 @@
       "festivalEffectSpringFestival": "Spring Festival (Lanterns)",
       "festivalEffectMidAutumn": "Mid-Autumn (Moon & Petals)",
       "festivalEffectNewYear": "New Year (Confetti)",
-      "festivalRemoveConfirm": "Remove \"{name}\"? Its animation will no longer play for anyone.",
-      "festivalRemove": "Remove Festival",
       "festivalRemoveConfirm": "This clears the festival animation config for everyone. No animation will play until a new one is saved. Continue?",
+      "festivalRemove": "Remove Festival",
       "festivalRemoved": "Festival animation removed",
       "festivalCustomEffect": "Custom (Emoji & Confetti)",
       "festivalCustomName": "Greeting Text",
@@ -1333,7 +1357,7 @@
     "import_failed": "Failed to import the releases",
     "push_to_provider": "Publish on GitHub as well",
     "sync_confluence_label": "Sync to Confluence",
-      "sync_confluence_prerelease": "A pre-release is not written to Confluence automatically.",
+    "sync_confluence_prerelease": "A pre-release is not written to Confluence automatically.",
     "sync_to_confluence": "Sync to Confluence",
     "view_on_confluence": "View on Confluence",
     "badge_confluence_failed": "Confluence sync failed",
@@ -1463,5 +1487,34 @@
     "restore": "Restore",
     "reset_layout": "Reset layout",
     "layered": "Layered layout"
+  },
+  "filters": {
+    "panel_title": "Advanced Filters",
+    "search_placeholder": "Search... (Click for more filters)",
+    "reset_all": "Reset All",
+    "app_name": "App Name",
+    "project": "Project",
+    "pr_user": "PR User",
+    "reviewer": "Reviewer",
+    "scored": "Scored",
+    "severity": "Severity",
+    "pr_status": "PR Status",
+    "date_range": "Date Range",
+    "select_or_type": "Select or type name",
+    "all": "All",
+    "all_status": "All Status",
+    "start_date": "Start date",
+    "end_date": "End date",
+    "scored_yes": "Scored",
+    "scored_no": "Not Scored",
+    "critical": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "status_open": "Open",
+    "status_merged": "Merged",
+    "status_closed": "Closed",
+    "status_draft": "Draft",
+    "unknown": "Unknown"
   }
 }

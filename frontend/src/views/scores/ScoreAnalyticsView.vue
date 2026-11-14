@@ -13,8 +13,8 @@
 
       <!-- Filters -->
       <el-form :inline="true" class="filter-form">
-        <el-form-item label="App Name">
-          <el-select v-model="appNameFilter" placeholder="All Applications" clearable filterable style="width: 200px" @change="loadAnalytics">
+        <el-form-item :label="t('scores.filters.app_name', 'App Name')">
+          <el-select v-model="appNameFilter" :placeholder="t('scores.filters.all_applications', 'All Applications')" clearable filterable style="width: 200px" @change="loadAnalytics">
             <el-option
               v-for="app in appOptions"
               :key="app.app_name"

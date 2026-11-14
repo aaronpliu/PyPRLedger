@@ -435,6 +435,24 @@
       "link_account_required": "请先将您的账户关联到Git用户后再提交评分。",
       "no_reviewer_assigned": "此审查尚未分配审查者，分配后方可进行评分。",
       "not_assigned_reviewer": "您只能对分配给您的关联Git用户的审查进行评分。"
+    },
+    "task": {
+      "assign_title": "分配审查人",
+      "bulk_assign_title": "批量分配审查人",
+      "bulk_assign_intro": "将 {count} 条审查分配给审查人：",
+      "bulk_assign_button": "分配 {count} 条",
+      "pr_id": "PR 编号",
+      "project_repo": "项目 / 仓库",
+      "branches": "分支",
+      "pr_status": "PR 状态",
+      "reviewers": "已有审查人",
+      "reviewer": "审查人",
+      "select_reviewer": "选择审查人",
+      "no_reviewers": "暂无审查人",
+      "no_available_reviewers": "没有可分配的审查人",
+      "assign": "分配",
+      "items_selected": "已选择 {count} 条审查 | 已选择 {count} 条审查",
+      "clear_selection": "清除选择"
     }
   },
   "scores": {
@@ -481,7 +499,9 @@
       "pr_level": "PR级别",
       "file_level": "文件级别",
       "apply_filters": "应用筛选",
-      "reset_filters": "重置"
+      "reset_filters": "重置",
+      "app_name": "应用名称",
+      "all_applications": "全部应用"
     },
     "statistics": {
       "average_score": "平均评分",
@@ -742,7 +762,12 @@
     "load_failed": "加载规则失败。",
     "save_failed": "保存规则失败。",
     "delete_confirm_title": "删除规则",
-    "delete_confirm_message": "确定要删除规则'{name}'吗？此操作无法撤销。"
+    "delete_confirm_message": "确定要删除规则'{name}'吗？此操作无法撤销。",
+    "f_app_name": "应用名称",
+    "f_app_name_placeholder": "选择应用",
+    "f_pr_status_placeholder": "选择 PR 状态",
+    "filter_hint": "显示匹配 {app} 的规则",
+    "f_conditions_help": "条件将解析为 JSON 中的 project_key 和 repository_slug"
   },
   "admin": {
     "admin_panel": "管理面板",
@@ -822,9 +847,8 @@
       "festivalEffectSpringFestival": "春节（灯笼）",
       "festivalEffectMidAutumn": "中秋（明月花瓣）",
       "festivalEffectNewYear": "元旦（彩带）",
-      "festivalRemoveConfirm": "确定移除「{name}」？所有用户将不再播放该动画。",
-      "festivalRemove": "移除节日",
       "festivalRemoveConfirm": "将清除所有用户的节日动画配置，移除后不再播放任何动画，直到重新保存。是否继续？",
+      "festivalRemove": "移除节日",
       "festivalRemoved": "节日动画已移除",
       "festivalCustomEffect": "自定义（Emoji 与彩带）",
       "festivalCustomName": "问候语",
@@ -1333,7 +1357,7 @@
     "import_failed": "导入版本失败",
     "push_to_provider": "同时发布到 GitHub",
     "sync_confluence_label": "同步到 Confluence",
-      "sync_confluence_prerelease": "预发布版本不会自动写入 Confluence。",
+    "sync_confluence_prerelease": "预发布版本不会自动写入 Confluence。",
     "sync_to_confluence": "同步到 Confluence",
     "view_on_confluence": "在 Confluence 查看",
     "badge_confluence_failed": "Confluence 同步失败",
@@ -1463,5 +1487,34 @@
     "restore": "还原",
     "reset_layout": "重置布局",
     "layered": "分层布局"
+  },
+  "filters": {
+    "panel_title": "高级筛选",
+    "search_placeholder": "搜索...（点击查看更多筛选）",
+    "reset_all": "全部重置",
+    "app_name": "应用名称",
+    "project": "项目",
+    "pr_user": "PR 提交人",
+    "reviewer": "审查人",
+    "scored": "是否已评分",
+    "severity": "严重程度",
+    "pr_status": "PR 状态",
+    "date_range": "日期范围",
+    "select_or_type": "选择或输入名称",
+    "all": "全部",
+    "all_status": "全部状态",
+    "start_date": "开始日期",
+    "end_date": "结束日期",
+    "scored_yes": "已评分",
+    "scored_no": "未评分",
+    "critical": "严重",
+    "high": "高",
+    "medium": "中",
+    "low": "低",
+    "status_open": "打开",
+    "status_merged": "已合并",
+    "status_closed": "已关闭",
+    "status_draft": "草稿",
+    "unknown": "未知"
   }
 }
