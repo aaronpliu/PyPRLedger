@@ -4,12 +4,30 @@
       <template #header>
         <div class="card-header">
           <span>{{ t('profile.tabs.title', 'Profile') }}</span>
+          <span class="current-tab-label">{{ currentTabLabel }}</span>
         </div>
       </template>
 
-      <el-tabs v-model="activeTab" tab-position="left" class="profile-tabs">
-        <!-- User Info Tab -->
-        <el-tab-pane :label="t('profile.tabs.user_info', 'User Info')" name="info">
+      <!-- Fixed-width nav panel + content panel. The nav is custom-rendered
+           (Element Plus' left tabs size their nav from the labels, which made
+           the layout shift between languages). -->
+      <div class="profile-layout">
+        <nav class="profile-nav">
+          <button
+            v-for="item in navItems"
+            :key="item.name"
+            type="button"
+            class="profile-nav-item"
+            :class="{ 'is-active': activeTab === item.name }"
+            @click="activeTab = item.name"
+          >
+            {{ item.label }}
+          </button>
+        </nav>
+
+        <div class="profile-body">
+          <!-- User Info Tab -->
+          <div v-show="activeTab === 'info'" class="profile-pane">
           <div class="tab-content">
             <!-- Two-column layout: avatar on the left, profile info on the right -->
             <div class="user-info-layout">
@@ -27,7 +45,7 @@
 
               <!-- Compact user info grid -->
               <div class="user-info-panel">
-            <el-row :gutter="16" style="margin-bottom: 20px;">
+            <el-row :gutter="16" class="info-row">
               <el-col :span="12">
                 <div class="info-item">
                   <label>{{ t('profile.user_info.username') }}</label>
@@ -42,7 +60,7 @@
               </el-col>
             </el-row>
             
-            <el-row :gutter="16" style="margin-bottom: 20px;">
+            <el-row :gutter="16" class="info-row">
               <el-col :span="12">
                 <div class="info-item">
                   <label>{{ t('profile.user_info.status') }}</label>
@@ -61,7 +79,7 @@
               </el-col>
             </el-row>
             
-            <el-row :gutter="16" style="margin-bottom: 20px;">
+            <el-row :gutter="16" class="info-row">
               <el-col :span="12">
                 <div class="info-item">
                   <label>{{ t('profile.user_info.member_since') }}</label>
@@ -164,13 +182,21 @@
               </el-form-item>
             </el-form>
           </div>
-        </el-tab-pane>
+        </div>
 
         <!-- Role Delegations Tab -->
-        <el-tab-pane :label="t('profile.tabs.delegations', 'Role Delegations')" name="delegations">
+        <div v-show="activeTab === 'delegations'" class="profile-pane">
           <div class="tab-content delegation-tab-content">
             <div class="tab-section-header">
-              <h3>{{ t('profile.delegations.my_title') }}</h3>
+              <div class="delegation-header-left">
+                <h3>{{ t('profile.delegations.my_title') }}</h3>
+                <!-- Replaces the horizontal sub-tabs: the current direction is
+                     shown as a label and toggled in place. -->
+                <el-radio-group v-model="delegationDirection">
+                  <el-radio-button value="received">{{ t('profile.delegations.received') }}</el-radio-button>
+                  <el-radio-button value="sent">{{ t('profile.delegations.sent') }}</el-radio-button>
+                </el-radio-group>
+              </div>
               <el-button
                 v-if="canManageDelegations"
                 type="primary"
@@ -180,12 +206,10 @@
                 {{ t('profile.delegations.create') }}
               </el-button>
             </div>
-            
-            <el-tabs v-model="delegationDirection" type="card" class="delegation-tabs">
-              <el-tab-pane :label="t('profile.delegations.received')" name="received">
-                <div v-loading="loadingReceived" class="delegation-table-wrapper">
-                  <el-empty v-if="receivedDelegations.length === 0" :description="t('profile.delegations.no_received')" />
-                  <el-table v-else :data="receivedDelegations" stripe style="width: 100%">
+
+            <div v-show="delegationDirection === 'received'" v-loading="loadingReceived" class="delegation-table-wrapper">
+              <el-empty v-if="receivedDelegations.length === 0" :description="t('profile.delegations.no_received')" />
+              <el-table v-else :data="receivedDelegations" stripe style="width: 100%">
                     <el-table-column prop="role_name" :label="t('profile.delegations.role')" width="130">
                       <template #default="{ row }">
                         <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
@@ -224,10 +248,8 @@
                     </el-table-column>
                   </el-table>
                 </div>
-              </el-tab-pane>
 
-              <el-tab-pane :label="t('profile.delegations.sent')" name="sent">
-                <div v-loading="loadingSent" class="delegation-table-wrapper">
+                <div v-show="delegationDirection === 'sent'" v-loading="loadingSent" class="delegation-table-wrapper">
                   <el-empty v-if="sentDelegations.length === 0" :description="t('profile.delegations.no_sent')" />
                   <el-table v-else :data="sentDelegations" stripe style="width: 100%">
                     <el-table-column prop="role_name" :label="t('profile.delegations.role')" width="130">
@@ -276,12 +298,10 @@
                     </el-table-column>
                   </el-table>
                 </div>
-              </el-tab-pane>
-            </el-tabs>
           </div>
-        </el-tab-pane>
+        </div>
 
-        <el-tab-pane :label="t('profile.tabs.sessions', 'My Sessions')" name="sessions">
+        <div v-show="activeTab === 'sessions'" class="profile-pane">
           <div class="tab-content sessions-tab-content">
             <div class="tab-section-header">
               <div>
@@ -366,24 +386,24 @@
 
             <el-empty v-if="!loadingSessions && sessions.length === 0" :description="t('profile.sessions.no_sessions')" />
           </div>
-        </el-tab-pane>
+        </div>
 
         <!-- Personal Access Tokens Tab -->
-        <el-tab-pane :label="t('profile.tabs.tokens', 'Personal Access Tokens')" name="tokens">
+        <div v-show="activeTab === 'tokens'" class="profile-pane">
           <div class="tab-content">
             <PATManagement />
           </div>
-        </el-tab-pane>
+        </div>
 
         <!-- My Comment Templates Tab -->
-        <el-tab-pane :label="t('profile.tabs.comment_templates', 'My Comment Templates')" name="comment-templates">
+        <div v-show="activeTab === 'comment-templates'" class="profile-pane">
           <div class="tab-content">
             <CommentTemplateManagement />
           </div>
-        </el-tab-pane>
+        </div>
 
         <!-- Appearance Tab -->
-        <el-tab-pane :label="t('profile.tabs.appearance', 'Appearance')" name="appearance">
+        <div v-show="activeTab === 'appearance'" class="profile-pane">
           <div class="tab-content appearance-tab">
             <section class="appearance-section">
               <h3>{{ t('profile.appearance.theme') }}</h3>
@@ -443,8 +463,9 @@
               />
             </section>
           </div>
-        </el-tab-pane>
-      </el-tabs>
+        </div>
+        </div>
+      </div>
     </el-card>
 
     <!-- Create Delegation Dialog -->
@@ -495,6 +516,21 @@ const PROFILE_TABS = ['info', 'delegations', 'sessions', 'tokens', 'comment-temp
 const requestedTab =
   typeof router.currentRoute.value.query.tab === 'string' ? router.currentRoute.value.query.tab : ''
 const activeTab = ref(PROFILE_TABS.includes(requestedTab) ? requestedTab : 'info')
+
+// Left nav panel entries - labels re-resolve on language change, but the
+// panel width stays fixed (see .profile-nav) so nothing shifts on switch.
+const navItems = computed(() => [
+  { name: 'info', label: t('profile.tabs.user_info', 'User Info') },
+  { name: 'delegations', label: t('profile.tabs.delegations', 'Role Delegations') },
+  { name: 'sessions', label: t('profile.tabs.sessions', 'My Sessions') },
+  { name: 'tokens', label: t('profile.tabs.tokens', 'Personal Access Tokens') },
+  { name: 'comment-templates', label: t('profile.tabs.comment_templates', 'My Comment Templates') },
+  { name: 'appearance', label: t('profile.tabs.appearance', 'Appearance') },
+])
+// Shown in the card header so the reader always sees which panel is open.
+const currentTabLabel = computed(
+  () => navItems.value.find((item) => item.name === activeTab.value)?.label ?? ''
+)
 const delegationDirection = ref<'received' | 'sent'>('received')
 const loadingSessions = ref(false)
 const sessions = ref<AuthSession[]>([])
@@ -948,6 +984,16 @@ onMounted(() => {
   font-weight: bold;
 }
 
+/* Label of the currently selected panel, shown at the right of the header */
+.current-tab-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+  padding: 4px 14px;
+  border-radius: 12px;
+}
+
 /* User Info tab: avatar panel on the left, profile info on the right */
 .user-info-layout {
   display: flex;
@@ -974,62 +1020,60 @@ onMounted(() => {
   min-width: 320px;
 }
 
-.profile-tabs {
+.profile-layout {
   flex: 1;
+  display: flex;
+  align-items: stretch;
   min-height: 0;
 }
 
-::deep(.profile-tabs.el-tabs--left) {
-  display: flex;
-}
-
-/* Left nav panel: the tab list becomes a vertical sidebar, the active pane
-   fills the rest - mirroring the admin section's panelled layout. */
-::deep(.profile-tabs > .el-tabs__header.is-left) {
-  width: 190px;
-  min-width: 190px;
-  max-width: 190px;
+/* Fixed-width nav panel - the width is sized for the longest English label
+   ("Personal Access Tokens") and never re-measured from the DOM, so the
+   splitter holds still in every language. */
+.profile-nav {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
   flex-shrink: 0;
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 10px;
   background-color: var(--el-fill-color-light);
   border-right: 1px solid var(--el-border-color-lighter);
 }
 
-::deep(.profile-tabs .el-tabs__nav-wrap.is-left) {
+.profile-nav-item {
+  display: flex;
+  align-items: center;
   width: 100%;
-}
-
-::deep(.profile-tabs .el-tabs__nav-wrap.is-left::after) {
-  display: none;
-}
-
-::deep(.profile-tabs .el-tabs__nav.is-left) {
-  width: 100%;
-}
-
-::deep(.profile-tabs .el-tabs__item.is-left) {
-  height: auto;
-  line-height: 1.4;
   padding: 12px 16px;
-  margin: 4px 10px;
+  border: none;
   border-radius: 8px;
-  text-align: left;
-  justify-content: flex-start;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
   font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--el-text-color-regular);
   transition: color 0.2s ease, background-color 0.2s ease;
 }
 
-::deep(.profile-tabs .el-tabs__item.is-left.is-active) {
+.profile-nav-item:hover {
+  color: var(--el-color-primary);
+  background-color: var(--el-fill-color);
+}
+
+.profile-nav-item.is-active {
   position: relative;
   font-weight: 600;
   color: var(--el-color-primary);
   background-color: var(--el-color-primary-light-9);
 }
 
-::deep(.profile-tabs .el-tabs__item.is-left.is-active::before) {
+.profile-nav-item.is-active::before {
   content: '';
   position: absolute;
   left: 0;
@@ -1047,58 +1091,17 @@ onMounted(() => {
   to { transform: scaleY(1); }
 }
 
-::deep(.profile-tabs .el-tabs__item.is-left:not(.is-active):hover) {
-  color: var(--el-color-primary);
-  background-color: var(--el-fill-color);
-}
-
-::deep(.profile-tabs > .el-tabs__content) {
+/* Content owns exactly what the fixed 220px nav leaves over, so the
+   splitter between them holds still regardless of the active language. */
+.profile-body {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
-  padding: 0;
   background-color: var(--el-bg-color);
 }
 
-/* Nested delegation tabs keep the horizontal card style: comfortable hit
-   area, accent bar springs open from the centre on the active item. */
-::deep(.delegation-tabs .el-tabs__item) {
-  padding: 0 24px;
-  font-size: 14px;
-  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
-}
-
-::deep(.delegation-tabs .el-tabs__item.is-active) {
-  position: relative;
-  font-weight: 600;
-  color: var(--el-color-primary);
-}
-
-::deep(.delegation-tabs .el-tabs__item.is-active::before) {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 14px;
-  right: 14px;
-  height: 3px;
-  border-radius: 0 0 3px 3px;
-  background-color: var(--el-color-primary);
-  transform-origin: center;
-  animation: tabAccentIn 0.25s ease;
-}
-
-::deep(.delegation-tabs .el-tabs__item:not(.is-active):hover) {
-  color: var(--el-color-primary);
-  background-color: var(--el-fill-color);
-}
-
-/* Fix Element Plus tabs structure */
-:deep(.el-tabs__content) {
-  flex: 1;
-  overflow: hidden;
-  padding: 0;
-}
-
-:deep(.el-tab-pane) {
+.profile-pane {
   height: 100%;
   overflow: hidden;
 }
@@ -1110,17 +1113,22 @@ onMounted(() => {
 }
 
 /* Compact info item layout */
+.info-row {
+  margin-bottom: 6px;
+}
+
 .info-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 0;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 14px;
 }
 
 .info-item label {
   font-weight: 600;
-  color: var(--el-text-color-regular);
-  min-width: 120px;
+  color: var(--el-text-color-secondary);
+  min-width: 110px;
   flex-shrink: 0;
 }
 
@@ -1129,7 +1137,7 @@ onMounted(() => {
   word-break: break-word;
   overflow-wrap: break-word;
   flex: 1;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 /* Compact status tag styling */
@@ -1299,33 +1307,21 @@ h3 {
   padding: 12px 0;
 }
 
-/* Improve delegation tabs spacing */
-:deep(.el-tabs--card > .el-tabs__header) {
-  margin-bottom: 16px;
-}
-
-:deep(.el-tabs--card > .el-tabs__header .el-tabs__item) {
-  padding: 10px 16px;
-  font-size: 14px;
-}
-
-/* Nested tabs inside delegations - use flex layout */
-.delegation-tabs {
-  height: calc(100% - 60px);
+.delegation-tab-content {
   display: flex;
   flex-direction: column;
 }
 
-:deep(.delegation-tabs > .el-tabs__content) {
-  flex: 1;
-  overflow: hidden;
-  padding: 0;
+/* Delegations: direction label (radio) sits next to the title; the two
+   table panels are toggled with v-show and fill the remaining height. */
+.delegation-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
-:deep(.delegation-tabs .el-tab-pane) {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+.delegation-header-left h3 {
+  margin: 0;
 }
 
 /* Wrapper for delegation tables with flex layout */
@@ -1336,8 +1332,8 @@ h3 {
   overflow: hidden;
 }
 
-/* Tables in delegation tabs with flexible height */
-:deep(.delegation-tabs .el-table) {
+/* Tables in delegation panels with flexible height */
+:deep(.delegation-tab-content .el-table) {
   flex: 1;
   min-height: 350px;
 }
@@ -1356,7 +1352,7 @@ h3 {
 }
 
 /* Table in sessions tab with flexible height */
-:deep(.el-tab-pane[name="sessions"] .el-table) {
+:deep(.sessions-tab-content .el-table) {
   flex: 1;
   min-height: 450px;
 }
@@ -1366,12 +1362,17 @@ h3 {
   margin: 30px auto;
 }
 
-/* Appearance tab */
+/* Appearance tab - sections are spaced by gap only, so the top gap to the
+   nav splitter matches the other tabs */
 .appearance-tab {
   display: flex;
   flex-direction: column;
   gap: 28px;
   max-width: 560px;
+}
+
+.appearance-tab h3 {
+  margin: 0 0 12px;
 }
 
 .appearance-section h3 {

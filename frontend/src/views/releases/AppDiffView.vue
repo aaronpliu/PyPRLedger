@@ -1000,8 +1000,6 @@ watch(depth, () => {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-  gap: 12px;
   flex-wrap: wrap;
 }
 
