@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -434,6 +434,39 @@ class Settings(BaseSettings):
         default=True,
         description="Enable API documentation in development. Always disabled in production for security.",
     )
+
+    @model_validator(mode="after")
+    def validate_production_hardening(self) -> "Settings":
+        """Refuse to start a production instance that still carries dev defaults.
+
+        A known SECRET_KEY lets anyone forge a JWT for any user, and a wildcard
+        CORS origin with credentials allows every site to call the API on the
+        reader's behalf. Failing fast beats a log line nobody reads.
+        """
+        if self.ENV.strip().lower() != "production":
+            return self
+
+        problems: list[str] = []
+        if (
+            self.SECRET_KEY == "development-secret-key-change-in-production"
+            or len(self.SECRET_KEY) < 32
+        ):
+            problems.append("SECRET_KEY must be a unique random value of at least 32 characters")
+        if "*" in self.backend_cors_origins_list:
+            problems.append(
+                "BACKEND_CORS_ORIGINS must not contain '*' when credentials are allowed"
+            )
+        if self.DEBUG:
+            problems.append("DEBUG must be False")
+        if self.ID_OBFUSCATOR_SALT == "change-me-in-production":
+            problems.append("ID_OBFUSCATOR_SALT must be a unique random value")
+
+        if problems:
+            raise ValueError(
+                "Insecure production configuration - refusing to start:\n  - "
+                + "\n  - ".join(problems)
+            )
+        return self
 
 
 @lru_cache
