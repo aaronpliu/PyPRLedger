@@ -7,26 +7,26 @@
         </div>
       </template>
 
-      <el-tabs v-model="activeTab" type="border-card" class="profile-tabs">
+      <el-tabs v-model="activeTab" tab-position="left" class="profile-tabs">
         <!-- User Info Tab -->
         <el-tab-pane :label="t('profile.tabs.user_info', 'User Info')" name="info">
           <div class="tab-content">
-            <!-- Avatar Section -->
-            <div class="avatar-section">
-              <h3 style="margin-top: 0;">{{ t('profile.user_info.avatar', 'Avatar') }}</h3>
-              <AvatarUpload
-                v-if="authStore.user"
-                :username="authStore.user.username"
-                :avatarUrl="authStore.user.avatar_url"
-                :size="120"
-                :showActions="true"
-                @update:avatarUrl="handleAvatarUpdate"
-              />
-              <!-- Debug: {{ authStore.user }} -->
-            </div>
-            
-            <el-divider />
-            <!-- Compact user info grid -->
+            <!-- Two-column layout: avatar on the left, profile info on the right -->
+            <div class="user-info-layout">
+              <div class="avatar-panel">
+                <h3>{{ t('profile.user_info.avatar', 'Avatar') }}</h3>
+                <AvatarUpload
+                  v-if="authStore.user"
+                  :username="authStore.user.username"
+                  :avatarUrl="authStore.user.avatar_url"
+                  :size="120"
+                  :showActions="true"
+                  @update:avatarUrl="handleAvatarUpdate"
+                />
+              </div>
+
+              <!-- Compact user info grid -->
+              <div class="user-info-panel">
             <el-row :gutter="16" style="margin-bottom: 20px;">
               <el-col :span="12">
                 <div class="info-item">
@@ -123,6 +123,8 @@
                 </div>
               </el-col>
             </el-row>
+              </div>
+            </div>
 
             <!-- Change Password Section -->
             <el-divider />
@@ -927,8 +929,8 @@ onMounted(() => {
 
 <style scoped>
 .profile-container {
-  width: 1200px;
-  max-width: 95vw;
+  width: 1400px;
+  max-width: 96vw;
   margin: 20px auto;
 }
 
@@ -946,43 +948,131 @@ onMounted(() => {
   font-weight: bold;
 }
 
-/* Avatar section styling */
-.avatar-section {
+/* User Info tab: avatar panel on the left, profile info on the right */
+.user-info-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.avatar-panel {
+  flex: 0 0 220px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 0;
+  padding: 8px 24px 20px 0;
+  border-right: 1px solid var(--el-border-color-lighter);
 }
 
-.avatar-section h3 {
-  margin-bottom: 16px;
+.avatar-panel h3 {
+  margin: 0 0 16px;
+}
+
+.user-info-panel {
+  flex: 1;
+  min-width: 320px;
 }
 
 .profile-tabs {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  min-height: 0;
 }
 
-/* Tab style: comfortable hit area, accent bar that springs open from the
-   centre on the active item, bolder label, gentle hover feedback. Applies to
-   both the main profile tabs and the nested delegation tabs. */
-::deep(.profile-tabs .el-tabs__item),
+::deep(.profile-tabs.el-tabs--left) {
+  display: flex;
+}
+
+/* Left nav panel: the tab list becomes a vertical sidebar, the active pane
+   fills the rest - mirroring the admin section's panelled layout. */
+::deep(.profile-tabs > .el-tabs__header.is-left) {
+  width: 190px;
+  min-width: 190px;
+  max-width: 190px;
+  flex-shrink: 0;
+  margin: 0;
+  background-color: var(--el-fill-color-light);
+  border-right: 1px solid var(--el-border-color-lighter);
+}
+
+::deep(.profile-tabs .el-tabs__nav-wrap.is-left) {
+  width: 100%;
+}
+
+::deep(.profile-tabs .el-tabs__nav-wrap.is-left::after) {
+  display: none;
+}
+
+::deep(.profile-tabs .el-tabs__nav.is-left) {
+  width: 100%;
+}
+
+::deep(.profile-tabs .el-tabs__item.is-left) {
+  height: auto;
+  line-height: 1.4;
+  padding: 12px 16px;
+  margin: 4px 10px;
+  border-radius: 8px;
+  text-align: left;
+  justify-content: flex-start;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+::deep(.profile-tabs .el-tabs__item.is-left.is-active) {
+  position: relative;
+  font-weight: 600;
+  color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+}
+
+::deep(.profile-tabs .el-tabs__item.is-left.is-active::before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background-color: var(--el-color-primary);
+  transform-origin: center;
+  animation: tabAccentIn 0.25s ease;
+}
+
+@keyframes tabAccentIn {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+::deep(.profile-tabs .el-tabs__item.is-left:not(.is-active):hover) {
+  color: var(--el-color-primary);
+  background-color: var(--el-fill-color);
+}
+
+::deep(.profile-tabs > .el-tabs__content) {
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+  background-color: var(--el-bg-color);
+}
+
+/* Nested delegation tabs keep the horizontal card style: comfortable hit
+   area, accent bar springs open from the centre on the active item. */
 ::deep(.delegation-tabs .el-tabs__item) {
   padding: 0 24px;
   font-size: 14px;
   transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
-::deep(.profile-tabs .el-tabs__item.is-active),
 ::deep(.delegation-tabs .el-tabs__item.is-active) {
   position: relative;
   font-weight: 600;
   color: var(--el-color-primary);
 }
 
-::deep(.profile-tabs .el-tabs__item.is-active::before),
 ::deep(.delegation-tabs .el-tabs__item.is-active::before) {
   content: '';
   position: absolute;
@@ -996,12 +1086,6 @@ onMounted(() => {
   animation: tabAccentIn 0.25s ease;
 }
 
-@keyframes tabAccentIn {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
-}
-
-::deep(.profile-tabs .el-tabs__item:not(.is-active):hover),
 ::deep(.delegation-tabs .el-tabs__item:not(.is-active):hover) {
   color: var(--el-color-primary);
   background-color: var(--el-fill-color);
