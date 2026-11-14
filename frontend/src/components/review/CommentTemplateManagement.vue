@@ -1,62 +1,59 @@
 <template>
   <div class="comment-template-management">
     <div class="ctm-header">
-      <h3>My Comment Templates</h3>
+      <h3>{{ t('profile.comment_templates.title') }}</h3>
       <div class="header-actions">
-        <el-button @click="loadTemplates" :loading="loading">
+        <el-button type="primary" @click="loadTemplates" :loading="loading">
           <el-icon><Refresh /></el-icon>
-          Refresh
+          {{ t('profile.comment_templates.refresh') }}
         </el-button>
         <el-button type="primary" @click="openCreateDialog">
           <el-icon><Plus /></el-icon>
-          New Template
+          {{ t('profile.comment_templates.new_template') }}
         </el-button>
       </div>
     </div>
 
-    <p class="ctm-description">
-      Save frequently used review comments as reusable templates. They will be available in the
-      "Add Score" dialog when writing a score review, making your comments personalized.
-    </p>
+    <p class="ctm-description">{{ t('profile.comment_templates.description') }}</p>
 
     <!-- Template List -->
     <div v-loading="loading" class="template-list">
-      <el-empty v-if="!loading && templates.length === 0" description="No comment templates yet">
-        <el-button type="primary" @click="openCreateDialog">Create Template</el-button>
+      <el-empty v-if="!loading && templates.length === 0" :description="t('profile.comment_templates.empty')">
+        <el-button type="primary" @click="openCreateDialog">{{ t('profile.comment_templates.create_template') }}</el-button>
       </el-empty>
 
       <el-table v-else :data="templates" stripe style="width: 100%">
-        <el-table-column prop="name" label="Name" min-width="180">
+        <el-table-column prop="name" :label="t('profile.comment_templates.name')" min-width="180">
           <template #default="{ row }">
             <span class="template-name">{{ row.name }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="Content" min-width="280">
+        <el-table-column :label="t('profile.comment_templates.content')" min-width="280">
           <template #default="{ row }">
             <div class="template-content">{{ row.content }}</div>
           </template>
         </el-table-column>
 
-        <el-table-column label="Updated" width="170">
+        <el-table-column :label="t('profile.comment_templates.updated')" width="170">
           <template #default="{ row }">
             {{ formatDate(row.updated_at) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="Created" width="170">
+        <el-table-column :label="t('profile.comment_templates.created')" width="170">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="Actions" width="150" fixed="right">
+        <el-table-column :label="t('profile.comment_templates.actions')" width="150" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" link @click="openEditDialog(row)">
-              Edit
+              {{ t('profile.comment_templates.edit') }}
             </el-button>
             <el-button size="small" type="danger" link @click="handleDeleteTemplate(row)">
-              Delete
+              {{ t('profile.comment_templates.delete') }}
             </el-button>
           </template>
         </el-table-column>
@@ -66,7 +63,7 @@
     <!-- Create / Edit Template Dialog -->
     <el-dialog
       v-model="showDialog"
-      :title="editingTemplate ? 'Edit Comment Template' : 'New Comment Template'"
+      :title="editingTemplate ? t('profile.comment_templates.dialog_edit') : t('profile.comment_templates.dialog_new')"
       width="650px"
       :close-on-click-modal="false"
     >
@@ -76,33 +73,33 @@
         :rules="formRules"
         label-width="100px"
       >
-        <el-form-item label="Name" prop="name">
+        <el-form-item :label="t('profile.comment_templates.name')" prop="name">
           <el-input
             v-model="form.name"
-            placeholder="e.g., Excellent - approve, Minor typo fixes"
+            :placeholder="t('profile.comment_templates.name_ph')"
             maxlength="100"
             show-word-limit
           />
-          <div class="form-help">A short name shown in the template dropdown</div>
+          <div class="form-help">{{ t('profile.comment_templates.name_help') }}</div>
         </el-form-item>
 
-        <el-form-item label="Content" prop="content">
+        <el-form-item :label="t('profile.comment_templates.content')" prop="content">
           <el-input
             v-model="form.content"
             type="textarea"
             :rows="8"
-            placeholder="Write the review comment (Markdown supported)..."
+            :placeholder="t('profile.comment_templates.content_ph')"
             maxlength="5000"
             show-word-limit
           />
-          <div class="form-help">The comment inserted into the editor when this template is selected</div>
+          <div class="form-help">{{ t('profile.comment_templates.content_help') }}</div>
         </el-form-item>
       </el-form>
 
       <template #footer>
-        <el-button @click="showDialog = false">Cancel</el-button>
+        <el-button @click="showDialog = false">{{ t('common.cancel', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="saving" @click="handleSave">
-          {{ editingTemplate ? 'Save Changes' : 'Create Template' }}
+          {{ editingTemplate ? t('profile.comment_templates.save_changes') : t('profile.comment_templates.create_template') }}
         </el-button>
       </template>
     </el-dialog>
@@ -115,11 +112,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
+import { useI18n } from 'vue-i18n'
 import {
   userCommentTemplatesApi,
   type UserCommentTemplate,
 } from '@/api/userCommentTemplates'
 
+const { t } = useI18n()
 const loading = ref(false)
 const saving = ref(false)
 const templates = ref<UserCommentTemplate[]>([])
@@ -135,15 +134,15 @@ const form = reactive<{ name: string; content: string }>({
 
 const formRules: FormRules = {
   name: [
-    { required: true, message: 'Please enter a template name', trigger: 'blur' },
-    { min: 1, max: 100, message: 'Name must be between 1 and 100 characters', trigger: 'blur' },
+    { required: true, message: t('profile.comment_templates.rule_name'), trigger: 'blur' },
+    { min: 1, max: 100, message: t('profile.comment_templates.rule_name_len'), trigger: 'blur' },
   ],
   content: [
-    { required: true, message: 'Please enter template content', trigger: 'blur' },
+    { required: true, message: t('profile.comment_templates.rule_content'), trigger: 'blur' },
     {
       min: 1,
       max: 5000,
-      message: 'Content must be between 1 and 5000 characters',
+      message: t('profile.comment_templates.rule_content_len'),
       trigger: 'blur',
     },
   ],
@@ -156,7 +155,7 @@ const loadTemplates = async () => {
     const response = await userCommentTemplatesApi.listTemplates()
     templates.value = response.items
   } catch (error) {
-    ElMessage.error('Failed to load comment templates')
+    ElMessage.error(t('profile.comment_templates.load_failed'))
   } finally {
     loading.value = false
   }
@@ -193,19 +192,19 @@ const handleSave = async () => {
           name: form.name,
           content: form.content,
         })
-        ElMessage.success('Template updated successfully')
+        ElMessage.success(t('profile.comment_templates.updated_success'))
       } else {
         await userCommentTemplatesApi.createTemplate({
           name: form.name,
           content: form.content,
         })
-        ElMessage.success('Template created successfully')
+        ElMessage.success(t('profile.comment_templates.created_success'))
       }
 
       showDialog.value = false
       await loadTemplates()
     } catch (error: any) {
-      ElMessage.error(error?.response?.data?.message || 'Failed to save template')
+      ElMessage.error(error?.response?.data?.message || t('profile.comment_templates.save_failed'))
     } finally {
       saving.value = false
     }
@@ -215,17 +214,17 @@ const handleSave = async () => {
 const handleDeleteTemplate = async (template: UserCommentTemplate) => {
   try {
     await ElMessageBox.confirm(
-      `Are you sure you want to delete the template "${template.name}"? This action cannot be undone.`,
-      'Delete Template',
+      t('profile.comment_templates.delete_body', { name: template.name }),
+      t('profile.comment_templates.delete_title'),
       { type: 'warning' },
     )
 
     await userCommentTemplatesApi.deleteTemplate(template.id)
-    ElMessage.success('Template deleted successfully')
+    ElMessage.success(t('profile.comment_templates.deleted_success'))
     await loadTemplates()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('Failed to delete template')
+      ElMessage.error(t('profile.comment_templates.delete_failed'))
     }
   }
 }
