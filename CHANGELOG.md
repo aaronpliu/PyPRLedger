@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.37.1] - 2026-11-14
+
+**Backend Version**: 1.37.1
+**Frontend Version**: 1.32.1
+
+### Added
+- App Diff page can export the current comparison as a standalone HTML report (`Export` button next to `Refresh`), sharing the release comparison report's style and i18n (en / zh-CN / zh-TW)
+- New backend endpoint `POST /api/v1/release/apps/diff/report` for CI pipelines: renders the same comparison as a self-contained HTML document (or `?format=json`), with `?download=true` adding an attachment filename; authenticated with a Personal Access Token and the caller's repository grants, same as the diff endpoint
+
+### Fixed
+- PAT management page: `Created`, `Expires` and `Last Used` no longer display shifted by the local timezone offset (the stored local wall-clock time was wrongly re-interpreted as UTC)
+
+### Changed
+- [Refactor] Update to restrict admin role revoke
+
+---
+
 ## [1.37.0] - 2026-11-12
 
 **Backend Version**: 1.37.0
