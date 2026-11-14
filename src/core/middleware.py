@@ -215,7 +215,20 @@ class CacheControlMiddleware(BaseHTTPMiddleware):
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Security headers middleware"""
+    """Attach baseline security headers to every API response.
+
+    Inline styles are allowed because the App Diff HTML report ships its own
+    ``<style>`` block; scripts stay restricted to same-origin.
+    """
+
+    _CSP = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data:; "
+        "frame-ancestors 'none'"
+    )
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Process request
@@ -224,9 +237,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Add security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
+        # X-XSS-Protection is obsolete and can introduce issues in old browsers;
+        # CSP below is the supported replacement, so only keep "0" (disable).
+        response.headers["X-XSS-Protection"] = "0"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Content-Security-Policy"] = self._CSP
+        # HSTS is ignored over plain HTTP, so local development is unaffected.
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
 
         return response
 
