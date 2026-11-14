@@ -370,6 +370,16 @@ class RBACService:
         if not assignment:
             return False
 
+        # The system admin role is a protected assignment: it keeps the platform
+        # manageable and is only given by hand, so no revoke may take it away.
+        role_result = await self.db.execute(select(Role).where(Role.id == role_id))
+        role = role_result.scalar_one_or_none()
+        if role and role.name == "system_admin":
+            raise ForbiddenException(
+                message="The system_admin role cannot be revoked. "
+                "Deactivate the user or transfer the role to another administrator instead."
+            )
+
         await self.db.delete(assignment)
         await self.db.commit()
 

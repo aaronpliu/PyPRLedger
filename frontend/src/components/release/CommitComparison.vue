@@ -24,7 +24,7 @@
         <span :class="`code-${tone}`">
           {{ t('appDiff.code_added', { count: code.added_count }) }}
         </span>
-        <span v-if="code.missing_count" :data-test="testId('missing')">
+        <span v-if="code.missing_count" class="code-missing-count" :data-test="testId('missing')">
           · {{ t('appDiff.code_missing', { count: code.missing_count }) }}
         </span>
       </p>
@@ -43,19 +43,54 @@
         <template v-if="code.added_commits.length">
           <h4>{{ t('appDiff.code_added_heading') }}</h4>
           <ul>
-            <li v-for="commit in code.added_commits" :key="commit.id">
-              <code>{{ shortCommitId(commit) }}</code>
-              <span class="subject">{{ commitSubject(commit) }}</span>
+            <li v-for="commit in code.added_commits" :key="commit.id" class="commit">
+              <a
+                v-if="commit.url"
+                class="commit-id"
+                :href="commit.url"
+                target="_blank"
+                rel="noopener"
+              >
+                <code>{{ shortCommitId(commit) }}</code>
+              </a>
+              <code v-else>{{ shortCommitId(commit) }}</code>
+              <div class="commit-body">
+                <span class="subject" :title="fullMessage(commit)">
+                  {{ commitSubject(commit) }}
+                </span>
+                <span v-if="commitMeta(commit)" class="commit-meta">
+                  {{ commitMeta(commit) }}
+                </span>
+              </div>
             </li>
           </ul>
         </template>
 
         <template v-if="code.missing_commits.length">
-          <h4>{{ t('appDiff.code_missing_heading') }}</h4>
+          <h4 class="missing-heading">
+            <el-icon><WarningFilled /></el-icon>
+            {{ t('appDiff.code_missing_heading') }}
+          </h4>
           <ul>
-            <li v-for="commit in code.missing_commits" :key="commit.id">
-              <code>{{ shortCommitId(commit) }}</code>
-              <span class="subject">{{ commitSubject(commit) }}</span>
+            <li v-for="commit in code.missing_commits" :key="commit.id" class="commit missing">
+              <a
+                v-if="commit.url"
+                class="commit-id"
+                :href="commit.url"
+                target="_blank"
+                rel="noopener"
+              >
+                <code>{{ shortCommitId(commit) }}</code>
+              </a>
+              <code v-else>{{ shortCommitId(commit) }}</code>
+              <div class="commit-body">
+                <span class="subject" :title="fullMessage(commit)">
+                  {{ commitSubject(commit) }}
+                </span>
+                <span v-if="commitMeta(commit)" class="commit-meta">
+                  {{ commitMeta(commit) }}
+                </span>
+              </div>
             </li>
           </ul>
         </template>
@@ -71,7 +106,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { AppVersionDiffCode } from '@/api/appVersionDiff'
+import dayjs from 'dayjs'
+import { WarningFilled } from '@element-plus/icons-vue'
+import type { AppVersionDiffCode, AppVersionDiffCommit } from '@/api/appVersionDiff'
 import { codeTone, commitSubject, commitTotal, shortCommitId } from '@/utils/appVersionDiff'
 
 /**
@@ -102,6 +139,22 @@ const verdictType = computed<'success' | 'danger' | 'info'>(() => {
   if (props.code.verdict === 'contained') return 'success'
   return props.code.verdict === 'missing' ? 'danger' : 'info'
 })
+
+/** The whole message, body lines included, for the hover title. */
+function fullMessage(commit: AppVersionDiffCommit): string {
+  return commit.message ?? ''
+}
+
+/** Who wrote it and when, in one short line under the subject. */
+function commitMeta(commit: AppVersionDiffCommit): string {
+  const parts: string[] = []
+  const author = commit.author_name || commit.author_username
+  if (author) parts.push(author)
+  if (commit.author_timestamp) {
+    parts.push(dayjs(commit.author_timestamp).format('YYYY-MM-DD'))
+  }
+  return parts.join(' · ')
+}
 </script>
 
 <style scoped>
@@ -128,6 +181,12 @@ const verdictType = computed<'success' | 'danger' | 'info'>(() => {
   color: var(--el-text-color-secondary);
 }
 
+/* the count that asks for action reads as soon as the verdict does */
+.code-missing-count {
+  color: var(--el-color-danger);
+  font-weight: 600;
+}
+
 .code-unavailable {
   margin: 0;
   color: var(--el-color-warning-dark-2);
@@ -151,27 +210,69 @@ const verdictType = computed<'success' | 'danger' | 'info'>(() => {
   color: var(--el-text-color-secondary);
 }
 
+.commits h4 .el-icon {
+  vertical-align: -2px;
+  margin-right: 2px;
+}
+
 .commits ul {
   margin: 0;
   padding-left: 0;
   list-style: none;
 }
 
-.commits li {
+.commits li.commit {
   display: flex;
-  gap: 6px;
-  padding: 1px 0;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+/* a commit the later ref does not hold: the row asks for attention before it is read */
+.commits li.commit.missing {
+  border-left: 3px solid var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+}
+
+.missing-heading {
+  color: var(--el-color-danger) !important;
 }
 
 .commits code {
   color: var(--el-text-color-secondary);
   font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* the UA stylesheet underlines the anchor itself, and a decoration set on the
+   ancestor is painted over every inline descendant - so it has to be cleared
+   on the anchor, not on the code inside it */
+a.commit-id {
+  text-decoration: none;
+}
+
+a.commit-id:hover code {
+  text-decoration: underline;
+}
+
+.commit-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }
 
 .commits .subject {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: default;
+}
+
+.commit-meta {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
 }
 
 .truncated {

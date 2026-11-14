@@ -24,7 +24,7 @@
       <div v-if="rules.length > 0" class="app-filter-bar">
         <el-select
           v-model="appFilter"
-          placeholder="All Applications"
+          :placeholder="t('scores.filters.all_applications', 'All Applications')"
           clearable
           style="width: 250px"
           @change="currentPage = 1"
@@ -37,7 +37,7 @@
           />
         </el-select>
         <span v-if="appFilter" class="filter-hint">
-          Showing rules matching {{ appFilter }}
+          {{ t('auto_rules.filter_hint', { app: appFilter }) }}
         </span>
       </div>
 
@@ -266,14 +266,14 @@
           <el-col :xs="24" :md="12">
             <h3 class="section-title">{{ t('auto_rules.section_conditions') }}</h3>
 
-            <el-form-item label="App Name">
+            <el-form-item :label="t('auto_rules.f_app_name', 'App Name')">
               <el-select
                 v-model="cond.app_name"
                 class="tag-select"
                 multiple
                 filterable
                 clearable
-                placeholder="Select applications"
+                :placeholder="t('auto_rules.f_app_name_placeholder', 'Select applications')"
                 style="width: 100%"
                 @change="onAppsChosen"
               >
@@ -284,7 +284,7 @@
                   :value="app.app_name"
                 />
               </el-select>
-              <div class="form-help-text">Conditions will be resolved to project_key and repository_slug in JSON</div>
+              <div class="form-help-text">{{ t('auto_rules.f_conditions_help', 'Conditions are resolved to project_key and repository_slug in JSON') }}</div>
             </el-form-item>
 
             <el-form-item :label="t('auto_rules.f_pr_user')">
@@ -346,7 +346,7 @@
                 multiple
                 filterable
                 clearable
-                placeholder="Select PR statuses"
+                :placeholder="t('auto_rules.f_pr_status_placeholder', 'Select PR statuses')"
                 style="width: 100%"
               >
                 <el-option label="open" value="open" />

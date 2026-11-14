@@ -69,16 +69,16 @@
       <div v-if="selectedReviews.length > 0" class="bulk-actions-toolbar">
         <div class="selection-info">
           <el-icon><CircleCheck /></el-icon>
-          <span>{{ selectedReviews.length }} item{{ selectedReviews.length > 1 ? 's' : '' }} selected</span>
+          <span>{{ t('reviews.task.items_selected', selectedReviews.length) }}</span>
         </div>
         <div class="bulk-actions">
           <el-button size="small" type="primary" @click="showBulkAssignDialog">
             <el-icon><Edit /></el-icon>
-            Assign Reviewer
+            {{ t('reviews.task.assign_title', 'Assign Reviewer') }}
           </el-button>
           <el-button size="small" @click="clearSelection">
             <el-icon><Close /></el-icon>
-            Clear Selection
+            {{ t('reviews.task.clear_selection', 'Clear Selection') }}
           </el-button>
         </div>
       </div>
@@ -248,7 +248,7 @@
               :class="{ active: sortState.prop === 'updated_date' }"
               @click="toggleSort('updated_date')"
             >
-              <span class="sort-header-label">Updated</span>
+              <span class="sort-header-label">{{ t('task_assignment.updated', 'Updated') }}</span>
               <div class="sort-header-icons">
                 <el-icon
                   class="sort-header-icon"
@@ -296,26 +296,26 @@
     </el-card>
 
     <!-- Assign Reviewer Dialog -->
-    <el-dialog v-model="assignDialogVisible" title="Assign Reviewer" width="640px">
+    <el-dialog v-model="assignDialogVisible" :title="t('reviews.task.assign_title', 'Assign Reviewer')" width="640px">
       <el-form :model="assignForm" label-width="120px">
-        <el-form-item label="PR ID">
+        <el-form-item :label="t('reviews.task.pr_id', 'PR ID')">
           <el-input :value="selectedReview?.pull_request_id" disabled />
         </el-form-item>
-        <el-form-item label="Project / Repo">
+        <el-form-item :label="t('reviews.task.project_repo', 'Project / Repo')">
           <el-input :value="selectedReview ? `${selectedReview.project_key} / ${selectedReview.repository_slug}` : ''" disabled />
         </el-form-item>
-        <el-form-item label="PR User">
+        <el-form-item :label="t('reviews.detail.pr_user', 'PR User')">
           <el-input :value="getPullRequestAuthor(selectedReview)" disabled />
         </el-form-item>
-        <el-form-item label="Branches">
+        <el-form-item :label="t('reviews.task.branches', 'Branches')">
           <el-input :value="selectedReview ? `${selectedReview.source_branch} -> ${selectedReview.target_branch}` : ''" disabled />
         </el-form-item>
-        <el-form-item label="PR Status">
+        <el-form-item :label="t('reviews.task.pr_status', 'PR Status')">
           <el-tag v-if="selectedReview" :type="getStatusType(selectedReview.pull_request_status)">
             {{ selectedReview.pull_request_status }}
           </el-tag>
         </el-form-item>
-        <el-form-item label="Reviewers">
+        <el-form-item :label="t('reviews.task.reviewers', 'Reviewers')">
           <div class="current-reviewers">
             <el-tag
               v-for="reviewer in selectedReview?.reviewers || []"
@@ -325,13 +325,13 @@
             >
               {{ reviewer.reviewer_info?.display_name || reviewer.reviewer }}
             </el-tag>
-            <span v-if="!selectedReview?.reviewers?.length" class="empty-reviewers">No reviewers assigned</span>
+            <span v-if="!selectedReview?.reviewers?.length" class="empty-reviewers">{{ t('reviews.task.no_reviewers', 'No reviewers assigned') }}</span>
           </div>
         </el-form-item>
-        <el-form-item label="Reviewer" required>
+        <el-form-item :label="t('reviews.task.reviewer', 'Reviewer')" required>
           <el-select
             v-model="assignForm.reviewer"
-            placeholder="Select reviewer"
+            :placeholder="t('reviews.task.select_reviewer', 'Select reviewer')"
             style="width: 100%"
             filterable
             :loading="loadingReviewers"
@@ -346,13 +346,13 @@
           </el-select>
         </el-form-item>
         <el-form-item v-if="!loadingReviewers && availableReviewers.length === 0" label="">
-          <span class="empty-reviewers">No available reviewers to assign</span>
+          <span class="empty-reviewers">{{ t('reviews.task.no_available_reviewers', 'No available reviewers to assign') }}</span>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="assignDialogVisible = false">Cancel</el-button>
+        <el-button @click="assignDialogVisible = false">{{ t('common.cancel', 'Cancel') }}</el-button>
         <el-button type="primary" @click="submitAssignment" :loading="assigning">
-          Assign
+          {{ t('reviews.task.assign', 'Assign') }}
         </el-button>
       </template>
     </el-dialog>
@@ -360,15 +360,15 @@
     <!-- Bulk Assign Dialog -->
     <el-dialog
       v-model="showBulkAssignDialogVisible"
-      title="Bulk Assign Reviewer"
+      :title="t('reviews.task.bulk_assign_title', 'Bulk Assign Reviewer')"
       width="500px"
     >
-      <p>Assign {{ selectedReviews.length }} review(s) to a reviewer:</p>
+      <p>{{ t('reviews.task.bulk_assign_intro', { count: selectedReviews.length }) }}</p>
       <el-form :model="bulkAssignForm" label-width="120px" style="margin-top: 20px">
-        <el-form-item label="Reviewer" required>
+        <el-form-item :label="t('reviews.task.reviewer', 'Reviewer')" required>
           <el-select
             v-model="bulkAssignForm.reviewer"
-            placeholder="Select reviewer"
+            :placeholder="t('reviews.task.select_reviewer', 'Select reviewer')"
             filterable
             style="width: 100%"
           >
@@ -382,9 +382,9 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showBulkAssignDialogVisible = false">Cancel</el-button>
+        <el-button @click="showBulkAssignDialogVisible = false">{{ t('common.cancel', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="bulkAssigning" @click="executeBulkAssign">
-          Assign {{ selectedReviews.length }} Items
+          {{ t('reviews.task.bulk_assign_button', { count: selectedReviews.length }) }}
         </el-button>
       </template>
     </el-dialog>

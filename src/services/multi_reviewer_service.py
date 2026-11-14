@@ -32,6 +32,7 @@ from src.schemas.review import (
 )
 from src.services.notification_service import NotificationService
 from src.services.project_registry_service import ProjectRegistryService
+from src.services.repository_access_service import RepositoryAccessService
 from src.utils.ai_review_utils import extract_issue_severities
 from src.utils.metrics import MetricsCollector, metrics
 from src.utils.timezone import get_current_time
@@ -680,8 +681,29 @@ class MultiReviewerService:
         review_base_id: int,
         assignment_data: AssignReviewerRequest,
         assigned_by: str | None = None,
+        granted_by_id: int | None = None,
     ) -> dict[str, Any]:
         """Assign a reviewer to a review"""
+        # The reviewer must be able to see the repository they are assigned to.
+        # Grant it (idempotent) to the git user and any linked system user, the
+        # same mechanism that grants a PR author its repository; otherwise the
+        # assignment would succeed but stay invisible in the reviewer's tasks.
+        base_result = await db.execute(
+            select(
+                PullRequestReviewBase.project_key,
+                PullRequestReviewBase.repository_slug,
+            ).where(PullRequestReviewBase.id == review_base_id)
+        )
+        base_row = base_result.first()
+        if not base_row:
+            raise ReviewNotFoundException(review_id=str(review_base_id))
+        await RepositoryAccessService(db).ensure_author_grants(
+            project_key=base_row.project_key,
+            repository_slug=base_row.repository_slug,
+            username=assignment_data.reviewer,
+            granted_by=granted_by_id,
+        )
+
         # Check if assignment already exists
         stmt = select(PullRequestReviewAssignment).where(
             and_(

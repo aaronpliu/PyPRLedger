@@ -56,14 +56,22 @@ async def get_llm_config(
 @router.post(
     "/proxy/{path:path}",
     summary="Proxy LLM API requests",
-    description="Proxies requests to the configured LLM provider with server-side API key.",
+    description=(
+        "Proxies requests to the configured LLM provider with the server-side API key. "
+        "Requires authentication: the caller's JWT is verified here and never forwarded."
+    ),
 )
 async def llm_proxy(
     path: str,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db_session)],
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
 ):
-    """Proxy any LLM API request path (e.g., chat/completions) to the configured provider."""
+    """Proxy any LLM API request path (e.g., chat/completions) to the configured provider.
+
+    Authentication is mandatory: without it this endpoint would be an open proxy
+    that spends the configured provider quota for anyone who can reach it.
+    """
     config = await _get_llm_config(db)
 
     if not config["enabled"] or not config["base_url"] or not config["api_key"]:

@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- `POST /api/v1/llm/proxy/{path}` now requires authentication. It previously forwarded every request to the configured LLM provider with the server-side API key without verifying the caller, so anyone able to reach the API could spend the provider quota and use it as an open proxy. The PageAgent client sends the caller's JWT instead of a placeholder; the backend verifies it and still substitutes the provider key, so the user token is never forwarded upstream
+- Escaped global search result titles before adding highlight markup. Titles come from the backend (PR, review and project names — text users control) and were injected through `v-html`, so a title containing markup executed in every reader's browser. The query is now escaped before being used as a regular expression (also fixing an exception on invalid patterns) and the output is passed through DOMPurify, which allows only `<mark>`
+- Production startup is validated at boot: a `model_validator` refuses to start when `ENV=production` and `SECRET_KEY` is the development default or shorter than 32 characters, or when `BACKEND_CORS_ORIGINS` contains `*`, `DEBUG=True`, or `ID_OBFUSCATOR_SALT` is still the default. A known secret key allowed forging a JWT for any user
+- Registered `SecurityHeadersMiddleware`, which was defined but never added to the application, so API responses carried no CSP, HSTS or clickjacking protection. Responses now include a Content-Security-Policy (same-origin scripts, inline styles allowed for the App Diff HTML report, `frame-ancestors 'none'`), HSTS, `Referrer-Policy: no-referrer` and a modern `X-XSS-Protection: 0`
+
+## [1.37.2] - 2026-11-14
+
+**Backend Version**: 1.37.2
+**Frontend Version**: 1.33.0
+
+### Changed
+- User Profile page redesigned as a left navigation panel (fixed 220px width, immune to language switching) with the content on the right, mirroring the admin section layout; the card header now shows the current panel label
+- Removed all nested horizontal tabs: the My Delegations Received/Sent switch is now an in-place radio label, and panels toggle without Element Plus tabs
+- User Info tab uses a two-column layout (avatar on the left, compact profile info on the right)
+- Unified header button styles across all profile tabs (Create Delegation / Refresh / Generate New Token / New Template: primary, default size, icon)
+- Element Plus locale now follows the UI language globally (pagination, date pickers, empty states, confirmation buttons in en / zh-CN / zh-TW)
+- [Style] Enhance user info page and navigation bar
+- [Style] Adjust profile page layout and UI styles
+- [Refactor] Continue to enhance i18n and styles for other tabs of user profile
+- [Refactor] Enhance i18n in all reviews related page
+
+### Fixed
+- App Diff page: repaired a broken CSS fragment that made the frontend build fail
+- Profile page: full i18n coverage for every tab including PAT management, My Comment Templates, My Sessions, Role Delegations, Appearance (new `profile` namespace, ~190 keys per language) and the password form validation messages
+- Profile navigation no longer shifts or flickers when switching languages
+
+---
+
+## [1.37.1] - 2026-11-14
+
+**Backend Version**: 1.37.1
+**Frontend Version**: 1.32.1
+
+### Added
+- App Diff page can export the current comparison as a standalone HTML report (`Export` button next to `Refresh`), sharing the release comparison report's style and i18n (en / zh-CN / zh-TW)
+- New backend endpoint `POST /api/v1/release/apps/diff/report` for CI pipelines: renders the same comparison as a self-contained HTML document (or `?format=json`), with `?download=true` adding an attachment filename; authenticated with a Personal Access Token and the caller's repository grants, same as the diff endpoint
+
+### Fixed
+- PAT management page: `Created`, `Expires` and `Last Used` no longer display shifted by the local timezone offset (the stored local wall-clock time was wrongly re-interpreted as UTC)
+
+### Changed
+- [Refactor] Update to restrict admin role revoke
+
+---
+
+## [1.37.0] - 2026-11-12
+
+**Backend Version**: 1.37.0
+**Frontend Version**: 1.32.0
+
+### Added
+- Repository access management: new `user_repository_access` table (migration `040`) binding users to `(project_key, repository_slug)` pairs, with backfill for existing PR authors
+- Project/review lists, score history, dependency graph, app diff, release notes and statistics are now filtered by the viewer's granted repository pairs
+- Task assignment auto-grants the repository to the reviewer (and linked system users) when a review admin assigns a task
+- PR authors are automatically granted their repository on `POST /reviews` (`ensure_author_grants`)
+- `replace_access` synchronizes grants across the git user and its linked system users, so manual edits no longer leave stale automatic grants
+- Release diff, release notes and dependency-graph endpoints validate the requested repository pair against the caller's grants (`ensure_pair_granted`)
+
+### Fixed
+- Reviews and Task Assignment pages translate the "Updated" table header (zh-CN / zh-TW)
+- Row actions on Git User / System User pages no longer overflow; Projects action moved into the More dropdown
+- More-button dropdown works when wrapped in a tooltip (native `title` used instead)
+
+### Changed
+- App Diff expanded rows: commit id links to the provider, author and date shown per commit, full message on hover; "Not contained" commits highlighted in red with a warning heading
+- Reviewer activity trend chart enhancements; filters on Git User / System User pages improved
+
+### Breaking Changes
+- Project visibility is now driven by explicit repository grants instead of role scope; admins are not exempted. After running `alembic upgrade head`, grant admin accounts and legacy reviewers/score submitters their repositories manually.
+
+---
+
 ## [1.36.2] - 2026-11-08
 
 **Backend Version**: 1.36.2

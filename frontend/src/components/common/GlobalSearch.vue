@@ -148,6 +148,7 @@ import { Search, Clock, Guide, Document, Star, User, Folder } from '@element-plu
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
+import DOMPurify from 'dompurify'
 import { globalSearch, type SearchResult } from '@/api/search'
 import { useGlobalSearch } from '@/composables/useGlobalSearch'
 
@@ -406,11 +407,33 @@ const typeLabel = (type: string) => {
   return key ? t(key) : type
 }
 
+/** Escape a string so it is safe to place in HTML text content */
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+/** Escape a string so it can be embedded in a RegExp literal safely */
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Highlight the query inside a result title.
+ *
+ * The title comes from the backend (PR / review / project names, i.e. text a
+ * user controls), so it is escaped before markup is added - otherwise a title
+ * such as `<img src=x onerror=alert(1)>` would execute. The final string still
+ * goes through DOMPurify as a second line of defence.
+ */
 const highlightMatch = (text: string, query: string) => {
-  if (!query) return text
-  
-  const regex = new RegExp(`(${query})`, 'gi')
-  return text.replace(regex, '<mark>$1</mark>')
+  const safeText = escapeHtml(text ?? '')
+  if (!query) return safeText
+
+  const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi')
+  const highlighted = safeText.replace(regex, '<mark>$1</mark>')
+  return DOMPurify.sanitize(highlighted, { ALLOWED_TAGS: ['mark'], ALLOWED_ATTR: [] })
 }
 
 const formatDate = (dateStr: string) => {

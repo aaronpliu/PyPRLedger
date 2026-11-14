@@ -23,6 +23,7 @@ from src.core.middleware import (
     DatabaseConnectionMiddleware,
     LoggingMiddleware,
     RateLimitMiddleware,
+    SecurityHeadersMiddleware,
 )
 from src.services.pat_service import PATService
 from src.services.project_service import ProjectService
@@ -226,6 +227,7 @@ app.add_middleware(
 # Add custom middleware
 app.add_middleware(ApiDocsVisibilityMiddleware)
 app.add_middleware(DatabaseConnectionMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware, max_requests=settings.RATE_LIMIT_MAX_REQUESTS)
 

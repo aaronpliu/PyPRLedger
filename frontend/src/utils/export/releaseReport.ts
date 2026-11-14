@@ -64,7 +64,7 @@ export function releaseReportFilename(
   return `release-${kind}-${safeScope}-${dayjs().format('YYYYMMDD-HHmmss')}.html`
 }
 
-function formatTimestamp(value?: number | null): string {
+export function formatTimestamp(value?: number | null): string {
   if (!value) return '-'
   return dayjs(value).format('YYYY-MM-DD HH:mm')
 }
@@ -127,7 +127,7 @@ export function releaseRefUrl(context: ReleaseReportContext, ref?: string | null
   return `${base}/commits/${encodeURIComponent(trimmed)}`
 }
 
-function stat(label: string, value: number | string, tone?: string): string {
+export function stat(label: string, value: number | string, tone?: string): string {
   const toneClass = tone ? ` stat-${tone}` : ''
   return `<div class="stat${toneClass}"><span class="stat-value">${escapeHtml(
     value,
@@ -135,13 +135,13 @@ function stat(label: string, value: number | string, tone?: string): string {
 }
 
 /** One ``<tr>`` of a meta table: label / value / optional link. */
-function metaRow(label: string, value?: string | null, url?: string | null): string {
+export function metaRow(label: string, value?: string | null, url?: string | null): string {
   if (!value) return ''
   const cell = url ? link(url, value) : escapeHtml(value)
   return `<tr><th>${escapeHtml(label)}</th><td>${cell}</td></tr>`
 }
 
-function metaTable(rows: string[]): string {
+export function metaTable(rows: string[]): string {
   const body = rows.filter(Boolean).join('\n      ')
   if (!body) return ''
   return `<table class="meta">\n      ${body}\n    </table>`
@@ -171,7 +171,7 @@ function authorCell(commit: CommitInfo | null | undefined): string {
     : handle
 }
 
-function commitTable(
+export function commitTable(
   commits: CommitInfo[] | undefined,
   truncated = false,
   context?: ReleaseReportContext,
@@ -399,7 +399,7 @@ export function buildCheckSectionHtml(
  * document with no access to the app's variables, so the accent is baked in at
  * the moment it is generated.
  */
-const buildReportStyle = (): string => `
+export const buildReportStyle = (): string => `
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 32px; background: #f5f7fa; color: #1f2937;

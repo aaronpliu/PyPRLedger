@@ -104,32 +104,31 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Actions" width="200" fixed="right">
+        <el-table-column label="Actions" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="viewRoles(row)">
-              Roles
-            </el-button>
-            <el-button size="small" @click="openAccess(row)">
-              Projects
-            </el-button>
-            <el-dropdown trigger="click" @command="(command: string) => handleAction(command, row)">
-              <el-button size="small">
-                More<el-icon class="el-icon--right"><arrow-down /></el-icon>
+            <div class="action-btns">
+              <el-button size="small" type="primary" @click="viewRoles(row)">
+                <el-icon><Key /></el-icon>
+                Roles
               </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item :command="'toggle'">
-                    {{ row.is_active ? 'Deactivate' : 'Activate' }}
-                  </el-dropdown-item>
-                  <el-dropdown-item :command="'reset'" divided>
-                    Reset Password
-                  </el-dropdown-item>
-                  <el-dropdown-item :command="'delete'" divided style="color: #f56c6c;">
-                    <el-icon><Delete /></el-icon> Delete
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
+              <el-dropdown trigger="click" @command="(command: string) => handleAction(command, row)">
+                <el-button size="small" :icon="MoreFilled" title="More" />
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item :command="'projects'">Projects</el-dropdown-item>
+                    <el-dropdown-item :command="'toggle'">
+                      {{ row.is_active ? 'Deactivate' : 'Activate' }}
+                    </el-dropdown-item>
+                    <el-dropdown-item :command="'reset'" divided>
+                      Reset Password
+                    </el-dropdown-item>
+                    <el-dropdown-item :command="'delete'" divided style="color: #f56c6c;">
+                      <el-icon><Delete /></el-icon> Delete
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -189,9 +188,17 @@
           <el-table-column prop="role_name" label="Role" width="150" />
           <el-table-column label="Actions" width="100">
             <template #default="{ row }">
-              <el-button 
-                size="small" 
-                type="danger" 
+              <el-tooltip
+                v-if="isProtectedRole(row)"
+                content="The system_admin role cannot be revoked"
+                placement="top"
+              >
+                <el-button size="small" type="danger" disabled>Revoke</el-button>
+              </el-tooltip>
+              <el-button
+                v-else
+                size="small"
+                type="danger"
                 @click="revokeRole(row)"
               >
                 Revoke
@@ -296,7 +303,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
-import { Plus, Search, Share, ArrowDown, Delete } from '@element-plus/icons-vue'
+import { Plus, Search, Share, Key, MoreFilled, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
@@ -519,6 +526,8 @@ const handleAction = async (command: string, user: any) => {
     showResetPasswordDialogHandler(user)
   } else if (command === 'delete') {
     await handleDeleteUser(user)
+  } else if (command === 'projects') {
+    openAccess(user)
   }
 }
 
@@ -595,6 +604,9 @@ const assignRole = async () => {
     ElMessage.error(error.response?.data?.detail || 'Failed to assign role')
   }
 }
+
+/** Protected roles keep the platform manageable and cannot be revoked here. */
+const isProtectedRole = (assignment: RoleAssignment) => assignment.role_name === 'system_admin'
 
 const revokeRole = async (assignment: RoleAssignment) => {
   if (!selectedUser.value) return
@@ -743,6 +755,19 @@ onMounted(() => {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+
+.action-btns {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* icon-only buttons: drop Element Plus' sibling margin, the gap handles spacing */
+.action-btns .el-button + .el-button {
+  margin-left: 0;
 }
 
 .text-muted {

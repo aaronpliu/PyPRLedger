@@ -3,9 +3,11 @@ import type { SupportedLanguage } from 'page-agent'
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { llmApi } from '@/api/llm'
+import { useAuthStore } from '@/stores/auth'
 
 export function usePageAgent() {
   const { locale } = useI18n()
+  const authStore = useAuthStore()
   const agent = ref<PageAgent | null>(null)
   const initialized = ref(false)
   const initializing = ref(false)
@@ -42,8 +44,11 @@ export function usePageAgent() {
       // Panel stays hidden — launcher icon controls visibility
       agent.value = new PageAgent({
         model: config.model,
-        baseURL: '/api/v1/llm/proxy', // Backend proxy handles auth
-        apiKey: 'proxy',               // Dummy key, backend adds real key
+        baseURL: '/api/v1/llm/proxy',
+        // The proxy endpoint requires authentication: this real JWT is verified
+        // server-side and then replaced by the provider key, so it is never
+        // forwarded to the LLM provider.
+        apiKey: authStore.accessToken,
         language: getSupportedLanguage(),
       })
 

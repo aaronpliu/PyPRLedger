@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import logging
 import secrets
-from datetime import timedelta
+from datetime import UTC, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -127,10 +127,17 @@ class PATService:
         if not self._constant_time_compare(token_record.token_hash, token_hash):
             return None
 
-        # Check expiration
+        # Check expiration. The column is timezone-aware on PostgreSQL, but
+        # MySQL stores plain DATETIME and hands a naive datetime back, so the
+        # read value is pinned to UTC before it meets the aware "now" - a bare
+        # comparison raises "can't compare offset-naive and offset-aware
+        # datetimes" and turns every PAT authentication into a 500.
         if token_record.expires_at:
             now = get_current_time()
-            if token_record.expires_at < now:
+            expires_at = token_record.expires_at
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+            if expires_at < now:
                 # Mark as inactive
                 token_record.is_active = False
                 await self.db.commit()

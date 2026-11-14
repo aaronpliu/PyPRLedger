@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "1.31.2",
+  "version": "1.33.0",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || ^22.12.0 || >=24.0.0"
@@ -30,6 +30,7 @@
     "axios": "^1.14.0",
     "dayjs": "^1.11.20",
     "diff2html": "^3.4.56",
+    "dompurify": "^3.4.17",
     "echarts": "^6.0.0",
     "element-plus": "^2.14.2",
     "exceljs": "^4.4.0",

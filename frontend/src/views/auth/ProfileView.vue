@@ -3,74 +3,92 @@
     <el-card class="profile-card">
       <template #header>
         <div class="card-header">
-          <span>Profile</span>
+          <span>{{ t('profile.tabs.title', 'Profile') }}</span>
+          <span class="current-tab-label">{{ currentTabLabel }}</span>
         </div>
       </template>
 
-      <el-tabs v-model="activeTab" type="border-card" class="profile-tabs">
-        <!-- User Info Tab -->
-        <el-tab-pane label="User Info" name="info">
+      <!-- Fixed-width nav panel + content panel. The nav is custom-rendered
+           (Element Plus' left tabs size their nav from the labels, which made
+           the layout shift between languages). -->
+      <div class="profile-layout">
+        <nav class="profile-nav">
+          <button
+            v-for="item in navItems"
+            :key="item.name"
+            type="button"
+            class="profile-nav-item"
+            :class="{ 'is-active': activeTab === item.name }"
+            @click="activeTab = item.name"
+          >
+            {{ item.label }}
+          </button>
+        </nav>
+
+        <div class="profile-body">
+          <!-- User Info Tab -->
+          <div v-show="activeTab === 'info'" class="profile-pane">
           <div class="tab-content">
-            <!-- Avatar Section -->
-            <div class="avatar-section">
-              <h3 style="margin-top: 0;">Avatar</h3>
-              <AvatarUpload
-                v-if="authStore.user"
-                :username="authStore.user.username"
-                :avatarUrl="authStore.user.avatar_url"
-                :size="120"
-                :showActions="true"
-                @update:avatarUrl="handleAvatarUpdate"
-              />
-              <!-- Debug: {{ authStore.user }} -->
-            </div>
-            
-            <el-divider />
-            <!-- Compact user info grid -->
-            <el-row :gutter="16" style="margin-bottom: 20px;">
+            <!-- Two-column layout: avatar on the left, profile info on the right -->
+            <div class="user-info-layout">
+              <div class="avatar-panel">
+                <h3>{{ t('profile.user_info.avatar', 'Avatar') }}</h3>
+                <AvatarUpload
+                  v-if="authStore.user"
+                  :username="authStore.user.username"
+                  :avatarUrl="authStore.user.avatar_url"
+                  :size="120"
+                  :showActions="true"
+                  @update:avatarUrl="handleAvatarUpdate"
+                />
+              </div>
+
+              <!-- Compact user info grid -->
+              <div class="user-info-panel">
+            <el-row :gutter="16" class="info-row">
               <el-col :span="12">
                 <div class="info-item">
-                  <label>Username:</label>
+                  <label>{{ t('profile.user_info.username') }}</label>
                   <span>{{ authStore.user?.username }}</span>
                 </div>
               </el-col>
               <el-col :span="12">
                 <div class="info-item">
-                  <label>Email:</label>
-                  <span>{{ authStore.user?.email || 'N/A' }}</span>
+                  <label>{{ t('profile.user_info.email') }}</label>
+                  <span>{{ authStore.user?.email || t('profile.user_info.na') }}</span>
                 </div>
               </el-col>
             </el-row>
             
-            <el-row :gutter="16" style="margin-bottom: 20px;">
+            <el-row :gutter="16" class="info-row">
               <el-col :span="12">
                 <div class="info-item">
-                  <label>Status:</label>
+                  <label>{{ t('profile.user_info.status') }}</label>
                   <div class="status-container">
                     <el-tag :type="authStore.user?.is_active ? 'success' : 'danger'" size="small">
-                      {{ authStore.user?.is_active ? 'Active' : 'Inactive' }}
+                      {{ authStore.user?.is_active ? t('profile.user_info.active') : t('profile.user_info.inactive') }}
                     </el-tag>
                   </div>
                 </div>
               </el-col>
               <el-col :span="12">
                 <div class="info-item">
-                  <label>Last Login:</label>
-                  <span>{{ authStore.user?.last_login_at ? formatDate(authStore.user.last_login_at) : 'Never' }}</span>
+                  <label>{{ t('profile.user_info.last_login') }}</label>
+                  <span>{{ authStore.user?.last_login_at ? formatDate(authStore.user.last_login_at) : t('profile.user_info.never') }}</span>
                 </div>
               </el-col>
             </el-row>
             
-            <el-row :gutter="16" style="margin-bottom: 20px;">
+            <el-row :gutter="16" class="info-row">
               <el-col :span="12">
                 <div class="info-item">
-                  <label>Member Since:</label>
-                  <span>{{ authStore.user?.created_at ? formatDate(authStore.user.created_at) : 'N/A' }}</span>
+                  <label>{{ t('profile.user_info.member_since') }}</label>
+                  <span>{{ authStore.user?.created_at ? formatDate(authStore.user.created_at) : t('profile.user_info.na') }}</span>
                 </div>
               </el-col>
               <el-col :span="12">
                 <div class="info-item">
-                  <label>Roles:</label>
+                  <label>{{ t('profile.user_info.roles') }}</label>
                   <div class="roles-header">
                     <div v-if="authStore.user?.roles && authStore.user.roles.length > 0" class="roles-container">
                       <el-tag
@@ -83,7 +101,7 @@
                         {{ formatRoleName(role) }}
                       </el-tag>
                     </div>
-                    <el-tag v-else type="info" size="small">No roles</el-tag>
+                    <el-tag v-else type="info" size="small">{{ t('profile.user_info.no_roles') }}</el-tag>
                     
                     <!-- Popover for viewer-only users -->
                     <el-popover
@@ -105,17 +123,17 @@
                       <div class="viewer-tips-content">
                         <h4 style="margin: 0 0 12px 0; color: var(--el-color-warning);">
                           <el-icon style="vertical-align: middle; margin-right: 4px;"><WarningFilled /></el-icon>
-                          Viewer Role Limitations
+                          {{ t('profile.viewer_tips.title') }}
                         </h4>
                         <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
-                          <li>You can only <strong>view</strong> code reviews and scores</li>
-                          <li>You <strong>cannot</strong> add or update scores</li>
-                          <li>You <strong>cannot</strong> add comments to reviews</li>
-                          <li>You <strong>cannot</strong> be assigned review tasks</li>
+                          <li>{{ t('profile.viewer_tips.only_view') }}</li>
+                          <li>{{ t('profile.viewer_tips.no_score') }}</li>
+                          <li>{{ t('profile.viewer_tips.no_comment') }}</li>
+                          <li>{{ t('profile.viewer_tips.no_assign') }}</li>
                         </ul>
                         <el-divider style="margin: 12px 0;" />
                         <p style="margin: 0; color: var(--el-text-color-secondary); font-size: 13px;">
-                          💡 To gain full reviewer permissions, please contact a system administrator to upgrade your role.
+                          💡 {{ t('profile.viewer_tips.contact_admin') }}
                         </p>
                       </div>
                     </el-popover>
@@ -123,92 +141,99 @@
                 </div>
               </el-col>
             </el-row>
+              </div>
+            </div>
 
             <!-- Change Password Section -->
             <el-divider />
-            <h3>Change Password</h3>
+            <h3>{{ t('profile.password.title', 'Change Password') }}</h3>
             <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="140px" class="password-form">
-              <el-form-item label="Current Password" prop="old_password">
+              <el-form-item :label="t('profile.password.current')" prop="old_password">
                 <el-input
                   v-model="passwordForm.old_password"
                   type="password"
-                  placeholder="Enter current password"
+                  :placeholder="t('profile.password.current_ph')"
                   show-password
                 />
               </el-form-item>
               
-              <el-form-item label="New Password" prop="new_password">
+              <el-form-item :label="t('profile.password.new')" prop="new_password">
                 <el-input
                   v-model="passwordForm.new_password"
                   type="password"
-                  placeholder="Enter new password"
+                  :placeholder="t('profile.password.new_ph')"
                   show-password
                 />
               </el-form-item>
               
-              <el-form-item label="Confirm Password" prop="confirm_password">
+              <el-form-item :label="t('profile.password.confirm')" prop="confirm_password">
                 <el-input
                   v-model="passwordForm.confirm_password"
                   type="password"
-                  placeholder="Confirm new password"
+                  :placeholder="t('profile.password.confirm_ph')"
                   show-password
                 />
               </el-form-item>
               
               <el-form-item>
                 <el-button type="primary" :loading="changingPassword" @click="handleChangePassword">
-                  Change Password
+                  {{ t('profile.password.change') }}
                 </el-button>
               </el-form-item>
             </el-form>
           </div>
-        </el-tab-pane>
+        </div>
 
         <!-- Role Delegations Tab -->
-        <el-tab-pane label="Role Delegations" name="delegations">
+        <div v-show="activeTab === 'delegations'" class="profile-pane">
           <div class="tab-content delegation-tab-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-              <h3 style="margin: 0;">My Delegations</h3>
-              <el-button 
+            <div class="tab-section-header">
+              <div class="delegation-header-left">
+                <h3>{{ t('profile.delegations.my_title') }}</h3>
+                <!-- Replaces the horizontal sub-tabs: the current direction is
+                     shown as a label and toggled in place. -->
+                <el-radio-group v-model="delegationDirection">
+                  <el-radio-button value="received">{{ t('profile.delegations.received') }}</el-radio-button>
+                  <el-radio-button value="sent">{{ t('profile.delegations.sent') }}</el-radio-button>
+                </el-radio-group>
+              </div>
+              <el-button
                 v-if="canManageDelegations"
-                type="primary" 
-                size="small"
+                type="primary"
                 @click="showCreateDialog = true"
               >
                 <el-icon><Plus /></el-icon>
-                Create Delegation
+                {{ t('profile.delegations.create') }}
               </el-button>
             </div>
-            
-            <el-tabs v-model="delegationDirection" type="card" class="delegation-tabs">
-              <el-tab-pane label="Received" name="received">
-                <div v-loading="loadingReceived" class="delegation-table-wrapper">
-                  <el-empty v-if="receivedDelegations.length === 0" description="No delegations received" />
-                  <el-table v-else :data="receivedDelegations" stripe style="width: 100%">
-                    <el-table-column prop="role_name" label="Role" width="130">
+
+            <div v-show="delegationDirection === 'received'" v-loading="loadingReceived" class="delegation-table-wrapper">
+              <el-empty v-if="receivedDelegations.length === 0" :description="t('profile.delegations.no_received')" />
+              <el-table v-else :data="receivedDelegations" stripe style="width: 100%">
+                    <el-table-column prop="role_name" :label="t('profile.delegations.role')" width="130">
                       <template #default="{ row }">
                         <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
-                          {{ row.role_name || `Role ${row.role_id}` }}
+                          {{ row.role_name || t('profile.delegations.role_with_id', { id: row.role_id }) }}
                         </el-tag>
                       </template>
                     </el-table-column>
-                    <el-table-column prop="resource_type" label="Resource" width="110" />
-                    <el-table-column label="Delegator" min-width="160">
+                    <el-table-column prop="resource_type" :label="t('profile.delegations.resource')" width="110" />
+                    <el-table-column :label="t('profile.delegations.delegator')" min-width="160">
                       <template #default="{ row }">
                         <div class="user-info-cell">
                           <div v-if="row.delegator_display_name" class="display-name">{{ row.delegator_display_name }}</div>
-                          <div class="username">{{ row.delegator_username || `User ${row.delegator_id}` }}</div>
+                          <div class="username">{{ row.delegator_username || t('profile.delegations.user_with_id', { id: row.delegator_id }) }}</div>
                         </div>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Status" width="100">
+                    <el-table-column :label="t('profile.delegations.status')" width="100">
                       <template #default="{ row }">
                         <el-tag :type="getStatusType(row.delegation_status)">
                           {{ formatStatus(row.delegation_status) }}
                         </el-tag>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Valid Period" min-width="220">
+                    <el-table-column :label="t('profile.delegations.valid_period')" min-width="220">
                       <template #default="{ row }">
                         <div v-if="row.starts_at && row.expires_at">
                           {{ formatDate(row.starts_at) }} → {{ formatDate(row.expires_at) }}
@@ -216,43 +241,41 @@
                         <span v-else>-</span>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Reason" min-width="180">
+                    <el-table-column :label="t('profile.delegations.reason')" min-width="180">
                       <template #default="{ row }">
                         {{ row.delegation_reason || '-' }}
                       </template>
                     </el-table-column>
                   </el-table>
                 </div>
-              </el-tab-pane>
 
-              <el-tab-pane label="Sent" name="sent">
-                <div v-loading="loadingSent" class="delegation-table-wrapper">
-                  <el-empty v-if="sentDelegations.length === 0" description="No delegations sent" />
+                <div v-show="delegationDirection === 'sent'" v-loading="loadingSent" class="delegation-table-wrapper">
+                  <el-empty v-if="sentDelegations.length === 0" :description="t('profile.delegations.no_sent')" />
                   <el-table v-else :data="sentDelegations" stripe style="width: 100%">
-                    <el-table-column prop="role_name" label="Role" width="130">
+                    <el-table-column prop="role_name" :label="t('profile.delegations.role')" width="130">
                       <template #default="{ row }">
                         <el-tag :type="getRoleTagType(row.role_name || '')" size="small">
-                          {{ row.role_name || `Role ${row.role_id}` }}
+                          {{ row.role_name || t('profile.delegations.role_with_id', { id: row.role_id }) }}
                         </el-tag>
                       </template>
                     </el-table-column>
-                    <el-table-column prop="resource_type" label="Resource" width="110" />
-                    <el-table-column label="Delegatee" min-width="160">
+                    <el-table-column prop="resource_type" :label="t('profile.delegations.resource')" width="110" />
+                    <el-table-column :label="t('profile.delegations.delegatee')" min-width="160">
                       <template #default="{ row }">
                         <div class="user-info-cell">
                           <div v-if="row.delegatee_display_name" class="display-name">{{ row.delegatee_display_name }}</div>
-                          <div class="username">{{ row.delegatee_username || `User ${row.auth_user_id}` }}</div>
+                          <div class="username">{{ row.delegatee_username || t('profile.delegations.user_with_id', { id: row.auth_user_id }) }}</div>
                         </div>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Status" width="100">
+                    <el-table-column :label="t('profile.delegations.status')" width="100">
                       <template #default="{ row }">
                         <el-tag :type="getStatusType(row.delegation_status)">
                           {{ formatStatus(row.delegation_status) }}
                         </el-tag>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Valid Period" min-width="220">
+                    <el-table-column :label="t('profile.delegations.valid_period')" min-width="220">
                       <template #default="{ row }">
                         <div v-if="row.starts_at && row.expires_at">
                           {{ formatDate(row.starts_at) }} → {{ formatDate(row.expires_at) }}
@@ -260,7 +283,7 @@
                         <span v-else>-</span>
                       </template>
                     </el-table-column>
-                    <el-table-column label="Actions" width="100" fixed="right">
+                    <el-table-column :label="t('profile.delegations.actions')" width="100" fixed="right">
                       <template #default="{ row }">
                         <el-button
                           v-if="row.delegation_status === 'active' || row.delegation_status === 'pending'"
@@ -268,71 +291,70 @@
                           type="danger"
                           @click="handleRevokeDelegation(row.id)"
                         >
-                          Revoke
+                          {{ t('profile.delegations.revoke') }}
                         </el-button>
                         <span v-else style="color: var(--el-text-color-secondary);">-</span>
                       </template>
                     </el-table-column>
                   </el-table>
                 </div>
-              </el-tab-pane>
-            </el-tabs>
           </div>
-        </el-tab-pane>
+        </div>
 
-        <el-tab-pane label="My Sessions" name="sessions">
+        <div v-show="activeTab === 'sessions'" class="profile-pane">
           <div class="tab-content sessions-tab-content">
-            <div class="sessions-header">
+            <div class="tab-section-header">
               <div>
-                <h3>Active Sessions</h3>
+                <h3>{{ t('profile.sessions.title') }}</h3>
                 <p class="sessions-subtitle">
-                  Revoke any session you no longer trust. Revoking the current session will log you out immediately.
+                  {{ t('profile.sessions.subtitle') }}
                 </p>
               </div>
-              <el-button type="primary" size="small" :loading="loadingSessions" @click="loadSessions">
-                Refresh
+              <el-button type="primary" :loading="loadingSessions" @click="loadSessions">
+                <el-icon><Refresh /></el-icon>
+                {{ t('profile.sessions.refresh') }}
               </el-button>
             </div>
 
             <el-table :data="sessions" v-loading="loadingSessions" stripe style="width: 100%">
-              <el-table-column label="Session" min-width="200">
+              <el-table-column :label="t('profile.sessions.session')" min-width="200">
                 <template #default="{ row }">
                   <div class="session-id-cell">
                     <span class="session-id">{{ row.session_id }}</span>
-                    <el-tag v-if="row.is_current" size="small" type="success">Current</el-tag>
+                    <el-tag v-if="row.is_current" size="small" type="success">{{ t('profile.sessions.current') }}</el-tag>
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column label="Created" width="170">
+              <el-table-column :label="t('profile.sessions.created')" width="170">
                 <template #default="{ row }">
                   {{ formatDate(row.created_at) }}
                 </template>
               </el-table-column>
-              <el-table-column label="Last Activity" width="170">
+              <el-table-column :label="t('profile.sessions.last_activity')" width="170">
                 <template #default="{ row }">
                   {{ formatDate(row.last_activity_at) }}
                 </template>
               </el-table-column>
-              <el-table-column label="IP" width="130">
+              <el-table-column :label="t('profile.sessions.ip')" width="130">
                 <template #default="{ row }">
                   {{ row.ip_address || '-' }}
                 </template>
               </el-table-column>
-              <el-table-column label="Device" min-width="220">
+              <el-table-column :label="t('profile.sessions.device')" min-width="220">
                 <template #default="{ row }">
                   <div class="device-cell" :title="getDeviceDetails(row).rawUserAgent || ''">
                     <div class="device-label-row">
                       <el-icon class="device-icon"><component :is="getDeviceIcon(row)" /></el-icon>
                       <span class="device-label">{{ getDeviceDetails(row).label }}</span>
-                      <el-tag v-if="row.is_current" size="small" type="primary">This device</el-tag>
+                      <el-tag v-if="row.is_current" size="small" type="primary">{{ t('profile.sessions.this_device') }}</el-tag>
                       <el-tag
                         v-if="getDeviceDetails(row).precision === 'approximate'"
                         size="small"
                         type="info"
                         effect="plain"
-                        title="This browser reports no client hints, so these values are read from its user agent and may be out of date."
+                        :title="t('profile.sessions.approximate_tooltip')"
                       >
-                        Approximate
+                        {{ t('profile.sessions.approximate') }}
                       </el-tag>
                     </div>
                     <div class="device-meta">
@@ -341,14 +363,14 @@
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column label="Idle Timeout" width="160">
+              <el-table-column :label="t('profile.sessions.idle_timeout')" width="160">
                 <template #default="{ row }">
                   <el-tag :type="getSessionExpiryType(row.expires_in_seconds)">
                     {{ formatDuration(row.expires_in_seconds) }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="Actions" width="120" fixed="right">
+              <el-table-column :label="t('profile.sessions.actions')" width="120" fixed="right">
                 <template #default="{ row }">
                   <el-button
                     size="small"
@@ -356,48 +378,47 @@
                     :loading="revokingSessionId === row.session_id"
                     @click="handleRevokeSession(row.session_id, row.is_current)"
                   >
-                    Revoke
+                    {{ t('profile.sessions.revoke') }}
                   </el-button>
                 </template>
               </el-table-column>
             </el-table>
 
-            <el-empty v-if="!loadingSessions && sessions.length === 0" description="No active sessions found" />
+            <el-empty v-if="!loadingSessions && sessions.length === 0" :description="t('profile.sessions.no_sessions')" />
           </div>
-        </el-tab-pane>
+        </div>
 
         <!-- Personal Access Tokens Tab -->
-        <el-tab-pane label="Personal Access Tokens" name="tokens">
+        <div v-show="activeTab === 'tokens'" class="profile-pane">
           <div class="tab-content">
             <PATManagement />
           </div>
-        </el-tab-pane>
+        </div>
 
         <!-- My Comment Templates Tab -->
-        <el-tab-pane label="My Comment Templates" name="comment-templates">
+        <div v-show="activeTab === 'comment-templates'" class="profile-pane">
           <div class="tab-content">
             <CommentTemplateManagement />
           </div>
-        </el-tab-pane>
+        </div>
 
         <!-- Appearance Tab -->
-        <el-tab-pane label="Appearance" name="appearance">
+        <div v-show="activeTab === 'appearance'" class="profile-pane">
           <div class="tab-content appearance-tab">
             <section class="appearance-section">
-              <h3>Theme</h3>
-              <p class="appearance-hint">Follows the system by default. Applies to this browser only.</p>
+              <h3>{{ t('profile.appearance.theme') }}</h3>
+              <p class="appearance-hint">{{ t('profile.appearance.theme_hint') }}</p>
               <el-radio-group v-model="themeMode">
-                <el-radio-button value="light">Light</el-radio-button>
-                <el-radio-button value="dark">Dark</el-radio-button>
-                <el-radio-button value="auto">Auto (System)</el-radio-button>
+                <el-radio-button value="light">{{ t('profile.appearance.light') }}</el-radio-button>
+                <el-radio-button value="dark">{{ t('profile.appearance.dark') }}</el-radio-button>
+                <el-radio-button value="auto">{{ t('profile.appearance.auto') }}</el-radio-button>
               </el-radio-group>
             </section>
 
             <section class="appearance-section">
-              <h3>Accent Color</h3>
+              <h3>{{ t('profile.appearance.accent') }}</h3>
               <p class="appearance-hint">
-                Recolours the whole interface, including the hover, disabled and selected states
-                Element Plus derives from the accent.
+                {{ t('profile.appearance.accent_hint') }}
               </p>
               <div class="appearance-presets">
                 <button
@@ -407,15 +428,15 @@
                   class="appearance-swatch"
                   :class="{ 'is-active': primaryColor === preset.value }"
                   :style="{ backgroundColor: preset.value }"
-                  :title="preset.label"
-                  :aria-label="preset.label"
+                  :title="t(`profile.appearance.preset_${preset.key}`)"
+                  :aria-label="t(`profile.appearance.preset_${preset.key}`)"
                   :aria-pressed="primaryColor === preset.value"
                   @click="setPrimaryColor(preset.value)"
                 />
               </div>
 
               <div class="appearance-custom">
-                <span class="appearance-custom-label">Custom</span>
+                <span class="appearance-custom-label">{{ t('profile.appearance.custom') }}</span>
                 <el-color-picker
                   :model-value="primaryColor"
                   :predefine="presetValues"
@@ -428,7 +449,7 @@
                   type="primary"
                   @click="resetPrimaryColor"
                 >
-                  Reset to default
+                  {{ t('profile.appearance.reset_to_default') }}
                 </el-button>
               </div>
 
@@ -442,12 +463,13 @@
               />
             </section>
           </div>
-        </el-tab-pane>
-      </el-tabs>
+        </div>
+        </div>
+      </div>
     </el-card>
 
     <!-- Create Delegation Dialog -->
-    <el-dialog v-model="showCreateDialog" title="Create Role Delegation" width="800px">
+    <el-dialog v-model="showCreateDialog" :title="t('profile.delegations.dialog_title')" width="800px">
       <DelegationForm
         ref="delegationFormRef"
         :current-user-id="authStore.user?.id || 0"
@@ -456,9 +478,9 @@
       />
       
       <template #footer>
-        <el-button @click="showCreateDialog = false">Cancel</el-button>
+        <el-button @click="showCreateDialog = false">{{ t('common.cancel', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="creating" @click="handleConfirmCreate">
-          Create Delegation
+          {{ t('profile.delegations.create') }}
         </el-button>
       </template>
     </el-dialog>
@@ -469,11 +491,12 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from 'vue-i18n'
 import { authApi } from '@/api/auth'
 import { rbacApi, type DelegationResponse } from '@/api/rbac'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { Cellphone, InfoFilled, Monitor, Plus, WarningFilled } from '@element-plus/icons-vue'
+import { Cellphone, InfoFilled, Monitor, Plus, Refresh, WarningFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import DelegationForm from '@/components/delegation/DelegationForm.vue'
 import AvatarUpload from '@/components/user/AvatarUpload.vue'
@@ -486,12 +509,28 @@ import { MIN_READABLE_CONTRAST, THEME_COLOR_PRESETS, contrastWithWhite } from '@
 
 const router = useRouter()
 const authStore = useAuthStore()
+const { t } = useI18n()
 const passwordFormRef = ref<FormInstance>()
 const changingPassword = ref(false)
 const PROFILE_TABS = ['info', 'delegations', 'sessions', 'tokens', 'comment-templates', 'appearance']
 const requestedTab =
   typeof router.currentRoute.value.query.tab === 'string' ? router.currentRoute.value.query.tab : ''
 const activeTab = ref(PROFILE_TABS.includes(requestedTab) ? requestedTab : 'info')
+
+// Left nav panel entries - labels re-resolve on language change, but the
+// panel width stays fixed (see .profile-nav) so nothing shifts on switch.
+const navItems = computed(() => [
+  { name: 'info', label: t('profile.tabs.user_info', 'User Info') },
+  { name: 'delegations', label: t('profile.tabs.delegations', 'Role Delegations') },
+  { name: 'sessions', label: t('profile.tabs.sessions', 'My Sessions') },
+  { name: 'tokens', label: t('profile.tabs.tokens', 'Personal Access Tokens') },
+  { name: 'comment-templates', label: t('profile.tabs.comment_templates', 'My Comment Templates') },
+  { name: 'appearance', label: t('profile.tabs.appearance', 'Appearance') },
+])
+// Shown in the card header so the reader always sees which panel is open.
+const currentTabLabel = computed(
+  () => navItems.value.find((item) => item.name === activeTab.value)?.label ?? ''
+)
 const delegationDirection = ref<'received' | 'sent'>('received')
 const loadingSessions = ref(false)
 const sessions = ref<AuthSession[]>([])
@@ -527,7 +566,7 @@ const contrastWarning = computed(() => {
   if (ratio === 0 || ratio >= MIN_READABLE_CONTRAST) {
     return ''
   }
-  return `This color has only ${ratio.toFixed(1)}:1 contrast against the white text buttons use, so labels may be hard to read.`
+  return t('profile.appearance.contrast_warning', { ratio: ratio.toFixed(1) })
 })
 
 // Delegation data
@@ -549,7 +588,7 @@ const passwordForm = reactive({
 
 const validatePass = (rule: any, value: string, callback: any) => {
   if (value === '') {
-    callback(new Error('Please input password'))
+    callback(new Error(t('profile.password.input_new')))
   } else {
     if (passwordForm.confirm_password !== '') {
       passwordFormRef.value?.validateField('confirm_password')
@@ -560,9 +599,9 @@ const validatePass = (rule: any, value: string, callback: any) => {
 
 const validatePass2 = (rule: any, value: string, callback: any) => {
   if (value === '') {
-    callback(new Error('Please input password again'))
+    callback(new Error(t('profile.password.input_confirm')))
   } else if (value !== passwordForm.new_password) {
-    callback(new Error("Two inputs don't match!"))
+    callback(new Error(t('profile.password.mismatch')))
   } else {
     callback()
   }
@@ -570,11 +609,11 @@ const validatePass2 = (rule: any, value: string, callback: any) => {
 
 const passwordRules: FormRules = {
   old_password: [
-    { required: true, message: 'Please input current password', trigger: 'blur' },
+    { required: true, message: t('profile.password.input_current'), trigger: 'blur' },
   ],
   new_password: [
     { validator: validatePass, trigger: 'blur' },
-    { min: 6, message: 'Password must be at least 6 characters', trigger: 'blur' },
+    { min: 6, message: t('profile.password.min_length'), trigger: 'blur' },
   ],
   confirm_password: [
     { validator: validatePass2, trigger: 'blur' },
@@ -742,7 +781,7 @@ const loadSessions = async () => {
   try {
     sessions.value = await authApi.getMySessions()
   } catch (error) {
-    ElMessage.error('Failed to load active sessions')
+    ElMessage.error(t('profile.sessions.load_failed'))
   } finally {
     loadingSessions.value = false
   }
@@ -752,9 +791,9 @@ const handleRevokeSession = async (sessionId: string, isCurrent: boolean) => {
   try {
     await ElMessageBox.confirm(
       isCurrent
-        ? 'Revoke your current session and log out now?'
-        : 'Revoke this active session?',
-      'Confirm Session Revocation',
+        ? t('profile.sessions.revoke_current_body')
+        : t('profile.sessions.revoke_body'),
+      t('profile.sessions.revoke_title'),
       { type: 'warning' }
     )
 
@@ -763,16 +802,16 @@ const handleRevokeSession = async (sessionId: string, isCurrent: boolean) => {
 
     if (isCurrent) {
       authStore.clearAuth()
-      ElMessage.success('Current session revoked. Please login again.')
+      ElMessage.success(t('profile.sessions.revoked_current'))
       await router.replace('/login')
       return
     }
 
-    ElMessage.success('Session revoked successfully')
+    ElMessage.success(t('profile.sessions.revoked_success'))
     await loadSessions()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('Failed to revoke session')
+      ElMessage.error(t('profile.sessions.revoke_failed'))
     }
   } finally {
     revokingSessionId.value = null
@@ -781,12 +820,12 @@ const handleRevokeSession = async (sessionId: string, isCurrent: boolean) => {
 
 // Format delegation status
 const formatStatus = (status?: string | null): string => {
-  if (!status) return 'Unknown'
+  if (!status) return t('profile.delegations.st_pending', 'Pending')
   const statusMap: Record<string, string> = {
-    active: 'Active',
-    pending: 'Pending',
-    expired: 'Expired',
-    revoked: 'Revoked',
+    active: t('profile.delegations.st_active'),
+    pending: t('profile.delegations.st_pending'),
+    expired: t('profile.delegations.st_expired'),
+    revoked: t('profile.delegations.st_revoked'),
   }
   return statusMap[status] || status
 }
@@ -806,13 +845,13 @@ const getStatusType = (status?: string | null): 'success' | 'warning' | 'info' |
 const handleRevokeDelegation = async (assignmentId: number) => {
   try {
     await ElMessageBox.confirm(
-      'Are you sure you want to revoke this delegation?',
-      'Confirm Revoke',
+      t('profile.delegations.revoke_body'),
+      t('profile.delegations.revoke_title'),
       { type: 'warning' }
     )
     
-    await rbacApi.revokeDelegation(assignmentId, { reason: 'Revoked by delegator' })
-    ElMessage.success('Delegation revoked successfully')
+    await rbacApi.revokeDelegation(assignmentId, { reason: t('profile.delegations.revoke_reason') })
+    ElMessage.success(t('profile.delegations.revoked_success'))
     
     // Reload delegations
     await loadSentDelegations()
@@ -822,7 +861,7 @@ const handleRevokeDelegation = async (assignmentId: number) => {
     updateCanManageDelegations()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('Failed to revoke delegation')
+      ElMessage.error(t('profile.delegations.revoked_failed'))
     }
   }
 }
@@ -842,12 +881,12 @@ const handleConfirmCreate = async () => {
   
   const isValid = await delegationFormRef.value.validate()
   if (!isValid) {
-    ElMessage.warning('Please fill in all required fields')
+    ElMessage.warning(t('profile.delegations.fill_required'))
     return
   }
   
   if (!pendingDelegationData.value) {
-    ElMessage.warning('Please complete the delegation form')
+    ElMessage.warning(t('profile.delegations.complete_form'))
     return
   }
   
@@ -855,7 +894,7 @@ const handleConfirmCreate = async () => {
     creating.value = true
     await rbacApi.createDelegation(pendingDelegationData.value)
     
-    ElMessage.success('Delegation created successfully')
+    ElMessage.success(t('profile.delegations.created_success'))
     showCreateDialog.value = false
     pendingDelegationData.value = null
     
@@ -868,7 +907,7 @@ const handleConfirmCreate = async () => {
   } catch (error: any) {
     // Don't show permission errors
     if (error?.response?.status !== 403) {
-      ElMessage.error(error?.response?.data?.detail || 'Failed to create delegation')
+      ElMessage.error(error?.response?.data?.detail || t('profile.delegations.create_failed'))
     }
   } finally {
     creating.value = false
@@ -886,7 +925,7 @@ const handleChangePassword = async () => {
           old_password: passwordForm.old_password,
           new_password: passwordForm.new_password,
         })
-        ElMessage.success('Password changed successfully. Please login with your new password.')
+        ElMessage.success(t('profile.password.change_success'))
         
         // Logout and redirect to login page
         setTimeout(async () => {
@@ -894,7 +933,7 @@ const handleChangePassword = async () => {
           router.push('/login')
         }, 1500)
       } catch (error) {
-        ElMessage.error('Failed to change password')
+        ElMessage.error(t('profile.password.change_failed'))
       } finally {
         changingPassword.value = false
       }
@@ -926,8 +965,8 @@ onMounted(() => {
 
 <style scoped>
 .profile-container {
-  width: 1200px;
-  max-width: 95vw;
+  width: 1400px;
+  max-width: 96vw;
   margin: 20px auto;
 }
 
@@ -945,33 +984,124 @@ onMounted(() => {
   font-weight: bold;
 }
 
-/* Avatar section styling */
-.avatar-section {
+/* Label of the currently selected panel, shown at the right of the header */
+.current-tab-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+  padding: 4px 14px;
+  border-radius: 12px;
+}
+
+/* User Info tab: avatar panel on the left, profile info on the right */
+.user-info-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.avatar-panel {
+  flex: 0 0 220px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 0;
+  padding: 8px 24px 20px 0;
+  border-right: 1px solid var(--el-border-color-lighter);
 }
 
-.avatar-section h3 {
-  margin-bottom: 16px;
+.avatar-panel h3 {
+  margin: 0 0 16px;
 }
 
-.profile-tabs {
+.user-info-panel {
+  flex: 1;
+  min-width: 320px;
+}
+
+.profile-layout {
   flex: 1;
   display: flex;
+  align-items: stretch;
+  min-height: 0;
+}
+
+/* Fixed-width nav panel - the width is sized for the longest English label
+   ("Personal Access Tokens") and never re-measured from the DOM, so the
+   splitter holds still in every language. */
+.profile-nav {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+  flex-shrink: 0;
+  display: flex;
   flex-direction: column;
-  overflow: hidden;
+  gap: 4px;
+  padding: 12px 10px;
+  background-color: var(--el-fill-color-light);
+  border-right: 1px solid var(--el-border-color-lighter);
 }
 
-/* Fix Element Plus tabs structure */
-:deep(.el-tabs__content) {
+.profile-nav-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--el-text-color-regular);
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.profile-nav-item:hover {
+  color: var(--el-color-primary);
+  background-color: var(--el-fill-color);
+}
+
+.profile-nav-item.is-active {
+  position: relative;
+  font-weight: 600;
+  color: var(--el-color-primary);
+  background-color: var(--el-color-primary-light-9);
+}
+
+.profile-nav-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background-color: var(--el-color-primary);
+  transform-origin: center;
+  animation: tabAccentIn 0.25s ease;
+}
+
+@keyframes tabAccentIn {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+/* Content owns exactly what the fixed 220px nav leaves over, so the
+   splitter between them holds still regardless of the active language. */
+.profile-body {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
-  padding: 0;
+  background-color: var(--el-bg-color);
 }
 
-:deep(.el-tab-pane) {
+.profile-pane {
   height: 100%;
   overflow: hidden;
 }
@@ -983,17 +1113,22 @@ onMounted(() => {
 }
 
 /* Compact info item layout */
+.info-row {
+  margin-bottom: 6px;
+}
+
 .info-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 0;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 14px;
 }
 
 .info-item label {
   font-weight: 600;
-  color: var(--el-text-color-regular);
-  min-width: 120px;
+  color: var(--el-text-color-secondary);
+  min-width: 110px;
   flex-shrink: 0;
 }
 
@@ -1002,7 +1137,7 @@ onMounted(() => {
   word-break: break-word;
   overflow-wrap: break-word;
   flex: 1;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 /* Compact status tag styling */
@@ -1074,12 +1209,18 @@ h3 {
   margin-bottom: 4px;
 }
 
-.sessions-header {
+/* Shared section header: title on the left, action button on the right -
+   used by both "My Delegations" and "My Sessions" so they line up. */
+.tab-section-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+}
+
+.tab-section-header h3 {
+  margin: 0;
 }
 
 .sessions-subtitle {
@@ -1166,33 +1307,21 @@ h3 {
   padding: 12px 0;
 }
 
-/* Improve delegation tabs spacing */
-:deep(.el-tabs--card > .el-tabs__header) {
-  margin-bottom: 16px;
-}
-
-:deep(.el-tabs--card > .el-tabs__header .el-tabs__item) {
-  padding: 10px 16px;
-  font-size: 14px;
-}
-
-/* Nested tabs inside delegations - use flex layout */
-.delegation-tabs {
-  height: calc(100% - 60px);
+.delegation-tab-content {
   display: flex;
   flex-direction: column;
 }
 
-:deep(.delegation-tabs > .el-tabs__content) {
-  flex: 1;
-  overflow: hidden;
-  padding: 0;
+/* Delegations: direction label (radio) sits next to the title; the two
+   table panels are toggled with v-show and fill the remaining height. */
+.delegation-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
-:deep(.delegation-tabs .el-tab-pane) {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+.delegation-header-left h3 {
+  margin: 0;
 }
 
 /* Wrapper for delegation tables with flex layout */
@@ -1203,8 +1332,8 @@ h3 {
   overflow: hidden;
 }
 
-/* Tables in delegation tabs with flexible height */
-:deep(.delegation-tabs .el-table) {
+/* Tables in delegation panels with flexible height */
+:deep(.delegation-tab-content .el-table) {
   flex: 1;
   min-height: 350px;
 }
@@ -1223,7 +1352,7 @@ h3 {
 }
 
 /* Table in sessions tab with flexible height */
-:deep(.el-tab-pane[name="sessions"] .el-table) {
+:deep(.sessions-tab-content .el-table) {
   flex: 1;
   min-height: 450px;
 }
@@ -1233,12 +1362,17 @@ h3 {
   margin: 30px auto;
 }
 
-/* Appearance tab */
+/* Appearance tab - sections are spaced by gap only, so the top gap to the
+   nav splitter matches the other tabs */
 .appearance-tab {
   display: flex;
   flex-direction: column;
   gap: 28px;
   max-width: 560px;
+}
+
+.appearance-tab h3 {
+  margin: 0 0 12px;
 }
 
 .appearance-section h3 {

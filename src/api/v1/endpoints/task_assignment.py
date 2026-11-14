@@ -283,6 +283,7 @@ async def assign_reviewer(
             review_base_id=review_id,
             assignment_data=request,
             assigned_by=git_username,
+            granted_by_id=current_user.id,
         )
         return result
     except HTTPException:

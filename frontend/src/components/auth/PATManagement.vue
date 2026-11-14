@@ -1,70 +1,70 @@
 <template>
   <div class="pat-management">
     <div class="pat-header">
-      <h3>Personal Access Tokens</h3>
+      <h3>{{ t('profile.pat.title') }}</h3>
       <div class="header-actions">
-        <el-button @click="loadTokens" :loading="loading">
+        <el-button type="primary" @click="loadTokens" :loading="loading">
           <el-icon><Refresh /></el-icon>
-          Refresh
+          {{ t('profile.pat.refresh') }}
         </el-button>
         <el-button type="primary" @click="showCreateDialog = true">
           <el-icon><Plus /></el-icon>
-          Generate New Token
+          {{ t('profile.pat.generate_new') }}
         </el-button>
       </div>
     </div>
 
-    <p class="pat-description">
-      Personal access tokens function like passwords for programmatic API access. 
-      Tokens are shown only once at creation time, so make sure to copy them immediately.
-    </p>
+    <p class="pat-description">{{ t('profile.pat.description') }}</p>
 
     <!-- Token List -->
     <div v-loading="loading" class="token-list">
-      <el-empty v-if="!loading && tokens.length === 0" description="No personal access tokens">
-        <el-button type="primary" @click="showCreateDialog = true">Generate Token</el-button>
+      <el-empty v-if="!loading && tokens.length === 0" :description="t('profile.pat.empty')">
+        <el-button type="primary" @click="showCreateDialog = true">
+          <el-icon><Plus /></el-icon>
+          {{ t('profile.pat.generate_token') }}
+        </el-button>
       </el-empty>
 
       <el-table v-else :data="tokens" stripe style="width: 100%">
-        <el-table-column prop="name" label="Token Name" min-width="200">
+        <el-table-column prop="name" :label="t('profile.pat.token_name')" min-width="200">
           <template #default="{ row }">
             <div class="token-name-cell">
               <span>{{ row.name }}</span>
-              <el-tag v-if="!row.is_active" size="small" type="info">Revoked</el-tag>
+              <el-tag v-if="!row.is_active" size="small" type="info">{{ t('profile.pat.revoked') }}</el-tag>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column label="Token Prefix" width="150">
+        <el-table-column :label="t('profile.pat.prefix')" width="150">
           <template #default="{ row }">
             <code class="token-prefix">{{ row.prefix }}...</code>
           </template>
         </el-table-column>
 
-        <el-table-column label="Created" width="180">
+        <el-table-column :label="t('profile.pat.created')" width="180">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="Expires" width="180">
+        <el-table-column :label="t('profile.pat.expires')" width="180">
           <template #default="{ row }">
             <div v-if="row.expires_at">
               <el-tag :type="getExpiryType(row.expires_at)" size="small">
                 {{ formatDate(row.expires_at) }}
               </el-tag>
             </div>
-            <span v-else style="color: var(--el-text-color-secondary);">Never</span>
+            <span v-else style="color: var(--el-text-color-secondary);">{{ t('profile.pat.never') }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="Last Used" width="180">
+        <el-table-column :label="t('profile.pat.last_used')" width="180">
           <template #default="{ row }">
-            {{ row.last_used_at ? formatDate(row.last_used_at) : 'Never' }}
+            {{ row.last_used_at ? formatDate(row.last_used_at) : t('profile.pat.never') }}
           </template>
         </el-table-column>
 
-        <el-table-column label="Actions" width="120" fixed="right">
+        <el-table-column :label="t('profile.pat.actions')" width="120" fixed="right">
           <template #default="{ row }">
             <el-button
               v-if="row.is_active"
@@ -72,7 +72,7 @@
               type="danger"
               @click="handleRevokeToken(row.id, row.name)"
             >
-              Revoke
+              {{ t('profile.delegations.revoke') }}
             </el-button>
             <span v-else style="color: var(--el-text-color-secondary);">-</span>
           </template>
@@ -83,7 +83,7 @@
     <!-- Create Token Dialog -->
     <el-dialog
       v-model="showCreateDialog"
-      title="Generate Personal Access Token"
+      :title="t('profile.pat.dialog_title')"
       width="600px"
       :close-on-click-modal="false"
     >
@@ -93,36 +93,37 @@
         :rules="createRules"
         label-width="140px"
       >
-        <el-form-item label="Token Name" prop="name">
+        <el-form-item :label="t('profile.pat.token_name')" prop="name">
           <el-input
             v-model="createForm.name"
-            placeholder="e.g., CI/CD Pipeline, Local Development"
+            :placeholder="t('profile.pat.name_ph')"
             maxlength="100"
             show-word-limit
           />
           <div class="form-help">
-            Choose a descriptive name to help you identify this token's purpose
+            {{ t('profile.pat.name_help') }}
           </div>
         </el-form-item>
 
-        <el-form-item label="Expiration" prop="expires_in_days">
-          <el-select v-model="createForm.expires_in_days" placeholder="Select expiration" style="width: 100%">
-            <el-option label="7 days" :value="7" />
-            <el-option label="30 days" :value="30" />
-            <el-option label="90 days (recommended)" :value="90" />
-            <el-option label="365 days" :value="365" />
-            <el-option label="No expiration" :value="null" />
+        <el-form-item :label="t('profile.pat.expiration')" prop="expires_in_days">
+          <el-select v-model="createForm.expires_in_days" :placeholder="t('profile.pat.exp_ph')" style="width: 100%">
+            <el-option :label="t('profile.pat.exp_7')" :value="7" />
+            <el-option :label="t('profile.pat.exp_30')" :value="30" />
+            <el-option :label="t('profile.pat.exp_90')" :value="90" />
+            <el-option :label="t('profile.pat.exp_365')" :value="365" />
+            <el-option :label="t('profile.pat.exp_none')" :value="null" />
           </el-select>
           <div class="form-help">
-            Tokens will automatically expire after the selected period
+            {{ t('profile.pat.exp_help') }}
           </div>
         </el-form-item>
       </el-form>
 
       <template #footer>
-        <el-button @click="showCreateDialog = false">Cancel</el-button>
+        <el-button @click="showCreateDialog = false">{{ t('common.cancel', 'Cancel') }}</el-button>
         <el-button type="primary" :loading="creating" @click="handleCreateToken">
-          Generate Token
+          <el-icon><Plus /></el-icon>
+          {{ t('profile.pat.generate_token') }}
         </el-button>
       </template>
     </el-dialog>
@@ -130,29 +131,29 @@
     <!-- Show Token Dialog (shown only once) -->
     <el-dialog
       v-model="showTokenDialog"
-      title="Your New Personal Access Token"
+      :title="t('profile.pat.new_token_title')"
       width="700px"
       :close-on-click-modal="false"
       :show-close="false"
     >
       <div class="token-warning">
         <el-alert
-          title="Important: Copy your token now!"
+          :title="t('profile.pat.copy_alert')"
           type="warning"
           :closable="false"
           show-icon
         >
-          <p>This token will only be shown once. If you lose it, you'll need to generate a new one.</p>
+          <p>{{ t('profile.pat.copy_alert_body') }}</p>
         </el-alert>
       </div>
 
       <div class="token-display">
-        <label>Token Name:</label>
+        <label>{{ t('profile.pat.token_name_label') }}</label>
         <div class="token-value">{{ createdToken?.name }}</div>
       </div>
 
       <div class="token-display">
-        <label>Token Value:</label>
+        <label>{{ t('profile.pat.token_value_label') }}</label>
         <div class="token-value-container">
           <code class="token-value-code">{{ createdToken?.token }}</code>
           <el-button
@@ -161,21 +162,21 @@
             @click="copyTokenToClipboard"
           >
             <el-icon><DocumentCopy /></el-icon>
-            Copy
+            {{ t('profile.pat.copy') }}
           </el-button>
         </div>
       </div>
 
       <div class="token-display">
-        <label>Expires:</label>
+        <label>{{ t('profile.pat.expires_label') }}</label>
         <div class="token-value">
-          {{ createdToken?.expires_at ? formatDate(createdToken.expires_at) : 'Never' }}
+          {{ createdToken?.expires_at ? formatDate(createdToken.expires_at) : t('profile.pat.never') }}
         </div>
       </div>
 
       <template #footer>
         <el-button type="primary" @click="handleTokenDialogClose">
-          I've Copied My Token
+          {{ t('profile.pat.copied_button') }}
         </el-button>
       </template>
     </el-dialog>
@@ -188,14 +189,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, DocumentCopy, Refresh } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
+import { useI18n } from 'vue-i18n'
 import { patApi, type PersonalAccessToken, type PATCreateRequest } from '@/api/pat'
 
-// Initialize dayjs plugins
-dayjs.extend(utc)
-dayjs.extend(timezone)
-
+const { t } = useI18n()
 const loading = ref(false)
 const creating = ref(false)
 const tokens = ref<PersonalAccessToken[]>([])
@@ -210,8 +207,8 @@ const createForm = reactive<PATCreateRequest>({
 
 const createRules: FormRules = {
   name: [
-    { required: true, message: 'Please enter a token name', trigger: 'blur' },
-    { min: 1, max: 100, message: 'Name must be between 1 and 100 characters', trigger: 'blur' },
+    { required: true, message: t('profile.pat.rule_name'), trigger: 'blur' },
+    { min: 1, max: 100, message: t('profile.pat.rule_name_len'), trigger: 'blur' },
   ],
 }
 
@@ -226,7 +223,7 @@ const loadTokens = async () => {
     const response = await patApi.listTokens(true) // Include expired for history
     tokens.value = response.items
   } catch (error) {
-    ElMessage.error('Failed to load personal access tokens')
+    ElMessage.error(t('profile.pat.load_failed'))
   } finally {
     loading.value = false
   }
@@ -263,7 +260,7 @@ const handleCreateToken = async () => {
       // Reload token list
       await loadTokens()
     } catch (error: any) {
-      ElMessage.error(error?.response?.data?.message || 'Failed to create token')
+      ElMessage.error(error?.response?.data?.message || t('profile.pat.create_failed'))
     } finally {
       creating.value = false
     }
@@ -274,17 +271,17 @@ const handleCreateToken = async () => {
 const handleRevokeToken = async (tokenId: number, tokenName: string) => {
   try {
     await ElMessageBox.confirm(
-      `Are you sure you want to revoke the token "${tokenName}"? This action cannot be undone.`,
-      'Revoke Token',
+      t('profile.pat.revoke_body', { name: tokenName }),
+      t('profile.pat.revoke_title'),
       { type: 'warning' }
     )
 
     await patApi.revokeToken(tokenId)
-    ElMessage.success('Token revoked successfully')
+    ElMessage.success(t('profile.pat.revoked_success'))
     await loadTokens()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('Failed to revoke token')
+      ElMessage.error(t('profile.pat.revoke_failed'))
     }
   }
 }
@@ -295,9 +292,9 @@ const copyTokenToClipboard = async () => {
 
   try {
     await navigator.clipboard.writeText(createdToken.value.token)
-    ElMessage.success('Token copied to clipboard')
+    ElMessage.success(t('profile.pat.copied'))
   } catch (error) {
-    ElMessage.error('Failed to copy token')
+    ElMessage.error(t('profile.pat.copy_failed'))
   }
 }
 
@@ -307,9 +304,12 @@ const handleTokenDialogClose = () => {
   createdToken.value = null
 }
 
-// Format date - converts UTC to local timezone
+// Format date. The backend stores local wall-clock time (USE_UTC_IN_DB=False),
+// and the API serializes it without a timezone suffix, so it must be parsed as
+// local time directly - treating it as UTC shifts the display by the local
+// offset (e.g. +8h for Asia/Shanghai).
 const formatDate = (dateStr: string) => {
-  return dayjs.utc(dateStr).local().format('YYYY-MM-DD HH:mm:ss')
+  return dayjs(dateStr).format('YYYY-MM-DD HH:mm:ss')
 }
 
 // Get expiry type for tag color
