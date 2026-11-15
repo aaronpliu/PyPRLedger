@@ -142,7 +142,7 @@ class BitbucketCloudProvider(BaseGitProvider):
     async def _request(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
         """Make a GET request, raising typed exceptions on failure."""
         try:
-            async with httpx.AsyncClient(verify=False) as client:
+            async with httpx.AsyncClient(verify=settings.OUTBOUND_TLS_VERIFY) as client:
                 response = await client.get(url, headers=self._headers, params=params, timeout=30.0)
         except httpx.HTTPError as e:
             logger.error(f"Bitbucket Cloud API request failed: {url} - {e}")

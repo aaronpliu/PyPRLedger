@@ -117,7 +117,7 @@ class BitbucketServerProvider(BaseGitProvider):
     async def _make_request(self, url: str) -> dict[str, Any] | None:
         """Make HTTP request to Bitbucket Server API."""
         try:
-            async with httpx.AsyncClient(verify=False) as client:
+            async with httpx.AsyncClient(verify=settings.OUTBOUND_TLS_VERIFY) as client:
                 response = await client.get(url, headers=self._headers, timeout=10.0)
                 response.raise_for_status()
                 return response.json()
@@ -228,7 +228,7 @@ class BitbucketServerProvider(BaseGitProvider):
     async def _request_page(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
         """Make a paginated GET request, raising typed exceptions on failure."""
         try:
-            async with httpx.AsyncClient(verify=False) as client:
+            async with httpx.AsyncClient(verify=settings.OUTBOUND_TLS_VERIFY) as client:
                 response = await client.get(url, headers=self._headers, params=params, timeout=30.0)
         except httpx.HTTPError as e:
             logger.error(f"Bitbucket API request failed: {url} - {e}")

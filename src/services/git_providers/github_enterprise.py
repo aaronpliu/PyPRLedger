@@ -72,9 +72,7 @@ class GitHubEnterpriseProvider(BaseGitProvider):
         The tree rather than ``/releases/tag/{tag}``: a release is only there when
         one was published on GitHub, while the tag always names the code.
         """
-        if not self.base_url or not self.compare_refs_ready(
-            project_key, repository_slug, tag_name
-        ):
+        if not self.base_url or not self.compare_refs_ready(project_key, repository_slug, tag_name):
             return None
 
         return (
@@ -91,7 +89,7 @@ class GitHubEnterpriseProvider(BaseGitProvider):
 
     async def _make_request(self, url: str) -> dict[str, Any] | None:
         try:
-            async with httpx.AsyncClient(verify=False) as client:
+            async with httpx.AsyncClient(verify=settings.OUTBOUND_TLS_VERIFY) as client:
                 response = await client.get(url, headers=self.headers, timeout=10.0)
                 response.raise_for_status()
                 return response.json()
@@ -191,7 +189,7 @@ class GitHubEnterpriseProvider(BaseGitProvider):
     ) -> Any:
         """Execute a GitHub API call, raising typed exceptions on failure."""
         try:
-            async with httpx.AsyncClient(verify=False) as client:
+            async with httpx.AsyncClient(verify=settings.OUTBOUND_TLS_VERIFY) as client:
                 response = await client.request(
                     method,
                     url,

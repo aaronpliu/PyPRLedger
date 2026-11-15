@@ -362,6 +362,15 @@ class Settings(BaseSettings):
         default=15.0, description="Timeout for a single Confluence request"
     )
 
+    OUTBOUND_TLS_VERIFY: bool = Field(
+        default=True,
+        description=(
+            "Verify TLS certificates on outbound calls to git providers and the "
+            "dependency API. Turn it off only for on-premise servers that serve a "
+            "self-signed certificate; leaving it off exposes tokens to interception."
+        ),
+    )
+
     # Review status constants
     REVIEW_STATUS_OPEN: str = "open"
     REVIEW_STATUS_MERGED: str = "merged"
