@@ -7,11 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.0] - 2026-11-15
+
+**Backend Version**: 1.38.0
+**Frontend Version**: 1.34.0
+
 ### Security
 - `POST /api/v1/llm/proxy/{path}` now requires authentication. It previously forwarded every request to the configured LLM provider with the server-side API key without verifying the caller, so anyone able to reach the API could spend the provider quota and use it as an open proxy. The PageAgent client sends the caller's JWT instead of a placeholder; the backend verifies it and still substitutes the provider key, so the user token is never forwarded upstream
 - Escaped global search result titles before adding highlight markup. Titles come from the backend (PR, review and project names — text users control) and were injected through `v-html`, so a title containing markup executed in every reader's browser. The query is now escaped before being used as a regular expression (also fixing an exception on invalid patterns) and the output is passed through DOMPurify, which allows only `<mark>`
 - Production startup is validated at boot: a `model_validator` refuses to start when `ENV=production` and `SECRET_KEY` is the development default or shorter than 32 characters, or when `BACKEND_CORS_ORIGINS` contains `*`, `DEBUG=True`, or `ID_OBFUSCATOR_SALT` is still the default. A known secret key allowed forging a JWT for any user
 - Registered `SecurityHeadersMiddleware`, which was defined but never added to the application, so API responses carried no CSP, HSTS or clickjacking protection. Responses now include a Content-Security-Policy (same-origin scripts, inline styles allowed for the App Diff HTML report, `frame-ancestors 'none'`), HSTS, `Referrer-Policy: no-referrer` and a modern `X-XSS-Protection: 0`
+
+### Upgrade Notes
+- A production instance now refuses to start when `ENV=production` and `SECRET_KEY` is still the development default or shorter than 32 characters, `BACKEND_CORS_ORIGINS` contains `*`, `DEBUG=True`, or `ID_OBFUSCATOR_SALT` keeps its default. Set all four before deploying; the startup error names every offending value
+- API responses now carry a Content-Security-Policy. Inline styles stay allowed (the App Diff HTML report needs them) but inline scripts and external script origins are blocked
+- `POST /api/v1/llm/proxy/{path}` requires a valid access token. The built-in PageAgent sends the signed-in user's JWT, so no configuration change is needed unless a client calls the proxy directly
+
+---
 
 ## [1.37.2] - 2026-11-14
 
