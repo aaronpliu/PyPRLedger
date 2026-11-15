@@ -187,6 +187,14 @@ class Settings(BaseSettings):
     # Security configuration
     SECRET_KEY: str = Field(default="development-secret-key-change-in-production")
     ALGORITHM: str = "HS256"
+    WEBHOOK_SHARED_SECRET: str = Field(
+        default="",
+        description=(
+            "Shared secret git providers use to sign review write requests "
+            "(X-Webhook-Signature over 'timestamp.body'). When empty, write "
+            "endpoints require a user token instead of a signature."
+        ),
+    )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
     REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES: int = Field(default=60)
     ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS: int = Field(default=60)

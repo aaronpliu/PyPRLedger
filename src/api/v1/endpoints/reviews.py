@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.core.config import settings
 from src.core.database import get_db_session
 from src.core.exceptions import (
     ForbiddenException,
@@ -50,6 +51,7 @@ from src.services.review_validation_service import ReviewValidationService
 from src.utils.id_obfuscator import decode
 from src.utils.metrics import OperationTimer, metrics
 from src.utils.timezone import get_current_time
+from src.utils.webhook_signature import SIGNATURE_HEADER, TIMESTAMP_HEADER, verify_signature
 
 
 logger = logging.getLogger(__name__)
@@ -64,17 +66,51 @@ async def get_review_service(
 ) -> ReviewService:
     """Build a review service carrying the caller's repository grants.
 
-    Read requests are authenticated; write endpoints stay open so git providers
-    can keep posting PR information without a user token.
+    Reads require a signed-in user. Writes accept either a signed-in user (the
+    UI) or a request signed with WEBHOOK_SHARED_SECRET (git providers posting PR
+    data). Writes are refused when neither is present, so an unconfigured
+    deployment fails closed instead of accepting anonymous writes.
     """
     from src.services.repository_access_service import RepositoryAccessService
 
     if request.method not in ("GET", "HEAD"):
+        if not request.headers.get("Authorization", "").startswith("Bearer "):
+            await require_valid_webhook_signature(request)
+        else:
+            # A token was sent, so it has to be a valid one.
+            await get_current_user_with_token(request, db)
         return ReviewService(metrics_collector=metrics)
 
     user = await get_current_user_with_token(request, db)
     pairs = await RepositoryAccessService(db).allowed_pairs(user.id)
     return ReviewService(metrics_collector=metrics, allowed_pairs=pairs)
+
+
+async def require_valid_webhook_signature(request: Request) -> None:
+    """Authenticate a machine caller via the shared secret.
+
+    Raises 401 when no secret is configured, the signature is missing, stale or
+    does not match the body.
+    """
+    secret = settings.WEBHOOK_SHARED_SECRET
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    body = await request.body()
+    if not verify_signature(
+        secret,
+        request.headers.get(TIMESTAMP_HEADER),
+        request.headers.get(SIGNATURE_HEADER),
+        body,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired webhook signature",
+        )
 
 
 async def require_granted_pair(request: Request, access: CurrentRepositoryAccess) -> None:
@@ -85,11 +121,7 @@ async def require_granted_pair(request: Request, access: CurrentRepositoryAccess
     )
     if project_key and project_key not in allowed_project_keys(access):
         raise ForbiddenException(message="No access to this project")
-    if (
-        project_key
-        and repository_slug
-        and (project_key, repository_slug) not in access
-    ):
+    if project_key and repository_slug and (project_key, repository_slug) not in access:
         raise ForbiddenException(message="No access to this repository")
 
 
@@ -730,11 +762,7 @@ async def list_reviews(
             return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
         if project_key and project_key not in allowed_project_keys(access):
             return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
-        if (
-            project_key
-            and repository_slug
-            and (project_key, repository_slug) not in access
-        ):
+        if project_key and repository_slug and (project_key, repository_slug) not in access:
             return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
 
         rbac_service = RBACService(db)
