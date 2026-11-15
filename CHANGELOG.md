@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Outbound calls to Bitbucket Cloud/Server, GitHub Enterprise and the dependency API now verify TLS certificates. All six call sites used `httpx.AsyncClient(verify=False)`, so a man in the middle could read the personal access tokens those requests carry. `OUTBOUND_TLS_VERIFY` (default `True`) keeps an escape hatch for on-premise hosts with self-signed certificates
+- Review write endpoints (`POST /reviews`, `PUT /reviews/{project}/{repo}/{pr}`, `PATCH .../status`) now require either a valid user token or a request signed with `WEBHOOK_SHARED_SECRET` (`X-Webhook-Timestamp` plus `X-Webhook-Signature: sha256=HMAC(secret, "<timestamp>.<raw body>")`, 5 minute clock skew). They previously accepted anonymous writes so git providers could post PR data without a token. With no secret configured they require a token, so an unconfigured deployment fails closed
+- Logging in locks the username for `LOGIN_LOCKOUT_MINUTES` (default 15) after `LOGIN_MAX_FAILED_ATTEMPTS` (default 5) consecutive failures. The counter lives in Redis so it is shared by all workers; unknown usernames are counted too, so the response does not reveal whether an account exists, and a successful login clears it
+
+### Changed
+- Dropped `passlib[bcrypt]`: passlib 1.7.4 has been unmaintained since 2020 and is incompatible with the bcrypt releases it wraps. The code always imported bcrypt directly, so `bcrypt>=5.0.0` is now a direct dependency
+
+### Upgrade Notes
+- Set `WEBHOOK_SHARED_SECRET` if a git provider (or any machine client) posts review data over HTTP without a user token; otherwise those calls now return 401. Sign each request as described above
+- Leave `OUTBOUND_TLS_VERIFY=True` unless an on-premise server serves a self-signed certificate
+- Tune `LOGIN_MAX_FAILED_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` when the defaults do not fit; users see a 429 with the retry window when locked
+
+
 ## [1.38.0] - 2026-11-15
 
 **Backend Version**: 1.38.0
