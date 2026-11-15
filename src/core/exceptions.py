@@ -251,6 +251,22 @@ class RateLimitException(AppException):
         )
 
 
+class AccountLockedException(RateLimitException):
+    """Too many failed logins: the username is temporarily locked"""
+
+    def __init__(self, retry_after_minutes: int):
+        super().__init__(
+            message=f"Too many failed login attempts. Try again in {retry_after_minutes} minute(s)."
+        )
+        self.detail = {
+            "error": "account_locked",
+            "message": f"Too many failed login attempts. Try again in {retry_after_minutes} minute(s).",
+            "retry_after_minutes": retry_after_minutes,
+        }
+        self.message_key = "errors.account_locked"
+        self.message_params = {"minutes": retry_after_minutes}
+
+
 class ReviewNotFoundException(NotFoundException):
     """Review not found"""
 

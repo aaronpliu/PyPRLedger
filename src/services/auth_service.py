@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.exceptions import (
+    AccountLockedException,
     AppException,
     ErrorCode,
     InvalidCredentialsException,
@@ -46,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 
 REFRESH_SESSION_KEY_PREFIX = "auth:refresh_session"
+LOGIN_FAILURE_KEY_PREFIX = "auth:login_failures"
 
 
 class AuthService:
@@ -58,6 +60,49 @@ class AuthService:
     @staticmethod
     def _get_refresh_session_key(session_id: str) -> str:
         return f"{REFRESH_SESSION_KEY_PREFIX}:{session_id}"
+
+    @staticmethod
+    def _get_login_failure_key(username: str) -> str:
+        # Usernames are matched case-sensitively at login, but the lockout key
+        # is lower-cased so `Alice` and `alice` share one counter.
+        return f"{LOGIN_FAILURE_KEY_PREFIX}:{username.strip().lower()}"
+
+    async def _ensure_login_not_locked(self, username: str) -> None:
+        """Raise when this username has too many recent failures.
+
+        Redis is the store, so the counter is shared by every API worker. A
+        Redis outage must not lock everybody out of the product: log it and
+        let the request through, the rate limiter still applies.
+        """
+        try:
+            raw = await self.redis_client.get(self._get_login_failure_key(username))
+        except Exception as exc:  # pragma: no cover - infrastructure failure
+            logger.warning("Login lockout check skipped, Redis unavailable: %s", exc)
+            return
+
+        failures = int(raw or 0)
+        if failures >= settings.LOGIN_MAX_FAILED_ATTEMPTS:
+            raise AccountLockedException(retry_after_minutes=settings.LOGIN_LOCKOUT_MINUTES)
+
+    async def _record_login_failure(self, username: str) -> None:
+        """Count one failed attempt and start/refresh the lockout window."""
+        key = self._get_login_failure_key(username)
+        try:
+            failures = await self.redis_client.incr(key)
+            if failures == 1:
+                await self.redis_client.expire(key, settings.LOGIN_LOCKOUT_MINUTES * 60)
+            elif failures >= settings.LOGIN_MAX_FAILED_ATTEMPTS:
+                # Keep the window from expiring mid-lockout.
+                await self.redis_client.expire(key, settings.LOGIN_LOCKOUT_MINUTES * 60)
+        except Exception as exc:  # pragma: no cover - infrastructure failure
+            logger.warning("Could not record login failure for %s: %s", username, exc)
+
+    async def _clear_login_failures(self, username: str) -> None:
+        """Reset the counter after a successful login."""
+        try:
+            await self.redis_client.delete(self._get_login_failure_key(username))
+        except Exception as exc:  # pragma: no cover - infrastructure failure
+            logger.warning("Could not clear login failures for %s: %s", username, exc)
 
     @staticmethod
     def _hash_token(token: str) -> str:
@@ -220,22 +265,33 @@ class AuthService:
         Raises:
             InvalidCredentialsException: If credentials are invalid
             UserInactiveException: If user account is inactive
+            AccountLockedException: If too many recent attempts failed
         """
+        # Refuse early when this username is inside its lockout window
+        await self._ensure_login_not_locked(login_data.username)
+
         # Find auth user by username
         stmt = select(AuthUser).where(AuthUser.username == login_data.username)
         result = await self.db.execute(stmt)
         auth_user = result.scalar_one_or_none()
 
         if not auth_user:
+            # Count unknown usernames too, so enumeration gains nothing and
+            # guessing against a real name is not cheaper than a fake one.
+            await self._record_login_failure(login_data.username)
             raise InvalidCredentialsException()
 
         # Verify password
         if not verify_password(login_data.password, auth_user.password_hash):
+            await self._record_login_failure(login_data.username)
             raise InvalidCredentialsException()
 
         # Check if user is active
         if not auth_user.is_active:
             raise UserInactiveException(username=login_data.username)
+
+        # Successful login clears the failure counter for this username
+        await self._clear_login_failures(login_data.username)
 
         # Auto-associate with Bitbucket user if not already linked
         if not auth_user.user_id:

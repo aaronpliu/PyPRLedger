@@ -190,6 +190,17 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
     REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES: int = Field(default=60)
     ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS: int = Field(default=60)
+    LOGIN_MAX_FAILED_ATTEMPTS: int = Field(
+        default=5,
+        description=(
+            "Consecutive failed logins for one username before it is locked. "
+            "Counted in Redis, so it survives across API workers."
+        ),
+    )
+    LOGIN_LOCKOUT_MINUTES: int = Field(
+        default=15,
+        description="How long a locked username stays blocked after too many failed logins.",
+    )
 
     # CORS configuration
     BACKEND_CORS_ORIGINS: str = Field(
