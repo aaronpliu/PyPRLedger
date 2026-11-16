@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.39.0] - 2026-11-16
+
+**Backend Version**: 1.39.0
+**Frontend Version**: 1.35.0
+
 ### Security
 - Outbound calls to Bitbucket Cloud/Server, GitHub Enterprise and the dependency API now verify TLS certificates. All six call sites used `httpx.AsyncClient(verify=False)`, so a man in the middle could read the personal access tokens those requests carry. `OUTBOUND_TLS_VERIFY` (default `True`) keeps an escape hatch for on-premise hosts with self-signed certificates
 - Review write endpoints (`POST /reviews`, `PUT /reviews/{project}/{repo}/{pr}`, `PATCH .../status`) now require either a valid user token or a request signed with `WEBHOOK_SHARED_SECRET` (`X-Webhook-Timestamp` plus `X-Webhook-Signature: sha256=HMAC(secret, "<timestamp>.<raw body>")`, 5 minute clock skew). They previously accepted anonymous writes so git providers could post PR data without a token. With no secret configured they require a token, so an unconfigured deployment fails closed
@@ -20,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The review list, the review detail and live updates are scoped by repository grant alone. A reader now sees every review in the repositories they are granted, whether or not they author or review that PR; a non-admin used to see only their own assignments and self-raised PRs, which hid the rest of the queue from a reviewer admin holding wider grants. `my-tasks` is untouched and remains the personal view
 - `require_permission` is the only authorization entry point again: the per-resource `Depends()` constants it replaced were never attached to a route, so they guarded nothing while reading like a guard. The rule is written down in `AGENTS.md`
 - CI now audits both dependency trees (`pip-audit`, `npm audit --omit=dev`) and fails a pull request whose coverage drops below 60%
+- Reformatted the codebase with ruff 0.17, whose Markdown code-block formatting also touched the samples in `AGENTS.md`
 
 ### Fixed
 - `GET /api/v1/reviews/statistics` returns `INTERNAL_SERVER_ERROR` again instead of numbers. The per-status breakdown read columns off a `select()` through `.c`, which SQLAlchemy 2.0 does not provide, so every call that reached the query failed with `'Select' object has no attribute 'c'`; the counts are now a single grouped query
@@ -34,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Leave `SSE_ALLOW_TOKEN_QUERY=False`. Unset it only for a client that still puts the JWT in the stream URL; the bundled frontend asks for a ticket instead and needs no configuration
 - Nothing to do about `python-jose` unless an out-of-tree integration imported it directly; the project only used it for access-token encoding
 
+
+---
 
 ## [1.38.0] - 2026-11-15
 
