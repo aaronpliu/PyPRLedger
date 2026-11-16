@@ -274,6 +274,53 @@ async def test_review_statistics_without_grants_are_zero(db: AsyncSession, catal
 
 
 @pytest.mark.asyncio
+async def test_review_statistics_count_reviews_by_status(db: AsyncSession, catalog):
+    """The per-status breakdown is one grouped query, not a select() with .c."""
+    from src.services.review_service import ReviewService
+
+    for index, (commit, review_status) in enumerate(
+        [("c1", "open"), ("c2", "open"), ("c3", "merged"), ("c4", "closed")]
+    ):
+        db.add(
+            PullRequestReviewBase(
+                pull_request_id=f"pr-{index}",
+                pull_request_commit_id=commit,
+                project_key="ONE",
+                repository_slug="a",
+                source_branch="feature/x",
+                target_branch="main",
+                git_code_diff="diff --git a/x b/x",
+                pull_request_status=review_status,
+                pull_request_user="someone-else",
+            )
+        )
+    # Outside the grant: must not reach the totals
+    db.add(
+        PullRequestReviewBase(
+            pull_request_id="pr-elsewhere",
+            pull_request_commit_id="z1",
+            project_key="TWO",
+            repository_slug="b",
+            source_branch="feature/x",
+            target_branch="main",
+            git_code_diff="diff --git a/x b/x",
+            pull_request_status="open",
+            pull_request_user="someone-else",
+        )
+    )
+    await db.commit()
+
+    stats = await ReviewService(allowed_pairs={("ONE", "a")}).get_review_statistics(
+        db=db, use_cache=False
+    )
+
+    assert stats.total_reviews == 4
+    assert stats.open_reviews == 2
+    assert stats.merged_reviews == 1
+    assert stats.closed_reviews == 1
+
+
+@pytest.mark.asyncio
 async def test_project_statistics_scoped_to_grants(db: AsyncSession, catalog):
     from src.services.project_service import ProjectService
 

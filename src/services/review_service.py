@@ -1694,29 +1694,26 @@ class ReviewService:
         total_result = await db.execute(total_query)
         total_reviews = total_result.scalar() or 0
 
-        # Get reviews by status - count unique PRs per status
-        status_subquery = select(
-            PullRequestReviewBase.pull_request_commit_id,
+        # Get reviews by status - count unique PRs per status. The count is grouped
+        # in one query: a select() is not a subquery in SQLAlchemy 2.0, so deriving
+        # columns from one with .c raised AttributeError.
+        status_query = select(
             PullRequestReviewBase.pull_request_status,
-        ).distinct()
+            func.count(func.distinct(PullRequestReviewBase.pull_request_commit_id)),
+        )
         if project_key:
-            status_subquery = status_subquery.where(
-                PullRequestReviewBase.project_key == project_key
-            )
+            status_query = status_query.where(PullRequestReviewBase.project_key == project_key)
         if app_conditions:
-            status_subquery = status_subquery.where(or_(*app_conditions))
+            status_query = status_query.where(or_(*app_conditions))
 
         # Apply reviewer filter
         if reviewer_username:
-            status_subquery = status_subquery.join(
+            status_query = status_query.join(
                 PullRequestReviewAssignment,
                 PullRequestReviewBase.id == PullRequestReviewAssignment.review_base_id,
             ).where(PullRequestReviewAssignment.reviewer == reviewer_username)
 
-        status_query = select(
-            status_subquery.c.pull_request_status,
-            func.count(status_subquery.c.pull_request_commit_id),
-        ).group_by(status_subquery.c.pull_request_status)
+        status_query = status_query.group_by(PullRequestReviewBase.pull_request_status)
 
         status_result = await db.execute(status_query)
         status_counts = {row[0]: row[1] for row in status_result}
