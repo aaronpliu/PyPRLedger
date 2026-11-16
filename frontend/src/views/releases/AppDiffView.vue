@@ -242,6 +242,16 @@
           {{ t(`appDiff.verdict_${result.verdict}`) }}
         </el-tag>
         <span class="scope" data-test="scope">{{ t('appDiff.scope') }}</span>
+        <!-- What each colour below says, spelled out once so the matrix itself
+             does not have to be decoded from memory. -->
+        <ul class="legend" data-test="legend">
+          <li v-for="tone in LEGEND_TONES" :key="tone" class="legend-item">
+            <span class="legend-glyph" :class="`glyph-${tone}`">
+              {{ moveSymbol(tone as MoveTone) }}
+            </span>
+            {{ t(moveLabelKey(tone as MoveTone)) }}
+          </li>
+        </ul>
       </div>
 
       <el-alert
@@ -441,7 +451,7 @@ import {
   moveVersions,
   ragTone,
 } from '@/utils/appVersionDiff'
-import type { AppDiffCell, AppDiffRow } from '@/utils/appVersionDiff'
+import type { AppDiffCell, AppDiffRow, MoveTone } from '@/utils/appVersionDiff'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -796,8 +806,22 @@ function cellClass(cell: AppDiffCell) {
   ]
 }
 
+/**
+ * The moves the legend names, in the order a reader weighs them: the risk first,
+ * then the neutral moves. `none` and `unknown` say no colour of their own.
+ */
+const LEGEND_TONES: MoveTone[] = ['upgrade', 'downgrade', 'changed', 'added', 'removed']
+
 function versionClass(cell: AppDiffCell) {
-  return { unknown: !cell.hasRecord, absent: cell.hasRecord && !cell.version }
+  // A move with a direction dresses its version in the move's own colour, so the
+  // cell is readable as "this release moved and how" without checking the glyph.
+  const tone = moveTone(cell.move)
+  return {
+    unknown: !cell.hasRecord,
+    absent: cell.hasRecord && !cell.version,
+    chip: isMarked(cell.move) && cell.hasRecord && tone !== 'unknown',
+    [`chip-${tone}`]: isMarked(cell.move) && cell.hasRecord && tone !== 'unknown',
+  }
 }
 
 /** A pair's identity, for the commit lists a reader opens by hand. */
@@ -1080,6 +1104,49 @@ watch(depth, () => {
   color: var(--el-text-color-secondary);
 }
 
+/* What each colour in the matrix says, in the same ink the matrix uses. */
+.legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.legend-glyph {
+  display: inline-block;
+  width: 14px;
+  margin-right: 4px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.legend-glyph.glyph-upgrade,
+.legend-glyph.glyph-added {
+  color: var(--diff-ink-green);
+}
+
+.legend-glyph.glyph-downgrade {
+  color: var(--diff-ink-red);
+}
+
+.legend-glyph.glyph-changed {
+  color: var(--diff-ink-amber);
+}
+
+.legend-glyph.glyph-removed {
+  color: var(--diff-ink-neutral);
+}
+
 .matrix-wrap {
   overflow-x: auto;
 }
@@ -1146,31 +1213,64 @@ watch(depth, () => {
 }
 
 .cell-upgrade .move {
-  color: var(--el-color-success);
+  color: var(--diff-ink-green);
 }
 
 .cell-downgrade .move,
 .cell-downgrade .risk {
-  color: var(--el-color-danger);
+  color: var(--diff-ink-red);
 }
 
 .cell-added .move {
-  color: var(--el-color-success);
+  color: var(--diff-ink-green);
 }
 
 .cell-removed .move {
-  color: var(--el-color-info);
+  color: var(--diff-ink-neutral);
 }
 
 .cell-changed .move,
 .cell-unknown .move {
-  color: var(--el-color-warning);
+  color: var(--diff-ink-amber);
 }
 
 .move {
   display: inline-block;
   width: 14px;
   font-weight: 700;
+}
+
+/* A version that moved wears its move's own colour, so the cell reads as
+   "changed and how" even where the glyph is easy to miss. The chip fills come
+   from the theme-aware diff tokens (styles/diff-status.css), which mix a far
+   stronger tint in the dark theme than the light one can bear. */
+.version.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.version.chip-upgrade,
+.version.chip-added {
+  background: var(--diff-fill-green);
+  color: var(--diff-ink-green);
+}
+
+.version.chip-downgrade {
+  background: var(--diff-fill-red);
+  color: var(--diff-ink-red);
+}
+
+.version.chip-changed {
+  background: var(--diff-fill-amber);
+  color: var(--diff-ink-amber);
+}
+
+.version.chip-removed {
+  background: var(--diff-fill-neutral);
+  color: var(--diff-ink-neutral);
 }
 
 .risk {
@@ -1187,39 +1287,37 @@ watch(depth, () => {
   color: var(--el-text-color-placeholder);
 }
 
-/* The RAG status is a whole-row tint, so a package that lost commits is spotted
-   without reading it: red = missing commits, green = new commits, amber = neither. */
-/* The RAG status is a whole-row tint that has to stay readable in light and dark
-   themes alike, so the fill is mixed from the theme's own colour onto the page
-   background, and the package column carries the full-strength colour as a bar. */
+/* The RAG status is a whole-row tint read from the theme-aware diff tokens
+   (styles/diff-status.css): the dark theme gets a far stronger mix there, since
+   the light mixture all but disappears on its dark surface. */
 .matrix-row.rag-red {
-  background: color-mix(in srgb, var(--el-color-danger) 15%, var(--el-bg-color));
+  background: var(--diff-fill-red);
 }
 
 .matrix-row.rag-green {
-  background: color-mix(in srgb, var(--el-color-success) 15%, var(--el-bg-color));
+  background: var(--diff-fill-green);
 }
 
 .matrix-row.rag-amber {
-  background: color-mix(in srgb, var(--el-color-warning) 18%, var(--el-bg-color));
+  background: var(--diff-fill-amber);
 }
 
 /* The package column is sticky, so it paints its own background - carry the row's
    tint onto it and mark it with the full-strength colour, so a red row never
    leaves its name cell white and the status reads at a glance. */
 .matrix-row.rag-red .package-col {
-  background: color-mix(in srgb, var(--el-color-danger) 15%, var(--el-bg-color));
-  box-shadow: inset 3px 0 0 var(--el-color-danger);
+  background: var(--diff-fill-red);
+  box-shadow: inset 3px 0 0 var(--diff-ink-red);
 }
 
 .matrix-row.rag-green .package-col {
-  background: color-mix(in srgb, var(--el-color-success) 15%, var(--el-bg-color));
-  box-shadow: inset 3px 0 0 var(--el-color-success);
+  background: var(--diff-fill-green);
+  box-shadow: inset 3px 0 0 var(--diff-ink-green);
 }
 
 .matrix-row.rag-amber .package-col {
-  background: color-mix(in srgb, var(--el-color-warning) 18%, var(--el-bg-color));
-  box-shadow: inset 3px 0 0 var(--el-color-warning);
+  background: var(--diff-fill-amber);
+  box-shadow: inset 3px 0 0 var(--diff-ink-amber);
 }
 
 /* A row whose commits can be read is the toggle for its own diff detail, and the

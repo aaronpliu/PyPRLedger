@@ -223,6 +223,34 @@ describe('AppDiffView', () => {
     )
   })
 
+  it('dresses a moved version in its move colour', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    // the upgrade carries the green chip; a package that did not move stays plain
+    expect(wrapper.find('[data-test="cell-packageA-1"] .version').classes()).toEqual([
+      'version',
+      'chip',
+      'chip-upgrade',
+    ])
+    expect(wrapper.find('[data-test="cell-packageB-1"] .version').classes()).toEqual(['version'])
+
+    // a change whose direction is unknown keeps its own reading, not a colour
+    const changed = wrapper.find('[data-test="cell-packageF-1"] .version')
+    expect(changed.classes()).toContain('chip-changed')
+  })
+
+  it('names what each colour says in a legend', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    const legend = wrapper.find('[data-test="legend"]')
+    expect(legend.exists()).toBe(true)
+    expect(legend.findAll('.legend-item')).toHaveLength(5)
+    expect(legend.text()).toContain('Upgrade')
+    expect(legend.text()).toContain('Downgrade')
+  })
+
   it('calls a downgrade out as a risk', async () => {
     const wrapper = await mountView()
     await openOn(wrapper)

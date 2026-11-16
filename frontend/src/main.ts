@@ -5,6 +5,7 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
 import './styles/admin-card.css'
+import './styles/diff-status.css'
 
 import App from './App.vue'
 import router from './router'

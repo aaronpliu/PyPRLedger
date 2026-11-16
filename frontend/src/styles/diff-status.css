@@ -1,0 +1,40 @@
+/**
+ * Theme-aware status colours for diff surfaces — the App Diff matrix, commit
+ * comparisons, and any view that paints a red/green/amber verdict.
+ *
+ * The mechanism: every surface reads a pair of custom properties instead of
+ * naming a colour. A fill is the theme's own status colour mixed onto the
+ * theme's own background, and an ink is the text/accent shade that stays
+ * legible on that fill. Because both derive from `--el-color-*`, a custom
+ * accent regenerated at runtime flows through unchanged.
+ *
+ * Dark mode is the reason this exists: a mix that reads clearly on white
+ * (14%) disappears over the dark `#141414` surface, so the dark theme mixes
+ * a far stronger fill and switches the ink to the ramp's brighter `dark-2`
+ * shades.
+ */
+:root {
+  --diff-fill-red: color-mix(in srgb, var(--el-color-danger) 14%, var(--el-bg-color));
+  --diff-fill-green: color-mix(in srgb, var(--el-color-success) 14%, var(--el-bg-color));
+  --diff-fill-amber: color-mix(in srgb, var(--el-color-warning) 16%, var(--el-bg-color));
+  --diff-fill-neutral: color-mix(in srgb, var(--el-color-info) 12%, var(--el-bg-color));
+
+  --diff-ink-red: var(--el-color-danger);
+  --diff-ink-green: var(--el-color-success);
+  --diff-ink-amber: var(--el-color-warning);
+  --diff-ink-neutral: var(--el-color-info);
+}
+
+html[data-theme='dark'] {
+  --diff-fill-red: color-mix(in srgb, var(--el-color-danger) 32%, var(--el-bg-color));
+  --diff-fill-green: color-mix(in srgb, var(--el-color-success) 32%, var(--el-bg-color));
+  --diff-fill-amber: color-mix(in srgb, var(--el-color-warning) 36%, var(--el-bg-color));
+  --diff-fill-neutral: color-mix(in srgb, var(--el-color-info) 28%, var(--el-bg-color));
+
+  /* the ramp's dark-2 shades are its brighter end, which is what stays
+     readable as text on top of a dark fill */
+  --diff-ink-red: var(--el-color-danger-dark-2);
+  --diff-ink-green: var(--el-color-success-dark-2);
+  --diff-ink-amber: var(--el-color-warning-dark-2);
+  --diff-ink-neutral: var(--el-color-info-dark-2);
+}

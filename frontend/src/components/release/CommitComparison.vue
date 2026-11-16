@@ -174,6 +174,7 @@ function commitMeta(commit: AppVersionDiffCommit): string {
 }
 
 .code-counts .code-commits {
+  color: var(--diff-ink-green);
   font-weight: 600;
 }
 
@@ -229,10 +230,13 @@ function commitMeta(commit: AppVersionDiffCommit): string {
   border-radius: 3px;
 }
 
-/* a commit the later ref does not hold: the row asks for attention before it is read */
+/* a commit the later ref does not hold: the row asks for attention before it is
+   read. The fill comes from the theme-aware diff tokens (styles/diff-status.css)
+   because Element Plus's dark `light-9` is so close to the dark surface that the
+   highlight all but disappears. */
 .commits li.commit.missing {
-  border-left: 3px solid var(--el-color-danger);
-  background: var(--el-color-danger-light-9);
+  border-left: 3px solid var(--diff-ink-red);
+  background: var(--diff-fill-red);
 }
 
 .missing-heading {
