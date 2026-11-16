@@ -297,9 +297,9 @@
           </thead>
           <tbody>
             <!-- A row is a package (the application's own version first). The whole
-                 row carries the RAG status of its commits, and opening it reveals the
-                 commit comparison in place - the diff info is the row's, not a list
-                 of its own below the table. -->
+                 row carries the RAG status of its commits, and clicking it opens the
+                 comparison drawer - the diff is the row's story, told in a space wide
+                 enough to read it instead of inside a table cell. -->
             <template v-for="row in rows" :key="`${row.kind}:${row.name}`">
               <tr
                 :class="[
@@ -308,13 +308,12 @@
                   { 'row-application': row.kind === 'application', toggleable: rowCodes(row).length > 0 },
                 ]"
                 :data-test="`matrix-row-${row.name}`"
-                @click="toggleRow(rowKey(row))"
+                @click="openRowDrawer(row)"
               >
                 <th class="package-col" scope="row">
                   <span
                     v-if="rowCodes(row).length > 0"
                     class="row-chevron"
-                    :class="{ open: isRowExpanded(rowKey(row)) }"
                     aria-hidden="true"
                     >▸</span
                   >
@@ -352,30 +351,6 @@
                   </span>
                 </td>
               </tr>
-
-              <!-- The diff info for this row, one comparison per pair it moved in. -->
-              <tr
-                v-if="isRowExpanded(rowKey(row)) && rowCodes(row).length"
-                class="row-detail"
-                :data-test="`matrix-detail-${row.name}`"
-              >
-                <td :colspan="releases.length + 1">
-                  <CommitComparison
-                    v-for="(entry, index) in rowCodes(row)"
-                    :key="entry.key"
-                    :code="entry.code"
-                    :scope="`matrix-${row.name}`"
-                    :expanded="isExpanded(commitKey(row, entry.key))"
-                    @toggle="toggleCommits(commitKey(row, entry.key))"
-                  >
-                    <template #note>
-                      <p class="detail-pair" :data-test="`matrix-${row.name}-pair-${index}`">
-                        {{ entry.label }}
-                      </p>
-                    </template>
-                  </CommitComparison>
-                </td>
-              </tr>
             </template>
           </tbody>
         </table>
@@ -405,6 +380,13 @@
         {{ t('appDiff.packages_read_rest', { count: pendingPackages }) }}
       </el-button>
 
+      <!-- The row's diff, told in a drawer: timeline on top, the pair's commits
+           side by side below. -->
+      <CommitDiffDrawer
+        v-model:visible="drawerVisible"
+        :row="drawerRow"
+        :entries="drawerRow ? rowCodes(drawerRow) : []"
+      />
     </template>
 
     <el-empty v-else :description="t('appDiff.no_result')" />
@@ -419,7 +401,7 @@ import { useI18n } from 'vue-i18n'
 import { Download, Loading, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import ContentLoader from '@/components/common/ContentLoader.vue'
-import CommitComparison from '@/components/release/CommitComparison.vue'
+import CommitDiffDrawer from '@/components/release/CommitDiffDrawer.vue'
 import { projectsApi } from '@/api/projects'
 import {
   appDiffReportFilename,
@@ -861,26 +843,18 @@ function rowCodes(row: AppDiffRow): { key: string; label: string; code: AppVersi
   })
 }
 
-/** The identity a row's own detail is held under. */
-function rowKey(row: AppDiffRow): string {
-  return `${row.kind}:${row.name}`
-}
+// --- The comparison drawer -----------------------------------------------------
+// Clicking a row opens the drawer instead of unfolding blocks inside the table:
+// the timeline and the side-by-side columns need a width the matrix cannot spare.
 
-const expandedRows = ref<string[]>([])
+const drawerVisible = ref(false)
+const drawerRow = ref<AppDiffRow | null>(null)
 
-function isRowExpanded(key: string): boolean {
-  return expandedRows.value.includes(key)
-}
-
-function toggleRow(key: string) {
-  expandedRows.value = isRowExpanded(key)
-    ? expandedRows.value.filter((item) => item !== key)
-    : [...expandedRows.value, key]
-}
-
-/** The key one commit list of a row's detail is expanded under. */
-function commitKey(row: AppDiffRow, intervalKeyValue: string): string {
-  return `${row.name}@${intervalKeyValue}`
+function openRowDrawer(row: AppDiffRow) {
+  // A row with no comparison has no diff to tell; clicking it does nothing.
+  if (!rowCodes(row).length) return
+  drawerRow.value = row
+  drawerVisible.value = true
 }
 
 /**
@@ -892,18 +866,6 @@ function rowRagClass(row: AppDiffRow): string {
   if (tones.includes('red')) return 'rag-red'
   if (tones.includes('green')) return 'rag-green'
   return tones.length ? 'rag-amber' : ''
-}
-
-const expandedCommits = ref<string[]>([])
-
-function isExpanded(key: string): boolean {
-  return expandedCommits.value.includes(key)
-}
-
-function toggleCommits(key: string) {
-  expandedCommits.value = isExpanded(key)
-    ? expandedCommits.value.filter((item) => item !== key)
-    : [...expandedCommits.value, key]
 }
 
 function syncUrl() {
@@ -1326,27 +1288,11 @@ watch(depth, () => {
   cursor: pointer;
 }
 
+/* the row points at the drawer it opens, and the pointer hand agrees */
 .row-chevron {
   display: inline-block;
   width: 0.8em;
   color: var(--el-text-color-secondary);
   font-size: 12px;
-  transition: transform 0.15s ease;
-}
-
-.row-chevron.open {
-  transform: rotate(90deg);
-}
-
-/* The diff detail unfolds in place under its row, one comparison per pair. */
-.row-detail td {
-  padding: 8px 10px 12px;
-  background: var(--el-fill-color-lighter);
-}
-
-.detail-pair {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
 }
 </style>

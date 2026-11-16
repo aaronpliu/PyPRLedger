@@ -430,3 +430,92 @@ export function diffOf(payload: { refs: string[] }): AppVersionDiffResponse {
   if (payload.refs.includes(RELEASE_DEFERRED)) return deferred()
   return compared()
 }
+
+/**
+ * A three-release comparison hand-built from the two-release fixture.
+ *
+ * The fixture set answers every state a two-release page has to read; the
+ * drawer's timeline only carries more than one edge from three releases on.
+ * Only packageA moves in the third release, so the second edge names one move.
+ */
+export function threeReleaseResponse(): AppVersionDiffResponse {
+  const base = compared()
+  return {
+    ...base,
+    releases: [
+      ...base.releases,
+      { ref: 'v3.0.0', released_at: '2026-11-01', has_record: true },
+    ],
+    rows: base.rows.map((row) => {
+      if (row.name === 'packageA') {
+        return {
+          ...row,
+          versions: [...row.versions, '1.2.0'],
+          moves: [
+            ...row.moves,
+            {
+              name: 'packageA',
+              kind: 'dependency',
+              source_version: '1.0.1',
+              target_version: '1.2.0',
+              state: 'changed',
+              direction: 'upgrade',
+              orderable: true,
+            },
+          ],
+        }
+      }
+      // everything else stays put in the third release
+      const version = row.versions[row.versions.length - 1]
+      return {
+        ...row,
+        versions: [...row.versions, version],
+        moves: [
+          ...row.moves,
+          {
+            name: row.name,
+            kind: row.kind,
+            source_version: version,
+            target_version: version,
+            state: 'unchanged',
+            direction: null,
+            orderable: true,
+          },
+        ],
+      }
+    }),
+    intervals: [
+      ...base.intervals,
+      {
+        source_ref: RELEASE_LATER,
+        target_ref: 'v3.0.0',
+        complete: true,
+        summary: { changed: 1, added: 0, removed: 0, upgrade: 1, downgrade: 0 },
+        dependencies_moved: true,
+        changes: [
+          {
+            name: 'packageA',
+            kind: 'dependency',
+            source_version: '1.0.1',
+            target_version: '1.2.0',
+            state: 'changed',
+            direction: 'upgrade',
+            orderable: true,
+          },
+        ],
+        code: {
+          verdict: 'contained',
+          scan_complete: true,
+          added_count: 0,
+          missing_count: 0,
+          added_commits: [],
+          missing_commits: [],
+          truncated: false,
+          unavailable: null,
+          deferred: false,
+        },
+        packages: [],
+      },
+    ],
+  }
+}
