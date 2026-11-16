@@ -5,11 +5,14 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.40.0] - 2026-11-16
+
+**Backend Version**: 1.40.0
+**Frontend Version**: 1.36.0
 
 ### Added
 - Notification events now ride the SSE stream. Creating a notification (for example when a task is assigned to a reviewer) publishes a `notification` event on a second Redis channel that the broker delivers only to the addressed user's connections; the bell refreshes its badge and popup within a moment instead of waiting up to 30 seconds for the poll, which stays as the fallback. Review events (`review_created`, `review_updated`) and their per-repository filtering are untouched
-- App Diff reads a package's commit comparison in a drawer instead of inside the matrix row. Clicking a row opens a side panel with the package's version timeline on top — one node per release, each edge the pair whose commits can be read — and the selected pair's comparison below: the verdict and counts, then the commits side by side (gained on the left, not held on the right) as cards with subject, author, date and link. The old three-level nesting (row → per-pair block → "show commits") is gone: the drawer shows everything at once, and rows without a comparison are not clickable
+- App Diff reads a package's commit comparison in a drawer instead of inside the matrix row. Clicking a row opens a side panel with the package's version timeline on top — one node per release, each edge the pair whose commits can be read — and the selected pair's comparison below: the verdict and counts, then the commits side by side (gained on the left, not held on the right) as cards with subject, author, date and link. The old three-level nesting (row → per-pair block → "show commits") is gone: the drawer shows everything at once, and rows without a comparison are not clickable. A "Not contained" column that holds commits announces itself with a red heading and a bordered, tinted box
 
 ### Fixed
 - The notification bell keeps its popup in step with its badge. The poller compared the unread count with the length of the popup list and skipped the fetch whenever that list was still empty, so the first task assigned to a reviewer raised the badge and left the popup blank until a page reload. The list is now refetched whenever the count moves in either direction, and again when the popup is opened
@@ -17,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SSE connection limits were advisory: pruning the oldest connection of a user who opened one tab too many only removed it from the ledger and left it streaming. The pruned stream is now actually ended, so the ledger and the real connection count stop drifting apart
 - A consumer that cannot keep up (paused tab, stalled proxy) used to have events silently dropped while staying connected and stale forever; its stream is now closed so the browser reconnects, refetches and resyncs
 - The browser client no longer gives up on SSE after 15 failed reconnection attempts (roughly 8 minutes of outage); it retries forever with the exponential backoff capped at 30 seconds, and the tab-visibility handler keeps resetting the attempt counter
+
+### Changed
+- [Refactor] Enhance app diff styles
+- [Refactor] Enhance sse connection and recovery
+
+### Dependencies
+- Update script of version publish and skill
+
+---
 
 ## [1.39.0] - 2026-11-16
 
