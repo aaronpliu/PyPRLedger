@@ -268,6 +268,33 @@ from src.core.config import settings
 - All config via `Settings` class in `src/core/config.py`
 - Use `@lru_cache` singleton pattern
 - Environment variables from `.env`
+- When you add a field to `Settings`, add the same name to `.env.example` in the
+  same commit. Older settings are documented on their own schedule - do not
+  backfill unrelated ones in the same change.
+
+### 11. Authorization
+
+One pattern: guard the route with `require_permission`, never with a hand-rolled
+role check inside the handler.
+
+```python
+from src.core.permissions import CurrentUser, require_permission
+
+@router.put(
+    "/{review_id}",
+    dependencies=[Depends(require_permission("update", "reviews", "review_id"))],
+)
+async def update_review(review_id: int, current_user: CurrentUser): ...
+```
+
+- Everything outside the guard is open by default: a new endpoint that skips it
+  is callable by anyone. Reads additionally filter by `CurrentRepositoryAccess`
+  so a user only sees repositories they are granted.
+- Do not add per-resource `Depends()` constants; the old `RequireReviewUpdate`
+  style table was never referenced by any route and has been removed.
+- Machine callers (git providers) are authenticated separately: either a user
+  token or a body signed with `WEBHOOK_SHARED_SECRET` (see
+  `src/utils/webhook_signature.py`). A write route must never accept neither.
 
 ## Testing
 
@@ -292,6 +319,8 @@ async def test_create_user(async_client: AsyncClient, db_session: AsyncSession):
 - [ ] Structured logging with `extra`
 - [ ] Proper exception types used
 - [ ] Response models match schemas
+- [ ] New endpoints declare `require_permission` (or are listed as intentionally open)
+- [ ] New `Settings` fields documented in `.env.example` under the same name
 - [ ] Tests added/updated: `pytest -v`
 - [ ] Pre-commit passes: `pre-commit run --all-files`
 - [ ] Migration generated if schema changed: `alembic revision --autogenerate`

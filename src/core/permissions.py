@@ -143,26 +143,15 @@ def require_permission(
     return permission_checker
 
 
-# Pre-defined common permission dependencies
+# The single way to guard a route: require_permission(action, resource_type) as
+# a FastAPI dependency, optionally reading the resource id from the path.
+#
+#     @router.put("/{review_id}", dependencies=[Depends(require_permission("update", "reviews", "review_id"))])
+#
+# An earlier set of pre-built Depends() constants (RequireReviewUpdate,
+# RequireSystemAdmin, ...) was never wired to a route, so there was no guarantee
+# a new endpoint picked one up. They are gone; use the factory above.
 CurrentUser = Annotated[AuthUser, Depends(get_current_user_with_token)]
-
-RequireReviewRead = Depends(require_permission("read", "reviews"))
-RequireReviewCreate = Depends(require_permission("create", "reviews"))
-RequireReviewUpdate = Depends(require_permission("update", "reviews"))
-RequireReviewDelete = Depends(require_permission("delete", "reviews"))
-
-RequireScoreRead = Depends(require_permission("read", "scores"))
-RequireScoreCreate = Depends(require_permission("create", "scores"))
-RequireScoreUpdate = Depends(require_permission("update", "scores"))
-RequireScoreDelete = Depends(require_permission("delete", "scores"))
-
-RequireProjectRead = Depends(require_permission("read", "projects"))
-RequireProjectManage = Depends(require_permission("manage", "projects"))
-
-RequireUserRead = Depends(require_permission("read", "users"))
-RequireUserManage = Depends(require_permission("manage", "users"))
-
-RequireSystemAdmin = Depends(require_permission("manage", "settings"))
 
 
 async def get_repository_access(
