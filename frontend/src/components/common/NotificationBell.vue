@@ -1,5 +1,10 @@
 <template>
-  <el-dropdown trigger="click" @command="handleCommand" class="notification-bell">
+  <el-dropdown
+    trigger="click"
+    @command="handleCommand"
+    @visible-change="handleDropdownVisible"
+    class="notification-bell"
+  >
     <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99">
       <el-icon :size="20" style="cursor: pointer; color: var(--el-text-color-primary)">
         <Bell />
@@ -79,11 +84,17 @@ import { notificationsApi, type Notification } from '@/api/notifications'
 const router = useRouter()
 const { t } = useI18n()
 
+const POLL_INTERVAL_MS = 30000
+
 // State
 const notifications = ref<Notification[]>([])
 const unreadCount = ref(0)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let isPolling = false  // Guard against overlapping poll requests
+// Last count the poller observed. Any move — up when a task is assigned to this
+// reviewer, down when a notification is read in another tab — means the popup
+// list no longer matches the badge.
+let lastUnreadCount: number | null = null
 
 // Computed
 const recentNotifications = computed(() => notifications.value.slice(0, 5))
@@ -93,6 +104,7 @@ const loadUnreadCount = async (timeout?: number): Promise<number | null> => {
   try {
     const response = await notificationsApi.getUnreadCount(timeout ? { timeout } : undefined)
     unreadCount.value = response.unread_count
+    lastUnreadCount = response.unread_count
     return response.unread_count
   } catch (error) {
     console.error('Failed to load unread count:', error)
@@ -196,6 +208,14 @@ const refreshData = () => {
   loadRecentNotifications()
 }
 
+const handleDropdownVisible = (visible: boolean) => {
+  // Opening the popup is the moment the user compares it with the badge, so make
+  // sure it is not showing a list the poller has not caught up with yet.
+  if (visible) {
+    refreshData()
+  }
+}
+
 // Smart non-blocking polling for real-time updates
 const startPolling = () => {
   pollTimer = setInterval(() => {
@@ -204,10 +224,14 @@ const startPolling = () => {
       return
     }
     isPolling = true
+    const previousCount = lastUnreadCount
     loadUnreadCount(10000)
       .then((count) => {
-        // Only reload list if there are new unread notifications
-        if (count !== null && notifications.value.length > 0 && count > notifications.value.filter((n) => !n.is_read).length) {
+        // Reload whenever the badge moved in either direction. The old check
+        // required a non-empty list, so the very first notification assigned to
+        // this reviewer left the popup empty while the badge already counted it
+        // — until a page refresh reloaded the list.
+        if (count !== null && count !== previousCount) {
           return loadRecentNotifications()
         }
       })
@@ -217,7 +241,7 @@ const startPolling = () => {
       .finally(() => {
         isPolling = false
       })
-  }, 30000) // Poll every 30 seconds
+  }, POLL_INTERVAL_MS)
 }
 
 const stopPolling = () => {

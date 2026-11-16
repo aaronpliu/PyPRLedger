@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The notification bell keeps its popup in step with its badge. The poller compared the unread count with the length of the popup list and skipped the fetch whenever that list was still empty, so the first task assigned to a reviewer raised the badge and left the popup blank until a page reload. The list is now refetched whenever the count moves in either direction, and again when the popup is opened
+
 ## [1.39.0] - 2026-11-16
 
 **Backend Version**: 1.39.0
