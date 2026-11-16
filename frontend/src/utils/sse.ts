@@ -6,6 +6,7 @@
  * - Automatic reconnection with exponential backoff (2s base, max 30s, ±20% jitter)
  * - Connection lifecycle management
  * - Type-safe event parsing
+ * - Refreshes on both `review_created` and `review_updated`
  * - Per-tab connection isolation (each tab gets its own instance)
  * - Visibility change handling — reconnects when tab becomes visible
  * - Fast recovery from 503 errors with shorter retry delay
@@ -28,6 +29,7 @@ export interface SSEReviewCreatedEvent {
 
 export interface SSECallbackMap {
   review_created: (event: SSEReviewCreatedEvent) => void
+  review_updated: (event: SSEReviewCreatedEvent) => void
 }
 
 export interface SSEServiceOptions {
@@ -249,7 +251,10 @@ export class SSEService {
       this.currentOnOpen?.()
     })
 
-    this.eventSource.addEventListener('review_created', (rawEvent: Event) => {
+    // A review the caller re-posts arrives as `review_updated`: both names carry
+    // the same payload shape and mean the same thing to the reader — the list
+    // changed — so they share one handler.
+    const onReviewEvent = (rawEvent: Event) => {
       // Ignore if a newer connection has been created
       if (generation !== this.connectionGeneration) {
         return
@@ -257,7 +262,10 @@ export class SSEService {
       if (this.currentOnEvent) {
         this.handleReviewCreated(rawEvent as MessageEvent, this.currentOnEvent)
       }
-    })
+    }
+
+    this.eventSource.addEventListener('review_created', onReviewEvent)
+    this.eventSource.addEventListener('review_updated', onReviewEvent)
 
     this.eventSource.addEventListener('error', (event: Event) => {
       // Ignore if a newer connection has been created

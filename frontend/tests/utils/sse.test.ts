@@ -54,6 +54,14 @@ class FakeEventSource {
     this.emit('error')
   }
 
+  /** Deliver a named SSE event carrying a JSON payload. */
+  message<T>(type: string, payload: T): void {
+    const event = { type, data: JSON.stringify(payload) } as unknown as Event
+    for (const handler of this.listeners[type] || []) {
+      handler(event)
+    }
+  }
+
   private emit(type: string): void {
     for (const handler of this.listeners[type] || []) {
       handler(new Event(type))
@@ -141,5 +149,29 @@ describe('SSEService stream authentication', () => {
 
     expect(createStreamTicket).toHaveBeenCalledTimes(2)
     expect(FakeEventSource.instances[0].url).toBe('/api/v1/sse/stream?ticket=ticket-late')
+  })
+})
+
+describe('SSEService event names', () => {
+  it('refreshes on review_updated as well as review_created', async () => {
+    createStreamTicket.mockResolvedValue({ ticket: 'ticket-1', expires_in: 60 })
+    const onEvent = vi.fn()
+
+    service.connect('jwt-value', onEvent)
+    await flushPromises()
+
+    const payload = {
+      review_id: 7,
+      project_key: 'BAR',
+      repository_slug: 'pyrag',
+      pull_request_id: '1203',
+      created_date: '2026-11-16T18:00:00+00:00',
+    }
+    FakeEventSource.instances[0].message('review_created', payload)
+    FakeEventSource.instances[0].message('review_updated', payload)
+
+    expect(onEvent).toHaveBeenCalledTimes(2)
+    expect(onEvent).toHaveBeenNthCalledWith(1, payload)
+    expect(onEvent).toHaveBeenNthCalledWith(2, payload)
   })
 })

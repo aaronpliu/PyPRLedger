@@ -462,3 +462,55 @@ async def test_sse_returns_200_and_streams_events(
     assert expected_sse in raw_body, (
         f"Expected SSE event not found in response.\nExpected: {expected_sse!r}\nGot: {raw_body!r}"
     )
+
+
+# --- Broker fan-out -----------------------------------------------------------
+# The broker is what turns a published review into an SSE frame, so the event
+# name and the involvement filter are worth pinning down on their own.
+
+
+def _review_event(event_name: str = "review_created", **overrides):
+    event = {
+        "event": event_name,
+        "review_id": 7,
+        "project_key": "BAR",
+        "repository_slug": "pyrag",
+        "pull_request_id": "1203",
+        "created_date": "2026-11-16T18:00:00+00:00",
+        "pull_request_user": "aaronpliu",
+        "reviewer": None,
+        "assigned_by": None,
+    }
+    event.update(overrides)
+    return event
+
+
+@pytest.mark.asyncio
+async def test_broker_forwards_the_event_name_it_was_given():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    client = SSEClient(client_id="broker-test", git_username="aaronpliu", is_admin=True)
+    broker._clients[client.client_id] = client
+    try:
+        await broker._fan_out(_review_event("review_updated"))
+        frame = client.queue.get_nowait()
+    finally:
+        broker._clients.pop(client.client_id, None)
+
+    assert frame.startswith("event: review_updated\ndata: ")
+    assert '"pull_request_id": "1203"' in frame
+
+
+@pytest.mark.asyncio
+async def test_broker_skips_events_the_connected_user_is_not_part_of():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    bystander = SSEClient(client_id="bystander", git_username="someone-else", is_admin=False)
+    broker._clients[bystander.client_id] = bystander
+    try:
+        await broker._fan_out(_review_event("review_updated"))
+        assert bystander.queue.empty()
+    finally:
+        broker._clients.pop(bystander.client_id, None)

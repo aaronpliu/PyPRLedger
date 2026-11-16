@@ -274,7 +274,10 @@ class SSEBroker:
             "pull_request_id": review["pull_request_id"],
             "created_date": review["created_date"],
         }
-        event_str = f"event: review_created\ndata: {json.dumps(minimal_payload)}\n\n"
+        # The publisher names the event (review_created / review_updated); the
+        # frame has to carry that name, else the browser fires the wrong one.
+        event_name = review.get("event") or "review_created"
+        event_str = f"event: {event_name}\ndata: {json.dumps(minimal_payload)}\n\n"
 
         for client in list(self._clients.values()):
             if _is_user_involved_in_review(

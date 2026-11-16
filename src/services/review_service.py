@@ -183,17 +183,21 @@ class ReviewService:
         except Exception as e:
             logger.warning(f"Failed to invalidate review cache: {str(e)}")
 
-    async def _publish_sse_event(self, review_dict: dict[str, Any]) -> None:
+    async def _publish_sse_event(
+        self, review_dict: dict[str, Any], event_type: str = "review_created"
+    ) -> None:
         """
-        Publish a review creation event to Redis pub/sub for SSE subscribers.
+        Publish a review change event to Redis pub/sub for SSE subscribers.
 
         Args:
             review_dict: Serialized review dictionary with all fields including
                          reviewer, assigned_by, pull_request_user, etc.
+            event_type: SSE event name — ``review_created`` for a new review,
+                        ``review_updated`` when an existing one was changed.
         """
         try:
             event_payload = {
-                "event": "review_created",
+                "event": event_type,
                 "review_id": review_dict["id"],
                 "project_key": review_dict["project_key"],
                 "repository_slug": review_dict["repository_slug"],
@@ -772,10 +776,12 @@ class ReviewService:
 
                 logger.info(f"Updated review: {existing_base.pull_request_id}")
 
-                # Publish SSE event if a new assignment was created
-                if created:
-                    await self._publish_sse_event(review_dict)
-                    await self._invalidate_list_cache()
+                # An upsert that only touched an existing review still changes what
+                # the list shows, so it notifies subscribers and drops the cached
+                # lists. Publishing nothing here left a re-posted review invisible
+                # to connected pages until the cache happened to expire.
+                await self._publish_sse_event(review_dict, event_type="review_updated")
+                await self._invalidate_list_cache()
 
                 # Step 3: Mark raw record as success and delete it to keep validation table clean
                 # The successful review is now in pull_request_review_base
