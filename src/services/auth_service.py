@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from jose import ExpiredSignatureError, JWTError
+from jwt import ExpiredSignatureError, InvalidTokenError
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -571,7 +571,7 @@ class AuthService:
             try:
                 payload = decode_access_token(token)
                 session_id = payload.get("sid")
-            except JWTError:
+            except InvalidTokenError:
                 session_id = None
 
         if session_id:
@@ -589,7 +589,7 @@ class AuthService:
             return session_id
         except ExpiredSignatureError as exc:
             raise TokenExpiredException() from exc
-        except JWTError as exc:
+        except InvalidTokenError as exc:
             raise InvalidTokenException() from exc
 
     async def sync_session_client_context(
@@ -750,7 +750,7 @@ class AuthService:
                 raise InvalidTokenException("Session missing from token")
         except ExpiredSignatureError as e:
             raise TokenExpiredException() from e
-        except JWTError as e:
+        except InvalidTokenError as e:
             raise InvalidTokenException() from e
 
         session_data = await self._get_refresh_session(session_id)
