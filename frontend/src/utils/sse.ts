@@ -2,7 +2,7 @@
  * SSE Service for real-time review notifications
  *
  * Features:
- * - JWT authentication via query parameter
+ * - One-shot ticket authentication — the JWT is never written into the stream URL
  * - Automatic reconnection with exponential backoff (2s base, max 30s, ±20% jitter)
  * - Connection lifecycle management
  * - Type-safe event parsing
@@ -11,6 +11,7 @@
  * - Fast recovery from 503 errors with shorter retry delay
  */
 
+import { sseApi } from '@/api/sse'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -50,6 +51,9 @@ export class SSEService {
   private token: string | null = null
   /** Incremented on each connect() — stale callbacks check and abort */
   private connectionGeneration = 0
+
+  /** True while a ticket is being fetched, before any EventSource exists */
+  private pendingStreamOpen = false
 
   /** Whether SSE is enabled by the user */
   private _enabled = true
@@ -131,8 +135,8 @@ export class SSEService {
       this.lastOnError = onError || null
       this.lastOnOpen = onOpen || null
 
-      // Also update the URL if token changed (for reconnection attempts)
-      this.url = `/api/v1/sse/stream?token=${encodeURIComponent(token)}`
+      // The live connection keeps its URL: its ticket is already spent, and the
+      // next reconnection fetches a fresh one from the token stored above.
 
       // DO NOT increment connectionGeneration — existing event listeners
       // still reference currentOnEvent/OnError/OnOpen, which we just updated
@@ -159,7 +163,8 @@ export class SSEService {
     this.currentOnOpen = onOpen || null
 
     this.token = token
-    this.url = `/api/v1/sse/stream?token=${encodeURIComponent(token)}`
+    // The URL is only known once a ticket has been issued — see _openStream().
+    this.url = null
     this.isManualDisconnect = false
     this.reconnectAttempts = 0
     this._lastErrorWas503 = false
@@ -173,8 +178,6 @@ export class SSEService {
 
     this.connectionGeneration++
     const myGeneration = this.connectionGeneration
-
-    console.log('[SSE] Connecting to stream:', this.url.replace(/token=[^&]+/, 'token=***'))
 
     // Register beforeunload listener to disconnect immediately on refresh/close
     if (this.boundBeforeUnload) {
@@ -190,11 +193,54 @@ export class SSEService {
     // Register pageshow listener for bfcache restoration
     this._setupPageShowListener()
 
+    void this._openStream(myGeneration)
+  }
+
+  /**
+   * Fetch a stream ticket and open the EventSource for this generation.
+   *
+   * The ticket request, not the stream, is where the JWT is presented, so the
+   * stream URL never carries anything worth replaying. A ticket is spent on
+   * first use — which is why every reconnection comes back through here.
+   */
+  private async _openStream(generation: number): Promise<void> {
+    let ticket: string
+    this.pendingStreamOpen = true
+    try {
+      const response = await sseApi.createStreamTicket()
+      ticket = response.ticket
+    } catch (error) {
+      if (generation !== this.connectionGeneration) {
+        return
+      }
+      const status = (error as { response?: { status?: number } } | undefined)?.response?.status
+      if (status === 401) {
+        // The request interceptor has already failed this session over to the
+        // login page; asking for another ticket would only repeat that.
+        this.handleAuthFailure()
+        return
+      }
+      console.warn('[SSE] Could not obtain a stream ticket:', error)
+      this.handleError(new Event('error'), this.currentOnError || undefined)
+      return
+    } finally {
+      this.pendingStreamOpen = false
+    }
+
+    // A newer connect() or a disconnect may have landed while the ticket was in
+    // flight: that caller owns the stream now, so this ticket is dropped.
+    if (generation !== this.connectionGeneration || this.isManualDisconnect || !this._enabled) {
+      return
+    }
+
+    this.url = this._buildStreamUrl(ticket)
+    console.log('[SSE] Connecting to stream:', this.url.replace(/ticket=[^&]+/, 'ticket=***'))
+
     this.eventSource = new EventSource(this.url, { withCredentials: false })
 
     this.eventSource.addEventListener('open', () => {
       // Ignore if a newer connection has been created
-      if (myGeneration !== this.connectionGeneration) {
+      if (generation !== this.connectionGeneration) {
         return
       }
       console.log('[SSE] Connection opened')
@@ -205,7 +251,7 @@ export class SSEService {
 
     this.eventSource.addEventListener('review_created', (rawEvent: Event) => {
       // Ignore if a newer connection has been created
-      if (myGeneration !== this.connectionGeneration) {
+      if (generation !== this.connectionGeneration) {
         return
       }
       if (this.currentOnEvent) {
@@ -215,11 +261,16 @@ export class SSEService {
 
     this.eventSource.addEventListener('error', (event: Event) => {
       // Ignore if a newer connection has been created
-      if (myGeneration !== this.connectionGeneration) {
+      if (generation !== this.connectionGeneration) {
         return
       }
       this.handleError(event, this.currentOnError || undefined, this.currentOnEvent!)
     })
+  }
+
+  /** Stream URL carrying the ticket, never the token. */
+  private _buildStreamUrl(ticket: string): string {
+    return `/api/v1/sse/stream?ticket=${encodeURIComponent(ticket)}`
   }
 
   /**
@@ -329,9 +380,6 @@ export class SSEService {
     this.token = newToken
     this.lastToken = newToken
 
-    // Also update the URL for reconnection
-    this.url = `/api/v1/sse/stream?token=${encodeURIComponent(newToken)}`
-
     if (this._enabled && this.lastOnEvent) {
       console.log('[SSE] Reconnecting with refreshed token')
       this.reconnectAttempts = 0
@@ -412,11 +460,16 @@ export class SSEService {
       this._lastErrorWas503 = true
     }
 
-    // If the EventSource is already closed by the browser, attempt reconnection
-    if (this.eventSource?.readyState === EventSource.CLOSED || !this.eventSource) {
-      onError?.(event)
-      this.attemptReconnect(onEvent, onError)
+    // A ticket is spent on first use, so the browser's own retry would present a
+    // ticket the server has already burnt. Close the EventSource and retry from
+    // scratch instead, which asks for a fresh ticket.
+    if (this.eventSource) {
+      this.eventSource.close()
+      this.eventSource = null
     }
+
+    onError?.(event)
+    this.attemptReconnect(onEvent, onError)
   }
 
   /**
@@ -511,15 +564,18 @@ export class SSEService {
     this._teardownVisibilityListener()
     this.boundVisibilityChange = () => {
       if (document.visibilityState === 'visible' && this._enabled && !this.isManualDisconnect) {
-        // Check if connection is dead and needs reconnection
-        if (!this.eventSource || this.eventSource.readyState === EventSource.CLOSED) {
+        // A ticket in flight means a connection is on its way — not dead.
+        const connectionDead = this.eventSource
+          ? this.eventSource.readyState === EventSource.CLOSED
+          : !this.pendingStreamOpen
+        if (connectionDead) {
           console.log('[SSE] Tab became visible — connection dead, reconnecting')
           this.reconnectAttempts = 0
           this._lastErrorWas503 = false
           if (this.lastToken) {
             this.connect(this.lastToken, this.lastOnEvent!, this.lastOnError || undefined, this.lastOnOpen || undefined)
           }
-        } else if (this.eventSource.readyState === EventSource.CONNECTING) {
+        } else if (this.eventSource?.readyState === EventSource.CONNECTING) {
           // Connection is trying to reconnect — reset attempts to give it more chances
           console.log('[SSE] Tab became visible — connection reconnecting, resetting attempts')
           this.reconnectAttempts = 0
@@ -549,7 +605,10 @@ export class SSEService {
     this.boundPageShow = (event: PageTransitionEvent) => {
       if (event.persisted && this._enabled && !this.isManualDisconnect) {
         // Page was restored from bfcache — check connection
-        if (!this.eventSource || this.eventSource.readyState !== EventSource.OPEN) {
+        const connectionBroken = this.eventSource
+          ? this.eventSource.readyState !== EventSource.OPEN
+          : !this.pendingStreamOpen
+        if (connectionBroken) {
           console.log('[SSE] Page restored from bfcache — reconnecting')
           this.reconnectAttempts = 0
           this._lastErrorWas503 = false

@@ -549,7 +549,7 @@ Request: GET /reviews?app_names=member,tv
 | ID | Requirement | Priority |
 |---|---|---|
 | FR-5.10.1 | SSE endpoint at `GET /api/v1/sse/stream` | P1 |
-| FR-5.10.2 | JWT token passed as query parameter for SSE connections | P1 |
+| FR-5.10.2 | SSE stream authenticated with a one-shot ticket from `POST /api/v1/sse/ticket` — the JWT is never placed in the URL (`?token=` only when `SSE_ALLOW_TOKEN_QUERY` is on) | P1 |
 | FR-5.10.3 | Events: `review_created`, `review_updated`, `score_added` | P1 |
 | FR-5.10.4 | Per-user relevance filtering (only events involving the user) | P1 |
 | FR-5.10.5 | Connection limits: 3 per user (regular), 10 per user (admin) | P1 |
@@ -947,7 +947,8 @@ Request: GET /reviews?app_names=member,tv
 | Method | Path | Description | Auth |
 |---|---|---|---|
 | GET | `/search/?q={query}` | Global search | JWT/PAT |
-| GET | `/sse/stream` | SSE event stream | JWT (query param) |
+| POST | `/sse/ticket` | Issue a one-shot SSE stream ticket | JWT |
+| GET | `/sse/stream` | SSE event stream | One-shot ticket (`?ticket=`) |
 | GET | `/audit/logs` | Query audit logs | system_admin |
 | GET | `/audit/logs/{log_id}` | Get specific audit log | system_admin |
 | GET | `/audit/stats` | Audit log statistics | system_admin |

@@ -247,6 +247,14 @@ class AuthService:
             raise UserInactiveException(username=auth_user.username)
         return auth_user
 
+    async def get_user_by_id(self, auth_user_id: int) -> AuthUser:
+        """Load an active user by id.
+
+        Used by the SSE stream, where the caller proved its identity with a
+        ticket instead of a token.
+        """
+        return await self._get_auth_user_by_id(auth_user_id)
+
     async def authenticate(
         self,
         login_data: LoginRequest,

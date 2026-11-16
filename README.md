@@ -394,7 +394,8 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
 ### Search & SSE
 
 - `GET /api/v1/search?q={query}` — Global search across reviews, scores, and users
-- `GET /api/v1/sse/stream` — SSE stream for real-time review notifications
+- `POST /api/v1/sse/ticket` — One-shot ticket (60s, single use) that authenticates the stream
+- `GET /api/v1/sse/stream?ticket={ticket}` — SSE stream for real-time review notifications
 
 ### Audit
 

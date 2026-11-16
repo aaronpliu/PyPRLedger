@@ -23,11 +23,18 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.models.auth_user import AuthUser
 from src.models.user import User
 from src.services.auth_service import AuthService
+from src.services.sse_ticket_service import SSETicketService
 from src.utils.jwt import create_access_token
 from src.utils.password import hash_password
+
+
+async def _ticket_for(auth_user_id: int) -> str:
+    """Issue the one-shot ticket the stream now expects."""
+    return await SSETicketService().issue(auth_user_id)
 
 
 def _make_token(
@@ -151,10 +158,26 @@ def _make_mock_redis():
     mock_redis.incr = AsyncMock(return_value=1)
     mock_redis.expire = AsyncMock()
     mock_redis.ttl = AsyncMock(return_value=60)
-    mock_redis.get = AsyncMock(return_value=None)
-    mock_redis.setex = AsyncMock(return_value=True)
     mock_redis.close = AsyncMock()
     mock_redis.ping = AsyncMock(return_value=True)
+
+    # A key written by setex stays readable by get until it is deleted, which is
+    # what the ticket flow relies on: the stream burns the ticket it is given.
+    store: dict[str, str] = {}
+
+    async def _setex(key: str, _ttl: int, value: str) -> bool:
+        store[key] = value
+        return True
+
+    async def _get(key: str) -> str | None:
+        return store.get(key)
+
+    async def _delete(*keys: str) -> int:
+        return sum(1 for key in keys if store.pop(key, None) is not None)
+
+    mock_redis.setex = AsyncMock(side_effect=_setex)
+    mock_redis.get = AsyncMock(side_effect=_get)
+    mock_redis.delete = AsyncMock(side_effect=_delete)
     return mock_redis, mock_pubsub
 
 
@@ -199,6 +222,7 @@ async def mock_redis(db_session: AsyncSession):
             patch("src.core.middleware.get_redis_client", return_value=mock_redis),
             patch("src.services.sse_broker.get_redis_pubsub_client", return_value=mock_redis),
             patch("src.services.auth_service.get_redis_client", return_value=mock_redis),
+            patch("src.services.sse_ticket_service.get_redis_client", return_value=mock_redis),
             patch("src.api.v1.endpoints.sse.get_db_context", side_effect=_fake_db_context_factory),
             patch.object(AuthService, "_get_refresh_session", return_value=_mock_session_data),
         ):
@@ -208,24 +232,71 @@ async def mock_redis(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_sse_returns_401_on_invalid_token(
+async def test_sse_returns_401_without_a_valid_ticket(
     async_client: AsyncClient, db_session: AsyncSession
 ):
     await _seed_user(db_session)
     response = await async_client.get(
         "/api/v1/sse/stream",
-        params={"token": "this-is-not-a-valid-jwt-token"},
+        params={"ticket": "this-is-not-a-valid-ticket"},
     )
     assert response.status_code == 401
-    body = response.json()
-    assert body["detail"]["error"] == "INVALID_TOKEN"
-    assert "Invalid token" in body["detail"]["message"]
+    assert response.json()["detail"]["error"] == "TICKET_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_sse_returns_401_when_nothing_is_sent(
+    async_client: AsyncClient, db_session: AsyncSession
+):
+    await _seed_user(db_session)
+
+    response = await async_client.get("/api/v1/sse/stream")
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["error"] == "TICKET_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_sse_rejects_the_token_query_unless_the_legacy_flag_is_on(
+    async_client: AsyncClient, db_session: AsyncSession
+):
+    auth_user, _ = await _seed_user(db_session)
+    token = _make_token(auth_user.id, username=auth_user.username)
+
+    response = await async_client.get("/api/v1/sse/stream", params={"token": token})
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["error"] == "TICKET_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_ticket_endpoint_requires_authentication(async_client: AsyncClient):
+    response = await async_client.post("/api/v1/sse/ticket")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_ticket_is_spent_by_the_stream(async_client: AsyncClient, db_session: AsyncSession):
+    auth_user, _ = await _seed_user(db_session)
+    ticket = await _ticket_for(auth_user.id)
+
+    with patch(
+        "src.api.v1.endpoints.sse.get_sse_broker", return_value=_make_auto_disconnect_broker()
+    ):
+        first = await async_client.get("/api/v1/sse/stream", params={"ticket": ticket})
+    second = await async_client.get("/api/v1/sse/stream", params={"ticket": ticket})
+
+    assert first.status_code == 200
+    assert second.status_code == 401
+    assert second.json()["detail"]["error"] == "TICKET_REQUIRED"
 
 
 @pytest.mark.asyncio
 async def test_sse_returns_401_on_expired_token(
-    async_client: AsyncClient, db_session: AsyncSession
+    async_client: AsyncClient, db_session: AsyncSession, monkeypatch
 ):
+    monkeypatch.setattr(settings, "SSE_ALLOW_TOKEN_QUERY", True)
     auth_user, _ = await _seed_user(db_session)
     expired_token = _make_token(auth_user.id, expires_in_minutes=-10)
     response = await async_client.get(
@@ -281,13 +352,13 @@ async def test_sse_allows_non_admin_without_git_binding(
     await db_session.flush()
     await db_session.commit()
 
-    token = _make_token(auth_user.id, username=auth_user.username)
+    ticket = await _ticket_for(auth_user.id)
     with patch(
         "src.api.v1.endpoints.sse.get_sse_broker", return_value=_make_auto_disconnect_broker()
     ):
         response = await async_client.get(
             "/api/v1/sse/stream",
-            params={"token": token},
+            params={"ticket": ticket},
         )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
@@ -298,7 +369,7 @@ async def test_sse_prunes_oldest_connection_when_limit_exceeded(
     async_client: AsyncClient, db_session: AsyncSession
 ):
     auth_user, _ = await _seed_user(db_session)
-    token = _make_token(auth_user.id)
+    ticket = await _ticket_for(auth_user.id)
 
     from src.api.v1.endpoints import sse as sse_module
 
@@ -314,7 +385,7 @@ async def test_sse_prunes_oldest_connection_when_limit_exceeded(
         ):
             response = await async_client.get(
                 "/api/v1/sse/stream",
-                params={"token": token},
+                params={"ticket": ticket},
             )
     finally:
         sse_module._sse_connections.pop(auth_user.username, None)
@@ -328,7 +399,7 @@ async def test_sse_returns_503_when_broker_fails(
     async_client: AsyncClient, db_session: AsyncSession
 ):
     auth_user, _ = await _seed_user(db_session)
-    token = _make_token(auth_user.id)
+    ticket = await _ticket_for(auth_user.id)
 
     with patch("src.api.v1.endpoints.sse.get_sse_broker") as mock_get_broker:
         mock_broker = MagicMock()
@@ -337,7 +408,7 @@ async def test_sse_returns_503_when_broker_fails(
 
         response = await async_client.get(
             "/api/v1/sse/stream",
-            params={"token": token},
+            params={"ticket": ticket},
         )
 
     assert response.status_code == 503
@@ -351,7 +422,7 @@ async def test_sse_returns_200_and_streams_events(
     async_client: AsyncClient, db_session: AsyncSession
 ):
     auth_user, _ = await _seed_user(db_session)
-    token = _make_token(auth_user.id)
+    ticket = await _ticket_for(auth_user.id)
 
     review_event = {
         "review_id": 42,
@@ -381,7 +452,7 @@ async def test_sse_returns_200_and_streams_events(
 
         response = await async_client.get(
             "/api/v1/sse/stream",
-            params={"token": token},
+            params={"ticket": ticket},
         )
 
     assert response.status_code == 200

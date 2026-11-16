@@ -187,6 +187,14 @@ class Settings(BaseSettings):
     # Security configuration
     SECRET_KEY: str = Field(default="development-secret-key-change-in-production")
     ALGORITHM: str = "HS256"
+    SSE_ALLOW_TOKEN_QUERY: bool = Field(
+        default=False,
+        description=(
+            "Accept ?token=<JWT> on the SSE stream for clients that cannot use "
+            "the ticket flow. Off by default: a token in the URL is written to "
+            "browser history and proxy access logs."
+        ),
+    )
     WEBHOOK_SHARED_SECRET: str = Field(
         default="",
         description=(
