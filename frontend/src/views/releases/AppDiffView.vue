@@ -317,7 +317,7 @@
                     aria-hidden="true"
                     >▸</span
                   >
-                  <span class="package-name">{{ row.name }}</span>
+                  <span class="package-name" :title="row.name">{{ row.name }}</span>
                   <!-- the application's own version is a row like the others, and
                        is marked so it does not read as one of its dependencies -->
                   <el-tag
@@ -1115,8 +1115,13 @@ watch(depth, () => {
 
 .matrix {
   width: 100%;
+  min-width: 640px;
   border-collapse: collapse;
   font-size: 13px;
+  /* The package column takes a fixed slice and the release columns share the
+     rest evenly, so picking one more release shrinks every version column a
+     little instead of squeezing them while the package column never moves. */
+  table-layout: fixed;
 }
 
 .matrix th,
@@ -1125,11 +1130,16 @@ watch(depth, () => {
   padding: 6px 10px;
   text-align: left;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .matrix thead th {
   background: var(--el-fill-color-light);
   vertical-align: top;
+  /* release refs can be long branch names: they wrap instead of widening */
+  white-space: normal;
+  word-break: break-word;
 }
 
 .matrix .release-ref {
@@ -1147,8 +1157,19 @@ watch(depth, () => {
 .matrix .package-col {
   position: sticky;
   left: 0;
+  width: 200px;
   background: var(--el-bg-color);
   z-index: 1;
+}
+
+/* A long package name ellipsizes within its slice; the full name stays on the
+   title so nothing is lost to the clipping. */
+.matrix .package-col .package-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 
 .matrix .package-col .kind {
