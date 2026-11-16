@@ -256,3 +256,61 @@ async def test_notification_authorization(db_session: AsyncSession):
     # User2 should not be able to mark user1's notification as read
     with pytest.raises(ValueError):
         await service.mark_as_read(db_session, created.id, "user2")
+
+
+# --- SSE publication ----------------------------------------------------------
+# Creating a notification tells the user's open SSE connections to refresh, so
+# the bell reacts within a moment instead of waiting for the next poll.
+
+
+@pytest.mark.asyncio
+async def test_create_notification_publishes_an_sse_event(
+    db_session: AsyncSession,
+):
+    """The created notification is pushed onto the notification channel."""
+    import json
+    from unittest.mock import AsyncMock
+
+    from src.services.sse_broker import NOTIFICATION_CHANNEL
+
+    service = NotificationService()
+    service.redis_client.publish = AsyncMock()
+
+    notification_data = NotificationCreate(
+        user_id="test_user",
+        type="review_assigned",
+        title="New Review Assigned",
+        message="You have been assigned to review PR #123",
+        priority="high",
+    )
+    created = await service.create_notification(db_session, notification_data)
+
+    service.redis_client.publish.assert_awaited_once()
+    channel, raw_payload = service.redis_client.publish.await_args.args
+    assert channel == NOTIFICATION_CHANNEL
+
+    payload = json.loads(raw_payload)
+    assert payload["event"] == "notification"
+    assert payload["user_id"] == "test_user"
+    assert payload["id"] == created.id
+    assert payload["type"] == "review_assigned"
+
+
+@pytest.mark.asyncio
+async def test_create_notification_survives_a_redis_outage(db_session: AsyncSession):
+    """A failed publish must not fail (or roll back) the notification itself."""
+    from unittest.mock import AsyncMock
+
+    service = NotificationService()
+    service.redis_client.publish = AsyncMock(side_effect=RuntimeError("redis down"))
+
+    notification_data = NotificationCreate(
+        user_id="test_user",
+        type="review_assigned",
+        title="New Review Assigned",
+        message="You have been assigned to review PR #123",
+    )
+    created = await service.create_notification(db_session, notification_data)
+
+    assert created.id is not None
+    assert created.user_id == "test_user"

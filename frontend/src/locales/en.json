@@ -1439,6 +1439,8 @@
     "code_show": "Show commits",
     "code_hide": "Hide commits",
     "code_added_heading": "Added",
+    "drawer_no_comparison": "No commit comparison for this pair",
+    "drawer_empty": "None",
     "code_missing_heading": "Not contained",
     "rebuilt": "Dependencies unchanged, but the commits moved - this release was rebuilt.",
     "failed_title": "The dependency source could not be read",

@@ -50,9 +50,7 @@ class FakeRegistry(ProjectRegistryService):
     async def get_app_name(self, project_key: str, repository_slug: str, db: Any) -> str:
         return self.app_name
 
-    async def get_dependency_app_name(
-        self, project_key: str, repository_slug: str, db: Any
-    ) -> str:
+    async def get_dependency_app_name(self, project_key: str, repository_slug: str, db: Any) -> str:
         # the endpoint's own resolution, so a test states a registration and reads
         # the name the page asks the database for
         return dependency_app_name(self.app_name, self.app_alias)

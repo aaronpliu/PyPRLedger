@@ -17,6 +17,7 @@ import {
   RELEASE_MISSING,
   RELEASE_REBUILT,
   RELEASE_UNAVAILABLE,
+  threeReleaseResponse,
 } from '../fixtures/appDiff'
 
 // The repository and its refs come from the provider in the running app; the
@@ -138,6 +139,14 @@ function compare() {
   return vi.mocked(appVersionDiffApi.compare)
 }
 
+/**
+ * The comparison drawer teleports to the body, so its content is queried on the
+ * document rather than inside the mounted wrapper.
+ */
+function drawerNode(testId: string): Element | null {
+  return document.querySelector(`[data-test="${testId}"]`)
+}
+
 /** The batch that reads the packages the first response deferred. */
 function comparePackages() {
   return vi.mocked(appVersionDiffApi.comparePackages)
@@ -223,6 +232,34 @@ describe('AppDiffView', () => {
     )
   })
 
+  it('dresses a moved version in its move colour', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    // the upgrade carries the green chip; a package that did not move stays plain
+    expect(wrapper.find('[data-test="cell-packageA-1"] .version').classes()).toEqual([
+      'version',
+      'chip',
+      'chip-upgrade',
+    ])
+    expect(wrapper.find('[data-test="cell-packageB-1"] .version').classes()).toEqual(['version'])
+
+    // a change whose direction is unknown keeps its own reading, not a colour
+    const changed = wrapper.find('[data-test="cell-packageF-1"] .version')
+    expect(changed.classes()).toContain('chip-changed')
+  })
+
+  it('names what each colour says in a legend', async () => {
+    const wrapper = await mountView()
+    await openOn(wrapper)
+
+    const legend = wrapper.find('[data-test="legend"]')
+    expect(legend.exists()).toBe(true)
+    expect(legend.findAll('.legend-item')).toHaveLength(5)
+    expect(legend.text()).toContain('Upgrade')
+    expect(legend.text()).toContain('Downgrade')
+  })
+
   it('calls a downgrade out as a risk', async () => {
     const wrapper = await mountView()
     await openOn(wrapper)
@@ -300,16 +337,17 @@ describe('AppDiffView', () => {
     expect(wrapper.find('[data-test="incomplete"]').exists()).toBe(true)
   })
 
-  it("shows the application's own commits when its row is opened", async () => {
+  it("shows the application's own commits when its row is clicked", async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
-    // tucked into the row: nothing is shown until the row is opened
-    expect(wrapper.find('[data-test="matrix-mylang-counts"]').exists()).toBe(false)
+    // the drawer is the row's story: nothing is told until a row is clicked
+    expect(drawerNode('drawer-mylang-counts')).toBeNull()
 
     await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+    await flushPromises()
 
-    expect(wrapper.find('[data-test="matrix-mylang-counts"]').text()).toContain('5 commits added')
-    expect(wrapper.find('[data-test="matrix-mylang-axis"]').exists()).toBe(true)
+    expect(drawerNode('drawer-name')?.textContent ?? '').toBe(APP_NAME)
+    expect(drawerNode('drawer-mylang-counts')?.textContent ?? '').toContain('5 commits added')
   })
 
   it('reads a version a package did not have as a dash', async () => {
@@ -320,14 +358,15 @@ describe('AppDiffView', () => {
     expect(wrapper.find('[data-test="cell-packageD-1"]').text()).toContain('0.9.0')
   })
 
-  it("reads a moved package's comparison in its row", async () => {
+  it("reads a moved package's comparison in its drawer", async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
     await wrapper.find('[data-test="matrix-row-packageA"]').trigger('click')
+    await flushPromises()
 
     // the verdict says what the counts suggest
-    expect(wrapper.find('[data-test="matrix-packageA-verdict"]').text()).toBe('Contained')
-    expect(wrapper.find('[data-test="matrix-packageA-counts"]').text()).toContain(
+    expect(drawerNode('drawer-packageA-verdict')?.textContent ?? '').toBe('Contained')
+    expect(drawerNode('drawer-packageA-counts')?.textContent ?? '').toContain(
       '4 commits added',
     )
   })
@@ -336,17 +375,19 @@ describe('AppDiffView', () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
     await wrapper.find('[data-test="matrix-row-packageA"]').trigger('click')
+    await flushPromises()
 
     // the commits are between the package's two versions in its own repository
-    expect(wrapper.find('[data-test="matrix-packageA-pair-0"]').text()).toBe('1.0.0 → 1.0.1')
+    expect(drawerNode('drawer-pair')?.textContent ?? '').toBe('1.0.0 → 1.0.1')
   })
 
   it("titles the application's comparison by the releases it ran between", async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
     await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+    await flushPromises()
 
-    expect(wrapper.find(`[data-test="matrix-${APP_NAME}-pair-0"]`).text()).toBe(
+    expect(drawerNode('drawer-pair')?.textContent ?? '').toBe(
       `${RELEASE_EARLIER} → ${RELEASE_LATER}`,
     )
   })
@@ -355,18 +396,20 @@ describe('AppDiffView', () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
     await wrapper.find('[data-test="matrix-row-packageC"]').trigger('click')
+    await flushPromises()
 
     // a removed package reads as a change of state rather than a blank side
-    expect(wrapper.find('[data-test="matrix-packageC-pair-0"]').text()).toBe('1.0.0 → —')
+    expect(drawerNode('drawer-pair')?.textContent ?? '').toBe('1.0.0 → —')
   })
 
   it('says so when no repository is registered for a package', async () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
     await wrapper.find('[data-test="matrix-row-packageE"]').trigger('click')
+    await flushPromises()
 
     // a package the registry does not know says so, instead of reading as compared
-    expect(wrapper.find('[data-test="matrix-packageE-unavailable"]').text()).toContain(
+    expect(drawerNode('drawer-packageE-unavailable')?.textContent ?? '').toContain(
       "no repository is registered as 'packageE'",
     )
   })
@@ -375,34 +418,50 @@ describe('AppDiffView', () => {
     const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
     await wrapper.find('[data-test="matrix-row-packageC"]').trigger('click')
+    await flushPromises()
 
     // a package with one version has no pair of refs to compare
-    expect(wrapper.find('[data-test="matrix-packageC-unavailable"]').text()).toContain(
+    expect(drawerNode('drawer-packageC-unavailable')?.textContent ?? '').toContain(
       'only one version is recorded',
     )
   })
 
-  it("opens a package's commits on demand", async () => {
-    const wrapper = await mountView()
-    await openOn(wrapper)
-
-    expect(wrapper.find('[data-test="matrix-packageA-commits"]').exists()).toBe(false)
+  it('reads the commits side by side, without a second click', async () => {
+    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
 
     await wrapper.find('[data-test="matrix-row-packageA"]').trigger('click')
-    await wrapper.find('[data-test="matrix-packageA-toggle"]').trigger('click')
+    await flushPromises()
 
-    expect(wrapper.find('[data-test="matrix-packageA-commits"]').text()).toContain('a1b2c3d')
+    // the added column is open with the drawer - no toggle inside the drawer
+    expect(drawerNode('drawer-packageA-added')).not.toBeNull()
+    expect(drawerNode('drawer-packageA-added')?.textContent ?? '').toContain('a1b2c3d')
+    // packageA contained everything, so its missing column reads as empty
+    expect(drawerNode('drawer-packageA-missing')?.textContent ?? '').toContain('None')
+  })
+
+  it('keeps the missing column beside the added one, even when it is empty', async () => {
+    const wrapper = await mountOn(RELEASE_LATER, RELEASE_EARLIER)
+
+    await wrapper.find('[data-test="matrix-row-packageF"]').trigger('click')
+    await flushPromises()
+
+    // packageF lost one commit: the counts say so, and the missing column exists
+    // to hold it - here the fixture carries the count without the list
+    expect(drawerNode('drawer-packageF-counts')?.textContent ?? '').toContain('1 not contained')
+    expect(drawerNode('drawer-packageF-missing')?.textContent ?? '').toContain('Not contained')
+    expect(drawerNode('drawer-packageF-missing')?.textContent ?? '').toContain('None')
+    expect(drawerNode('drawer-packageF-added')?.textContent ?? '').toContain('a1b2c3d')
   })
 
   it("opens a package's diff by clicking its row", async () => {
     const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_LATER)
 
-    expect(wrapper.find('[data-test="matrix-packageA-axis"]').exists()).toBe(false)
+    expect(drawerNode('drawer-packageA-counts')).toBeNull()
 
     await wrapper.find('[data-test="matrix-row-packageA"]').trigger('click')
+    await flushPromises()
 
-    expect(wrapper.find('[data-test="matrix-packageA-axis"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="matrix-packageA-counts"]').text()).toContain('4 commits added')
+    expect(drawerNode('drawer-packageA-counts')?.textContent ?? '').toContain('4 commits added')
   })
 
   it('tints each row by what its commits say', async () => {
@@ -447,53 +506,61 @@ describe('AppDiffView', () => {
     await openOn(wrapper)
 
     await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+    await flushPromises()
 
-    expect(wrapper.find('[data-test="matrix-mylang-counts"]').text()).toContain('5 commits added')
-    expect(wrapper.find('[data-test="matrix-mylang-unavailable"]').exists()).toBe(false)
-  })
-
-  it('opens the commit list on demand', async () => {
-    const wrapper = await mountView()
-    await openOn(wrapper)
-
-    await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
-    expect(wrapper.find('[data-test="matrix-mylang-commits"]').exists()).toBe(false)
-
-    await wrapper.find('[data-test="matrix-mylang-toggle"]').trigger('click')
-
-    const commits = wrapper.find('[data-test="matrix-mylang-commits"]')
-    expect(commits.text()).toContain('a1b2c3d')
-    expect(commits.text()).toContain('Add the new module')
+    expect(drawerNode('drawer-mylang-counts')?.textContent ?? '').toContain('5 commits added')
+    expect(drawerNode('drawer-mylang-unavailable')).toBeNull()
   })
 
   it('reads the commits of a release whose own version did not move', async () => {
     const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_REBUILT)
 
     await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+    await flushPromises()
 
     // nothing moved, so nothing is marked as having moved - but the release still
-    // has commits, and they are read under its name
-    expect(wrapper.find('[data-test="matrix-mylang-counts"]').text()).toContain('3 commits added')
+    // has commits, and the drawer reads them under its name
+    expect(drawerNode('drawer-mylang-counts')?.textContent ?? '').toContain('3 commits added')
   })
 
   it('says the commits could not be read instead of showing none', async () => {
     const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_UNAVAILABLE)
 
     await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+    await flushPromises()
 
-    expect(wrapper.find('[data-test="matrix-mylang-unavailable"]').text()).toContain(
+    expect(drawerNode('drawer-mylang-unavailable')?.textContent ?? '').toContain(
       'provider unreachable',
     )
   })
 
-  it('shows no counts or toggle for commits it could not read', async () => {
+  it('shows no counts or columns for commits it could not read', async () => {
     const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_UNAVAILABLE)
 
     await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+    await flushPromises()
 
     // nothing reads as a pair without commits
-    expect(wrapper.find('[data-test="matrix-mylang-counts"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="matrix-mylang-toggle"]').exists()).toBe(false)
+    expect(drawerNode('drawer-mylang-counts')).toBeNull()
+    expect(drawerNode('drawer-mylang-added')).toBeNull()
+  })
+
+  it('walks the timeline to another pair of the same row', async () => {
+    compare().mockResolvedValueOnce(threeReleaseResponse())
+    const wrapper = await mountOn('v1.1.0', 'v2.0.0', 'v3.0.0')
+
+    await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+    await flushPromises()
+
+    // the timeline carries one edge per release pair, both walkable here
+    expect(drawerNode('drawer-edge-0')).not.toBeNull()
+    expect(drawerNode('drawer-edge-1')).not.toBeNull()
+
+    drawerNode('drawer-edge-1')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    await flushPromises()
+
+    expect(drawerNode('drawer-pair')?.textContent ?? '').toBe('v2.0.0 → v3.0.0')
   })
 
   it('shows the releases as columns in timeline order, not the order they were asked for', async () => {
@@ -535,12 +602,13 @@ describe('AppDiffView', () => {
     await flushPromises()
 
     await wrapper.find('[data-test="matrix-row-packageF"]').trigger('click')
+    await flushPromises()
 
     // the response deferred it: there is a pair and a repository, so it is waiting
     // its turn - which is not the same as a package that was checked
-    expect(wrapper.find('[data-test="matrix-packageF-deferred"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="matrix-packageF-unavailable"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="matrix-packageF-counts"]').exists()).toBe(false)
+    expect(drawerNode('drawer-packageF-deferred')).not.toBeNull()
+    expect(drawerNode('drawer-packageF-unavailable')).toBeNull()
+    expect(drawerNode('drawer-packageF-counts')).toBeNull()
   })
 
   it('reads the packages the response deferred, without being asked', async () => {
@@ -562,11 +630,10 @@ describe('AppDiffView', () => {
     await flushPromises()
 
     await wrapper.find('[data-test="matrix-row-packageE"]').trigger('click')
+    await flushPromises()
 
-    expect(wrapper.find('[data-test="matrix-packageE-counts"]').text()).toContain(
-      '2 commits added',
-    )
-    expect(wrapper.find('[data-test="matrix-packageE-deferred"]').exists()).toBe(false)
+    expect(drawerNode('drawer-packageE-counts')?.textContent ?? '').toContain('2 commits added')
+    expect(drawerNode('drawer-packageE-deferred')).toBeNull()
   })
 
   it('stops at the allowance the response carries and says what is left', async () => {
@@ -579,7 +646,8 @@ describe('AppDiffView', () => {
     expect(wrapper.find('[data-test="packages-read-rest"]').exists()).toBe(true)
 
     await wrapper.find('[data-test="matrix-row-packageF"]').trigger('click')
-    expect(wrapper.find('[data-test="matrix-packageF-deferred"]').exists()).toBe(true)
+    await flushPromises()
+    expect(drawerNode('drawer-packageF-deferred')).not.toBeNull()
   })
 
   it('reads the rest when the reader asks, past the allowance', async () => {
@@ -594,9 +662,8 @@ describe('AppDiffView', () => {
     expect(comparePackages()).toHaveBeenCalledTimes(2)
 
     await wrapper.find('[data-test="matrix-row-packageF"]').trigger('click')
-    expect(wrapper.find('[data-test="matrix-packageF-counts"]').text()).toContain(
-      '2 commits added',
-    )
+    await flushPromises()
+    expect(drawerNode('drawer-packageF-counts')?.textContent ?? '').toContain('2 commits added')
   })
 
   it('says nothing is left waiting once everything is read', async () => {
@@ -620,8 +687,9 @@ describe('AppDiffView', () => {
     expect(wrapper.find('[data-test="packages-read-rest"]').exists()).toBe(true)
 
     await wrapper.find('[data-test="matrix-row-packageE"]').trigger('click')
-    expect(wrapper.find('[data-test="matrix-packageE-deferred"]').exists()).toBe(true)
-    expect(wrapper.find('[data-test="matrix-packageE-counts"]').exists()).toBe(false)
+    await flushPromises()
+    expect(drawerNode('drawer-packageE-deferred')).not.toBeNull()
+    expect(drawerNode('drawer-packageE-counts')).toBeNull()
   })
 
   it('asks for the deferred packages in the batches the answer names', async () => {

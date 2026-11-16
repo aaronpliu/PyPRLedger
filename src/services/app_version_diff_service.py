@@ -135,6 +135,7 @@ class PackageBudget:
     page_total: int
     batch: int
 
+
 # A version as an application declares it: an optional `v`, up to three numeric
 # components, an optional pre-release, an optional build metadata suffix - and,
 # because this project's releases carry one, an optional trailing `_<digits>`
@@ -417,9 +418,7 @@ class AppVersionDiffService:
         async def compare(item: AppVersionDiffPackageRequest) -> AppVersionDiffPackageComparison:
             # The state is read from the two versions rather than taken on trust, by
             # the same reading the matrix was built with.
-            state, direction, orderable = compare_versions(
-                item.source_version, item.target_version
-            )
+            state, direction, orderable = compare_versions(item.source_version, item.target_version)
             move = AppVersionDiffMove(
                 name=item.name,
                 kind=KIND_DEPENDENCY,
@@ -788,7 +787,8 @@ class AppVersionDiffService:
             settings.APP_DIFF_PACKAGE_COMPARISONS_CEILING,
         )
         page_total = min(
-            request.max_total_package_comparisons or settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS,
+            request.max_total_package_comparisons
+            or settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS,
             settings.APP_DIFF_PAGE_COMPARISONS_CEILING,
         )
         return PackageBudget(

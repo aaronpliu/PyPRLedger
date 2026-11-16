@@ -46,8 +46,12 @@ def get_commit_hash():
 
 
 def prepare_commit_message(backend_version, frontend_version):
-    """Generate commit message."""
-    return f"""Release v{backend_version}
+    """Generate commit message.
+
+    The subject carries a Conventional Commits type because the repository's
+    commit-msg hook rejects anything else; a bare "Release vX.Y.Z" is refused.
+    """
+    return f"""build: Release v{backend_version}
 
 - Bump backend version to {backend_version}
 - Bump frontend version to {frontend_version}
@@ -116,7 +120,7 @@ def main():
     else:
         print("ACTIONS REQUIRED:")
         print("  1. Stage changes:  git add .")
-        print("  2. Create commit:  git commit -m 'Release v{backend_ver}...'")
+        print(f"  2. Create commit:  git commit -m 'build: Release v{backend_ver}' ...")
         print("\nOr run with --execute to automate (will prompt before committing).")
         print("=" * 60)
 

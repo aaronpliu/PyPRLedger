@@ -890,38 +890,53 @@ class SSEMetrics:
 
 ```python
 # Connection lifecycle
-logger.info("SSE connection established", extra={
-    "user_id": auth_user.id,
-    "username": git_username,
-    "session_id": session_id,
-})
+logger.info(
+    "SSE connection established",
+    extra={
+        "user_id": auth_user.id,
+        "username": git_username,
+        "session_id": session_id,
+    },
+)
 
-logger.info("SSE connection closed", extra={
-    "user_id": auth_user.id,
-    "username": git_username,
-    "duration_seconds": duration,
-    "reason": reason,  # "client_disconnect", "token_expired", "error"
-})
+logger.info(
+    "SSE connection closed",
+    extra={
+        "user_id": auth_user.id,
+        "username": git_username,
+        "duration_seconds": duration,
+        "reason": reason,  # "client_disconnect", "token_expired", "error"
+    },
+)
 
 # Event publishing
-logger.info("SSE event published", extra={
-    "review_id": review.id,
-    "project_key": review.project_key,
-    "channel": "reviews:created",
-})
+logger.info(
+    "SSE event published",
+    extra={
+        "review_id": review.id,
+        "project_key": review.project_key,
+        "channel": "reviews:created",
+    },
+)
 
 # Event filtering
-logger.debug("SSE event filtered", extra={
-    "review_id": review.id,
-    "username": git_username,
-    "involved": is_involved,
-})
+logger.debug(
+    "SSE event filtered",
+    extra={
+        "review_id": review.id,
+        "username": git_username,
+        "involved": is_involved,
+    },
+)
 
 # Error conditions
-logger.warning("SSE publish failed", extra={
-    "review_id": review.id,
-    "error": str(e),
-})
+logger.warning(
+    "SSE publish failed",
+    extra={
+        "review_id": review.id,
+        "error": str(e),
+    },
+)
 ```
 
 ### 10.3 Tracing

@@ -48,9 +48,7 @@ class FakeRegistry(ProjectRegistryService):
     async def get_app_name(self, project_key: str, repository_slug: str, db: Any) -> str:
         return self.app_name
 
-    async def get_dependency_app_name(
-        self, project_key: str, repository_slug: str, db: Any
-    ) -> str:
+    async def get_dependency_app_name(self, project_key: str, repository_slug: str, db: Any) -> str:
         # the endpoint's own resolution, so a test states a registration and reads
         # the name the page asks the database for
         return dependency_app_name(self.app_name, self.app_alias)
@@ -347,9 +345,7 @@ async def test_a_moved_package_is_compared_in_the_repository_the_registry_names(
     diff = FakeDiff(added=3)
     client = FakeDependencyClient(
         {
-            (MOCK_APP_NAME, MOCK_TAG): record_with(
-                MOCK_TAG, "2026-09-30", {"packageA": "1.0.0"}
-            ),
+            (MOCK_APP_NAME, MOCK_TAG): record_with(MOCK_TAG, "2026-09-30", {"packageA": "1.0.0"}),
             (MOCK_APP_NAME, MOCK_BRANCH): record_with(
                 MOCK_BRANCH, "2026-10-01", {"packageA": "1.1.0"}
             ),
@@ -457,9 +453,7 @@ async def test_a_batch_answers_for_a_package_no_repository_is_known_for(
     assert entry["code"]["deferred"] is False
 
 
-async def test_a_batch_rejects_an_empty_package_list(
-    async_client, authenticated_client
-) -> None:
+async def test_a_batch_rejects_an_empty_package_list(async_client, authenticated_client) -> None:
     response = await async_client.post(
         "/api/v1/release/apps/diff/packages",
         json=package_batch_payload(),

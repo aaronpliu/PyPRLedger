@@ -242,6 +242,16 @@
           {{ t(`appDiff.verdict_${result.verdict}`) }}
         </el-tag>
         <span class="scope" data-test="scope">{{ t('appDiff.scope') }}</span>
+        <!-- What each colour below says, spelled out once so the matrix itself
+             does not have to be decoded from memory. -->
+        <ul class="legend" data-test="legend">
+          <li v-for="tone in LEGEND_TONES" :key="tone" class="legend-item">
+            <span class="legend-glyph" :class="`glyph-${tone}`">
+              {{ moveSymbol(tone as MoveTone) }}
+            </span>
+            {{ t(moveLabelKey(tone as MoveTone)) }}
+          </li>
+        </ul>
       </div>
 
       <el-alert
@@ -287,9 +297,9 @@
           </thead>
           <tbody>
             <!-- A row is a package (the application's own version first). The whole
-                 row carries the RAG status of its commits, and opening it reveals the
-                 commit comparison in place - the diff info is the row's, not a list
-                 of its own below the table. -->
+                 row carries the RAG status of its commits, and clicking it opens the
+                 comparison drawer - the diff is the row's story, told in a space wide
+                 enough to read it instead of inside a table cell. -->
             <template v-for="row in rows" :key="`${row.kind}:${row.name}`">
               <tr
                 :class="[
@@ -298,17 +308,16 @@
                   { 'row-application': row.kind === 'application', toggleable: rowCodes(row).length > 0 },
                 ]"
                 :data-test="`matrix-row-${row.name}`"
-                @click="toggleRow(rowKey(row))"
+                @click="openRowDrawer(row)"
               >
                 <th class="package-col" scope="row">
                   <span
                     v-if="rowCodes(row).length > 0"
                     class="row-chevron"
-                    :class="{ open: isRowExpanded(rowKey(row)) }"
                     aria-hidden="true"
                     >▸</span
                   >
-                  <span class="package-name">{{ row.name }}</span>
+                  <span class="package-name" :title="row.name">{{ row.name }}</span>
                   <!-- the application's own version is a row like the others, and
                        is marked so it does not read as one of its dependencies -->
                   <el-tag
@@ -342,30 +351,6 @@
                   </span>
                 </td>
               </tr>
-
-              <!-- The diff info for this row, one comparison per pair it moved in. -->
-              <tr
-                v-if="isRowExpanded(rowKey(row)) && rowCodes(row).length"
-                class="row-detail"
-                :data-test="`matrix-detail-${row.name}`"
-              >
-                <td :colspan="releases.length + 1">
-                  <CommitComparison
-                    v-for="(entry, index) in rowCodes(row)"
-                    :key="entry.key"
-                    :code="entry.code"
-                    :scope="`matrix-${row.name}`"
-                    :expanded="isExpanded(commitKey(row, entry.key))"
-                    @toggle="toggleCommits(commitKey(row, entry.key))"
-                  >
-                    <template #note>
-                      <p class="detail-pair" :data-test="`matrix-${row.name}-pair-${index}`">
-                        {{ entry.label }}
-                      </p>
-                    </template>
-                  </CommitComparison>
-                </td>
-              </tr>
             </template>
           </tbody>
         </table>
@@ -395,6 +380,13 @@
         {{ t('appDiff.packages_read_rest', { count: pendingPackages }) }}
       </el-button>
 
+      <!-- The row's diff, told in a drawer: timeline on top, the pair's commits
+           side by side below. -->
+      <CommitDiffDrawer
+        v-model:visible="drawerVisible"
+        :row="drawerRow"
+        :entries="drawerRow ? rowCodes(drawerRow) : []"
+      />
     </template>
 
     <el-empty v-else :description="t('appDiff.no_result')" />
@@ -409,7 +401,7 @@ import { useI18n } from 'vue-i18n'
 import { Download, Loading, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import ContentLoader from '@/components/common/ContentLoader.vue'
-import CommitComparison from '@/components/release/CommitComparison.vue'
+import CommitDiffDrawer from '@/components/release/CommitDiffDrawer.vue'
 import { projectsApi } from '@/api/projects'
 import {
   appDiffReportFilename,
@@ -441,7 +433,7 @@ import {
   moveVersions,
   ragTone,
 } from '@/utils/appVersionDiff'
-import type { AppDiffCell, AppDiffRow } from '@/utils/appVersionDiff'
+import type { AppDiffCell, AppDiffRow, MoveTone } from '@/utils/appVersionDiff'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -796,8 +788,22 @@ function cellClass(cell: AppDiffCell) {
   ]
 }
 
+/**
+ * The moves the legend names, in the order a reader weighs them: the risk first,
+ * then the neutral moves. `none` and `unknown` say no colour of their own.
+ */
+const LEGEND_TONES: MoveTone[] = ['upgrade', 'downgrade', 'changed', 'added', 'removed']
+
 function versionClass(cell: AppDiffCell) {
-  return { unknown: !cell.hasRecord, absent: cell.hasRecord && !cell.version }
+  // A move with a direction dresses its version in the move's own colour, so the
+  // cell is readable as "this release moved and how" without checking the glyph.
+  const tone = moveTone(cell.move)
+  return {
+    unknown: !cell.hasRecord,
+    absent: cell.hasRecord && !cell.version,
+    chip: isMarked(cell.move) && cell.hasRecord && tone !== 'unknown',
+    [`chip-${tone}`]: isMarked(cell.move) && cell.hasRecord && tone !== 'unknown',
+  }
 }
 
 /** A pair's identity, for the commit lists a reader opens by hand. */
@@ -837,26 +843,18 @@ function rowCodes(row: AppDiffRow): { key: string; label: string; code: AppVersi
   })
 }
 
-/** The identity a row's own detail is held under. */
-function rowKey(row: AppDiffRow): string {
-  return `${row.kind}:${row.name}`
-}
+// --- The comparison drawer -----------------------------------------------------
+// Clicking a row opens the drawer instead of unfolding blocks inside the table:
+// the timeline and the side-by-side columns need a width the matrix cannot spare.
 
-const expandedRows = ref<string[]>([])
+const drawerVisible = ref(false)
+const drawerRow = ref<AppDiffRow | null>(null)
 
-function isRowExpanded(key: string): boolean {
-  return expandedRows.value.includes(key)
-}
-
-function toggleRow(key: string) {
-  expandedRows.value = isRowExpanded(key)
-    ? expandedRows.value.filter((item) => item !== key)
-    : [...expandedRows.value, key]
-}
-
-/** The key one commit list of a row's detail is expanded under. */
-function commitKey(row: AppDiffRow, intervalKeyValue: string): string {
-  return `${row.name}@${intervalKeyValue}`
+function openRowDrawer(row: AppDiffRow) {
+  // A row with no comparison has no diff to tell; clicking it does nothing.
+  if (!rowCodes(row).length) return
+  drawerRow.value = row
+  drawerVisible.value = true
 }
 
 /**
@@ -868,18 +866,6 @@ function rowRagClass(row: AppDiffRow): string {
   if (tones.includes('red')) return 'rag-red'
   if (tones.includes('green')) return 'rag-green'
   return tones.length ? 'rag-amber' : ''
-}
-
-const expandedCommits = ref<string[]>([])
-
-function isExpanded(key: string): boolean {
-  return expandedCommits.value.includes(key)
-}
-
-function toggleCommits(key: string) {
-  expandedCommits.value = isExpanded(key)
-    ? expandedCommits.value.filter((item) => item !== key)
-    : [...expandedCommits.value, key]
 }
 
 function syncUrl() {
@@ -1080,14 +1066,62 @@ watch(depth, () => {
   color: var(--el-text-color-secondary);
 }
 
+/* What each colour in the matrix says, in the same ink the matrix uses. */
+.legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.legend-glyph {
+  display: inline-block;
+  width: 14px;
+  margin-right: 4px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.legend-glyph.glyph-upgrade,
+.legend-glyph.glyph-added {
+  color: var(--diff-ink-green);
+}
+
+.legend-glyph.glyph-downgrade {
+  color: var(--diff-ink-red);
+}
+
+.legend-glyph.glyph-changed {
+  color: var(--diff-ink-amber);
+}
+
+.legend-glyph.glyph-removed {
+  color: var(--diff-ink-neutral);
+}
+
 .matrix-wrap {
   overflow-x: auto;
 }
 
 .matrix {
   width: 100%;
+  min-width: 640px;
   border-collapse: collapse;
   font-size: 13px;
+  /* The package column takes a fixed slice and the release columns share the
+     rest evenly, so picking one more release shrinks every version column a
+     little instead of squeezing them while the package column never moves. */
+  table-layout: fixed;
 }
 
 .matrix th,
@@ -1096,11 +1130,16 @@ watch(depth, () => {
   padding: 6px 10px;
   text-align: left;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .matrix thead th {
   background: var(--el-fill-color-light);
   vertical-align: top;
+  /* release refs can be long branch names: they wrap instead of widening */
+  white-space: normal;
+  word-break: break-word;
 }
 
 .matrix .release-ref {
@@ -1118,8 +1157,19 @@ watch(depth, () => {
 .matrix .package-col {
   position: sticky;
   left: 0;
+  width: 200px;
   background: var(--el-bg-color);
   z-index: 1;
+}
+
+/* A long package name ellipsizes within its slice; the full name stays on the
+   title so nothing is lost to the clipping. */
+.matrix .package-col .package-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 
 .matrix .package-col .kind {
@@ -1146,31 +1196,64 @@ watch(depth, () => {
 }
 
 .cell-upgrade .move {
-  color: var(--el-color-success);
+  color: var(--diff-ink-green);
 }
 
 .cell-downgrade .move,
 .cell-downgrade .risk {
-  color: var(--el-color-danger);
+  color: var(--diff-ink-red);
 }
 
 .cell-added .move {
-  color: var(--el-color-success);
+  color: var(--diff-ink-green);
 }
 
 .cell-removed .move {
-  color: var(--el-color-info);
+  color: var(--diff-ink-neutral);
 }
 
 .cell-changed .move,
 .cell-unknown .move {
-  color: var(--el-color-warning);
+  color: var(--diff-ink-amber);
 }
 
 .move {
   display: inline-block;
   width: 14px;
   font-weight: 700;
+}
+
+/* A version that moved wears its move's own colour, so the cell reads as
+   "changed and how" even where the glyph is easy to miss. The chip fills come
+   from the theme-aware diff tokens (styles/diff-status.css), which mix a far
+   stronger tint in the dark theme than the light one can bear. */
+.version.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.version.chip-upgrade,
+.version.chip-added {
+  background: var(--diff-fill-green);
+  color: var(--diff-ink-green);
+}
+
+.version.chip-downgrade {
+  background: var(--diff-fill-red);
+  color: var(--diff-ink-red);
+}
+
+.version.chip-changed {
+  background: var(--diff-fill-amber);
+  color: var(--diff-ink-amber);
+}
+
+.version.chip-removed {
+  background: var(--diff-fill-neutral);
+  color: var(--diff-ink-neutral);
 }
 
 .risk {
@@ -1187,39 +1270,37 @@ watch(depth, () => {
   color: var(--el-text-color-placeholder);
 }
 
-/* The RAG status is a whole-row tint, so a package that lost commits is spotted
-   without reading it: red = missing commits, green = new commits, amber = neither. */
-/* The RAG status is a whole-row tint that has to stay readable in light and dark
-   themes alike, so the fill is mixed from the theme's own colour onto the page
-   background, and the package column carries the full-strength colour as a bar. */
+/* The RAG status is a whole-row tint read from the theme-aware diff tokens
+   (styles/diff-status.css): the dark theme gets a far stronger mix there, since
+   the light mixture all but disappears on its dark surface. */
 .matrix-row.rag-red {
-  background: color-mix(in srgb, var(--el-color-danger) 15%, var(--el-bg-color));
+  background: var(--diff-fill-red);
 }
 
 .matrix-row.rag-green {
-  background: color-mix(in srgb, var(--el-color-success) 15%, var(--el-bg-color));
+  background: var(--diff-fill-green);
 }
 
 .matrix-row.rag-amber {
-  background: color-mix(in srgb, var(--el-color-warning) 18%, var(--el-bg-color));
+  background: var(--diff-fill-amber);
 }
 
 /* The package column is sticky, so it paints its own background - carry the row's
    tint onto it and mark it with the full-strength colour, so a red row never
    leaves its name cell white and the status reads at a glance. */
 .matrix-row.rag-red .package-col {
-  background: color-mix(in srgb, var(--el-color-danger) 15%, var(--el-bg-color));
-  box-shadow: inset 3px 0 0 var(--el-color-danger);
+  background: var(--diff-fill-red);
+  box-shadow: inset 3px 0 0 var(--diff-ink-red);
 }
 
 .matrix-row.rag-green .package-col {
-  background: color-mix(in srgb, var(--el-color-success) 15%, var(--el-bg-color));
-  box-shadow: inset 3px 0 0 var(--el-color-success);
+  background: var(--diff-fill-green);
+  box-shadow: inset 3px 0 0 var(--diff-ink-green);
 }
 
 .matrix-row.rag-amber .package-col {
-  background: color-mix(in srgb, var(--el-color-warning) 18%, var(--el-bg-color));
-  box-shadow: inset 3px 0 0 var(--el-color-warning);
+  background: var(--diff-fill-amber);
+  box-shadow: inset 3px 0 0 var(--diff-ink-amber);
 }
 
 /* A row whose commits can be read is the toggle for its own diff detail, and the
@@ -1228,27 +1309,11 @@ watch(depth, () => {
   cursor: pointer;
 }
 
+/* the row points at the drawer it opens, and the pointer hand agrees */
 .row-chevron {
   display: inline-block;
   width: 0.8em;
   color: var(--el-text-color-secondary);
   font-size: 12px;
-  transition: transform 0.15s ease;
-}
-
-.row-chevron.open {
-  transform: rotate(90deg);
-}
-
-/* The diff detail unfolds in place under its row, one comparison per pair. */
-.row-detail td {
-  padding: 8px 10px 12px;
-  background: var(--el-fill-color-lighter);
-}
-
-.detail-pair {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
 }
 </style>

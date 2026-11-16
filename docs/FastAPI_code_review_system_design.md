@@ -437,15 +437,16 @@ from typing import Annotated
 
 RedisDep = Annotated[redis.Redis, Depends(get_redis_client)]
 
+
 async def get_pull_request_review(pr_id: str, redis: RedisDep):
     # Try to get from cache first
     cached_data = await redis.get(f"pr_review:{pr_id}")
     if cached_data:
         return json.loads(cached_data)
-    
+
     # If not in cache, fetch from database
     review = await fetch_review_from_db(pr_id)
-    
+
     # Store in cache with expiration
     await redis.setex(f"pr_review:{pr_id}", 3600, json.dumps(review))
     return review
@@ -475,45 +476,47 @@ from typing import Annotated
 
 router = APIRouter()
 
+
 @router.post("/reviews")
 async def create_review(
     review_data: ReviewCreate,
     db: Annotated[Session, Depends(get_db)],
-    redis: Annotated[Redis, Depends(get_redis)]
+    redis: Annotated[Redis, Depends(get_redis)],
 ):
     # Asynchronous database operation
     review = await db.execute(select(Review).where(Review.id == review_data.id))
-    
+
     # Asynchronous Redis operation
     await redis.setex(f"review:{review.id}", 3600, json.dumps(review.dict()))
-    
+
     return {"status": "success"}
+
 
 @router.get("/reviews")
 async def get_reviews(
     project_id: str,
     date_range: DateRange,
     db: Annotated[Session, Depends(get_db)],
-    redis: Annotated[Redis, Depends(get_redis)]
+    redis: Annotated[Redis, Depends(get_redis)],
 ):
     # Try cache first
     cache_key = f"reviews:{project_id}:{date_range.hash()}"
     cached_data = await redis.get(cache_key)
-    
+
     if cached_data:
         return json.loads(cached_data)
-    
+
     # Fetch from database if not cached
     reviews = await db.execute(
         select(Review).where(
             Review.project_id == project_id,
-            Review.created_date.between(date_range.start, date_range.end)
+            Review.created_date.between(date_range.start, date_range.end),
         )
     )
-    
+
     # Cache the result
     await redis.setex(cache_key, 1800, json.dumps([r.dict() for r in reviews]))
-    
+
     return [r.dict() for r in reviews]
 ```
 
@@ -524,19 +527,21 @@ For operations that can be processed asynchronously after the response:
 ```python
 from fastapi import BackgroundTasks
 
+
 @router.post("/reviews")
 async def create_review(
     review_data: ReviewCreate,
     background_tasks: BackgroundTasks,
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[Session, Depends(get_db)],
 ):
     # Create review immediately
     review = await create_review_in_db(review_data, db)
-    
+
     # Add background task to update statistics
     background_tasks.add_task(update_review_statistics, review.project_id)
-    
+
     return {"status": "success", "review_id": review.id}
+
 
 async def update_review_statistics(project_id: str):
     # Perform heavy computation or update statistics
@@ -556,9 +561,12 @@ from fastapi import Request
 import time
 
 # Define metrics
-review_counter = Counter('code_review_total', 'Total number of code reviews', ['project', 'reviewer'])
-review_duration = Histogram('code_review_duration_seconds', 'Time spent on code review')
-active_reviewers = Gauge('active_reviewers', 'Number of active reviewers')
+review_counter = Counter(
+    "code_review_total", "Total number of code reviews", ["project", "reviewer"]
+)
+review_duration = Histogram("code_review_duration_seconds", "Time spent on code review")
+active_reviewers = Gauge("active_reviewers", "Number of active reviewers")
+
 
 # Middleware to collect metrics
 @app.middleware("http")
@@ -566,22 +574,23 @@ async def metrics_middleware(request: Request, call_next):
     start_time = time.time()
     response = await call_next(request)
     duration = time.time() - start_time
-    
+
     # Record metrics
     review_duration.observe(duration)
-    
+
     return response
+
 
 # API endpoints to update metrics
 @router.post("/reviews")
 async def create_review(review_data: ReviewCreate):
     # Create review
     review = await create_review_in_db(review_data)
-    
+
     # Update metrics
     review_counter.labels(project=review.project_id, reviewer=review.reviewer_id).inc()
     active_reviewers.set(await get_active_reviewers_count())
-    
+
     return {"status": "success", "review_id": review.id}
 ```
 
@@ -782,26 +791,26 @@ async def delete_review(
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+
 class ReviewNotFoundError(HTTPException):
     def __init__(self, review_id: str):
         super().__init__(status_code=404, detail=f"Review with ID {review_id} not found")
+
 
 class InvalidReviewDataError(HTTPException):
     def __init__(self, detail: str):
         super().__init__(status_code=400, detail=detail)
 
+
 @app.exception_handler(ReviewNotFoundError)
 async def review_not_found_handler(request, exc):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": exc.detail}
-    )
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+
 
 @app.exception_handler(ValidationError)
 async def validation_exception_handler(request, exc):
     return JSONResponse(
-        status_code=422,
-        content={"error": "Validation error", "details": exc.errors()}
+        status_code=422, content={"error": "Validation error", "details": exc.errors()}
     )
 ```
 
@@ -859,18 +868,16 @@ from asyncio import Semaphore
 max_concurrent_operations = 1000
 semaphore = Semaphore(max_concurrent_operations)
 
+
 async def limited_operation():
     async with semaphore:
         # Perform the operation
         await some_resource_intensive_operation()
 
+
 # Use in endpoints
 @router.post("/reviews")
-async def create_review(
-    review_data: ReviewCreate,
-    db: DBDep,
-    redis: RedisDep
-):
+async def create_review(review_data: ReviewCreate, db: DBDep, redis: RedisDep):
     async with semaphore:
         # Create review with limited concurrency
         review = await review_service.create_review(review_data, db, redis)

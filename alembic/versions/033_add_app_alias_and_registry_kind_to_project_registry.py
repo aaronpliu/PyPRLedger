@@ -57,9 +57,7 @@ def upgrade() -> None:
         # makes a choice
         sa.Column("registry_kind", sa.String(16), nullable=True),
     )
-    op.create_index(
-        "ix_project_registry_registry_kind", "project_registry", ["registry_kind"]
-    )
+    op.create_index("ix_project_registry_registry_kind", "project_registry", ["registry_kind"])
 
 
 def downgrade() -> None:

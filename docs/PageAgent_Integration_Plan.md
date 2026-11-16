@@ -49,6 +49,7 @@ The proxy endpoint will check `system_settings` first, then fall back to these e
 Add:
 ```python
 from src.api.v1.endpoints import llm_proxy
+
 api_router.include_router(llm_proxy.router, tags=["llm-proxy"])
 ```
 

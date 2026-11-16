@@ -33,7 +33,8 @@
     "database_connection_error": "資料庫連線錯誤",
     "cache_error": "快取錯誤",
     "rate_limit_exceeded": "超過速率限制",
-    "status_transition_not_allowed": "無法將評審狀態從 {current_status} 轉換為 {target_status}"
+    "status_transition_not_allowed": "無法將評審狀態從 {current_status} 轉換為 {target_status}",
+    "account_locked": "登入失敗次數過多，請在 {minutes} 分鐘後重試。"
   },
   "success": {
     "created": "資源建立成功",

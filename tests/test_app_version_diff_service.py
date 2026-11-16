@@ -860,9 +860,7 @@ async def test_a_moved_dependency_is_compared_in_its_own_repository():
     package_request = next(item for item in diff.requests if item.repository_slug == "pkg-a")
     assert (package_request.source_ref, package_request.target_ref) == ("1.0.0", "1.1.0")
     # while the application's own axis stays the application's repository
-    application_request = next(
-        item for item in diff.requests if item.repository_slug == REPOSITORY
-    )
+    application_request = next(item for item in diff.requests if item.repository_slug == REPOSITORY)
     assert application_request.project_key == PROJECT
 
 
@@ -947,8 +945,7 @@ async def test_a_pairs_first_packages_are_read_and_the_rest_deferred(monkeypatch
     assert entries["packageB"].repository_slug == "pkg-b"
     # and the page is told how much more it may read on its own
     assert (
-        result.package_comparisons.remaining
-        == settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS - 1
+        result.package_comparisons.remaining == settings.APP_DIFF_MAX_TOTAL_PACKAGE_COMPARISONS - 1
     )
 
 
@@ -979,12 +976,8 @@ async def test_a_downgrade_is_read_before_an_upgrade(monkeypatch):
     monkeypatch.setattr(settings, "APP_DIFF_MAX_PACKAGE_COMPARISONS", 1)
     service, _, _ = build_service(
         {
-            (APP, "1.0.0"): record(
-                "1.0.0", "2026-09-01", {"aUp": "1.0.0", "zDown": "2.0.0"}
-            ),
-            (APP, "1.1.0"): record(
-                "1.1.0", "2026-10-01", {"aUp": "1.1.0", "zDown": "1.0.0"}
-            ),
+            (APP, "1.0.0"): record("1.0.0", "2026-09-01", {"aUp": "1.0.0", "zDown": "2.0.0"}),
+            (APP, "1.1.0"): record("1.1.0", "2026-10-01", {"aUp": "1.1.0", "zDown": "1.0.0"}),
         }
     )
 
@@ -1030,10 +1023,7 @@ async def test_the_total_ceiling_bounds_a_whole_page(monkeypatch):
     assert result.package_comparisons.remaining == 0
     # the pair that did not get its read says so, and is still askable
     deferred = [
-        entry
-        for interval in result.intervals
-        for entry in interval.packages
-        if entry.code.deferred
+        entry for interval in result.intervals for entry in interval.packages if entry.code.deferred
     ]
     assert [entry.name for entry in deferred] == ["packageA"]
 

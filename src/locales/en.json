@@ -33,7 +33,8 @@
     "database_connection_error": "Database connection error",
     "cache_error": "Cache error",
     "rate_limit_exceeded": "Rate limit exceeded",
-    "status_transition_not_allowed": "Cannot transition review from {current_status} to {target_status}"
+    "status_transition_not_allowed": "Cannot transition review from {current_status} to {target_status}",
+    "account_locked": "Too many failed login attempts. Try again in {minutes} minute(s)."
   },
   "success": {
     "created": "Resource created successfully",

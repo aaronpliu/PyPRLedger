@@ -478,7 +478,9 @@ class ProjectService:
             ProjectStats: Project statistics
         """
         # Try cache first
-        cache_key = f"stats:projects:{project_id or 'all'}:{access_scope(self._allowed_project_keys)}"
+        cache_key = (
+            f"stats:projects:{project_id or 'all'}:{access_scope(self._allowed_project_keys)}"
+        )
         if use_cache:
             try:
                 cached = await self.redis_client.get(cache_key)

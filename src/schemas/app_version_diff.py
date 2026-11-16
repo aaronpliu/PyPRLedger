@@ -389,9 +389,7 @@ class AppVersionDiffPackageBudget(BaseModel):
         ..., description="Most comparisons an adjacent pair carries in this response"
     )
     page_total: int = Field(..., description="Most comparisons this page may run automatically")
-    batch: int = Field(
-        ..., description="Most deferred packages should be asked for at a time"
-    )
+    batch: int = Field(..., description="Most deferred packages should be asked for at a time")
     remaining: int = Field(
         ...,
         description=(

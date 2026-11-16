@@ -183,17 +183,21 @@ class ReviewService:
         except Exception as e:
             logger.warning(f"Failed to invalidate review cache: {str(e)}")
 
-    async def _publish_sse_event(self, review_dict: dict[str, Any]) -> None:
+    async def _publish_sse_event(
+        self, review_dict: dict[str, Any], event_type: str = "review_created"
+    ) -> None:
         """
-        Publish a review creation event to Redis pub/sub for SSE subscribers.
+        Publish a review change event to Redis pub/sub for SSE subscribers.
 
         Args:
             review_dict: Serialized review dictionary with all fields including
                          reviewer, assigned_by, pull_request_user, etc.
+            event_type: SSE event name — ``review_created`` for a new review,
+                        ``review_updated`` when an existing one was changed.
         """
         try:
             event_payload = {
-                "event": "review_created",
+                "event": event_type,
                 "review_id": review_dict["id"],
                 "project_key": review_dict["project_key"],
                 "repository_slug": review_dict["repository_slug"],
@@ -772,10 +776,12 @@ class ReviewService:
 
                 logger.info(f"Updated review: {existing_base.pull_request_id}")
 
-                # Publish SSE event if a new assignment was created
-                if created:
-                    await self._publish_sse_event(review_dict)
-                    await self._invalidate_list_cache()
+                # An upsert that only touched an existing review still changes what
+                # the list shows, so it notifies subscribers and drops the cached
+                # lists. Publishing nothing here left a re-posted review invisible
+                # to connected pages until the cache happened to expire.
+                await self._publish_sse_event(review_dict, event_type="review_updated")
+                await self._invalidate_list_cache()
 
                 # Step 3: Mark raw record as success and delete it to keep validation table clean
                 # The successful review is now in pull_request_review_base
@@ -1688,29 +1694,26 @@ class ReviewService:
         total_result = await db.execute(total_query)
         total_reviews = total_result.scalar() or 0
 
-        # Get reviews by status - count unique PRs per status
-        status_subquery = select(
-            PullRequestReviewBase.pull_request_commit_id,
+        # Get reviews by status - count unique PRs per status. The count is grouped
+        # in one query: a select() is not a subquery in SQLAlchemy 2.0, so deriving
+        # columns from one with .c raised AttributeError.
+        status_query = select(
             PullRequestReviewBase.pull_request_status,
-        ).distinct()
+            func.count(func.distinct(PullRequestReviewBase.pull_request_commit_id)),
+        )
         if project_key:
-            status_subquery = status_subquery.where(
-                PullRequestReviewBase.project_key == project_key
-            )
+            status_query = status_query.where(PullRequestReviewBase.project_key == project_key)
         if app_conditions:
-            status_subquery = status_subquery.where(or_(*app_conditions))
+            status_query = status_query.where(or_(*app_conditions))
 
         # Apply reviewer filter
         if reviewer_username:
-            status_subquery = status_subquery.join(
+            status_query = status_query.join(
                 PullRequestReviewAssignment,
                 PullRequestReviewBase.id == PullRequestReviewAssignment.review_base_id,
             ).where(PullRequestReviewAssignment.reviewer == reviewer_username)
 
-        status_query = select(
-            status_subquery.c.pull_request_status,
-            func.count(status_subquery.c.pull_request_commit_id),
-        ).group_by(status_subquery.c.pull_request_status)
+        status_query = status_query.group_by(PullRequestReviewBase.pull_request_status)
 
         status_result = await db.execute(status_query)
         status_counts = {row[0]: row[1] for row in status_result}
@@ -2421,10 +2424,14 @@ class ReviewService:
             base = result.scalars().first()
             if not base:
                 return None
-            if self._allowed_pairs is not None and (
-                base.project_key,
-                base.repository_slug,
-            ) not in self._allowed_pairs:
+            if (
+                self._allowed_pairs is not None
+                and (
+                    base.project_key,
+                    base.repository_slug,
+                )
+                not in self._allowed_pairs
+            ):
                 return None
 
             reviews = self._flatten_reviews([base], reviewer=None, visible_to_username=None)

@@ -136,7 +136,5 @@ class AssignReviewerRequest(BaseModel):
 class UpdateAssignmentStatusRequest(BaseModel):
     """Request schema for updating assignment status"""
 
-    assignment_status: str = Field(
-        ..., description="New status (assigned, in_progress, completed)"
-    )
+    assignment_status: str = Field(..., description="New status (assigned, in_progress, completed)")
     reviewer_comments: str | None = Field(None, description="Optional comments")

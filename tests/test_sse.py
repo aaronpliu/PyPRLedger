@@ -23,11 +23,18 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.models.auth_user import AuthUser
 from src.models.user import User
 from src.services.auth_service import AuthService
+from src.services.sse_ticket_service import SSETicketService
 from src.utils.jwt import create_access_token
 from src.utils.password import hash_password
+
+
+async def _ticket_for(auth_user_id: int) -> str:
+    """Issue the one-shot ticket the stream now expects."""
+    return await SSETicketService().issue(auth_user_id)
 
 
 def _make_token(
@@ -151,10 +158,26 @@ def _make_mock_redis():
     mock_redis.incr = AsyncMock(return_value=1)
     mock_redis.expire = AsyncMock()
     mock_redis.ttl = AsyncMock(return_value=60)
-    mock_redis.get = AsyncMock(return_value=None)
-    mock_redis.setex = AsyncMock(return_value=True)
     mock_redis.close = AsyncMock()
     mock_redis.ping = AsyncMock(return_value=True)
+
+    # A key written by setex stays readable by get until it is deleted, which is
+    # what the ticket flow relies on: the stream burns the ticket it is given.
+    store: dict[str, str] = {}
+
+    async def _setex(key: str, _ttl: int, value: str) -> bool:
+        store[key] = value
+        return True
+
+    async def _get(key: str) -> str | None:
+        return store.get(key)
+
+    async def _delete(*keys: str) -> int:
+        return sum(1 for key in keys if store.pop(key, None) is not None)
+
+    mock_redis.setex = AsyncMock(side_effect=_setex)
+    mock_redis.get = AsyncMock(side_effect=_get)
+    mock_redis.delete = AsyncMock(side_effect=_delete)
     return mock_redis, mock_pubsub
 
 
@@ -199,6 +222,7 @@ async def mock_redis(db_session: AsyncSession):
             patch("src.core.middleware.get_redis_client", return_value=mock_redis),
             patch("src.services.sse_broker.get_redis_pubsub_client", return_value=mock_redis),
             patch("src.services.auth_service.get_redis_client", return_value=mock_redis),
+            patch("src.services.sse_ticket_service.get_redis_client", return_value=mock_redis),
             patch("src.api.v1.endpoints.sse.get_db_context", side_effect=_fake_db_context_factory),
             patch.object(AuthService, "_get_refresh_session", return_value=_mock_session_data),
         ):
@@ -208,24 +232,71 @@ async def mock_redis(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_sse_returns_401_on_invalid_token(
+async def test_sse_returns_401_without_a_valid_ticket(
     async_client: AsyncClient, db_session: AsyncSession
 ):
     await _seed_user(db_session)
     response = await async_client.get(
         "/api/v1/sse/stream",
-        params={"token": "this-is-not-a-valid-jwt-token"},
+        params={"ticket": "this-is-not-a-valid-ticket"},
     )
     assert response.status_code == 401
-    body = response.json()
-    assert body["detail"]["error"] == "INVALID_TOKEN"
-    assert "Invalid token" in body["detail"]["message"]
+    assert response.json()["detail"]["error"] == "TICKET_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_sse_returns_401_when_nothing_is_sent(
+    async_client: AsyncClient, db_session: AsyncSession
+):
+    await _seed_user(db_session)
+
+    response = await async_client.get("/api/v1/sse/stream")
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["error"] == "TICKET_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_sse_rejects_the_token_query_unless_the_legacy_flag_is_on(
+    async_client: AsyncClient, db_session: AsyncSession
+):
+    auth_user, _ = await _seed_user(db_session)
+    token = _make_token(auth_user.id, username=auth_user.username)
+
+    response = await async_client.get("/api/v1/sse/stream", params={"token": token})
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["error"] == "TICKET_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_ticket_endpoint_requires_authentication(async_client: AsyncClient):
+    response = await async_client.post("/api/v1/sse/ticket")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_ticket_is_spent_by_the_stream(async_client: AsyncClient, db_session: AsyncSession):
+    auth_user, _ = await _seed_user(db_session)
+    ticket = await _ticket_for(auth_user.id)
+
+    with patch(
+        "src.api.v1.endpoints.sse.get_sse_broker", return_value=_make_auto_disconnect_broker()
+    ):
+        first = await async_client.get("/api/v1/sse/stream", params={"ticket": ticket})
+    second = await async_client.get("/api/v1/sse/stream", params={"ticket": ticket})
+
+    assert first.status_code == 200
+    assert second.status_code == 401
+    assert second.json()["detail"]["error"] == "TICKET_REQUIRED"
 
 
 @pytest.mark.asyncio
 async def test_sse_returns_401_on_expired_token(
-    async_client: AsyncClient, db_session: AsyncSession
+    async_client: AsyncClient, db_session: AsyncSession, monkeypatch
 ):
+    monkeypatch.setattr(settings, "SSE_ALLOW_TOKEN_QUERY", True)
     auth_user, _ = await _seed_user(db_session)
     expired_token = _make_token(auth_user.id, expires_in_minutes=-10)
     response = await async_client.get(
@@ -281,13 +352,13 @@ async def test_sse_allows_non_admin_without_git_binding(
     await db_session.flush()
     await db_session.commit()
 
-    token = _make_token(auth_user.id, username=auth_user.username)
+    ticket = await _ticket_for(auth_user.id)
     with patch(
         "src.api.v1.endpoints.sse.get_sse_broker", return_value=_make_auto_disconnect_broker()
     ):
         response = await async_client.get(
             "/api/v1/sse/stream",
-            params={"token": token},
+            params={"ticket": ticket},
         )
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
@@ -298,7 +369,7 @@ async def test_sse_prunes_oldest_connection_when_limit_exceeded(
     async_client: AsyncClient, db_session: AsyncSession
 ):
     auth_user, _ = await _seed_user(db_session)
-    token = _make_token(auth_user.id)
+    ticket = await _ticket_for(auth_user.id)
 
     from src.api.v1.endpoints import sse as sse_module
 
@@ -311,10 +382,10 @@ async def test_sse_prunes_oldest_connection_when_limit_exceeded(
     try:
         with patch(
             "src.api.v1.endpoints.sse.get_sse_broker", return_value=_make_auto_disconnect_broker()
-        ):
+        ) as mock_get_broker:
             response = await async_client.get(
                 "/api/v1/sse/stream",
-                params={"token": token},
+                params={"ticket": ticket},
             )
     finally:
         sse_module._sse_connections.pop(auth_user.username, None)
@@ -322,13 +393,17 @@ async def test_sse_prunes_oldest_connection_when_limit_exceeded(
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
 
+    # The pruned stream is ended for real — not merely removed from the ledger
+    # while the connection keeps streaming past the per-user limit.
+    mock_get_broker.return_value.disconnect_client.assert_called_once_with("conn-1")
+
 
 @pytest.mark.asyncio
 async def test_sse_returns_503_when_broker_fails(
     async_client: AsyncClient, db_session: AsyncSession
 ):
     auth_user, _ = await _seed_user(db_session)
-    token = _make_token(auth_user.id)
+    ticket = await _ticket_for(auth_user.id)
 
     with patch("src.api.v1.endpoints.sse.get_sse_broker") as mock_get_broker:
         mock_broker = MagicMock()
@@ -337,7 +412,7 @@ async def test_sse_returns_503_when_broker_fails(
 
         response = await async_client.get(
             "/api/v1/sse/stream",
-            params={"token": token},
+            params={"ticket": ticket},
         )
 
     assert response.status_code == 503
@@ -351,7 +426,7 @@ async def test_sse_returns_200_and_streams_events(
     async_client: AsyncClient, db_session: AsyncSession
 ):
     auth_user, _ = await _seed_user(db_session)
-    token = _make_token(auth_user.id)
+    ticket = await _ticket_for(auth_user.id)
 
     review_event = {
         "review_id": 42,
@@ -381,7 +456,7 @@ async def test_sse_returns_200_and_streams_events(
 
         response = await async_client.get(
             "/api/v1/sse/stream",
-            params={"token": token},
+            params={"ticket": ticket},
         )
 
     assert response.status_code == 200
@@ -391,3 +466,272 @@ async def test_sse_returns_200_and_streams_events(
     assert expected_sse in raw_body, (
         f"Expected SSE event not found in response.\nExpected: {expected_sse!r}\nGot: {raw_body!r}"
     )
+
+    # The connection carries the user's notification identity so personal
+    # notification events can find it.
+    register_kwargs = mock_broker.register.call_args.kwargs
+    assert auth_user.username in register_kwargs["notification_user_ids"]
+
+
+# --- Broker fan-out -----------------------------------------------------------
+# The broker is what turns a published review into an SSE frame, so the event
+# name and the involvement filter are worth pinning down on their own.
+
+
+def _review_event(event_name: str = "review_created", **overrides):
+    event = {
+        "event": event_name,
+        "review_id": 7,
+        "project_key": "BAR",
+        "repository_slug": "pyrag",
+        "pull_request_id": "1203",
+        "created_date": "2026-11-16T18:00:00+00:00",
+        "pull_request_user": "aaronpliu",
+        "reviewer": None,
+        "assigned_by": None,
+    }
+    event.update(overrides)
+    return event
+
+
+@pytest.mark.asyncio
+async def test_broker_forwards_the_event_name_it_was_given():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    client = SSEClient(client_id="broker-test", git_username="aaronpliu", is_admin=True)
+    broker._clients[client.client_id] = client
+    try:
+        await broker._fan_out(_review_event("review_updated"))
+        frame = client.queue.get_nowait()
+    finally:
+        broker._clients.pop(client.client_id, None)
+
+    assert frame.startswith("event: review_updated\ndata: ")
+    assert '"pull_request_id": "1203"' in frame
+
+
+@pytest.mark.asyncio
+async def test_broker_delivers_to_a_reader_who_only_has_the_repository_grant():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    reader = SSEClient(
+        client_id="granted-reader",
+        git_username="aaronpliu",
+        is_admin=False,
+        allowed_pairs={("BAR", "pyrag")},
+    )
+    broker._clients[reader.client_id] = reader
+    try:
+        await broker._fan_out(_review_event("review_created"))
+        frame = reader.queue.get_nowait()
+    finally:
+        broker._clients.pop(reader.client_id, None)
+
+    assert frame.startswith("event: review_created\ndata: ")
+
+
+@pytest.mark.asyncio
+async def test_broker_skips_repositories_the_reader_has_no_grant_for():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    bystander = SSEClient(
+        client_id="bystander",
+        git_username="aaronpliu",
+        is_admin=False,
+        allowed_pairs={("OTHER", "repository")},
+    )
+    broker._clients[bystander.client_id] = bystander
+    try:
+        await broker._fan_out(_review_event("review_updated"))
+        assert bystander.queue.empty()
+    finally:
+        broker._clients.pop(bystander.client_id, None)
+
+
+# --- Notification fan-out -----------------------------------------------------
+# Notifications are personal: they travel on their own channel and only reach
+# the connections of the user they were created for, whatever repositories that
+# user is granted.
+
+
+def _notification_event(**overrides):
+    event = {
+        "event": "notification",
+        "user_id": "aaronpliu",
+        "id": 42,
+        "type": "review_assigned",
+        "priority": "high",
+    }
+    event.update(overrides)
+    return event
+
+
+@pytest.mark.asyncio
+async def test_broker_delivers_a_notification_to_the_addressed_user():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    addressee = SSEClient(
+        client_id="addressee",
+        git_username="aaronpliu",
+        is_admin=False,
+        notification_user_ids=frozenset({"aaronpliu"}),
+    )
+    broker._clients[addressee.client_id] = addressee
+    try:
+        await broker._dispatch_notification(json.dumps(_notification_event()))
+        frame = addressee.queue.get_nowait()
+    finally:
+        broker._clients.pop(addressee.client_id, None)
+
+    assert frame.startswith("event: notification\ndata: ")
+    assert '"user_id": "aaronpliu"' in frame
+
+
+@pytest.mark.asyncio
+async def test_broker_keeps_other_users_notifications_to_themselves():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    somebody_else = SSEClient(
+        client_id="somebody-else",
+        git_username="colleague",
+        is_admin=False,
+        notification_user_ids=frozenset({"colleague"}),
+    )
+    broker._clients[somebody_else.client_id] = somebody_else
+    try:
+        await broker._dispatch_notification(json.dumps(_notification_event()))
+        assert somebody_else.queue.empty()
+    finally:
+        broker._clients.pop(somebody_else.client_id, None)
+
+
+@pytest.mark.asyncio
+async def test_broker_delivers_via_either_username_of_the_user():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    # The auth username and the linked git username can differ; the publisher
+    # may address the notification by either.
+    linked = SSEClient(
+        client_id="linked",
+        git_username="aaronpliu",
+        is_admin=False,
+        notification_user_ids=frozenset({"auth-user", "aaronpliu"}),
+    )
+    broker._clients[linked.client_id] = linked
+    try:
+        await broker._dispatch_notification(json.dumps(_notification_event(user_id="auth-user")))
+        frame = linked.queue.get_nowait()
+    finally:
+        broker._clients.pop(linked.client_id, None)
+
+    assert frame.startswith("event: notification\ndata: ")
+
+
+@pytest.mark.asyncio
+async def test_broker_drops_malformed_notification_payloads():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    client = SSEClient(
+        client_id="anyone",
+        git_username="aaronpliu",
+        is_admin=False,
+        notification_user_ids=frozenset({"aaronpliu"}),
+    )
+    broker._clients[client.client_id] = client
+    try:
+        await broker._dispatch_notification("not json at all")
+        await broker._dispatch_notification(json.dumps({"type": "review_assigned"}))
+        assert client.queue.empty()
+    finally:
+        broker._clients.pop(client.client_id, None)
+
+
+@pytest.mark.asyncio
+async def test_review_events_keep_their_own_path():
+    """Review frames come from the review fan-out, never the notification one."""
+    from src.services.sse_broker import (
+        NOTIFICATION_CHANNEL,
+        REVIEW_CREATED_CHANNEL,
+        SUBSCRIBED_CHANNELS,
+        SSEBroker,
+        SSEClient,
+    )
+
+    assert SUBSCRIBED_CHANNELS == (REVIEW_CREATED_CHANNEL, NOTIFICATION_CHANNEL)
+
+    broker = SSEBroker()
+    client = SSEClient(
+        client_id="review-reader",
+        git_username="aaronpliu",
+        is_admin=False,
+        notification_user_ids=frozenset({"aaronpliu"}),
+    )
+    broker._clients[client.client_id] = client
+    try:
+        await broker._fan_out(_review_event("review_created"))
+        review_frame = client.queue.get_nowait()
+    finally:
+        broker._clients.pop(client.client_id, None)
+
+    assert review_frame.startswith("event: review_created")
+
+
+# --- Resilience under load ----------------------------------------------------
+# What actually breaks with many long-lived connections is not the fan-out (one
+# Redis subscription, O(clients) work per event) but the edges: a consumer that
+# cannot keep up, and limits that only exist on paper.
+
+
+@pytest.mark.asyncio
+async def test_broker_ends_the_stream_of_a_slow_consumer():
+    from src.services.sse_broker import QUEUE_MAX_SIZE, SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    client = SSEClient(client_id="slow-reader", git_username="aaronpliu", is_admin=False)
+    broker._clients[client.client_id] = client
+    try:
+        for _ in range(QUEUE_MAX_SIZE):
+            await broker._fan_out(_review_event())
+        assert client.queue.full()
+
+        # One event past capacity: instead of dropping the frame and leaving the
+        # client connected-but-stale forever, the stream is signalled to end so
+        # the browser reconnects, refetches and resyncs.
+        await broker._fan_out(_review_event())
+
+        frames = []
+        while not client.queue.empty():
+            frames.append(client.queue.get_nowait())
+    finally:
+        broker._clients.pop(client.client_id, None)
+
+    assert frames[-1] is None, "the last frame must be the disconnect signal"
+    assert all(frame is not None for frame in frames[:-1])
+    assert len(frames) == QUEUE_MAX_SIZE
+
+
+@pytest.mark.asyncio
+async def test_broker_disconnect_client_signals_the_stream_to_end():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    client = SSEClient(client_id="victim", git_username="aaronpliu", is_admin=False)
+    broker._clients[client.client_id] = client
+    try:
+        assert broker.disconnect_client("victim") is True
+        assert broker.disconnect_client("never-existed") is False
+
+        frames = []
+        while not client.queue.empty():
+            frames.append(client.queue.get_nowait())
+    finally:
+        broker._clients.pop(client.client_id, None)
+
+    assert frames == [None]

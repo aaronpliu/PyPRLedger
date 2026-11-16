@@ -52,9 +52,7 @@ def _visibility_overrides():
         )
         # The invalid-kind test seeds no data at all; it still needs a grant for
         # CORE so that the request reaches the endpoint's parameter validation.
-        return {(project_key, slug) for project_key, slug in rows.all()} | {
-            ("CORE", "unknown")
-        }
+        return {(project_key, slug) for project_key, slug in rows.all()} | {("CORE", "unknown")}
 
     app.dependency_overrides[get_current_user_with_token] = _current_user
     app.dependency_overrides[get_repository_access] = _access
@@ -77,7 +75,9 @@ async def test_a_registration_nobody_classified_says_nothing(
     as it goes - so a default of any kind would either claim packages are
     applications or take applications out of the pages nobody has worked through.
     """
-    entry = await ProjectRegistryService().register_project("core-app", "CORE", "app", db=db_session)
+    entry = await ProjectRegistryService().register_project(
+        "core-app", "CORE", "app", db=db_session
+    )
 
     assert entry.registry_kind is None
 
@@ -321,9 +321,7 @@ async def test_naming_an_application_decides_the_list(async_client, db_session) 
         app.dependency_overrides.pop(get_db_session, None)
 
 
-async def test_nothing_disappears_before_an_application_is_named(
-    async_client, db_session
-) -> None:
+async def test_nothing_disappears_before_an_application_is_named(async_client, db_session) -> None:
     """A project nobody has classified keeps offering what it has.
 
     The repositories still have to be reachable somewhere: the pages that read an

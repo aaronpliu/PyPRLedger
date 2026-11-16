@@ -66,6 +66,7 @@ from src.utils.log import get_logger
 
 logger = get_logger(__name__)
 
+
 def my_function():
     logger.debug("Debug information")
     logger.info("Process started")

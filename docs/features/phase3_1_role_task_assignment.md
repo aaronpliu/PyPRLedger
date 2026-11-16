@@ -176,34 +176,34 @@ async def list_reviews(
 ) -> ReviewListResponse:
     """
     List pull request reviews with filtering and pagination
-    
+
     Access Control:
     - review_admin: Can view ALL reviews
     - reviewer: Can only view reviews where reviewer field matches their username
     """
     try:
         from src.services.rbac_service import RBACService
-        
+
         rbac_service = RBACService(db)
-        
+
         # Check if user has review_admin role (by checking 'assign' permission)
         is_review_admin = await rbac_service.check_permission(
             auth_user_id=current_user.id,
             action="assign",
             resource_type="reviews",
         )
-        
+
         filters = ReviewFilter(
             pull_request_id=pull_request_id,
             project_key=project_key,
             # ... other filters ...
         )
-        
+
         # ✨ NEW: Apply role-based filtering
         if not is_review_admin:
             # Regular user - filter by their git username
             git_username = await _get_git_username(current_user.id, db)
-            
+
             if git_username:
                 filters.reviewer = git_username
                 logger.info(
@@ -211,20 +211,18 @@ async def list_reviews(
                 )
             else:
                 # No linked git user - return empty list
-                logger.warning(
-                    f"User {current_user.username} has no linked Git account"
-                )
+                logger.warning(f"User {current_user.username} has no linked Git account")
                 return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
         else:
             logger.info(f"Review admin {current_user.username} accessing all reviews")
-        
+
         # Continue with existing logic
         enriched_reviews, total = await review_service.list_reviews_with_entities(
             filters, db, page, page_size, app_names=app_names_list
         )
-        
+
         review_responses = [ReviewResponse(**review) for review in enriched_reviews]
-        
+
         return ReviewListResponse(
             items=review_responses,
             total=total,
@@ -293,21 +291,20 @@ async def _get_git_username(auth_user_id: int, db: AsyncSession) -> str | None:
 ```python
 class ReviewAssignmentRequest(BaseModel):
     """Schema for assigning review task to a reviewer"""
-    
+
     pull_request_id: str = Field(..., description="Pull request ID")
     project_key: str = Field(..., min_length=1, max_length=32, description="Project key")
     repository_slug: str = Field(..., min_length=1, max_length=128, description="Repository slug")
     assignee_username: str = Field(
-        ..., 
-        min_length=1, 
-        max_length=64, 
-        description="Reviewer username to assign"
+        ..., min_length=1, max_length=64, description="Reviewer username to assign"
     )
-    pull_request_user: str = Field(..., min_length=1, max_length=64, description="PR author username")
+    pull_request_user: str = Field(
+        ..., min_length=1, max_length=64, description="PR author username"
+    )
     source_branch: str = Field(..., min_length=1, description="Source branch")
     target_branch: str = Field(..., min_length=1, description="Target branch")
     pull_request_commit_id: str | None = Field(None, description="Commit ID (optional)")
-    
+
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -334,19 +331,19 @@ async def assign_review_task(
 ) -> ReviewResponse:
     """
     Assign a review task to a reviewer (requires review_admin role)
-    
+
     Creates a new review record with the specified reviewer.
     Only users with 'assign' permission on 'reviews' can use this endpoint.
-    
+
     Args:
         assignment_data: Assignment details
         db: Database session
         current_user: Authenticated user (must be review_admin)
         review_service: Review service instance
-    
+
     Returns:
         ReviewResponse: The created review
-    
+
     Raises:
         ForbiddenException: If user lacks assign permission
         NotFoundException: If assignee not found
@@ -356,7 +353,7 @@ async def assign_review_task(
     from src.models.user import User
     from src.schemas.pull_request import ReviewCreate
     from sqlalchemy import select
-    
+
     # Check permission - must have 'assign' permission (review_admin)
     rbac_service = RBACService(db)
     await rbac_service.require_permission(
@@ -364,25 +361,25 @@ async def assign_review_task(
         action="assign",
         resource_type="reviews",
     )
-    
+
     # Verify assignee exists
     stmt = select(User).where(User.username == assignment_data.assignee_username)
     result = await db.execute(stmt)
     assignee = result.scalar_one_or_none()
-    
+
     if not assignee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Reviewer '{assignment_data.assignee_username}' not found",
         )
-    
+
     # Verify assignee is a reviewer
     if not assignee.is_reviewer:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"User '{assignment_data.assignee_username}' is not marked as a reviewer",
         )
-    
+
     # Create review with assigned reviewer
     review_data = ReviewCreate(
         pull_request_id=assignment_data.pull_request_id,
@@ -395,12 +392,13 @@ async def assign_review_task(
         pull_request_status="open",
         pull_request_commit_id=assignment_data.pull_request_commit_id,
     )
-    
+
     review, is_created = await review_service.upsert_review(review_data, db)
-    
+
     # Log audit trail
     try:
         from src.services.audit_service import AuditService
+
         audit_service = AuditService(db)
         await audit_service.log_action(
             auth_user_id=current_user.id,
@@ -414,12 +412,12 @@ async def assign_review_task(
         )
     except Exception as e:
         logger.warning(f"Failed to log audit for task assignment: {e}")
-    
+
     logger.info(
         f"Review task assigned: PR {assignment_data.pull_request_id} "
         f"to {assignment_data.assignee_username} by {current_user.username}"
     )
-    
+
     return ReviewResponse(**review.to_dict())
 ```
 

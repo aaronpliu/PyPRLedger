@@ -52,6 +52,7 @@ def _get_cached_local_timezone() -> ZoneInfo:
         _local_tz_cache = get_local_timezone()
     return _local_tz_cache
 
+
 def _get_cached_use_utc_setting() -> bool:
     """Get cached USE_UTC_IN_DB setting to avoid repeated config access"""
     global _use_utc_in_db_cache
@@ -64,6 +65,7 @@ def _get_cached_use_utc_setting() -> bool:
 ```python
 # BEFORE: Every call did this
 from src.utils.log import get_logger
+
 logger = get_logger(__name__)
 logger.debug(f"Naive datetime detected: {dt}...")
 

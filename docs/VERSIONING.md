@@ -34,11 +34,11 @@ import tomllib
 from pathlib import Path
 
 try:
-   pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
-   with Path.open(pyproject_path, "rb") as f:
-      __version__ = tomllib.load(f).get("project", {}).get("version", "1.0.0-dev")
+    pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+    with Path.open(pyproject_path, "rb") as f:
+        __version__ = tomllib.load(f).get("project", {}).get("version", "1.0.0-dev")
 except Exception:
-   __version__ = "1.0.0-dev"
+    __version__ = "1.0.0-dev"
 ```
 
 This ensures consistency across all parts of the application.

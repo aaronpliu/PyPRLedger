@@ -54,7 +54,7 @@ class DependencyApiClient:
             headers["Authorization"] = f"Bearer {settings.DEPENDENCY_API_TOKEN}"
 
         try:
-            async with httpx.AsyncClient(verify=False) as client:
+            async with httpx.AsyncClient(verify=settings.OUTBOUND_TLS_VERIFY) as client:
                 response = await client.get(
                     url, params=params, headers=headers, timeout=REQUEST_TIMEOUT
                 )

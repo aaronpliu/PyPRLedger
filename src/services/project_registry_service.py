@@ -203,13 +203,9 @@ class ProjectRegistryService:
             return in_project[0], None
 
         registered = ", ".join(f"{entry.project_key}/{entry.repository_slug}" for entry in matches)
-        return None, (
-            f"{len(matches)} repositories are registered as '{candidate}' ({registered})"
-        )
+        return None, (f"{len(matches)} repositories are registered as '{candidate}' ({registered})")
 
-    async def _find_registrations(
-        self, condition: Any, db: AsyncSession
-    ) -> list[ProjectRegistry]:
+    async def _find_registrations(self, condition: Any, db: AsyncSession) -> list[ProjectRegistry]:
         """Every registration matching one lookup condition."""
         result = await db.execute(select(ProjectRegistry).where(condition))
         return list(result.scalars().all())

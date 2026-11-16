@@ -76,3 +76,11 @@ def test_development_is_not_held_to_production_rules():
     settings = Settings(ENV="development")
 
     assert settings.ENV == "development"
+
+
+def test_outbound_tls_verification_defaults_to_enabled():
+    assert Settings(_env_file=None).OUTBOUND_TLS_VERIFY is True
+
+
+def test_outbound_tls_verification_can_be_disabled_for_on_premise():
+    assert Settings(_env_file=None, OUTBOUND_TLS_VERIFY=False).OUTBOUND_TLS_VERIFY is False

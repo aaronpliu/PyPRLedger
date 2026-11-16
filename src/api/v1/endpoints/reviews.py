@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.core.config import settings
 from src.core.database import get_db_session
 from src.core.exceptions import (
     ForbiddenException,
@@ -50,6 +51,7 @@ from src.services.review_validation_service import ReviewValidationService
 from src.utils.id_obfuscator import decode
 from src.utils.metrics import OperationTimer, metrics
 from src.utils.timezone import get_current_time
+from src.utils.webhook_signature import SIGNATURE_HEADER, TIMESTAMP_HEADER, verify_signature
 
 
 logger = logging.getLogger(__name__)
@@ -64,17 +66,51 @@ async def get_review_service(
 ) -> ReviewService:
     """Build a review service carrying the caller's repository grants.
 
-    Read requests are authenticated; write endpoints stay open so git providers
-    can keep posting PR information without a user token.
+    Reads require a signed-in user. Writes accept either a signed-in user (the
+    UI) or a request signed with WEBHOOK_SHARED_SECRET (git providers posting PR
+    data). Writes are refused when neither is present, so an unconfigured
+    deployment fails closed instead of accepting anonymous writes.
     """
     from src.services.repository_access_service import RepositoryAccessService
 
     if request.method not in ("GET", "HEAD"):
+        if not request.headers.get("Authorization", "").startswith("Bearer "):
+            await require_valid_webhook_signature(request)
+        else:
+            # A token was sent, so it has to be a valid one.
+            await get_current_user_with_token(request, db)
         return ReviewService(metrics_collector=metrics)
 
     user = await get_current_user_with_token(request, db)
     pairs = await RepositoryAccessService(db).allowed_pairs(user.id)
     return ReviewService(metrics_collector=metrics, allowed_pairs=pairs)
+
+
+async def require_valid_webhook_signature(request: Request) -> None:
+    """Authenticate a machine caller via the shared secret.
+
+    Raises 401 when no secret is configured, the signature is missing, stale or
+    does not match the body.
+    """
+    secret = settings.WEBHOOK_SHARED_SECRET
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    body = await request.body()
+    if not verify_signature(
+        secret,
+        request.headers.get(TIMESTAMP_HEADER),
+        request.headers.get(SIGNATURE_HEADER),
+        body,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired webhook signature",
+        )
 
 
 async def require_granted_pair(request: Request, access: CurrentRepositoryAccess) -> None:
@@ -85,11 +121,7 @@ async def require_granted_pair(request: Request, access: CurrentRepositoryAccess
     )
     if project_key and project_key not in allowed_project_keys(access):
         raise ForbiddenException(message="No access to this project")
-    if (
-        project_key
-        and repository_slug
-        and (project_key, repository_slug) not in access
-    ):
+    if project_key and repository_slug and (project_key, repository_slug) not in access:
         raise ForbiddenException(message="No access to this repository")
 
 
@@ -730,21 +762,8 @@ async def list_reviews(
             return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
         if project_key and project_key not in allowed_project_keys(access):
             return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
-        if (
-            project_key
-            and repository_slug
-            and (project_key, repository_slug) not in access
-        ):
+        if project_key and repository_slug and (project_key, repository_slug) not in access:
             return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
-
-        rbac_service = RBACService(db)
-
-        # Check if user has review_admin role (by checking 'assign' permission)
-        is_review_admin = await rbac_service.check_permission(
-            auth_user_id=current_user.id,
-            action="assign",
-            resource_type="reviews",
-        )
 
         filters = ReviewFilter(
             pull_request_id=pull_request_id,
@@ -764,23 +783,13 @@ async def list_reviews(
             pinned_only=pinned_only,
         )
 
-        # Apply role-based filtering
-        if not is_review_admin:
-            # Regular user - filter by their bitbucket username
-            git_username = await _get_git_username(current_user.id, db)
-
-            if git_username:
-                # Use visible_to_username to show both assigned reviews AND self-raised PRs
-                filters.visible_to_username = git_username
-                logger.info(
-                    f"Regular user {current_user.username} filtered by visible_to={git_username}"
-                )
-            else:
-                # No linked bitbucket user - return empty list
-                logger.warning(f"User {current_user.username} has no linked Bitbucket account")
-                return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
-        else:
-            logger.info(f"Review admin {current_user.username} accessing all reviews")
+        # Repository access is the only visibility rule: a reader sees every review
+        # in the repositories they are granted, whether or not they author or review
+        # that PR. "My tasks" (task_assignment endpoints) still narrows to their own
+        # work, which is where a personal view belongs.
+        logger.info(
+            f"User {current_user.username} listing reviews in {len(access)} granted repositories"
+        )
 
         # Parse app_names from comma-separated string
         app_names_list = None
@@ -916,24 +925,10 @@ async def get_review(
         NotFoundException: If no reviews are found
     """
     try:
-        # Check if user has review_admin role (by checking 'assign' permission)
-        rbac_service = RBACService(db)
-        is_review_admin = await rbac_service.check_permission(
-            auth_user_id=current_user.id,
-            action="assign",
-            resource_type="reviews",
-        )
+        logger.info(f"User {current_user.username} viewing PR {pull_request_id}")
 
-        # Determine visible_to_username based on user role
-        # Admin: sees all reviews (including unassigned)
-        # Regular user: only sees their assigned reviews and self-raised PRs
-        visible_to_username = None if is_review_admin else current_user.username
-
-        logger.info(
-            f"User {current_user.username} (admin={is_review_admin}) viewing PR {pull_request_id}"
-        )
-
-        # Get all reviews for this PR (may have multiple reviews from different reviewers)
+        # No visible_to_username: a reader who can list a review can open it, and
+        # the service still refuses pairs the reader has no grant for.
         reviews = await review_service.get_review(
             project_key=project_key,
             repository_slug=repository_slug,
@@ -941,7 +936,6 @@ async def get_review(
             reviewer=reviewer,
             source_filename=source_filename,
             db=db,
-            visible_to_username=visible_to_username,
             current_user_id=current_user.id,
         )
 

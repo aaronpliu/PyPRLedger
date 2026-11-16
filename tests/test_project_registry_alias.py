@@ -49,9 +49,7 @@ def test_an_alias_is_asked_for_as_it_was_entered() -> None:
 
 async def test_a_registration_reaches_the_database_under_its_alias(db_session) -> None:
     service = ProjectRegistryService()
-    await service.register_project(
-        "trmyapp", "CORE", "app", db=db_session, app_alias="myapptr"
-    )
+    await service.register_project("trmyapp", "CORE", "app", db=db_session, app_alias="myapptr")
 
     assert await service.get_dependency_app_name("CORE", "app", db_session) == "myapptr"
 
@@ -65,9 +63,7 @@ async def test_a_registration_without_an_alias_asks_for_the_application_name(db_
 
 async def test_clearing_the_alias_puts_the_application_name_back(db_session) -> None:
     service = ProjectRegistryService()
-    await service.register_project(
-        "trmyapp", "CORE", "app", db=db_session, app_alias="myapptr"
-    )
+    await service.register_project("trmyapp", "CORE", "app", db=db_session, app_alias="myapptr")
 
     await service.update_app_alias("CORE", "app", None, db_session)
 
@@ -99,9 +95,7 @@ async def test_registering_an_alias_for_a_known_pair_updates_it(db_session) -> N
     service = ProjectRegistryService()
     await service.register_project("trmyapp", "CORE", "app", db=db_session)
 
-    await service.register_project(
-        "trmyapp", "CORE", "app", db=db_session, app_alias="myapptr"
-    )
+    await service.register_project("trmyapp", "CORE", "app", db=db_session, app_alias="myapptr")
 
     assert await service.get_dependency_app_name("CORE", "app", db_session) == "myapptr"
     assert len(await service.list_all_projects(db_session)) == 1
@@ -181,9 +175,7 @@ async def test_endpoint_lists_the_alias_with_every_registration(async_client, db
 
         assert response.status_code == 200, response.text
         items = response.json()["items"]
-        assert [(item["app_name"], item["app_alias"]) for item in items] == [
-            ("trmyapp", "myapptr")
-        ]
+        assert [(item["app_name"], item["app_alias"]) for item in items] == [("trmyapp", "myapptr")]
     finally:
         app.dependency_overrides.pop(get_current_user_with_token, None)
         app.dependency_overrides.pop(get_db_session, None)

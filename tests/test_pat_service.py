@@ -96,9 +96,7 @@ async def test_validate_handles_naive_expires_at(db_session: AsyncSession) -> No
 
     valid_raw = "pat_" + secrets.token_urlsafe(32)
     expired_raw = "pat_" + secrets.token_urlsafe(32)
-    await _add_token(
-        db_session, "naive-valid", now + timedelta(days=30)
-    )
+    await _add_token(db_session, "naive-valid", now + timedelta(days=30))
     # rewrite the hash to match the raw token we will authenticate with
     result = await db_session.execute(
         select(PersonalAccessToken).where(PersonalAccessToken.name == "naive-valid")

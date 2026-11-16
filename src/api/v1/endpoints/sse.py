@@ -11,18 +11,21 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
+from src.core.config import settings
 from src.core.database import get_db_context
 from src.core.exceptions import (
     InvalidTokenException,
     TokenExpiredException,
     UserInactiveException,
 )
+from src.core.permissions import CurrentUser
 from src.models.auth_user import AuthUser
 from src.models.user import User
 from src.services.auth_service import AuthService
 from src.services.rbac_service import RBACService
 from src.services.repository_access_service import RepositoryAccessService
 from src.services.sse_broker import get_sse_broker
+from src.services.sse_ticket_service import SSETicketService
 from src.utils.metrics import metrics
 
 
@@ -59,6 +62,10 @@ def _prune_oldest_user_connection(tracking_username: str) -> None:
     _sse_connections[tracking_username] = user_connections[1:]
     if not _sse_connections[tracking_username]:
         del _sse_connections[tracking_username]
+    # End the pruned stream for real — removing it from tracking alone would
+    # leave the connection streaming past the per-user limit while the ledger
+    # quietly drifts away from reality.
+    get_sse_broker().disconnect_client(old_id)
     logger.info(
         "SSE connection abort signalled for pruning",
         extra={"connection_id": old_id, "username": tracking_username},
@@ -103,9 +110,27 @@ async def _sse_event_generator(
         )
 
 
+@router.post("/ticket")
+async def create_stream_ticket(current_user: CurrentUser) -> dict[str, int | str]:
+    """Issue a one-shot ticket for the SSE stream.
+
+    EventSource cannot set an Authorization header, so the client asks for this
+    ticket over a normal authenticated request and puts it in the URL instead of
+    a JWT. Tickets expire after a minute and stop working once used.
+    """
+    service = SSETicketService()
+    ticket = await service.issue(current_user.id)
+    return {"ticket": ticket, "expires_in": service.TICKET_TTL_SECONDS}
+
+
 @router.get("/stream")
 async def stream_reviews(
-    token: Annotated[str, Query(description="JWT access token for SSE authentication")],
+    ticket: Annotated[
+        str | None, Query(description="One-shot ticket from POST /sse/ticket")
+    ] = None,
+    token: Annotated[
+        str | None, Query(deprecated=True, description="Deprecated: pass a ticket instead")
+    ] = None,
 ) -> StreamingResponse:
     """
     Server-Sent Events (SSE) endpoint for real-time new review notifications.
@@ -115,12 +140,17 @@ async def stream_reviews(
     This supports thousands of concurrent connections using only 1 Redis connection.
 
     Authentication:
-        JWT token passed as query parameter: ?token=<JWT>
+        ?ticket=<ticket> from POST /api/v1/sse/ticket. The deprecated ?token=<JWT>
+        form is only accepted when SSE_ALLOW_TOKEN_QUERY is enabled.
 
     Authorization:
         - Any authenticated user can connect (no Bitbucket linkage required)
-        - Non-admin users without linked Bitbucket account receive no events
-        - Admin users (review_admin, system_admin) receive all review events
+        - Events are delivered for reviews in the repositories the user is granted,
+          whether or not the user is the PR author or an assignee; a user holding no
+          grants receives nothing
+        - Reviewer admins usually hold wider grants, so they see more events
+        - ``notification`` events are personal: only the addressed user's own
+          connections receive them, independent of repository grants
 
     Connection limits:
         - Maximum 3 concurrent SSE connections per regular user
@@ -132,17 +162,31 @@ async def stream_reviews(
 
     async with get_db_context() as db:
         auth_service = AuthService(db)
-        try:
-            auth_user = await auth_service.get_current_user(token)
-        except TokenExpiredException:
+        user_id = await SSETicketService().consume(ticket) if ticket else None
+
+        if user_id is not None:
+            auth_user = await auth_service.get_user_by_id(user_id)
+        elif token and settings.SSE_ALLOW_TOKEN_QUERY:
+            # Deprecated path for clients that cannot fetch a ticket yet.
+            try:
+                auth_user = await auth_service.get_current_user(token)
+            except TokenExpiredException:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={"error": "TOKEN_EXPIRED", "message": "Token expired"},
+                )
+            except InvalidTokenException:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={"error": "INVALID_TOKEN", "message": "Invalid token"},
+                )
+        else:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={"error": "TOKEN_EXPIRED", "message": "Token expired"},
-            )
-        except InvalidTokenException:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={"error": "INVALID_TOKEN", "message": "Invalid token"},
+                detail={
+                    "error": "TICKET_REQUIRED",
+                    "message": "Request a ticket from POST /api/v1/sse/ticket first",
+                },
             )
 
         stmt = select(AuthUser).where(AuthUser.id == auth_user.id)
@@ -227,7 +271,19 @@ async def stream_reviews(
     broker = get_sse_broker()
     try:
         allowed_pairs = await RepositoryAccessService(db).allowed_pairs(auth_user.id)
-        queue = await broker.register(connection_id, git_username, is_admin, allowed_pairs)
+        # Notifications are keyed by username, and two names are in play: the auth
+        # username the /notifications endpoints read with, and the linked git
+        # username assignment code writes with. Accept either.
+        notification_user_ids = frozenset(
+            name for name in (auth_user.username, git_username) if name
+        )
+        queue = await broker.register(
+            connection_id,
+            git_username,
+            is_admin,
+            allowed_pairs,
+            notification_user_ids=notification_user_ids,
+        )
     except Exception as exc:
         logger.error(
             f"Failed to register with SSEBroker: {exc}",

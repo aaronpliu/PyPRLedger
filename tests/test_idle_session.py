@@ -120,6 +120,9 @@ async def test_token_refresh_does_not_extend_ttl(db_session: AsyncSession) -> No
 
 async def test_heartbeat_route_registered() -> None:
     """POST /api/v1/auth/heartbeat exists on the app router."""
-    route = next((r for r in app.routes if r.path == "/api/v1/auth/heartbeat"), None)
-    assert route is not None, "POST /api/v1/auth/heartbeat route missing"
-    assert "POST" in route.methods
+    # Read it from the schema: newer FastAPI keeps included routers in opaque
+    # wrappers on app.routes, so inspecting that list is not portable.
+    paths = app.openapi()["paths"]
+
+    assert "/api/v1/auth/heartbeat" in paths, "POST /api/v1/auth/heartbeat route missing"
+    assert "post" in paths["/api/v1/auth/heartbeat"]

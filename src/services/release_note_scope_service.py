@@ -334,9 +334,7 @@ def nearest_tag(version: str, tags: list[dict[str, Any]]) -> dict[str, Any] | No
 
     current_key = version_sort_key(version)
     below = [
-        tag
-        for tag in candidates
-        if version_sort_key(str(tag.get("name") or "")) < current_key
+        tag for tag in candidates if version_sort_key(str(tag.get("name") or "")) < current_key
     ]
     if not below:
         return None

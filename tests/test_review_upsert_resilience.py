@@ -15,7 +15,9 @@ in-memory SQLite fixture.
 
 from __future__ import annotations
 
+import json
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select
@@ -183,3 +185,28 @@ async def test_a_failed_flush_keeps_the_cause_and_is_recorded(
     assert failed[0].processed_date is not None
     assert failed[0].error_details is not None
     assert failed[0].error_details["error_type"] == "IntegrityError"
+
+
+async def test_a_reposted_review_publishes_an_update(
+    db_session: AsyncSession, provider: StubProvider
+) -> None:
+    """A re-posted review must reach the open pages, not just the database.
+
+    Only new reviews (and new assignments) used to publish, so a second POST for
+    the same PR left every connected list showing the old row until its cache
+    expired.
+    """
+    service = ReviewService()
+    service.redis_client = AsyncMock()
+    service.redis_client.keys = AsyncMock(return_value=[])
+
+    await service.upsert_review(review_payload(), db_session)
+    service.redis_client.publish.reset_mock()
+
+    _, created = await service.upsert_review(review_payload(), db_session)
+
+    assert created is False
+    channel, raw_payload = service.redis_client.publish.await_args.args
+    assert channel == "reviews:created"
+    assert json.loads(raw_payload)["event"] == "review_updated"
+    assert json.loads(raw_payload)["pull_request_id"] == "42"

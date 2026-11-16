@@ -5,13 +5,84 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.40.0] - 2026-11-16
+
+**Backend Version**: 1.40.0
+**Frontend Version**: 1.36.0
+
+### Added
+- Notification events now ride the SSE stream. Creating a notification (for example when a task is assigned to a reviewer) publishes a `notification` event on a second Redis channel that the broker delivers only to the addressed user's connections; the bell refreshes its badge and popup within a moment instead of waiting up to 30 seconds for the poll, which stays as the fallback. Review events (`review_created`, `review_updated`) and their per-repository filtering are untouched
+- App Diff reads a package's commit comparison in a drawer instead of inside the matrix row. Clicking a row opens a side panel with the package's version timeline on top — one node per release, each edge the pair whose commits can be read — and the selected pair's comparison below: the verdict and counts, then the commits side by side (gained on the left, not held on the right) as cards with subject, author, date and link. The old three-level nesting (row → per-pair block → "show commits") is gone: the drawer shows everything at once, and rows without a comparison are not clickable. A "Not contained" column that holds commits announces itself with a red heading and a bordered, tinted box
+
+### Fixed
+- The notification bell keeps its popup in step with its badge. The poller compared the unread count with the length of the popup list and skipped the fetch whenever that list was still empty, so the first task assigned to a reviewer raised the badge and left the popup blank until a page reload. The list is now refetched whenever the count moves in either direction, and again when the popup is opened
+- App Diff now reads its colours from theme-aware diff tokens (`frontend/src/styles/diff-status.css`): the matrix's RAG row tints, move glyphs and a new version chip derive from the Element Plus status palette, so a custom accent still flows through. The dark theme mixes a far stronger fill and switches the ink to the ramp's brighter shades — the light-theme mixture all but disappeared on the dark surface. A legend under the verdict names what each colour says, and the commit comparison's missing-commit highlight uses the same tokens
+- SSE connection limits were advisory: pruning the oldest connection of a user who opened one tab too many only removed it from the ledger and left it streaming. The pruned stream is now actually ended, so the ledger and the real connection count stop drifting apart
+- A consumer that cannot keep up (paused tab, stalled proxy) used to have events silently dropped while staying connected and stale forever; its stream is now closed so the browser reconnects, refetches and resyncs
+- The browser client no longer gives up on SSE after 15 failed reconnection attempts (roughly 8 minutes of outage); it retries forever with the exponential backoff capped at 30 seconds, and the tab-visibility handler keeps resetting the attempt counter
+
+### Changed
+- [Refactor] Enhance app diff styles
+- [Refactor] Enhance sse connection and recovery
+
+### Dependencies
+- Update script of version publish and skill
+
+---
+
+## [1.39.0] - 2026-11-16
+
+**Backend Version**: 1.39.0
+**Frontend Version**: 1.35.0
+
+### Security
+- Outbound calls to Bitbucket Cloud/Server, GitHub Enterprise and the dependency API now verify TLS certificates. All six call sites used `httpx.AsyncClient(verify=False)`, so a man in the middle could read the personal access tokens those requests carry. `OUTBOUND_TLS_VERIFY` (default `True`) keeps an escape hatch for on-premise hosts with self-signed certificates
+- Review write endpoints (`POST /reviews`, `PUT /reviews/{project}/{repo}/{pr}`, `PATCH .../status`) now require either a valid user token or a request signed with `WEBHOOK_SHARED_SECRET` (`X-Webhook-Timestamp` plus `X-Webhook-Signature: sha256=HMAC(secret, "<timestamp>.<raw body>")`, 5 minute clock skew). They previously accepted anonymous writes so git providers could post PR data without a token. With no secret configured they require a token, so an unconfigured deployment fails closed
+- Logging in locks the username for `LOGIN_LOCKOUT_MINUTES` (default 15) after `LOGIN_MAX_FAILED_ATTEMPTS` (default 5) consecutive failures. The counter lives in Redis so it is shared by all workers; unknown usernames are counted too, so the response does not reveal whether an account exists, and a successful login clears it
+- The SSE stream is authenticated with a one-shot ticket from `POST /api/v1/sse/ticket` (60 second lifetime, spent on first use) instead of the JWT in the query string, which landed in browser history, proxy access logs and `Referer` headers. `EventSource` cannot send an `Authorization` header, so the frontend fetches a fresh ticket for every (re)connection; `?token=` is only accepted when `SSE_ALLOW_TOKEN_QUERY` is turned on
+- Replaced `python-jose` with `PyJWT`. `python-jose` is unmaintained and carries unfixed advisories in the versions this project pinned; the token format and signing algorithm (`HS256`) are unchanged
+
+### Changed
+- Dropped `passlib[bcrypt]`: passlib 1.7.4 has been unmaintained since 2020 and is incompatible with the bcrypt releases it wraps. The code always imported bcrypt directly, so `bcrypt>=5.0.0` is now a direct dependency
+- Refreshed the whole dependency set in `uv.lock` (90 packages) against the current releases
+- The review list, the review detail and live updates are scoped by repository grant alone. A reader now sees every review in the repositories they are granted, whether or not they author or review that PR; a non-admin used to see only their own assignments and self-raised PRs, which hid the rest of the queue from a reviewer admin holding wider grants. `my-tasks` is untouched and remains the personal view
+- `require_permission` is the only authorization entry point again: the per-resource `Depends()` constants it replaced were never attached to a route, so they guarded nothing while reading like a guard. The rule is written down in `AGENTS.md`
+- CI now audits both dependency trees (`pip-audit`, `npm audit --omit=dev`) and fails a pull request whose coverage drops below 60%
+- Reformatted the codebase with ruff 0.17, whose Markdown code-block formatting also touched the samples in `AGENTS.md`
+
+### Fixed
+- `GET /api/v1/reviews/statistics` returns `INTERNAL_SERVER_ERROR` again instead of numbers. The per-status breakdown read columns off a `select()` through `.c`, which SQLAlchemy 2.0 does not provide, so every call that reached the query failed with `'Select' object has no attribute 'c'`; the counts are now a single grouped query
+- Live updates now fire for a re-posted review. An upsert that only changed an existing review published no SSE event and left the cached review lists in place, so a page with real-time updates on kept showing the old rows; updates publish `review_updated`, the broker forwards the publisher's event name instead of always labelling the frame `review_created`, and the frontend refreshes on either event. A brand new review still arrives as `review_created`
+- The offline API documentation renders again: `/api/docs` and `/api/redoc` are generated pages that start their bundle from an inline `<script>`, and the `script-src 'self'` policy registered in 1.38.0 blocked it, so the page loaded and stayed blank. Those two pages now carry a CSP that allows inline scripts; every other response keeps the stricter policy
+- In the frontend image, nginx's static-asset regex claimed `/api/…` paths ending in `.js` or `.css`, so the offline Swagger bundle under `/api/static-offline-docs` was looked for on the web server's disk and answered 404 — another way to reach a blank docs page. `/api/` is now a `^~` prefix location, which takes precedence over the regex
+
+### Upgrade Notes
+- Set `WEBHOOK_SHARED_SECRET` if a git provider (or any machine client) posts review data over HTTP without a user token; otherwise those calls now return 401. Sign each request as described above, or give the caller a Personal Access Token and send it as `Authorization: Bearer pat_...`; `scripts/webhook_curl.sh` signs a request for you
+- Leave `OUTBOUND_TLS_VERIFY=True` unless an on-premise server serves a self-signed certificate
+- Tune `LOGIN_MAX_FAILED_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` when the defaults do not fit; users see a 429 with the retry window when locked
+- Leave `SSE_ALLOW_TOKEN_QUERY=False`. Unset it only for a client that still puts the JWT in the stream URL; the bundled frontend asks for a ticket instead and needs no configuration
+- Nothing to do about `python-jose` unless an out-of-tree integration imported it directly; the project only used it for access-token encoding
+
+
+---
+
+## [1.38.0] - 2026-11-15
+
+**Backend Version**: 1.38.0
+**Frontend Version**: 1.34.0
 
 ### Security
 - `POST /api/v1/llm/proxy/{path}` now requires authentication. It previously forwarded every request to the configured LLM provider with the server-side API key without verifying the caller, so anyone able to reach the API could spend the provider quota and use it as an open proxy. The PageAgent client sends the caller's JWT instead of a placeholder; the backend verifies it and still substitutes the provider key, so the user token is never forwarded upstream
 - Escaped global search result titles before adding highlight markup. Titles come from the backend (PR, review and project names — text users control) and were injected through `v-html`, so a title containing markup executed in every reader's browser. The query is now escaped before being used as a regular expression (also fixing an exception on invalid patterns) and the output is passed through DOMPurify, which allows only `<mark>`
 - Production startup is validated at boot: a `model_validator` refuses to start when `ENV=production` and `SECRET_KEY` is the development default or shorter than 32 characters, or when `BACKEND_CORS_ORIGINS` contains `*`, `DEBUG=True`, or `ID_OBFUSCATOR_SALT` is still the default. A known secret key allowed forging a JWT for any user
 - Registered `SecurityHeadersMiddleware`, which was defined but never added to the application, so API responses carried no CSP, HSTS or clickjacking protection. Responses now include a Content-Security-Policy (same-origin scripts, inline styles allowed for the App Diff HTML report, `frame-ancestors 'none'`), HSTS, `Referrer-Policy: no-referrer` and a modern `X-XSS-Protection: 0`
+
+### Upgrade Notes
+- A production instance now refuses to start when `ENV=production` and `SECRET_KEY` is still the development default or shorter than 32 characters, `BACKEND_CORS_ORIGINS` contains `*`, `DEBUG=True`, or `ID_OBFUSCATOR_SALT` keeps its default. Set all four before deploying; the startup error names every offending value
+- API responses now carry a Content-Security-Policy. Inline styles stay allowed (the App Diff HTML report needs them) but inline scripts and external script origins are blocked
+- `POST /api/v1/llm/proxy/{path}` requires a valid access token. The built-in PageAgent sends the signed-in user's JWT, so no configuration change is needed unless a client calls the proxy directly
+
+---
 
 ## [1.37.2] - 2026-11-14
 
@@ -2133,14 +2204,17 @@ All Pydantic validators have been migrated to v2 syntax. If you have custom sche
 # Old (deprecated)
 from pydantic import validator
 
-@validator('field')
+
+@validator("field")
 def validate_field(cls, v):
     return v
+
 
 # New (required)
 from pydantic import field_validator
 
-@field_validator('field')
+
+@field_validator("field")
 def validate_field(cls, v):
     return v
 ```

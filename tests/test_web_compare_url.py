@@ -127,9 +127,7 @@ def test_server_tag_url_opens_the_repository_at_the_tag() -> None:
 
 
 def test_server_tag_url_encodes_reserved_characters() -> None:
-    url = bitbucket_server.BitbucketServerProvider().web_tag_url(
-        "PROJ", "my-repo", "release/1.0"
-    )
+    url = bitbucket_server.BitbucketServerProvider().web_tag_url("PROJ", "my-repo", "release/1.0")
 
     assert url is not None
     assert url.endswith("?at=refs%2Ftags%2Frelease%2F1.0")
@@ -144,9 +142,7 @@ def test_cloud_tag_url_opens_the_source_at_the_tag() -> None:
 def test_github_tag_url_uses_the_tree_of_the_tag(monkeypatch) -> None:
     monkeypatch.setattr(settings, "GITHUB_ENTERPRISE_URL", "https://github.local")
 
-    url = github_enterprise.GitHubEnterpriseProvider().web_tag_url(
-        "acme", "pyledger", "v1.0.0"
-    )
+    url = github_enterprise.GitHubEnterpriseProvider().web_tag_url("acme", "pyledger", "v1.0.0")
 
     assert url == "https://github.local/acme/pyledger/tree/v1.0.0"
 
@@ -155,9 +151,7 @@ def test_github_tag_url_is_omitted_without_a_host(monkeypatch) -> None:
     monkeypatch.setattr(settings, "GITHUB_ENTERPRISE_URL", "")
 
     assert (
-        github_enterprise.GitHubEnterpriseProvider().web_tag_url(
-            "acme", "pyledger", "v1.0.0"
-        )
+        github_enterprise.GitHubEnterpriseProvider().web_tag_url("acme", "pyledger", "v1.0.0")
         is None
     )
 

@@ -187,9 +187,36 @@ class Settings(BaseSettings):
     # Security configuration
     SECRET_KEY: str = Field(default="development-secret-key-change-in-production")
     ALGORITHM: str = "HS256"
+    SSE_ALLOW_TOKEN_QUERY: bool = Field(
+        default=False,
+        description=(
+            "Accept ?token=<JWT> on the SSE stream for clients that cannot use "
+            "the ticket flow. Off by default: a token in the URL is written to "
+            "browser history and proxy access logs."
+        ),
+    )
+    WEBHOOK_SHARED_SECRET: str = Field(
+        default="",
+        description=(
+            "Shared secret git providers use to sign review write requests "
+            "(X-Webhook-Signature over 'timestamp.body'). When empty, write "
+            "endpoints require a user token instead of a signature."
+        ),
+    )
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
     REFRESH_TOKEN_IDLE_TIMEOUT_MINUTES: int = Field(default=60)
     ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS: int = Field(default=60)
+    LOGIN_MAX_FAILED_ATTEMPTS: int = Field(
+        default=5,
+        description=(
+            "Consecutive failed logins for one username before it is locked. "
+            "Counted in Redis, so it survives across API workers."
+        ),
+    )
+    LOGIN_LOCKOUT_MINUTES: int = Field(
+        default=15,
+        description="How long a locked username stays blocked after too many failed logins.",
+    )
 
     # CORS configuration
     BACKEND_CORS_ORIGINS: str = Field(
@@ -360,6 +387,15 @@ class Settings(BaseSettings):
     )
     CONFLUENCE_SERVER_TIMEOUT_SECONDS: float = Field(
         default=15.0, description="Timeout for a single Confluence request"
+    )
+
+    OUTBOUND_TLS_VERIFY: bool = Field(
+        default=True,
+        description=(
+            "Verify TLS certificates on outbound calls to git providers and the "
+            "dependency API. Turn it off only for on-premise servers that serve a "
+            "self-signed certificate; leaving it off exposes tokens to interception."
+        ),
     )
 
     # Review status constants

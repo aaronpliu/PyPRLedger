@@ -168,9 +168,12 @@ python scripts/release/prepare_commit.py {backend_new_version} {frontend_new_ver
 All changes ready.
 
 Execute commit now? (yes/no)
-  yes → Run: git add . && git commit -m "Release v{backend_new_version}..."
+  yes → Run: git add . && git commit -m "build: Release v{backend_new_version}" -m "<body>"
   no  → Stop, wait for user
 ```
+
+**Commit message must stay Conventional Commits** (`build: Release vX.Y.Z`): the repository's
+`commit-msg` hook rejects a bare `Release vX.Y.Z`.
 
 **On yes**:
 - Execute `git add .`

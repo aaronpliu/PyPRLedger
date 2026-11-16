@@ -17,6 +17,12 @@ from src.utils.redis import get_redis_pubsub_client
 logger = logging.getLogger(__name__)
 
 REVIEW_CREATED_CHANNEL = "reviews:created"
+# Notifications ride the same pubsub connection but on their own channel so the
+# review pipeline keeps its semantics: notifications are per-user, reviews are
+# per-repository-grant.
+NOTIFICATION_CHANNEL = "notifications:events"
+
+SUBSCRIBED_CHANNELS = (REVIEW_CREATED_CHANNEL, NOTIFICATION_CHANNEL)
 
 DISPATCHER_POLL_TIMEOUT = 1.0
 HEARTBEAT_INTERVAL = 30
@@ -32,32 +38,31 @@ class SSEClient:
     git_username: str | None
     is_admin: bool
     allowed_pairs: set[tuple[str, str]] | None = None
+    # Identifiers the notification publisher may address this user by: the auth
+    # username (what the /notifications endpoints key on) and the linked git
+    # username (what assignment code passes when it creates notifications).
+    notification_user_ids: frozenset[str] = frozenset()
     queue: asyncio.Queue[str | None] = field(
         default_factory=lambda: asyncio.Queue(maxsize=QUEUE_MAX_SIZE)
     )
     connected_at: float = field(default_factory=time.monotonic)
 
 
-def _is_user_involved_in_review(
+def _reader_may_see_review(
     review: dict,
-    git_username: str | None,
-    is_admin: bool = False,
     allowed_pairs: set[tuple[str, str]] | None = None,
 ) -> bool:
-    if allowed_pairs is not None and (
-        review.get("project_key"),
-        review.get("repository_slug"),
-    ) not in allowed_pairs:
-        return False
-    if is_admin:
+    """Whether a review belongs in this reader's list.
+
+    Access to the repository is the whole test, not involvement: the list page
+    shows every review in the repositories a reader is granted, so a review that
+    lands in one of them changes what is on screen even when the reader is
+    neither its author nor its assignee - the normal case for a reviewer admin,
+    whose grants usually cover more repositories than the rest of the team.
+    """
+    if allowed_pairs is None:
         return True
-    if not git_username:
-        return False
-    if review.get("pull_request_user") == git_username:
-        return True
-    if review.get("reviewer") == git_username:
-        return True
-    return review.get("assigned_by") == git_username
+    return (review.get("project_key"), review.get("repository_slug")) in allowed_pairs
 
 
 class SSEBroker:
@@ -110,7 +115,7 @@ class SSEBroker:
         """Create a fresh pubsub subscription to Redis."""
         redis_client = get_redis_pubsub_client()
         self._pubsub = redis_client.pubsub()
-        await self._pubsub.subscribe(REVIEW_CREATED_CHANNEL)
+        await self._pubsub.subscribe(*SUBSCRIBED_CHANNELS)
         logger.info("SSEBroker pubsub subscription established")
 
     async def stop(self) -> None:
@@ -133,7 +138,7 @@ class SSEBroker:
 
             if self._pubsub:
                 with contextlib.suppress(Exception):
-                    await self._pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
+                    await self._pubsub.unsubscribe(*SUBSCRIBED_CHANNELS)
                     await self._pubsub.close()
                 self._pubsub = None
 
@@ -151,6 +156,7 @@ class SSEBroker:
         git_username: str | None,
         is_admin: bool,
         allowed_pairs: set[tuple[str, str]] | None = None,
+        notification_user_ids: frozenset[str] | None = None,
     ) -> asyncio.Queue[str | None]:
         await self.start()
 
@@ -159,6 +165,7 @@ class SSEBroker:
             git_username=git_username,
             is_admin=is_admin,
             allowed_pairs=allowed_pairs,
+            notification_user_ids=notification_user_ids or frozenset(),
         )
         self._clients[client_id] = client
 
@@ -189,6 +196,25 @@ class SSEBroker:
         if total == 0 and self._running:
             logger.info("No SSE clients remaining — stopping broker to free Redis connection")
             await self.stop()
+
+    def disconnect_client(self, client_id: str) -> bool:
+        """Signal one client's stream to end.
+
+        The stream generator treats ``None`` as disconnect and unregisters the
+        client in its ``finally`` block, so no cleanup happens here.
+        """
+        client = self._clients.get(client_id)
+        if client is None:
+            return False
+        with contextlib.suppress(asyncio.QueueFull):
+            if client.queue.full():
+                client.queue.get_nowait()
+            client.queue.put_nowait(None)
+        logger.info(
+            "SSEBroker client disconnect signalled",
+            extra={"client_id": client_id},
+        )
+        return True
 
     @property
     def client_count(self) -> int:
@@ -221,6 +247,10 @@ class SSEBroker:
                     continue
 
                 if not message or message["type"] != "message":
+                    continue
+
+                if message["channel"] == NOTIFICATION_CHANNEL:
+                    await self._dispatch_notification(message["data"])
                     continue
 
                 try:
@@ -258,7 +288,7 @@ class SSEBroker:
         """Safely close the current pubsub connection."""
         if self._pubsub:
             with contextlib.suppress(Exception):
-                await self._pubsub.unsubscribe(REVIEW_CREATED_CHANNEL)
+                await self._pubsub.unsubscribe(*SUBSCRIBED_CHANNELS)
                 await self._pubsub.close()
             self._pubsub = None
 
@@ -270,15 +300,13 @@ class SSEBroker:
             "pull_request_id": review["pull_request_id"],
             "created_date": review["created_date"],
         }
-        event_str = f"event: review_created\ndata: {json.dumps(minimal_payload)}\n\n"
+        # The publisher names the event (review_created / review_updated); the
+        # frame has to carry that name, else the browser fires the wrong one.
+        event_name = review.get("event") or "review_created"
+        event_str = f"event: {event_name}\ndata: {json.dumps(minimal_payload)}\n\n"
 
         for client in list(self._clients.values()):
-            if _is_user_involved_in_review(
-                review,
-                client.git_username,
-                client.is_admin,
-                client.allowed_pairs,
-            ):
+            if _reader_may_see_review(review, client.allowed_pairs):
                 try:
                     client.queue.put_nowait(event_str)
                     metrics.sse_events_filtered_total.labels(filtered="false").inc()
@@ -290,12 +318,54 @@ class SSEBroker:
                         },
                     )
                 except asyncio.QueueFull:
-                    logger.warning(
-                        "SSEBroker client queue full — dropping event",
-                        extra={"client_id": client.client_id},
-                    )
+                    self._drop_slow_consumer(client)
             else:
                 metrics.sse_events_filtered_total.labels(filtered="true").inc()
+
+    def _drop_slow_consumer(self, client: SSEClient) -> None:
+        """End the stream of a consumer that cannot keep up.
+
+        Silently dropping frames would leave the client connected but stale
+        forever — worse than a short blip. Signalling the stream to end makes
+        the browser reconnect, refetch and resync; one pending frame is
+        sacrificed to make room for the disconnect signal.
+        """
+        with contextlib.suppress(asyncio.QueueFull):
+            if client.queue.full():
+                client.queue.get_nowait()
+            client.queue.put_nowait(None)
+        metrics.sse_events_filtered_total.labels(filtered="slow_consumer").inc()
+        logger.warning(
+            "SSEBroker client queue full — closing stream to force a resync",
+            extra={"client_id": client.client_id},
+        )
+
+    async def _dispatch_notification(self, raw_data: str | bytes) -> None:
+        """Parse a notification pubsub payload and deliver it to its user."""
+        try:
+            payload = json.loads(raw_data)
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning(f"SSEBroker failed to parse notification event: {exc}")
+            metrics.sse_events_filtered_total.labels(filtered="notification_parse_error").inc()
+            return
+
+        if not isinstance(payload, dict) or not isinstance(payload.get("user_id"), str):
+            logger.warning("SSEBroker dropping notification event without a user_id")
+            metrics.sse_events_filtered_total.labels(filtered="notification_parse_error").inc()
+            return
+
+        event_str = f"event: notification\ndata: {json.dumps(payload)}\n\n"
+        delivered = False
+        for client in list(self._clients.values()):
+            if payload["user_id"] in client.notification_user_ids:
+                try:
+                    client.queue.put_nowait(event_str)
+                    delivered = True
+                except asyncio.QueueFull:
+                    self._drop_slow_consumer(client)
+        metrics.sse_events_filtered_total.labels(
+            filtered="notification_delivered" if delivered else "notification_no_recipient"
+        ).inc()
 
     async def _heartbeat_loop(self) -> None:
         try:

@@ -33,7 +33,7 @@ class GitProvider(StrEnum):
     BITBUCKET_SERVER = "bitbucket_server"
     BITBUCKET_CLOUD = "bitbucket_cloud"
     GITHUB_ENTERPRISE = "github_enterprise"
-    GITLAB = "gitlab"                  # ← Add new member
+    GITLAB = "gitlab"  # ← Add new member
 ```
 
 The enum is the single source of truth. All defaults, validations, and descriptions across the codebase derive from it automatically.
