@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `require_permission` is the only authorization entry point again: the per-resource `Depends()` constants it replaced were never attached to a route, so they guarded nothing while reading like a guard. The rule is written down in `AGENTS.md`
 - CI now audits both dependency trees (`pip-audit`, `npm audit --omit=dev`) and fails a pull request whose coverage drops below 60%
 
+### Fixed
+- The offline API documentation renders again: `/api/docs` and `/api/redoc` are generated pages that start their bundle from an inline `<script>`, and the `script-src 'self'` policy registered in 1.38.0 blocked it, so the page loaded and stayed blank. Those two pages now carry a CSP that allows inline scripts; every other response keeps the stricter policy
+- In the frontend image, nginx's static-asset regex claimed `/api/…` paths ending in `.js` or `.css`, so the offline Swagger bundle under `/api/static-offline-docs` was looked for on the web server's disk and answered 404 — another way to reach a blank docs page. `/api/` is now a `^~` prefix location, which takes precedence over the regex
+
 ### Upgrade Notes
 - Set `WEBHOOK_SHARED_SECRET` if a git provider (or any machine client) posts review data over HTTP without a user token; otherwise those calls now return 401. Sign each request as described above
 - Leave `OUTBOUND_TLS_VERIFY=True` unless an on-premise server serves a self-signed certificate

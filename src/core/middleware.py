@@ -230,6 +230,20 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         "frame-ancestors 'none'"
     )
 
+    # The offline Swagger UI and ReDoc pages start their bundle from an inline
+    # <script>, which ``script-src 'self'`` blocks: the document loads but stays
+    # blank because nothing runs. The allowance is scoped to those pages, so
+    # every other response keeps the stricter policy.
+    _DOCS_CSP = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data:; "
+        "frame-ancestors 'none'"
+    )
+    _DOCS_PATHS = ("/api/docs", "/api/redoc")
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Process request
         response = await call_next(request)
@@ -241,11 +255,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # CSP below is the supported replacement, so only keep "0" (disable).
         response.headers["X-XSS-Protection"] = "0"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Content-Security-Policy"] = self._CSP
+        response.headers["Content-Security-Policy"] = (
+            self._DOCS_CSP if self._is_docs_page(request.url.path) else self._CSP
+        )
         # HSTS is ignored over plain HTTP, so local development is unaffected.
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
         return response
+
+    def _is_docs_page(self, path: str) -> bool:
+        """True for the generated documentation pages and their sub-pages."""
+        return any(
+            path == docs_path or path.startswith(f"{docs_path}/") for docs_path in self._DOCS_PATHS
+        )
 
 
 class TimingMiddleware(BaseHTTPMiddleware):
