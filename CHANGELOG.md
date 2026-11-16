@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Notification events now ride the SSE stream. Creating a notification (for example when a task is assigned to a reviewer) publishes a `notification` event on a second Redis channel that the broker delivers only to the addressed user's connections; the bell refreshes its badge and popup within a moment instead of waiting up to 30 seconds for the poll, which stays as the fallback. Review events (`review_created`, `review_updated`) and their per-repository filtering are untouched
+
 ### Fixed
 - The notification bell keeps its popup in step with its badge. The poller compared the unread count with the length of the popup list and skipped the fetch whenever that list was still empty, so the first task assigned to a reviewer raised the badge and left the popup blank until a page reload. The list is now refetched whenever the count moves in either direction, and again when the popup is opened
 

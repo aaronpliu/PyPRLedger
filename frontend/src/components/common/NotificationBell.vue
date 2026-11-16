@@ -80,6 +80,7 @@ import { useI18n } from 'vue-i18n'
 import { Bell } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { notificationsApi, type Notification } from '@/api/notifications'
+import { sseService, type SSENotificationEvent } from '@/utils/sse'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -216,6 +217,23 @@ const handleDropdownVisible = (visible: boolean) => {
   }
 }
 
+// SSE push — a task assignment creates the notification and publishes an event;
+// the poll below stays as the fallback when the stream is down.
+let sseRefreshTimer: ReturnType<typeof setTimeout> | null = null
+
+const handleSSENotification = (_event: SSENotificationEvent) => {
+  // The publisher emits before its caller commits, so give the row a moment to
+  // land before reading it back. Repeated events restart the timer instead of
+  // stacking refreshes.
+  if (sseRefreshTimer !== null) {
+    clearTimeout(sseRefreshTimer)
+  }
+  sseRefreshTimer = setTimeout(() => {
+    sseRefreshTimer = null
+    refreshData()
+  }, 300)
+}
+
 // Smart non-blocking polling for real-time updates
 const startPolling = () => {
   pollTimer = setInterval(() => {
@@ -255,10 +273,16 @@ const stopPolling = () => {
 onMounted(() => {
   refreshData()
   startPolling()
+  sseService.setNotificationHandler(handleSSENotification)
 })
 
 onUnmounted(() => {
   stopPolling()
+  sseService.setNotificationHandler(null)
+  if (sseRefreshTimer !== null) {
+    clearTimeout(sseRefreshTimer)
+    sseRefreshTimer = null
+  }
 })
 </script>
 

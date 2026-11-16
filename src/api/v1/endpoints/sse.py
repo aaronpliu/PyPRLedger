@@ -145,6 +145,8 @@ async def stream_reviews(
           whether or not the user is the PR author or an assignee; a user holding no
           grants receives nothing
         - Reviewer admins usually hold wider grants, so they see more events
+        - ``notification`` events are personal: only the addressed user's own
+          connections receive them, independent of repository grants
 
     Connection limits:
         - Maximum 3 concurrent SSE connections per regular user
@@ -265,7 +267,19 @@ async def stream_reviews(
     broker = get_sse_broker()
     try:
         allowed_pairs = await RepositoryAccessService(db).allowed_pairs(auth_user.id)
-        queue = await broker.register(connection_id, git_username, is_admin, allowed_pairs)
+        # Notifications are keyed by username, and two names are in play: the auth
+        # username the /notifications endpoints read with, and the linked git
+        # username assignment code writes with. Accept either.
+        notification_user_ids = frozenset(
+            name for name in (auth_user.username, git_username) if name
+        )
+        queue = await broker.register(
+            connection_id,
+            git_username,
+            is_admin,
+            allowed_pairs,
+            notification_user_ids=notification_user_ids,
+        )
     except Exception as exc:
         logger.error(
             f"Failed to register with SSEBroker: {exc}",

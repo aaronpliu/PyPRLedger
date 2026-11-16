@@ -5,6 +5,7 @@ import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import NotificationBell from '@/components/common/NotificationBell.vue'
 import { notificationsApi, type Notification } from '@/api/notifications'
+import type { SSENotificationEvent } from '@/utils/sse'
 import enMessages from '@/locales/en.json'
 
 vi.mock('@/api/notifications', () => ({
@@ -14,6 +15,11 @@ vi.mock('@/api/notifications', () => ({
     markAsRead: vi.fn(),
     markAllAsRead: vi.fn(),
   },
+}))
+
+const setNotificationHandler = vi.fn()
+vi.mock('@/utils/sse', () => ({
+  sseService: { setNotificationHandler: (handler: unknown) => setNotificationHandler(handler) },
 }))
 
 const getUnreadCount = vi.mocked(notificationsApi.getUnreadCount)
@@ -136,5 +142,49 @@ describe('NotificationBell', () => {
     await pollOnce()
 
     expect(getNotifications).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes immediately when the SSE stream pushes a notification', async () => {
+    mountBell()
+    await flushPromises()
+    expect(getNotifications).toHaveBeenCalledTimes(1)
+
+    // The component subscribes its handler to the shared SSE service
+    expect(setNotificationHandler).toHaveBeenCalledWith(expect.any(Function))
+    const onSSENotification = setNotificationHandler.mock.calls[0][0] as (
+      event: SSENotificationEvent,
+    ) => void
+
+    // A task assignment lands while the connection is open
+    onSSENotification({ user_id: 'testuser-1', type: 'review_assigned' })
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
+    expect(getUnreadCount).toHaveBeenCalledTimes(2)
+    expect(getNotifications).toHaveBeenCalledTimes(2)
+
+    // Unmount detaches the handler
+    mountedWrappers.splice(0).forEach((wrapper) => wrapper.unmount())
+    document.body.innerHTML = ''
+    expect(setNotificationHandler).toHaveBeenLastCalledWith(null)
+  })
+
+  it('debounces bursts of SSE notifications into one refresh', async () => {
+    mountBell()
+    await flushPromises()
+    expect(getNotifications).toHaveBeenCalledTimes(1)
+
+    const onSSENotification = setNotificationHandler.mock.calls[0][0] as (
+      event: SSENotificationEvent,
+    ) => void
+
+    // Three reviewers assigned in quick succession — one refresh, not three
+    onSSENotification({ user_id: 'testuser-1' })
+    onSSENotification({ user_id: 'testuser-1' })
+    onSSENotification({ user_id: 'testuser-1' })
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+
+    expect(getNotifications).toHaveBeenCalledTimes(2)
   })
 })

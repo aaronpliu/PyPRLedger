@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta
 
@@ -17,6 +18,7 @@ from src.schemas.notification import (
     NotificationResponse,
     NotificationStats,
 )
+from src.services.sse_broker import NOTIFICATION_CHANNEL
 from src.utils import metrics as metrics_module
 from src.utils.metrics import MetricsCollector
 from src.utils.redis import get_redis_client
@@ -63,6 +65,10 @@ class NotificationService:
 
         # Invalidate unread count cache
         await self._invalidate_unread_count_cache(notification_data.user_id)
+
+        # Tell the user's open SSE connections to refresh — the bell badge and
+        # popup follow the event instead of waiting for the 30s poll.
+        await self._publish_sse_event(notification)
 
         # Log creation
         logger.info(
@@ -420,3 +426,22 @@ class NotificationService:
             await self.redis_client.delete(cache_key)
         except Exception as e:
             logger.warning(f"Failed to invalidate cache: {e}")
+
+    async def _publish_sse_event(self, notification: Notification) -> None:
+        """Publish a notification event for the user's open SSE connections.
+
+        Fire-and-forget: a Redis outage must never fail notification creation.
+        The event reaches the broker before the caller's commit may have landed,
+        so the frontend refreshes on a short debounce to be safe.
+        """
+        try:
+            payload = {
+                "event": "notification",
+                "user_id": notification.user_id,
+                "id": notification.id,
+                "type": notification.type,
+                "priority": notification.priority,
+            }
+            await self.redis_client.publish(NOTIFICATION_CHANNEL, json.dumps(payload))
+        except Exception as e:
+            logger.warning(f"Failed to publish notification SSE event: {e}")

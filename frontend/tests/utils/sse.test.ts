@@ -175,3 +175,82 @@ describe('SSEService event names', () => {
     expect(onEvent).toHaveBeenNthCalledWith(2, payload)
   })
 })
+
+describe('SSEService notification events', () => {
+  it('routes notification events to the notification handler', async () => {
+    createStreamTicket.mockResolvedValue({ ticket: 'ticket-1', expires_in: 60 })
+    const onEvent = vi.fn()
+    const onNotification = vi.fn()
+    service.setNotificationHandler(onNotification)
+
+    service.connect('jwt-value', onEvent)
+    await flushPromises()
+
+    FakeEventSource.instances[0].message('notification', {
+      user_id: 'aaronpliu',
+      id: 42,
+      type: 'review_assigned',
+      priority: 'high',
+    })
+
+    expect(onNotification).toHaveBeenCalledTimes(1)
+    expect(onNotification).toHaveBeenCalledWith({
+      user_id: 'aaronpliu',
+      id: 42,
+      type: 'review_assigned',
+      priority: 'high',
+    })
+    // Review callbacks stay untouched by notification traffic
+    expect(onEvent).not.toHaveBeenCalled()
+  })
+
+  it('keeps the notification handler across reconnections', async () => {
+    createStreamTicket
+      .mockResolvedValueOnce({ ticket: 'ticket-1', expires_in: 60 })
+      .mockResolvedValueOnce({ ticket: 'ticket-2', expires_in: 60 })
+    const onNotification = vi.fn()
+    service.setNotificationHandler(onNotification)
+
+    service.connect('jwt-value', vi.fn())
+    await flushPromises()
+
+    const first = FakeEventSource.instances[0]
+    first.open()
+    first.fail()
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(1000)
+    await flushPromises()
+
+    FakeEventSource.instances[1].message('notification', { user_id: 'aaronpliu' })
+
+    expect(onNotification).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops malformed notification events instead of throwing', async () => {
+    createStreamTicket.mockResolvedValue({ ticket: 'ticket-1', expires_in: 60 })
+    const onNotification = vi.fn()
+    service.setNotificationHandler(onNotification)
+
+    service.connect('jwt-value', vi.fn())
+    await flushPromises()
+
+    FakeEventSource.instances[0].message('notification', { no_user_id: true })
+    FakeEventSource.instances[0].message('notification', 'not-json' as unknown as object)
+
+    expect(onNotification).not.toHaveBeenCalled()
+  })
+
+  it('unsubscribes the notification handler when asked', async () => {
+    createStreamTicket.mockResolvedValue({ ticket: 'ticket-1', expires_in: 60 })
+    const onNotification = vi.fn()
+
+    service.setNotificationHandler(onNotification)
+    service.connect('jwt-value', vi.fn())
+    await flushPromises()
+
+    service.setNotificationHandler(null)
+    FakeEventSource.instances[0].message('notification', { user_id: 'aaronpliu' })
+
+    expect(onNotification).not.toHaveBeenCalled()
+  })
+})

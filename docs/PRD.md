@@ -559,6 +559,7 @@ Request: GET /reviews?app_names=member,tv
 | FR-5.10.8 | Heartbeat every 15 seconds to keep connections alive | P1 |
 | FR-5.10.9 | Oldest connection pruned when per-user limit exceeded | P1 |
 | FR-5.10.10 | Broker auto-reconnects to Redis with exponential backoff | P1 |
+| FR-5.10.11 | Personal `notification` events: creating a notification publishes it on a second Redis channel and the broker delivers it only to the addressed user's connections (matched by auth or linked git username); the notification bell refreshes on the event with the 30s poll as fallback | P2 |
 
 ### 5.11 Export
 

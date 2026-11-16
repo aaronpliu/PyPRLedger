@@ -30,7 +30,21 @@ export interface SSEReviewCreatedEvent {
 export interface SSECallbackMap {
   review_created: (event: SSEReviewCreatedEvent) => void
   review_updated: (event: SSEReviewCreatedEvent) => void
+  notification: (event: SSENotificationEvent) => void
 }
+
+/**
+ * Payload of a personal `notification` event: a notification was created for
+ * the signed-in user and their bell should refresh.
+ */
+export interface SSENotificationEvent {
+  user_id: string
+  id?: number
+  type?: string
+  priority?: string
+}
+
+export type SSENotificationHandler = (event: SSENotificationEvent) => void
 
 export interface SSEServiceOptions {
   /** Maximum reconnection attempts before giving up (default: 15) */
@@ -65,6 +79,14 @@ export class SSEService {
   private lastOnEvent: ((event: SSEReviewCreatedEvent) => void) | null = null
   private lastOnError: ((error: Event) => void) | null = null
   private lastOnOpen: (() => void) | null = null
+
+  /**
+   * Handler for personal `notification` events. Deliberately outside connect()'s
+   * callback chain: the bell subscribes once and keeps receiving across page
+   * navigations and reconnections, while review callbacks keep being swapped by
+   * whichever view currently owns the stream.
+   */
+  private notificationHandler: SSENotificationHandler | null = null
 
   // Store current callbacks so they can be updated
   private currentOnEvent: ((event: SSEReviewCreatedEvent) => void) | null = null
@@ -267,6 +289,14 @@ export class SSEService {
     this.eventSource.addEventListener('review_created', onReviewEvent)
     this.eventSource.addEventListener('review_updated', onReviewEvent)
 
+    this.eventSource.addEventListener('notification', (rawEvent: Event) => {
+      // Ignore if a newer connection has been created
+      if (generation !== this.connectionGeneration) {
+        return
+      }
+      this.handleNotification(rawEvent as MessageEvent)
+    })
+
     this.eventSource.addEventListener('error', (event: Event) => {
       // Ignore if a newer connection has been created
       if (generation !== this.connectionGeneration) {
@@ -409,6 +439,30 @@ export class SSEService {
    */
   isConnected(): boolean {
     return this.eventSource?.readyState === EventSource.OPEN
+  }
+
+  /**
+   * Subscribe (or unsubscribe) to personal notification events.
+   * Pass null to detach — the bell does this on unmount.
+   */
+  setNotificationHandler(handler: SSENotificationHandler | null): void {
+    this.notificationHandler = handler
+  }
+
+  /**
+   * Handle an incoming `notification` SSE event
+   */
+  private handleNotification(rawEvent: MessageEvent): void {
+    try {
+      const data = JSON.parse(rawEvent.data)
+      if (!data || typeof data.user_id !== 'string') {
+        console.warn('[SSE] Received malformed notification event — dropping:', rawEvent.data)
+        return
+      }
+      this.notificationHandler?.(data)
+    } catch (e) {
+      console.error('[SSE] Failed to parse notification event:', e, rawEvent.data)
+    }
   }
 
   /**

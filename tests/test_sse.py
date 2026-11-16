@@ -463,6 +463,11 @@ async def test_sse_returns_200_and_streams_events(
         f"Expected SSE event not found in response.\nExpected: {expected_sse!r}\nGot: {raw_body!r}"
     )
 
+    # The connection carries the user's notification identity so personal
+    # notification events can find it.
+    register_kwargs = mock_broker.register.call_args.kwargs
+    assert auth_user.username in register_kwargs["notification_user_ids"]
+
 
 # --- Broker fan-out -----------------------------------------------------------
 # The broker is what turns a published review into an SSE frame, so the event
@@ -540,3 +545,135 @@ async def test_broker_skips_repositories_the_reader_has_no_grant_for():
         assert bystander.queue.empty()
     finally:
         broker._clients.pop(bystander.client_id, None)
+
+
+# --- Notification fan-out -----------------------------------------------------
+# Notifications are personal: they travel on their own channel and only reach
+# the connections of the user they were created for, whatever repositories that
+# user is granted.
+
+
+def _notification_event(**overrides):
+    event = {
+        "event": "notification",
+        "user_id": "aaronpliu",
+        "id": 42,
+        "type": "review_assigned",
+        "priority": "high",
+    }
+    event.update(overrides)
+    return event
+
+
+@pytest.mark.asyncio
+async def test_broker_delivers_a_notification_to_the_addressed_user():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    addressee = SSEClient(
+        client_id="addressee",
+        git_username="aaronpliu",
+        is_admin=False,
+        notification_user_ids=frozenset({"aaronpliu"}),
+    )
+    broker._clients[addressee.client_id] = addressee
+    try:
+        await broker._dispatch_notification(json.dumps(_notification_event()))
+        frame = addressee.queue.get_nowait()
+    finally:
+        broker._clients.pop(addressee.client_id, None)
+
+    assert frame.startswith("event: notification\ndata: ")
+    assert '"user_id": "aaronpliu"' in frame
+
+
+@pytest.mark.asyncio
+async def test_broker_keeps_other_users_notifications_to_themselves():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    somebody_else = SSEClient(
+        client_id="somebody-else",
+        git_username="colleague",
+        is_admin=False,
+        notification_user_ids=frozenset({"colleague"}),
+    )
+    broker._clients[somebody_else.client_id] = somebody_else
+    try:
+        await broker._dispatch_notification(json.dumps(_notification_event()))
+        assert somebody_else.queue.empty()
+    finally:
+        broker._clients.pop(somebody_else.client_id, None)
+
+
+@pytest.mark.asyncio
+async def test_broker_delivers_via_either_username_of_the_user():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    # The auth username and the linked git username can differ; the publisher
+    # may address the notification by either.
+    linked = SSEClient(
+        client_id="linked",
+        git_username="aaronpliu",
+        is_admin=False,
+        notification_user_ids=frozenset({"auth-user", "aaronpliu"}),
+    )
+    broker._clients[linked.client_id] = linked
+    try:
+        await broker._dispatch_notification(json.dumps(_notification_event(user_id="auth-user")))
+        frame = linked.queue.get_nowait()
+    finally:
+        broker._clients.pop(linked.client_id, None)
+
+    assert frame.startswith("event: notification\ndata: ")
+
+
+@pytest.mark.asyncio
+async def test_broker_drops_malformed_notification_payloads():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    client = SSEClient(
+        client_id="anyone",
+        git_username="aaronpliu",
+        is_admin=False,
+        notification_user_ids=frozenset({"aaronpliu"}),
+    )
+    broker._clients[client.client_id] = client
+    try:
+        await broker._dispatch_notification("not json at all")
+        await broker._dispatch_notification(json.dumps({"type": "review_assigned"}))
+        assert client.queue.empty()
+    finally:
+        broker._clients.pop(client.client_id, None)
+
+
+@pytest.mark.asyncio
+async def test_review_events_keep_their_own_path():
+    """Review frames come from the review fan-out, never the notification one."""
+    from src.services.sse_broker import (
+        NOTIFICATION_CHANNEL,
+        REVIEW_CREATED_CHANNEL,
+        SUBSCRIBED_CHANNELS,
+        SSEBroker,
+        SSEClient,
+    )
+
+    assert SUBSCRIBED_CHANNELS == (REVIEW_CREATED_CHANNEL, NOTIFICATION_CHANNEL)
+
+    broker = SSEBroker()
+    client = SSEClient(
+        client_id="review-reader",
+        git_username="aaronpliu",
+        is_admin=False,
+        notification_user_ids=frozenset({"aaronpliu"}),
+    )
+    broker._clients[client.client_id] = client
+    try:
+        await broker._fan_out(_review_event("review_created"))
+        review_frame = client.queue.get_nowait()
+    finally:
+        broker._clients.pop(client.client_id, None)
+
+    assert review_frame.startswith("event: review_created")
