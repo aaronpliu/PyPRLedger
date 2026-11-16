@@ -280,6 +280,7 @@ role check inside the handler.
 ```python
 from src.core.permissions import CurrentUser, require_permission
 
+
 @router.put(
     "/{review_id}",
     dependencies=[Depends(require_permission("update", "reviews", "review_id"))],
