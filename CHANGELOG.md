@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Dropped `passlib[bcrypt]`: passlib 1.7.4 has been unmaintained since 2020 and is incompatible with the bcrypt releases it wraps. The code always imported bcrypt directly, so `bcrypt>=5.0.0` is now a direct dependency
 - Refreshed the whole dependency set in `uv.lock` (90 packages) against the current releases
+- The review list, the review detail and live updates are scoped by repository grant alone. A reader now sees every review in the repositories they are granted, whether or not they author or review that PR; a non-admin used to see only their own assignments and self-raised PRs, which hid the rest of the queue from a reviewer admin holding wider grants. `my-tasks` is untouched and remains the personal view
 - `require_permission` is the only authorization entry point again: the per-resource `Depends()` constants it replaced were never attached to a route, so they guarded nothing while reading like a guard. The rule is written down in `AGENTS.md`
 - CI now audits both dependency trees (`pip-audit`, `npm audit --omit=dev`) and fails a pull request whose coverage drops below 60%
 

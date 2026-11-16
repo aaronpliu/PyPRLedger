@@ -141,8 +141,10 @@ async def stream_reviews(
 
     Authorization:
         - Any authenticated user can connect (no Bitbucket linkage required)
-        - Non-admin users without linked Bitbucket account receive no events
-        - Admin users (review_admin, system_admin) receive all review events
+        - Events are delivered for reviews in the repositories the user is granted,
+          whether or not the user is the PR author or an assignee; a user holding no
+          grants receives nothing
+        - Reviewer admins usually hold wider grants, so they see more events
 
     Connection limits:
         - Maximum 3 concurrent SSE connections per regular user

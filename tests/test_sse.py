@@ -503,11 +503,37 @@ async def test_broker_forwards_the_event_name_it_was_given():
 
 
 @pytest.mark.asyncio
-async def test_broker_skips_events_the_connected_user_is_not_part_of():
+async def test_broker_delivers_to_a_reader_who_only_has_the_repository_grant():
     from src.services.sse_broker import SSEBroker, SSEClient
 
     broker = SSEBroker()
-    bystander = SSEClient(client_id="bystander", git_username="someone-else", is_admin=False)
+    reader = SSEClient(
+        client_id="granted-reader",
+        git_username="aaronpliu",
+        is_admin=False,
+        allowed_pairs={("BAR", "pyrag")},
+    )
+    broker._clients[reader.client_id] = reader
+    try:
+        await broker._fan_out(_review_event("review_created"))
+        frame = reader.queue.get_nowait()
+    finally:
+        broker._clients.pop(reader.client_id, None)
+
+    assert frame.startswith("event: review_created\ndata: ")
+
+
+@pytest.mark.asyncio
+async def test_broker_skips_repositories_the_reader_has_no_grant_for():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    bystander = SSEClient(
+        client_id="bystander",
+        git_username="aaronpliu",
+        is_admin=False,
+        allowed_pairs={("OTHER", "repository")},
+    )
     broker._clients[bystander.client_id] = bystander
     try:
         await broker._fan_out(_review_event("review_updated"))

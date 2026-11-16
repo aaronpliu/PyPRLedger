@@ -301,6 +301,7 @@ Redis PubSub → SSEBroker (singleton) → asyncio.Queue per client → SSE stre
 | FR-5.2.7 | Deleting a reviewer (Git user) sets assignment's reviewer to NULL | P1 |
 | FR-5.2.8 | `my-tasks` endpoint: users can view their own assigned reviews | P1 |
 | FR-5.2.9 | Task assignment list supports `search_query` filter across PR ID, project key, repository slug, and reviewer username | P1 |
+| FR-5.2.10 | The review list, review detail and live SSE events are scoped by repository grant alone: a reader sees every review in the repositories they are granted, whether or not they author or review that PR. `my-tasks` remains the personal view | P1 |
 
 ### 5.3 Auto-Assignment Engine
 
@@ -551,7 +552,7 @@ Request: GET /reviews?app_names=member,tv
 | FR-5.10.1 | SSE endpoint at `GET /api/v1/sse/stream` | P1 |
 | FR-5.10.2 | SSE stream authenticated with a one-shot ticket from `POST /api/v1/sse/ticket` — the JWT is never placed in the URL (`?token=` only when `SSE_ALLOW_TOKEN_QUERY` is on) | P1 |
 | FR-5.10.3 | Events: `review_created`, `review_updated`, `score_added` | P1 |
-| FR-5.10.4 | Per-user relevance filtering (only events involving the user) | P1 |
+| FR-5.10.4 | Per-user relevance filtering by repository grant — a reader sees events for the repositories they are granted, whether or not they author or review that PR (no grants, no events) | P1 |
 | FR-5.10.5 | Connection limits: 3 per user (regular), 10 per user (admin) | P1 |
 | FR-5.10.6 | Global connection limit: 2000 concurrent SSE connections | P1 |
 | FR-5.10.7 | Idle timeout: 300 seconds (auto-disconnect) | P1 |

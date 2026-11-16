@@ -38,30 +38,21 @@ class SSEClient:
     connected_at: float = field(default_factory=time.monotonic)
 
 
-def _is_user_involved_in_review(
+def _reader_may_see_review(
     review: dict,
-    git_username: str | None,
-    is_admin: bool = False,
     allowed_pairs: set[tuple[str, str]] | None = None,
 ) -> bool:
-    if (
-        allowed_pairs is not None
-        and (
-            review.get("project_key"),
-            review.get("repository_slug"),
-        )
-        not in allowed_pairs
-    ):
-        return False
-    if is_admin:
+    """Whether a review belongs in this reader's list.
+
+    Access to the repository is the whole test, not involvement: the list page
+    shows every review in the repositories a reader is granted, so a review that
+    lands in one of them changes what is on screen even when the reader is
+    neither its author nor its assignee - the normal case for a reviewer admin,
+    whose grants usually cover more repositories than the rest of the team.
+    """
+    if allowed_pairs is None:
         return True
-    if not git_username:
-        return False
-    if review.get("pull_request_user") == git_username:
-        return True
-    if review.get("reviewer") == git_username:
-        return True
-    return review.get("assigned_by") == git_username
+    return (review.get("project_key"), review.get("repository_slug")) in allowed_pairs
 
 
 class SSEBroker:
@@ -280,12 +271,7 @@ class SSEBroker:
         event_str = f"event: {event_name}\ndata: {json.dumps(minimal_payload)}\n\n"
 
         for client in list(self._clients.values()):
-            if _is_user_involved_in_review(
-                review,
-                client.git_username,
-                client.is_admin,
-                client.allowed_pairs,
-            ):
+            if _reader_may_see_review(review, client.allowed_pairs):
                 try:
                     client.queue.put_nowait(event_str)
                     metrics.sse_events_filtered_total.labels(filtered="false").inc()

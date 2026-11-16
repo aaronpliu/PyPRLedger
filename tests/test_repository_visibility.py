@@ -16,7 +16,7 @@ from src.models.project_registry import ProjectRegistry
 from src.models.pull_request import PullRequestReviewBase
 from src.models.repository import Repository
 from src.services.project_service import ProjectService
-from src.services.sse_broker import _is_user_involved_in_review
+from src.services.sse_broker import _reader_may_see_review
 
 
 @pytest.fixture
@@ -157,15 +157,71 @@ async def test_reviews_endpoint_without_grants_returns_empty_list(
     assert response.json()["total"] == 0
 
 
+@pytest.mark.asyncio
+async def test_reviews_endpoint_lists_every_review_in_a_granted_repository(
+    scoped_client: AsyncClient, db_session: AsyncSession, catalog
+):
+    """Access to the repository is enough; involvement is not required.
+
+    The signed-in account has no Bitbucket link, authors nothing here and reviews
+    nothing here, yet the row belongs on its list because ONE/a is granted.
+    """
+    from src.api.v1.endpoints.reviews import get_review_service
+    from src.services.review_service import ReviewService
+
+    db_session.add(
+        PullRequestReviewBase(
+            pull_request_id="pr-elsewhere",
+            pull_request_commit_id="abc123",
+            project_key="ONE",
+            repository_slug="a",
+            source_branch="feature/x",
+            target_branch="main",
+            git_code_diff="diff --git a/x b/x",
+            pull_request_status="open",
+            pull_request_user="someone-else",
+        )
+    )
+    await db_session.commit()
+
+    app.dependency_overrides[get_repository_access] = lambda: {("ONE", "a")}
+    app.dependency_overrides[get_review_service] = lambda: ReviewService(
+        allowed_pairs={("ONE", "a")}
+    )
+
+    response = await scoped_client.get("/api/v1/reviews")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["pull_request_id"] == "pr-elsewhere"
+
+
 def test_sse_events_require_a_granted_repository():
     review = {
         "project_key": "ONE",
         "repository_slug": "a",
         "pull_request_user": "author",
     }
-    assert _is_user_involved_in_review(review, None, True, {("ONE", "a")})
-    assert not _is_user_involved_in_review(review, None, True, set())
-    assert not _is_user_involved_in_review(review, None, True, {("TWO", "b")})
+    assert _reader_may_see_review(review, {("ONE", "a")})
+    assert not _reader_may_see_review(review, set())
+    assert not _reader_may_see_review(review, {("TWO", "b")})
+
+
+def test_sse_events_reach_a_reader_who_only_holds_the_repository_grant():
+    """A reader who is neither the author nor an assignee still needs the event.
+
+    The list page shows every review in the repositories the reader is granted,
+    so a reviewer admin with wide grants has to see reviews land in them.
+    """
+    review = {
+        "project_key": "ONE",
+        "repository_slug": "a",
+        "pull_request_user": "author",
+        "reviewer": "someone-else",
+        "assigned_by": "another-one",
+    }
+    assert _reader_may_see_review(review, {("ONE", "a")})
 
 
 @pytest.mark.asyncio

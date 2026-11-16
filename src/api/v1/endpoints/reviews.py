@@ -765,15 +765,6 @@ async def list_reviews(
         if project_key and repository_slug and (project_key, repository_slug) not in access:
             return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
 
-        rbac_service = RBACService(db)
-
-        # Check if user has review_admin role (by checking 'assign' permission)
-        is_review_admin = await rbac_service.check_permission(
-            auth_user_id=current_user.id,
-            action="assign",
-            resource_type="reviews",
-        )
-
         filters = ReviewFilter(
             pull_request_id=pull_request_id,
             project_key=project_key,
@@ -792,23 +783,13 @@ async def list_reviews(
             pinned_only=pinned_only,
         )
 
-        # Apply role-based filtering
-        if not is_review_admin:
-            # Regular user - filter by their bitbucket username
-            git_username = await _get_git_username(current_user.id, db)
-
-            if git_username:
-                # Use visible_to_username to show both assigned reviews AND self-raised PRs
-                filters.visible_to_username = git_username
-                logger.info(
-                    f"Regular user {current_user.username} filtered by visible_to={git_username}"
-                )
-            else:
-                # No linked bitbucket user - return empty list
-                logger.warning(f"User {current_user.username} has no linked Bitbucket account")
-                return ReviewListResponse(items=[], total=0, page=page, page_size=page_size)
-        else:
-            logger.info(f"Review admin {current_user.username} accessing all reviews")
+        # Repository access is the only visibility rule: a reader sees every review
+        # in the repositories they are granted, whether or not they author or review
+        # that PR. "My tasks" (task_assignment endpoints) still narrows to their own
+        # work, which is where a personal view belongs.
+        logger.info(
+            f"User {current_user.username} listing reviews in {len(access)} granted repositories"
+        )
 
         # Parse app_names from comma-separated string
         app_names_list = None
@@ -944,24 +925,10 @@ async def get_review(
         NotFoundException: If no reviews are found
     """
     try:
-        # Check if user has review_admin role (by checking 'assign' permission)
-        rbac_service = RBACService(db)
-        is_review_admin = await rbac_service.check_permission(
-            auth_user_id=current_user.id,
-            action="assign",
-            resource_type="reviews",
-        )
+        logger.info(f"User {current_user.username} viewing PR {pull_request_id}")
 
-        # Determine visible_to_username based on user role
-        # Admin: sees all reviews (including unassigned)
-        # Regular user: only sees their assigned reviews and self-raised PRs
-        visible_to_username = None if is_review_admin else current_user.username
-
-        logger.info(
-            f"User {current_user.username} (admin={is_review_admin}) viewing PR {pull_request_id}"
-        )
-
-        # Get all reviews for this PR (may have multiple reviews from different reviewers)
+        # No visible_to_username: a reader who can list a review can open it, and
+        # the service still refuses pairs the reader has no grant for.
         reviews = await review_service.get_review(
             project_key=project_key,
             repository_slug=repository_slug,
@@ -969,7 +936,6 @@ async def get_review(
             reviewer=reviewer,
             source_filename=source_filename,
             db=db,
-            visible_to_username=visible_to_username,
             current_user_id=current_user.id,
         )
 
