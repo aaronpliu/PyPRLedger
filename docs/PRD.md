@@ -553,10 +553,10 @@ Request: GET /reviews?app_names=member,tv
 | FR-5.10.2 | SSE stream authenticated with a one-shot ticket from `POST /api/v1/sse/ticket` — the JWT is never placed in the URL (`?token=` only when `SSE_ALLOW_TOKEN_QUERY` is on) | P1 |
 | FR-5.10.3 | Events: `review_created`, `review_updated`, `score_added` | P1 |
 | FR-5.10.4 | Per-user relevance filtering by repository grant — a reader sees events for the repositories they are granted, whether or not they author or review that PR (no grants, no events) | P1 |
-| FR-5.10.5 | Connection limits: 3 per user (regular), 10 per user (admin) | P1 |
-| FR-5.10.6 | Global connection limit: 2000 concurrent SSE connections | P1 |
+| FR-5.10.5 | Connection limits: 3 per user (regular), 10 per user (admin) — enforced per backend process, so multiply by worker count | P1 |
+| FR-5.10.6 | Global connection limit: 2000 concurrent SSE connections per backend process | P1 |
 | FR-5.10.7 | Idle timeout: 300 seconds (auto-disconnect) | P1 |
-| FR-5.10.8 | Heartbeat every 15 seconds to keep connections alive | P1 |
+| FR-5.10.8 | Heartbeat every 30 seconds to keep connections alive | P1 |
 | FR-5.10.9 | Oldest connection pruned when per-user limit exceeded | P1 |
 | FR-5.10.10 | Broker auto-reconnects to Redis with exponential backoff | P1 |
 | FR-5.10.11 | Personal `notification` events: creating a notification publishes it on a second Redis channel and the broker delivers it only to the addressed user's connections (matched by auth or linked git username); the notification bell refreshes on the event with the 30s poll as fallback | P2 |

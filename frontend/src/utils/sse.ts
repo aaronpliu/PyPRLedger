@@ -47,7 +47,11 @@ export interface SSENotificationEvent {
 export type SSENotificationHandler = (event: SSENotificationEvent) => void
 
 export interface SSEServiceOptions {
-  /** Maximum reconnection attempts before giving up (default: 15) */
+  /**
+   * Maximum reconnection attempts before giving up (default: Infinity — the
+   * capped 30s backoff keeps trying forever; a silently dead stream is worse
+   * than one small ticket request every 30 seconds).
+   */
   maxReconnectAttempts: number
   /** Base reconnection delay in ms, doubled each attempt (default: 2000) */
   reconnectBaseDelay: number
@@ -113,7 +117,7 @@ export class SSEService {
 
   constructor(options: Partial<SSEServiceOptions> = {}) {
     this.options = {
-      maxReconnectAttempts: 15,
+      maxReconnectAttempts: Number.POSITIVE_INFINITY,
       reconnectBaseDelay: 2000,
       maxReconnectDelay: 30000,
       fastRetryDelay: 1500,
@@ -587,6 +591,8 @@ export class SSEService {
       console.error('[SSE] Max reconnection attempts reached — giving up')
       return
     }
+    // attempts grows without bound when retrying forever; the exponential
+    // delay is capped by maxReconnectDelay so the backoff stays at 30s.
 
     this.reconnectAttempts++
 

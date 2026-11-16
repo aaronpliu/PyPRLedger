@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - The notification bell keeps its popup in step with its badge. The poller compared the unread count with the length of the popup list and skipped the fetch whenever that list was still empty, so the first task assigned to a reviewer raised the badge and left the popup blank until a page reload. The list is now refetched whenever the count moves in either direction, and again when the popup is opened
+- SSE connection limits were advisory: pruning the oldest connection of a user who opened one tab too many only removed it from the ledger and left it streaming. The pruned stream is now actually ended, so the ledger and the real connection count stop drifting apart
+- A consumer that cannot keep up (paused tab, stalled proxy) used to have events silently dropped while staying connected and stale forever; its stream is now closed so the browser reconnects, refetches and resyncs
+- The browser client no longer gives up on SSE after 15 failed reconnection attempts (roughly 8 minutes of outage); it retries forever with the exponential backoff capped at 30 seconds, and the tab-visibility handler keeps resetting the attempt counter
 
 ## [1.39.0] - 2026-11-16
 

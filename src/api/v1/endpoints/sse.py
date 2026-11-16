@@ -62,6 +62,10 @@ def _prune_oldest_user_connection(tracking_username: str) -> None:
     _sse_connections[tracking_username] = user_connections[1:]
     if not _sse_connections[tracking_username]:
         del _sse_connections[tracking_username]
+    # End the pruned stream for real — removing it from tracking alone would
+    # leave the connection streaming past the per-user limit while the ledger
+    # quietly drifts away from reality.
+    get_sse_broker().disconnect_client(old_id)
     logger.info(
         "SSE connection abort signalled for pruning",
         extra={"connection_id": old_id, "username": tracking_username},

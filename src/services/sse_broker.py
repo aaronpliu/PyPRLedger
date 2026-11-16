@@ -197,6 +197,25 @@ class SSEBroker:
             logger.info("No SSE clients remaining — stopping broker to free Redis connection")
             await self.stop()
 
+    def disconnect_client(self, client_id: str) -> bool:
+        """Signal one client's stream to end.
+
+        The stream generator treats ``None`` as disconnect and unregisters the
+        client in its ``finally`` block, so no cleanup happens here.
+        """
+        client = self._clients.get(client_id)
+        if client is None:
+            return False
+        with contextlib.suppress(asyncio.QueueFull):
+            if client.queue.full():
+                client.queue.get_nowait()
+            client.queue.put_nowait(None)
+        logger.info(
+            "SSEBroker client disconnect signalled",
+            extra={"client_id": client_id},
+        )
+        return True
+
     @property
     def client_count(self) -> int:
         return len(self._clients)
@@ -299,12 +318,27 @@ class SSEBroker:
                         },
                     )
                 except asyncio.QueueFull:
-                    logger.warning(
-                        "SSEBroker client queue full — dropping event",
-                        extra={"client_id": client.client_id},
-                    )
+                    self._drop_slow_consumer(client)
             else:
                 metrics.sse_events_filtered_total.labels(filtered="true").inc()
+
+    def _drop_slow_consumer(self, client: SSEClient) -> None:
+        """End the stream of a consumer that cannot keep up.
+
+        Silently dropping frames would leave the client connected but stale
+        forever — worse than a short blip. Signalling the stream to end makes
+        the browser reconnect, refetch and resync; one pending frame is
+        sacrificed to make room for the disconnect signal.
+        """
+        with contextlib.suppress(asyncio.QueueFull):
+            if client.queue.full():
+                client.queue.get_nowait()
+            client.queue.put_nowait(None)
+        metrics.sse_events_filtered_total.labels(filtered="slow_consumer").inc()
+        logger.warning(
+            "SSEBroker client queue full — closing stream to force a resync",
+            extra={"client_id": client.client_id},
+        )
 
     async def _dispatch_notification(self, raw_data: str | bytes) -> None:
         """Parse a notification pubsub payload and deliver it to its user."""
@@ -328,10 +362,7 @@ class SSEBroker:
                     client.queue.put_nowait(event_str)
                     delivered = True
                 except asyncio.QueueFull:
-                    logger.warning(
-                        "SSEBroker client queue full — dropping notification",
-                        extra={"client_id": client.client_id},
-                    )
+                    self._drop_slow_consumer(client)
         metrics.sse_events_filtered_total.labels(
             filtered="notification_delivered" if delivered else "notification_no_recipient"
         ).inc()

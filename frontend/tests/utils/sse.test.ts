@@ -150,6 +150,27 @@ describe('SSEService stream authentication', () => {
     expect(createStreamTicket).toHaveBeenCalledTimes(2)
     expect(FakeEventSource.instances[0].url).toBe('/api/v1/sse/stream?ticket=ticket-late')
   })
+
+  it('never gives up reconnecting during a long outage', async () => {
+    createStreamTicket.mockImplementation(async () => ({
+      ticket: `ticket-${createStreamTicket.mock.calls.length}`,
+      expires_in: 60,
+    }))
+
+    service.connect('jwt-value', vi.fn())
+    await flushPromises()
+
+    // An outage far longer than the old 15-attempt (~8 minute) limit
+    for (let cycle = 0; cycle < 25; cycle++) {
+      FakeEventSource.instances[FakeEventSource.instances.length - 1]?.fail()
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(31000)
+      await flushPromises()
+    }
+
+    expect(FakeEventSource.instances.length).toBeGreaterThanOrEqual(25)
+    expect(createStreamTicket).toHaveBeenCalledTimes(FakeEventSource.instances.length)
+  })
 })
 
 describe('SSEService event names', () => {

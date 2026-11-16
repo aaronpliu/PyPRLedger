@@ -382,7 +382,7 @@ async def test_sse_prunes_oldest_connection_when_limit_exceeded(
     try:
         with patch(
             "src.api.v1.endpoints.sse.get_sse_broker", return_value=_make_auto_disconnect_broker()
-        ):
+        ) as mock_get_broker:
             response = await async_client.get(
                 "/api/v1/sse/stream",
                 params={"ticket": ticket},
@@ -392,6 +392,10 @@ async def test_sse_prunes_oldest_connection_when_limit_exceeded(
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
+
+    # The pruned stream is ended for real — not merely removed from the ledger
+    # while the connection keeps streaming past the per-user limit.
+    mock_get_broker.return_value.disconnect_client.assert_called_once_with("conn-1")
 
 
 @pytest.mark.asyncio
@@ -677,3 +681,57 @@ async def test_review_events_keep_their_own_path():
         broker._clients.pop(client.client_id, None)
 
     assert review_frame.startswith("event: review_created")
+
+
+# --- Resilience under load ----------------------------------------------------
+# What actually breaks with many long-lived connections is not the fan-out (one
+# Redis subscription, O(clients) work per event) but the edges: a consumer that
+# cannot keep up, and limits that only exist on paper.
+
+
+@pytest.mark.asyncio
+async def test_broker_ends_the_stream_of_a_slow_consumer():
+    from src.services.sse_broker import QUEUE_MAX_SIZE, SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    client = SSEClient(client_id="slow-reader", git_username="aaronpliu", is_admin=False)
+    broker._clients[client.client_id] = client
+    try:
+        for _ in range(QUEUE_MAX_SIZE):
+            await broker._fan_out(_review_event())
+        assert client.queue.full()
+
+        # One event past capacity: instead of dropping the frame and leaving the
+        # client connected-but-stale forever, the stream is signalled to end so
+        # the browser reconnects, refetches and resyncs.
+        await broker._fan_out(_review_event())
+
+        frames = []
+        while not client.queue.empty():
+            frames.append(client.queue.get_nowait())
+    finally:
+        broker._clients.pop(client.client_id, None)
+
+    assert frames[-1] is None, "the last frame must be the disconnect signal"
+    assert all(frame is not None for frame in frames[:-1])
+    assert len(frames) == QUEUE_MAX_SIZE
+
+
+@pytest.mark.asyncio
+async def test_broker_disconnect_client_signals_the_stream_to_end():
+    from src.services.sse_broker import SSEBroker, SSEClient
+
+    broker = SSEBroker()
+    client = SSEClient(client_id="victim", git_username="aaronpliu", is_admin=False)
+    broker._clients[client.client_id] = client
+    try:
+        assert broker.disconnect_client("victim") is True
+        assert broker.disconnect_client("never-existed") is False
+
+        frames = []
+        while not client.queue.empty():
+            frames.append(client.queue.get_nowait())
+    finally:
+        broker._clients.pop(client.client_id, None)
+
+    assert frames == [None]
