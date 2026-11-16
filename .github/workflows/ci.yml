@@ -52,8 +52,31 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
-      - name: Run tests
-        run: uv run pytest
+      - name: Run tests with coverage
+        # The floor is the current baseline; raise it as suites are added.
+        run: uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=60
+
+  backend-audit:
+    name: Backend Dependency Audit
+    runs-on: ubuntu-latest
+    needs: backend-lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Audit dependencies
+        # Audits the resolved environment, dev tooling included.
+        run: uv run pip-audit
 
   frontend-test:
     name: Frontend Tests
@@ -75,6 +98,33 @@ jobs:
       - name: Run unit tests
         working-directory: frontend
         run: npm run test:run
+
+      - name: Type check
+        working-directory: frontend
+        run: npm run type-check
+
+  frontend-audit:
+    name: Frontend Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Audit production dependencies
+        # The tree still carries known high-severity advisories; the gate fails
+        # on critical until `npm audit fix` has been applied, then raise it to high.
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=critical
 
   frontend-build:
     name: Frontend Build
