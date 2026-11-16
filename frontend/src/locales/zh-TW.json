@@ -1494,6 +1494,7 @@
     "panel_title": "進階篩選",
     "search_placeholder": "搜尋...（點擊查看更多篩選）",
     "reset_all": "全部重置",
+    "clear_all": "清除全部",
     "app_name": "應用名稱",
     "project": "專案",
     "pr_user": "PR 提交人",

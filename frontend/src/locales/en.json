@@ -1494,6 +1494,7 @@
     "panel_title": "Advanced Filters",
     "search_placeholder": "Search... (Click for more filters)",
     "reset_all": "Reset All",
+    "clear_all": "Clear All",
     "app_name": "App Name",
     "project": "Project",
     "pr_user": "PR User",
