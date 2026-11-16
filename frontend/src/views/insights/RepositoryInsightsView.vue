@@ -44,6 +44,20 @@
           </div>
         </div>
 
+        <!-- A scope with nothing in it reads as an empty reading, not as an
+             error: either the window holds no reviews, or the caller holds no
+             grant for this scope. The page says so instead of leaving six zeros
+             to be interpreted. -->
+        <el-alert
+          v-if="reading && !reading.kpis.reviews_total && !reading.recent.length"
+          class="empty-hint"
+          type="info"
+          :closable="false"
+          show-icon
+          :title="t('insights.scope_empty')"
+          data-test="insights-scope-empty"
+        />
+
         <el-row v-if="reading" :gutter="16" class="chart-grid">
           <el-col :xs="24" :md="12">
             <el-card shadow="never" class="chart-card">
@@ -115,6 +129,7 @@ import RepositoryScopePicker, {
   type RepositoryScope,
 } from '@/components/insights/RepositoryScopePicker.vue'
 import { insightsApi, type RepositoryInsights } from '@/api/insights'
+import { sseService, type SSEReviewCreatedEvent } from '@/utils/sse'
 
 const { t } = useI18n()
 
@@ -137,6 +152,8 @@ const loading = ref(false)
 const lastUpdated = ref('')
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
+// A burst of reviews arrives as a burst of events; one refresh answers them all.
+let sseRefreshTimer: ReturnType<typeof setTimeout> | null = null
 
 function percent(value: number): string {
   return `${Math.round(value * 100)}%`
@@ -268,6 +285,25 @@ async function load(quiet = true) {
   }
 }
 
+/**
+ * A review event only matters when it landed in the scope on screen: the
+ * project matches, and so does the repository unless the whole project is read.
+ */
+function appliesToScope(event: SSEReviewCreatedEvent): boolean {
+  if (!scope.value.projectKey) return false
+  if (event.project_key !== scope.value.projectKey) return false
+  return !scope.value.repositorySlug || event.repository_slug === scope.value.repositorySlug
+}
+
+function handleReviewEvent(event: SSEReviewCreatedEvent) {
+  if (!appliesToScope(event) || document.hidden) return
+  if (sseRefreshTimer) clearTimeout(sseRefreshTimer)
+  sseRefreshTimer = setTimeout(() => {
+    sseRefreshTimer = null
+    void load()
+  }, 300)
+}
+
 function startPolling() {
   stopPolling()
   pollTimer = setInterval(() => {
@@ -301,11 +337,19 @@ watch(
 onMounted(() => {
   startPolling()
   document.addEventListener('visibilitychange', handleVisibility)
+  // The 30s poll is the floor; a review that lands in this scope arrives as an
+  // event and the reading is refreshed without waiting for the next tick.
+  sseService.addReviewListener(handleReviewEvent)
 })
 
 onUnmounted(() => {
   stopPolling()
   document.removeEventListener('visibilitychange', handleVisibility)
+  sseService.removeReviewListener(handleReviewEvent)
+  if (sseRefreshTimer) {
+    clearTimeout(sseRefreshTimer)
+    sseRefreshTimer = null
+  }
 })
 </script>
 

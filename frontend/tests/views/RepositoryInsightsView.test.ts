@@ -10,6 +10,17 @@ const api = vi.hoisted(() => ({
   getProjectRepositories: vi.fn(),
 }))
 
+// The page watches review events on the shared stream; the tests hand it the
+// events directly through the same registry the service would call.
+const sse = vi.hoisted(() => ({ listeners: new Set<(event: any) => void>() }))
+
+vi.mock('@/utils/sse', () => ({
+  sseService: {
+    addReviewListener: (handler: (event: any) => void) => sse.listeners.add(handler),
+    removeReviewListener: (handler: (event: any) => void) => sse.listeners.delete(handler),
+  },
+}))
+
 vi.mock('@/api/insights', () => ({
   insightsApi: { getRepositoryInsights: api.getRepositoryInsights },
 }))
@@ -154,6 +165,95 @@ describe('RepositoryInsightsView', () => {
 
     expect(api.getRepositoryInsights).toHaveBeenCalledTimes(2)
     wrapper.unmount()
+  })
+
+  it('refreshes at once when a review lands in the scope on screen', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountView()
+    await pick(wrapper, 'CORE')
+    expect(api.getRepositoryInsights).toHaveBeenCalledTimes(1)
+
+    sse.listeners.forEach((listener) =>
+      listener({
+        review_id: 1,
+        project_key: 'CORE',
+        repository_slug: 'app',
+        pull_request_id: '9',
+        created_date: '2026-11-16T10:00:00',
+      }),
+    )
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(api.getRepositoryInsights).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('ignores a review from outside the scope, and a burst collapses into one read', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountView()
+    await pick(wrapper, 'CORE', 'app')
+    expect(api.getRepositoryInsights).toHaveBeenCalledTimes(1)
+
+    const send = (project: string, repository: string) =>
+      sse.listeners.forEach((listener) =>
+        listener({
+          review_id: 1,
+          project_key: project,
+          repository_slug: repository,
+          pull_request_id: '9',
+          created_date: '2026-11-16T10:00:00',
+        }),
+      )
+
+    send('CORE', 'api') // another repository of the same project
+    send('PAY', 'app') // another project entirely
+    await vi.advanceTimersByTimeAsync(300)
+    expect(api.getRepositoryInsights).toHaveBeenCalledTimes(1)
+
+    send('CORE', 'app')
+    send('CORE', 'app')
+    send('CORE', 'app')
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(api.getRepositoryInsights).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('says a scope with nothing in it is empty rather than silently zero', async () => {
+    api.getRepositoryInsights.mockResolvedValue(
+      reading({
+        kpis: {
+          reviews_total: 0,
+          reviews_open: 0,
+          reviews_today: 0,
+          avg_score: 0,
+          good_suggestion_rate: 0,
+          assigned_pending: 0,
+          assigned_in_progress: 0,
+          unassigned_count: 0,
+          active_reviewers: 0,
+        },
+        trends: [],
+        breakdown: { by_status: [], by_reviewer: [], by_project: [] },
+        recent: [],
+      }),
+    )
+    const wrapper = await mountView()
+    await pick(wrapper, 'CORE')
+
+    const hint = wrapper.find('[data-test="insights-scope-empty"]')
+    expect(hint.exists()).toBe(true)
+    expect(hint.text()).toContain('no grant')
+  })
+
+  it('stops watching the stream once the page is gone', async () => {
+    const wrapper = await mountView()
+    await pick(wrapper, 'CORE')
+    expect(sse.listeners.size).toBe(1)
+
+    wrapper.unmount()
+
+    expect(sse.listeners.size).toBe(0)
   })
 
   it('keeps the last reading when a poll fails', async () => {

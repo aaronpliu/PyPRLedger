@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - A repository insights page (`/insights/repository`) answers the question the personal dashboard cannot: how is *this* repository doing? Pick a project and optionally one of its repositories, and one backend reading (`GET /api/v1/insights/repository`, cached for a minute) returns six KPIs (reviews, open PRs, average score, high-score rate, unassigned work, active reviewers), a review/assignment trend, an average-score trend, PR status and reviewer workload distributions, and the last ten reviews. Counting and grouping happen in SQL rather than by pulling rows into the browser, and every query is limited to the caller's repository grants — a scope they hold nothing for answers with an empty reading. The page polls every 30 seconds, pauses while the tab is hidden, and keeps the last good reading when a poll fails
+- The insights page also reads the existing SSE stream: `review_created` and `review_updated` carry `project_key` and `repository_slug`, so a review landing in the scope on screen refreshes the reading within a moment (a burst of events collapses into one refresh). Pages no longer have to take over the stream's single callback to watch it — `SSEService.addReviewListener`/`removeReviewListener` fan the parsed event out to any number of watchers, alongside the callback the stream's owner still gets
 
 ## [1.40.0] - 2026-11-16
 

@@ -1375,11 +1375,12 @@
   },
   "insights": {
     "title": "仓库洞察",
-    "subtitle": "单个仓库的评审、评分与任务分配，每 30 秒刷新一次。",
+    "subtitle": "单个仓库的评审、评分与任务分配——有新评审时实时刷新，此外每 30 秒刷新一次。",
     "select_project": "选择项目",
     "select_repository": "选择仓库",
     "all_repositories": "全部仓库",
     "select_project_hint": "选择一个项目，查看它的评审、评分与任务分配。",
+    "scope_empty": "所选时间范围内没有数据——该范围没有评审，或你未被授权查看该范围。",
     "days_option": "近 {days} 天",
     "period_daily": "按日",
     "period_weekly": "按周",

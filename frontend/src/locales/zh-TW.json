@@ -1375,11 +1375,12 @@
   },
   "insights": {
     "title": "倉庫洞察",
-    "subtitle": "單一倉庫的審查、評分與任務指派，每 30 秒更新一次。",
+    "subtitle": "單一倉庫的審查、評分與任務指派——有新審查時即時更新，此外每 30 秒更新一次。",
     "select_project": "選擇專案",
     "select_repository": "選擇倉庫",
     "all_repositories": "全部倉庫",
     "select_project_hint": "選擇一個專案，查看它的審查、評分與任務指派。",
+    "scope_empty": "所選時間範圍內沒有資料——該範圍沒有審查，或你未被授權檢視該範圍。",
     "days_option": "近 {days} 天",
     "period_daily": "按日",
     "period_weekly": "按週",

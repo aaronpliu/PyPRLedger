@@ -195,6 +195,46 @@ describe('SSEService event names', () => {
     expect(onEvent).toHaveBeenNthCalledWith(1, payload)
     expect(onEvent).toHaveBeenNthCalledWith(2, payload)
   })
+
+  it('feeds watchers that do not own the stream', async () => {
+    createStreamTicket.mockResolvedValue({ ticket: 'ticket-1', expires_in: 60 })
+    const watcher = vi.fn()
+
+    service.addReviewListener(watcher)
+    service.connect('jwt-value', vi.fn())
+    await flushPromises()
+
+    const payload = {
+      review_id: 9,
+      project_key: 'CORE',
+      repository_slug: 'app',
+      pull_request_id: '77',
+      created_date: '2026-11-16T18:00:00+00:00',
+    }
+    FakeEventSource.instances[0].message('review_created', payload)
+
+    expect(watcher).toHaveBeenCalledWith(payload)
+  })
+
+  it('stops feeding a watcher once it detaches', async () => {
+    createStreamTicket.mockResolvedValue({ ticket: 'ticket-1', expires_in: 60 })
+    const watcher = vi.fn()
+
+    service.addReviewListener(watcher)
+    service.connect('jwt-value', vi.fn())
+    await flushPromises()
+    service.removeReviewListener(watcher)
+
+    FakeEventSource.instances[0].message('review_created', {
+      review_id: 9,
+      project_key: 'CORE',
+      repository_slug: 'app',
+      pull_request_id: '77',
+      created_date: '2026-11-16T18:00:00+00:00',
+    })
+
+    expect(watcher).not.toHaveBeenCalled()
+  })
 })
 
 describe('SSEService notification events', () => {

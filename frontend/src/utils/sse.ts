@@ -16,16 +16,24 @@ import { sseApi } from '@/api/sse'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
 
+/**
+ * The payload a review event carries.
+ *
+ * Both `review_created` and `review_updated` send the same shape, so a consumer
+ * that only wants to know "this repository changed" reads the pair below.
+ */
 export interface SSEReviewCreatedEvent {
-  event: 'review_created'
-  data: {
-    review_id: number
-    project_key: string
-    repository_slug: string
-    pull_request_id: string
-    created_date: string
-  }
+  /** Which stream event carried it; absent when a caller builds one by hand. */
+  event?: 'review_created' | 'review_updated'
+  review_id: number
+  project_key: string
+  repository_slug: string
+  pull_request_id: string
+  created_date: string
 }
+
+/** A component that watches review events without owning the stream. */
+export type SSEReviewListener = (event: SSEReviewCreatedEvent) => void
 
 export interface SSECallbackMap {
   review_created: (event: SSEReviewCreatedEvent) => void
@@ -91,6 +99,13 @@ export class SSEService {
    * whichever view currently owns the stream.
    */
   private notificationHandler: SSENotificationHandler | null = null
+
+  /**
+   * Review watchers that do not own the stream. Like the notification handler,
+   * these sit outside `connect()`'s callback chain so a page keeps receiving
+   * across navigations and reconnections.
+   */
+  private reviewListeners = new Set<SSEReviewListener>()
 
   // Store current callbacks so they can be updated
   private currentOnEvent: ((event: SSEReviewCreatedEvent) => void) | null = null
@@ -285,8 +300,20 @@ export class SSEService {
       if (generation !== this.connectionGeneration) {
         return
       }
-      if (this.currentOnEvent) {
-        this.handleReviewCreated(rawEvent as MessageEvent, this.currentOnEvent)
+      // One parse, many readers: the page that opened the stream gets the event
+      // through its own callback, and pages that only watch a scope subscribe to
+      // the same stream through `addReviewListener` instead of competing for it.
+      const event = this.parseReviewEvent(rawEvent as MessageEvent)
+      if (!event) {
+        return
+      }
+      this.currentOnEvent?.(event)
+      for (const listener of this.reviewListeners) {
+        try {
+          listener(event)
+        } catch (error) {
+          console.error('[SSE] Review listener failed:', error)
+        }
       }
     }
 
@@ -454,6 +481,22 @@ export class SSEService {
   }
 
   /**
+   * Subscribe to review events without owning the stream.
+   *
+   * `connect()` keeps a single callback for the page that opened the stream;
+   * a second page that only cares about its own scope (a dashboard watching one
+   * repository, say) would otherwise have to take that callback over.
+   */
+  addReviewListener(handler: SSEReviewListener): void {
+    this.reviewListeners.add(handler)
+  }
+
+  /** Detach a listener added with `addReviewListener`. */
+  removeReviewListener(handler: SSEReviewListener): void {
+    this.reviewListeners.delete(handler)
+  }
+
+  /**
    * Handle an incoming `notification` SSE event
    */
   private handleNotification(rawEvent: MessageEvent): void {
@@ -472,14 +515,9 @@ export class SSEService {
   /**
    * Handle an incoming review_created SSE event
    */
-  private handleReviewCreated(
-    rawEvent: MessageEvent,
-    onEvent: (event: SSEReviewCreatedEvent) => void,
-  ): void {
+  private parseReviewEvent(rawEvent: MessageEvent): SSEReviewCreatedEvent | null {
     try {
-      console.log('[SSE] Raw event received:', rawEvent.data)
       const data = JSON.parse(rawEvent.data)
-      console.log('[SSE] Parsed event:', data)
       if (
         !data ||
         typeof data.review_id !== 'number' ||
@@ -488,12 +526,13 @@ export class SSEService {
         typeof data.pull_request_id !== 'string' ||
         typeof data.created_date !== 'string'
       ) {
-        console.warn('[SSE] Received malformed review_created event — dropping:', rawEvent.data)
-        return
+        console.warn('[SSE] Received malformed review event — dropping:', rawEvent.data)
+        return null
       }
-      onEvent(data)
-    } catch (e) {
-      console.error('[SSE] Failed to parse review_created event:', e, rawEvent.data)
+      return data as SSEReviewCreatedEvent
+    } catch (error) {
+      console.error('[SSE] Failed to parse review event:', error, rawEvent.data)
+      return null
     }
   }
 

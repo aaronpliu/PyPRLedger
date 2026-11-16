@@ -1375,11 +1375,12 @@
   },
   "insights": {
     "title": "Repository Insights",
-    "subtitle": "Reviews, scores and assignments of one repository, refreshed every 30 seconds.",
+    "subtitle": "Reviews, scores and assignments of one repository — live on new reviews, and every 30 seconds besides.",
     "select_project": "Select a project",
     "select_repository": "Select a repository",
     "all_repositories": "All repositories",
     "select_project_hint": "Pick a project to read its reviews, scores and assignments.",
+    "scope_empty": "Nothing was read for this scope in the selected window — it holds no reviews, or you hold no grant for it.",
     "days_option": "Last {days} days",
     "period_daily": "Daily",
     "period_weekly": "Weekly",
