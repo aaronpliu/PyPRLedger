@@ -40,6 +40,7 @@ Before writing tests, check whether the `unit-test-backend` or `unit-test-fronte
 import pytest
 from httpx import AsyncClient
 
+
 @pytest.mark.asyncio
 async def test_create_user(async_client: AsyncClient):
     response = await async_client.post("/api/v1/users/", json={...})

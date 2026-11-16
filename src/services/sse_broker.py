@@ -44,10 +44,14 @@ def _is_user_involved_in_review(
     is_admin: bool = False,
     allowed_pairs: set[tuple[str, str]] | None = None,
 ) -> bool:
-    if allowed_pairs is not None and (
-        review.get("project_key"),
-        review.get("repository_slug"),
-    ) not in allowed_pairs:
+    if (
+        allowed_pairs is not None
+        and (
+            review.get("project_key"),
+            review.get("repository_slug"),
+        )
+        not in allowed_pairs
+    ):
         return False
     if is_admin:
         return True

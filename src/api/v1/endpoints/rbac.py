@@ -480,7 +480,9 @@ def _normalize_festival(raw: dict) -> dict:
     custom_colors = []
     if isinstance(raw_colors, list):
         for color in raw_colors[:FESTIVAL_MAX_CUSTOM_COLORS]:
-            if isinstance(color, str) and re.fullmatch(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})", color):
+            if isinstance(color, str) and re.fullmatch(
+                r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})", color
+            ):
                 custom_colors.append(color.lower())
 
     duration_low, duration_high = FESTIVAL_DURATION_RANGE

@@ -2421,10 +2421,14 @@ class ReviewService:
             base = result.scalars().first()
             if not base:
                 return None
-            if self._allowed_pairs is not None and (
-                base.project_key,
-                base.repository_slug,
-            ) not in self._allowed_pairs:
+            if (
+                self._allowed_pairs is not None
+                and (
+                    base.project_key,
+                    base.repository_slug,
+                )
+                not in self._allowed_pairs
+            ):
                 return None
 
             reviews = self._flatten_reviews([base], reviewer=None, visible_to_username=None)

@@ -148,9 +148,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    created_date: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC)
-    )
+    created_date: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 ```
 - Always use `Mapped[type]` + `mapped_column()`
 - Use `lambda: datetime.now(UTC)` for timestamps
@@ -163,8 +161,10 @@ class UserBase(BaseModel):
     username: str = Field(..., min_length=3, max_length=64)
     model_config = {"from_attributes": True}
 
+
 class UserCreate(UserBase):
     password: str = Field(..., min_length=8)
+
 
 class UserResponse(UserBase):
     id: int
@@ -177,6 +177,7 @@ class UserResponse(UserBase):
 ### 5. API Endpoint Pattern
 ```python
 router = APIRouter(prefix="/users", tags=["users"])
+
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
@@ -198,7 +199,10 @@ async def create_user(
 class UserNotFoundException(NotFoundException):
     def __init__(self, user_id: int | None = None, username: str | None = None):
         if user_id:
-            super().__init__(message=f"User with ID {user_id} not found", detail={"user_id": user_id})
+            super().__init__(
+                message=f"User with ID {user_id} not found", detail={"user_id": user_id}
+            )
+
 
 # Raise in code
 raise UserNotFoundException(user_id=user_id)
@@ -242,11 +246,14 @@ await cache.delete(f"user:{user_id}")  # Invalidate on write
 ### 9. Logging
 ```python
 logger = get_logger(__name__)
-logger.info("Review created", extra={
-    "review_id": review.id,
-    "user_id": user.id,
-    "project_key": project_key,
-})
+logger.info(
+    "Review created",
+    extra={
+        "review_id": review.id,
+        "user_id": user.id,
+        "project_key": project_key,
+    },
+)
 ```
 - Use structured logging with `extra`
 - Appropriate levels: DEBUG/INFO/WARNING/ERROR/CRITICAL

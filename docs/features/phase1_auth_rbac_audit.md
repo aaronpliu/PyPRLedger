@@ -186,19 +186,21 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 class AuthService:
     async def register(self, register_data: RegisterRequest) -> TokenResponse:
         """Register new user with validation"""
-        
+
     async def authenticate(self, login_data: LoginRequest) -> TokenResponse:
         """Login and return JWT tokens"""
-        
+
     async def refresh_token(self, refresh_token: str) -> TokenResponse:
         """Refresh access token using refresh token"""
-        
+
     async def logout(self, token: str) -> bool:
         """Logout by blacklisting token in Redis"""
-        
-    async def change_password(self, auth_user_id: int, old_password: str, new_password: str) -> bool:
+
+    async def change_password(
+        self, auth_user_id: int, old_password: str, new_password: str
+    ) -> bool:
         """Change user password with old password verification"""
-        
+
     async def get_current_user(self, token: str) -> AuthUser:
         """Get current user from JWT token"""
 ```
@@ -295,7 +297,7 @@ class RBACService:
         resource_id: str | None = None,
     ) -> bool:
         """Check if user has permission (returns boolean)"""
-        
+
     async def require_permission(
         self,
         auth_user_id: int,
@@ -304,7 +306,7 @@ class RBACService:
         resource_id: str | None = None,
     ) -> None:
         """Require permission or raise ForbiddenException"""
-        
+
     async def assign_role(
         self,
         auth_user_id: int,
@@ -315,7 +317,7 @@ class RBACService:
         expires_at: datetime | None = None,
     ) -> UserRoleAssignment:
         """Assign role to user with optional expiration"""
-        
+
     async def revoke_role(
         self,
         auth_user_id: int,
@@ -324,14 +326,12 @@ class RBACService:
         resource_id: str | None = None,
     ) -> bool:
         """Revoke role from user"""
-        
+
     async def get_user_roles(
-        self, 
-        auth_user_id: int, 
-        resource_type: str | None = None
+        self, auth_user_id: int, resource_type: str | None = None
     ) -> list[dict]:
         """Get all roles assigned to user"""
-        
+
     async def get_all_roles(self) -> list[Role]:
         """Get all available roles"""
 ```
@@ -352,6 +352,7 @@ def get_current_user_with_token(
     db: AsyncSession,
 ) -> AuthUser:
     """Extract and validate JWT from Authorization header"""
+
 
 def require_permission(
     action: str,
@@ -398,6 +399,7 @@ async def create_review(
 ):
     # Only users with "create" permission on "reviews" can access
     pass
+
 
 @router.get("/projects/{project_key}")
 async def get_project(
@@ -605,6 +607,7 @@ auth_user (1) ────── (M) user_role_assignment (M) ──────
 permissions = role.permissions
 if isinstance(permissions, str):
     import json
+
     permissions = json.loads(permissions)
 ```
 
@@ -614,8 +617,7 @@ if isinstance(permissions, str):
 ```python
 if level == "global":
     level_assignments = [
-        a for a in active_assignments
-        if a.resource_type == level and a.resource_id is None
+        a for a in active_assignments if a.resource_type == level and a.resource_id is None
     ]
 ```
 

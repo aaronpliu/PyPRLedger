@@ -132,12 +132,12 @@ class PersonalAccessToken(Base):
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
-    auth_user: Mapped["AuthUser"] = relationship("AuthUser", back_populates="personal_access_tokens")
+    auth_user: Mapped["AuthUser"] = relationship(
+        "AuthUser", back_populates="personal_access_tokens"
+    )
 
     # Table arguments
-    __table_args__ = (
-        Index("idx_auth_user_created", "auth_user_id", "created_at"),
-    )
+    __table_args__ = (Index("idx_auth_user_created", "auth_user_id", "created_at"),)
 
     def to_dict(self) -> dict:
         """Convert to dictionary (excludes sensitive data)"""
@@ -158,9 +158,7 @@ Add relationship:
 ```python
 # In AuthUser class
 personal_access_tokens: Mapped[list["PersonalAccessToken"]] = relationship(
-    "PersonalAccessToken", 
-    back_populates="auth_user",
-    lazy="selectin"
+    "PersonalAccessToken", back_populates="auth_user", lazy="selectin"
 )
 ```
 
@@ -175,19 +173,21 @@ from pydantic import BaseModel, Field
 
 class PATCreateRequest(BaseModel):
     """Request schema for creating a new personal access token"""
-    
-    name: str = Field(..., min_length=1, max_length=100, description="Token name for identification")
+
+    name: str = Field(
+        ..., min_length=1, max_length=100, description="Token name for identification"
+    )
     expires_in_days: int | None = Field(
-        None, 
-        ge=1, 
-        le=365, 
-        description="Days until token expires (1-365). None means use default (90 days)"
+        None,
+        ge=1,
+        le=365,
+        description="Days until token expires (1-365). None means use default (90 days)",
     )
 
 
 class PATResponse(BaseModel):
     """Response schema for token metadata (no token value)"""
-    
+
     id: int
     name: str
     prefix: str
@@ -195,20 +195,20 @@ class PATResponse(BaseModel):
     expires_at: datetime | None
     last_used_at: datetime | None
     is_active: bool
-    
+
     class Config:
         from_attributes = True
 
 
 class PATCreationResponse(PATResponse):
     """Special response for token creation (includes token once)"""
-    
+
     token: str = Field(..., description="Full token value (shown only once)")
 
 
 class PATListResponse(BaseModel):
     """Paginated list response"""
-    
+
     total: int
     items: list[PATResponse]
 ```
@@ -263,27 +263,27 @@ class PATService:
     ) -> tuple[str, PersonalAccessToken]:
         """
         Create a new personal access token
-        
+
         Returns:
             Tuple of (full_token_string, token_record)
         """
         # Check rate limit
         await self._check_rate_limit(auth_user_id)
-        
+
         # Check token count limit
         await self._check_token_limit(auth_user_id)
-        
+
         # Generate token
         raw_token = TOKEN_PREFIX + secrets.token_urlsafe(TOKEN_LENGTH)
         token_hash = self._hash_token(raw_token)
         prefix = raw_token[:12]  # Store first 12 chars for identification
-        
+
         # Calculate expiry
         if expires_in_days is None:
             expires_in_days = DEFAULT_EXPIRY_DAYS
-        
+
         expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
-        
+
         # Create record
         token_record = PersonalAccessToken(
             auth_user_id=auth_user_id,
@@ -294,35 +294,35 @@ class PATService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        
+
         self.db.add(token_record)
         await self.db.commit()
         await self.db.refresh(token_record)
-        
+
         logger.info(
             "PAT created",
             extra={
                 "token_id": token_record.id,
                 "user_id": auth_user_id,
                 "token_name": name,
-            }
+            },
         )
-        
+
         return raw_token, token_record
 
     async def validate_token(self, token_string: str) -> PersonalAccessToken | None:
         """
         Validate a personal access token
-        
+
         Returns:
             PersonalAccessToken record if valid, None otherwise
         """
         if not token_string.startswith(TOKEN_PREFIX):
             return None
-        
+
         # Extract prefix
         prefix = token_string[:12]
-        
+
         # Find by prefix
         result = await self.db.execute(
             select(PersonalAccessToken)
@@ -330,15 +330,15 @@ class PATService:
             .where(PersonalAccessToken.is_active == True)
         )
         token_record = result.scalar_one_or_none()
-        
+
         if not token_record:
             return None
-        
+
         # Verify hash
         token_hash = self._hash_token(token_string)
         if not self._constant_time_compare(token_record.token_hash, token_hash):
             return None
-        
+
         # Check expiration
         if token_record.expires_at and token_record.expires_at < datetime.now(UTC):
             # Mark as inactive
@@ -346,11 +346,11 @@ class PATService:
             await self.db.commit()
             logger.warning("PAT expired", extra={"token_id": token_record.id})
             return None
-        
+
         # Update last used
         token_record.last_used_at = datetime.now(UTC)
         await self.db.commit()
-        
+
         return token_record
 
     async def list_tokens(
@@ -359,20 +359,18 @@ class PATService:
         include_expired: bool = False,
     ) -> list[PersonalAccessToken]:
         """List tokens for a user"""
-        query = select(PersonalAccessToken).where(
-            PersonalAccessToken.auth_user_id == auth_user_id
-        )
-        
+        query = select(PersonalAccessToken).where(PersonalAccessToken.auth_user_id == auth_user_id)
+
         if not include_expired:
             query = query.where(PersonalAccessToken.is_active == True)
         else:
             # Include expired tokens from last 3 months
             three_months_ago = datetime.now(UTC) - timedelta(days=90)
             query = query.where(
-                (PersonalAccessToken.is_active == True) |
-                (PersonalAccessToken.expires_at >= three_months_ago)
+                (PersonalAccessToken.is_active == True)
+                | (PersonalAccessToken.expires_at >= three_months_ago)
             )
-        
+
         query = query.order_by(PersonalAccessToken.created_at.desc())
         result = await self.db.execute(query)
         return result.scalars().all()
@@ -385,48 +383,48 @@ class PATService:
             .where(PersonalAccessToken.auth_user_id == auth_user_id)
         )
         token_record = result.scalar_one_or_none()
-        
+
         if not token_record:
             return False
-        
+
         token_record.is_active = False
         await self.db.commit()
-        
+
         logger.info(
             "PAT revoked",
             extra={
                 "token_id": token_id,
                 "user_id": auth_user_id,
-            }
+            },
         )
-        
+
         return True
 
     async def cleanup_expired_tokens(self) -> int:
         """
         Delete tokens that expired more than 3 months ago
-        
+
         Returns:
             Number of deleted tokens
         """
         three_months_ago = datetime.now(UTC) - timedelta(days=90)
-        
+
         result = await self.db.execute(
             select(PersonalAccessToken)
             .where(PersonalAccessToken.expires_at < three_months_ago)
             .where(PersonalAccessToken.is_active == False)
         )
         expired_tokens = result.scalars().all()
-        
+
         count = len(expired_tokens)
         for token in expired_tokens:
             await self.db.delete(token)
-        
+
         await self.db.commit()
-        
+
         if count > 0:
             logger.info("Cleaned up expired PATs", extra={"count": count})
-        
+
         return count
 
     async def get_token_count(self, auth_user_id: int) -> int:
@@ -439,7 +437,7 @@ class PATService:
         return len(result.scalars().all())
 
     # Private methods
-    
+
     def _hash_token(self, token: str) -> str:
         """Hash token using SHA-256"""
         return hashlib.sha256(token.encode()).hexdigest()
@@ -452,13 +450,13 @@ class PATService:
         """Check if user has exceeded token creation rate limit"""
         key = f"pat_rate_limit:{auth_user_id}"
         current = await self.redis_client.get(key)
-        
+
         if current and int(current) >= RATE_LIMIT_MAX:
             raise AppException(
                 error_code=ErrorCode.RATE_LIMIT_EXCEEDED,
                 message=f"Token creation rate limit exceeded. Max {RATE_LIMIT_MAX} tokens per hour.",
             )
-        
+
         # Increment counter
         pipe = self.redis_client.pipeline()
         pipe.incr(key)
@@ -468,7 +466,7 @@ class PATService:
     async def _check_token_limit(self, auth_user_id: int):
         """Check if user has reached maximum token limit"""
         count = await self.get_token_count(auth_user_id)
-        
+
         if count >= MAX_TOKENS_PER_USER:
             raise AppException(
                 error_code=ErrorCode.VALIDATION_ERROR,
@@ -528,7 +526,7 @@ async def list_tokens(
         auth_user_id=current_user.id,
         include_expired=include_expired,
     )
-    
+
     return PATListResponse(
         total=len(tokens),
         items=[PATResponse.model_validate(t) for t in tokens],
@@ -556,7 +554,7 @@ async def create_token(
     if not ip_address and request.client:
         ip_address = request.client.host
     user_agent = request.headers.get("User-Agent")
-    
+
     # Create token
     full_token, token_record = await pat_service.create_token(
         auth_user_id=current_user.id,
@@ -565,7 +563,7 @@ async def create_token(
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    
+
     return PATCreationResponse(
         id=token_record.id,
         name=token_record.name,
@@ -592,21 +590,22 @@ async def get_token(
     """Get details of a specific token"""
     from sqlalchemy import select
     from src.models.personal_access_token import PersonalAccessToken
-    
+
     result = await db.execute(
         select(PersonalAccessToken)
         .where(PersonalAccessToken.id == token_id)
         .where(PersonalAccessToken.auth_user_id == current_user.id)
     )
     token_record = result.scalar_one_or_none()
-    
+
     if not token_record:
         from fastapi import HTTPException
+
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Token not found",
         )
-    
+
     return PATResponse.model_validate(token_record)
 
 
@@ -626,14 +625,15 @@ async def revoke_token(
         auth_user_id=current_user.id,
         token_id=token_id,
     )
-    
+
     if not success:
         from fastapi import HTTPException
+
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Token not found or already revoked",
         )
-    
+
     return {"message": "Token revoked successfully"}
 ```
 
@@ -670,36 +670,36 @@ async def get_current_user_with_token(
         )
 
     token = authorization.split(" ")[1]
-    
+
     # Check if token is PAT or JWT
     if token.startswith("pat_"):
         # Validate as Personal Access Token
         from src.services.pat_service import PATService
+
         pat_service = PATService(db)
         token_record = await pat_service.validate_token(token)
-        
+
         if not token_record:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired personal access token",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         # Get auth user
         from sqlalchemy import select
         from src.models.auth_user import AuthUser
-        result = await db.execute(
-            select(AuthUser).where(AuthUser.id == token_record.auth_user_id)
-        )
+
+        result = await db.execute(select(AuthUser).where(AuthUser.id == token_record.auth_user_id))
         auth_user = result.scalar_one_or_none()
-        
+
         if not auth_user or not auth_user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User account is inactive",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         return auth_user
     else:
         # Validate as JWT (existing logic)

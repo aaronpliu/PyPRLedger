@@ -156,6 +156,7 @@ import asyncio
 import aiosmtplib
 from src.core.config import settings
 
+
 async def test_smtp():
     """Test SMTP connection"""
     try:
@@ -167,7 +168,7 @@ To: test@example.com
 This is a test email from PyPRLedger notification system.
 If you receive this, SMTP is configured correctly!
 """
-        
+
         await aiosmtplib.send(
             message,
             hostname=settings.SMTP_HOST,
@@ -179,6 +180,7 @@ If you receive this, SMTP is configured correctly!
         print("✅ Email sent successfully!")
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
+
 
 asyncio.run(test_smtp())
 ```

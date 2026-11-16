@@ -373,7 +373,9 @@ def notification_service(self):
 Provide fallbacks for missing dependencies:
 ```python
 class MockRedis:
-    async def get(self, key): return None
+    async def get(self, key):
+        return None
+
     # ... other methods
 ```
 

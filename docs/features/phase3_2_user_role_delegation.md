@@ -81,7 +81,7 @@ INDEX ix_user_role_is_delegated (is_delegated)
 
 **Enum Type:**
 ```python
-delegation_status_enum = ('active', 'expired', 'revoked', 'pending')
+delegation_status_enum = ("active", "expired", "revoked", "pending")
 ```
 
 ---
@@ -279,6 +279,7 @@ class DelegationCreate(BaseModel):
     expires_at: datetime
     reason: str | None
 
+
 class DelegationResponse(BaseModel):
     id: int
     auth_user_id: int  # delegatee
@@ -298,8 +299,10 @@ class DelegationResponse(BaseModel):
     revoked_at: str | None
     created_at: str
 
+
 class DelegationRevoke(BaseModel):
     reason: str | None
+
 
 class DelegationListQuery(BaseModel):
     delegator_id: int | None

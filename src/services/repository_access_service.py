@@ -35,9 +35,7 @@ class RepositoryAccessService:
         A system user sees the union of its own grants and the grants of the git
         user it is linked to. No role is consulted here.
         """
-        linked = await self.db.execute(
-            select(AuthUser.user_id).where(AuthUser.id == auth_user_id)
-        )
+        linked = await self.db.execute(select(AuthUser.user_id).where(AuthUser.id == auth_user_id))
         git_user_id = linked.scalar_one_or_none()
 
         conditions = [
@@ -150,9 +148,7 @@ class RepositoryAccessService:
         )
         return await self.list_access(subject_type, subject_id)
 
-    async def _linked_subjects(
-        self, subject_type: str, subject_id: int
-    ) -> list[tuple[str, int]]:
+    async def _linked_subjects(self, subject_type: str, subject_id: int) -> list[tuple[str, int]]:
         """The subject itself plus every counterpart it is linked to."""
         targets = [(subject_type, subject_id)]
         if subject_type == SUBJECT_GIT_USER:

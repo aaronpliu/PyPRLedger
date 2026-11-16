@@ -164,12 +164,8 @@ async def _tag_urls(
         pair = (note.project_key, note.repository_slug)
         if pair not in resolved:
             resolved[pair] = (
-                await registered_provider(
-                    note.project_key, note.repository_slug, service.db
-                ),
-                await registered_workspace_slug(
-                    note.project_key, note.repository_slug, service.db
-                ),
+                await registered_provider(note.project_key, note.repository_slug, service.db),
+                await registered_workspace_slug(note.project_key, note.repository_slug, service.db),
             )
         git_provider, workspace_slug = resolved[pair]
         url = service.tag_url(

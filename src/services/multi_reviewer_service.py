@@ -638,10 +638,14 @@ class MultiReviewerService:
 
         if not base:
             raise ReviewNotFoundException(review_id=str(review_id))
-        if self._allowed_pairs is not None and (
-            base.project_key,
-            base.repository_slug,
-        ) not in self._allowed_pairs:
+        if (
+            self._allowed_pairs is not None
+            and (
+                base.project_key,
+                base.repository_slug,
+            )
+            not in self._allowed_pairs
+        ):
             raise ReviewNotFoundException(review_id=str(review_id))
 
         response = self._base_to_response(base)

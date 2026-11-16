@@ -225,8 +225,6 @@ async def compare_app_releases_report(
     headers = {}
     if download:
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-        scope = re.sub(
-            r"[^A-Za-z0-9._-]+", "_", f"{result.project_key}-{result.repository_slug}"
-        )
+        scope = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{result.project_key}-{result.repository_slug}")
         headers["Content-Disposition"] = f'attachment; filename="app-diff-{scope}-{stamp}.html"'
     return Response(content=html, media_type="text/html", headers=headers)

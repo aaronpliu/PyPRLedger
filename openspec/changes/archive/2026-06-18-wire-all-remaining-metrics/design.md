@@ -62,6 +62,7 @@ The `MetricsCollector` registers ~40 metric families. The `wire-metrics-into-ser
 def before_execute(conn, clause, multiparams, params, execution_options):
     conn.info["query_start_time"] = time.monotonic()
 
+
 @event.listens_for(Engine, "after_execute")
 def after_execute(conn, clause, multiparams, params, execution_options, result):
     if metrics := getattr(conn, "_metrics", None):

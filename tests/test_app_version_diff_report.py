@@ -43,9 +43,7 @@ class FakeRegistry(ProjectRegistryService):
     async def get_app_name(self, project_key: str, repository_slug: str, db: Any) -> str:
         return MOCK_APP_NAME
 
-    async def get_dependency_app_name(
-        self, project_key: str, repository_slug: str, db: Any
-    ) -> str:
+    async def get_dependency_app_name(self, project_key: str, repository_slug: str, db: Any) -> str:
         return MOCK_APP_NAME
 
 
@@ -125,8 +123,8 @@ async def test_report_endpoint_download_header(async_client, authenticated_clien
 
     assert response.status_code == 200
     disposition = response.headers["content-disposition"]
-    assert disposition.startswith("attachment; filename=\"app-diff-CORE-app-")
-    assert disposition.endswith(".html\"")
+    assert disposition.startswith('attachment; filename="app-diff-CORE-app-')
+    assert disposition.endswith('.html"')
 
 
 async def test_report_endpoint_json_format(async_client, authenticated_client) -> None:

@@ -72,6 +72,7 @@ version = "1.7.1"  # ← Backend/API version
 
 ```python
 from src import __version__
+
 print(f"Running PRLedger v{__version__}")
 ```
 

@@ -67,9 +67,7 @@ async def test_a_registration_naming_no_provider_takes_the_projects(db_session: 
     """The manual path resolves the same way the automatic one does."""
     await seed_project(db_session, GitProvider.GITHUB_ENTERPRISE.value)
 
-    entry = await ProjectRegistryService().register_project(
-        "pylang", "AI", "pylang", db=db_session
-    )
+    entry = await ProjectRegistryService().register_project("pylang", "AI", "pylang", db=db_session)
 
     assert entry.git_provider == GitProvider.GITHUB_ENTERPRISE.value
 

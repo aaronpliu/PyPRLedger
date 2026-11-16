@@ -2159,14 +2159,17 @@ All Pydantic validators have been migrated to v2 syntax. If you have custom sche
 # Old (deprecated)
 from pydantic import validator
 
-@validator('field')
+
+@validator("field")
 def validate_field(cls, v):
     return v
+
 
 # New (required)
 from pydantic import field_validator
 
-@field_validator('field')
+
+@field_validator("field")
 def validate_field(cls, v):
     return v
 ```

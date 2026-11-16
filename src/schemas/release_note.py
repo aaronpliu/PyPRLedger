@@ -567,6 +567,3 @@ class ReleaseNoteExportResponse(BaseModel):
             "carries the newest ones"
         ),
     )
-
-
-

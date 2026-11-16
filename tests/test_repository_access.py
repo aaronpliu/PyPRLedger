@@ -68,12 +68,8 @@ async def access_data(db: AsyncSession) -> dict:
                 repository_slug="repo-two",
                 repository_url="https://example.com/PROJ/repo-two",
             ),
-            ProjectRegistry(
-                app_name="App", project_key="PROJ", repository_slug="repo-one"
-            ),
-            ProjectRegistry(
-                app_name="App", project_key="PROJ", repository_slug="repo-two"
-            ),
+            ProjectRegistry(app_name="App", project_key="PROJ", repository_slug="repo-one"),
+            ProjectRegistry(app_name="App", project_key="PROJ", repository_slug="repo-two"),
         ]
     )
     await db.commit()
@@ -117,25 +113,17 @@ async def test_replace_access_syncs_the_linked_subject(db: AsyncSession, access_
     """Saving either side of a linked pair rewrites the other side too."""
     service = RepositoryAccessService(db)
 
-    await service.replace_access(
-        "git_user", access_data["git_user"].id, {("PROJ", "repo-one")}, 1
-    )
+    await service.replace_access("git_user", access_data["git_user"].id, {("PROJ", "repo-one")}, 1)
     assert await service.allowed_pairs(access_data["linked"].id) == {("PROJ", "repo-one")}
 
     # stale grants on the git user must not survive a system-user save
-    await service.replace_access(
-        "auth_user", access_data["linked"].id, {("PROJ", "repo-two")}, 1
-    )
+    await service.replace_access("auth_user", access_data["linked"].id, {("PROJ", "repo-two")}, 1)
     assert await service.allowed_pairs(access_data["linked"].id) == {("PROJ", "repo-two")}
     git_rows = await service.list_access("git_user", access_data["git_user"].id)
-    assert {(r["project_key"], r["repository_slug"]) for r in git_rows} == {
-        ("PROJ", "repo-two")
-    }
+    assert {(r["project_key"], r["repository_slug"]) for r in git_rows} == {("PROJ", "repo-two")}
 
     # a system user without a linked git user is untouched by other subjects
-    await service.replace_access(
-        "auth_user", access_data["unlinked"].id, {("PROJ", "repo-one")}, 1
-    )
+    await service.replace_access("auth_user", access_data["unlinked"].id, {("PROJ", "repo-one")}, 1)
     assert await service.allowed_pairs(access_data["linked"].id) == {("PROJ", "repo-two")}
 
 
@@ -171,9 +159,7 @@ async def test_assign_reviewer_auto_grants_the_repository(db: AsyncSession, acce
     access = RepositoryAccessService(db)
     assert ("PROJ", "repo-one") in await access.allowed_pairs(access_data["linked"].id)
     git_rows = await access.list_access("git_user", access_data["git_user"].id)
-    assert {(r["project_key"], r["repository_slug"]) for r in git_rows} == {
-        ("PROJ", "repo-one")
-    }
+    assert {(r["project_key"], r["repository_slug"]) for r in git_rows} == {("PROJ", "repo-one")}
     assert git_rows[0]["granted_by"] == 999
 
     # a repeat assign is a no-op on the assignment but keeps the grant in place

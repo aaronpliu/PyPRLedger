@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 # never been worked through keeps listing every repository it has.
 REGISTRY_KIND_UNCLASSIFIED = "unclassified"
 
+
 async def enforce_project_visibility(
     request: Request,
     access: CurrentRepositoryAccess,
@@ -56,9 +57,7 @@ async def enforce_project_visibility(
             conditions = [Project.project_id == identifier, Project.project_name == identifier]
             if str(identifier).isdigit():
                 conditions.insert(0, Project.id == int(identifier))
-            result = await db.execute(
-                select(Project.project_key).where(or_(*conditions)).limit(1)
-            )
+            result = await db.execute(select(Project.project_key).where(or_(*conditions)).limit(1))
             project_key = result.scalar_one_or_none()
     if not project_key:
         return

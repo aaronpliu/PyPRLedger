@@ -111,12 +111,12 @@ In `ReviewScoreService.assign_reviewer()`:
 # After successful assignment
 await notification_service.create_notification(
     user_id=reviewer_username,
-    type='review_assigned',
-    title=f'New Review Assigned: {pr_id}',
-    message=f'You have been assigned to review PR #{pr_id} in {project_key}/{repository_slug}',
+    type="review_assigned",
+    title=f"New Review Assigned: {pr_id}",
+    message=f"You have been assigned to review PR #{pr_id} in {project_key}/{repository_slug}",
     related_id=pull_request_id,
-    related_type='pull_request',
-    priority='high'
+    related_type="pull_request",
+    priority="high",
 )
 ```
 
@@ -125,12 +125,12 @@ When reviewer submits score:
 ```python
 await notification_service.create_notification(
     user_id=pr_author,
-    type='review_completed',
-    title=f'Review Completed: {pr_id}',
-    message=f'{reviewer} has completed their review of PR #{pr_id}',
+    type="review_completed",
+    title=f"Review Completed: {pr_id}",
+    message=f"{reviewer} has completed their review of PR #{pr_id}",
     related_id=pull_request_id,
-    related_type='pull_request',
-    priority='normal'
+    related_type="pull_request",
+    priority="normal",
 )
 ```
 
@@ -139,12 +139,12 @@ In background task (7 days before expiry):
 ```python
 await notification_service.create_notification(
     user_id=delegate_username,
-    type='delegation_expiring',
-    title='Role Delegation Expiring Soon',
-    message=f'Your delegated role will expire in 7 days',
+    type="delegation_expiring",
+    title="Role Delegation Expiring Soon",
+    message=f"Your delegated role will expire in 7 days",
     related_id=str(delegation_id),
-    related_type='delegation',
-    priority='normal'
+    related_type="delegation",
+    priority="normal",
 )
 ```
 
@@ -291,21 +291,9 @@ SLACK_ENABLED=false
 ### Default Preferences
 ```python
 DEFAULT_PREFERENCES = {
-    'review_assigned': {
-        'in_app_enabled': True,
-        'email_enabled': True,
-        'slack_enabled': False
-    },
-    'review_completed': {
-        'in_app_enabled': True,
-        'email_enabled': False,
-        'slack_enabled': False
-    },
-    'delegation_expiring': {
-        'in_app_enabled': True,
-        'email_enabled': True,
-        'slack_enabled': False
-    }
+    "review_assigned": {"in_app_enabled": True, "email_enabled": True, "slack_enabled": False},
+    "review_completed": {"in_app_enabled": True, "email_enabled": False, "slack_enabled": False},
+    "delegation_expiring": {"in_app_enabled": True, "email_enabled": True, "slack_enabled": False},
 }
 ```
 

@@ -23,8 +23,12 @@ from src.services.sse_broker import _is_user_involved_in_review
 async def catalog(db: AsyncSession):
     db.add_all(
         [
-            Project(project_id=1, project_key="ONE", project_name="One", project_url="https://x/ONE"),
-            Project(project_id=2, project_key="TWO", project_name="Two", project_url="https://x/TWO"),
+            Project(
+                project_id=1, project_key="ONE", project_name="One", project_url="https://x/ONE"
+            ),
+            Project(
+                project_id=2, project_key="TWO", project_name="Two", project_url="https://x/TWO"
+            ),
         ]
     )
     await db.flush()
@@ -208,9 +212,7 @@ async def test_project_review_lookup_inherits_service_grants(db: AsyncSession, c
 async def test_review_statistics_without_grants_are_zero(db: AsyncSession, catalog):
     from src.services.review_service import ReviewService
 
-    stats = await ReviewService(allowed_pairs=set()).get_review_statistics(
-        db=db, use_cache=False
-    )
+    stats = await ReviewService(allowed_pairs=set()).get_review_statistics(db=db, use_cache=False)
     assert stats.total_reviews == 0
     assert stats.average_score == 0.0
 

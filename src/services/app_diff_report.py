@@ -106,9 +106,7 @@ def _meta_row(label: str, value: Any, url: str | None = None) -> str:
     if value is None or value == "":
         return ""
     cell = (
-        f'<a href="{_e(url)}" target="_blank" rel="noopener">{_e(value)}</a>'
-        if url
-        else _e(value)
+        f'<a href="{_e(url)}" target="_blank" rel="noopener">{_e(value)}</a>' if url else _e(value)
     )
     return f"<tr><th>{_e(label)}</th><td>{cell}</td></tr>"
 
@@ -137,14 +135,10 @@ def _commit_table(commits: list[dict[str, Any]] | None, missing: bool = False) -
     for commit in rows:
         sha = _e(_field(commit, "display_id") or _field(commit, "id"))
         url = _field(commit, "url")
-        sha_cell = (
-            f'<a href="{_e(url)}" target="_blank" rel="noopener">{sha}</a>' if url else sha
-        )
+        sha_cell = f'<a href="{_e(url)}" target="_blank" rel="noopener">{sha}</a>' if url else sha
         author = _field(commit, "author_name") or _field(commit, "author_username") or "-"
         username = _field(commit, "author_username")
-        author_cell = (
-            f'<span class="muted">@{_e(username)}</span>' if username else _e(author)
-        )
+        author_cell = f'<span class="muted">@{_e(username)}</span>' if username else _e(author)
         timestamp = _field(commit, "author_timestamp")
         when = (
             datetime.fromtimestamp(timestamp / 1000, tz=UTC).strftime("%Y-%m-%d")
@@ -190,7 +184,7 @@ def _code_status(code: AppVersionDiffCode | None) -> str:
         if code.missing_count
         else ""
     )
-    return f'<p>{badge} {added}{" · " + missing if missing else ""}</p>'
+    return f"<p>{badge} {added}{' · ' + missing if missing else ''}</p>"
 
 
 def _code_commits(code: AppVersionDiffCode | None) -> str:
@@ -213,8 +207,7 @@ def _matrix_section(result: AppVersionDiffResponse) -> str:
     rows: list[str] = []
     for row in result.rows:
         cells = "".join(
-            f'<td class="matrix">{_e(version) if version else "-"}</td>'
-            for version in row.versions
+            f'<td class="matrix">{_e(version) if version else "-"}</td>' for version in row.versions
         )
         self_class = " self" if row.kind == "application" else ""
         rows.append(f'<tr><td class="pkg{self_class}">{_e(row.name)}</td>{cells}</tr>')
@@ -223,7 +216,7 @@ def _matrix_section(result: AppVersionDiffResponse) -> str:
         '<section class="report-section">'
         f"<h2>1. Version Matrix</h2>"
         '<table class="data matrix">'
-        f'<thead><tr><th>Package</th>{head}</tr></thead>'
+        f"<thead><tr><th>Package</th>{head}</tr></thead>"
         f"<tbody>{''.join(rows)}</tbody>"
         "</table>"
         "</section>"
@@ -298,7 +291,7 @@ def _interval_section(interval: AppVersionDiffInterval, index: int) -> str:
         '<section class="report-section">'
         f"<h2>{heading}</h2>"
         f'<p><span class="status status-info">{_e(verdict)}</span>'
-        f'{_e(completeness)}</p>'
+        f"{_e(completeness)}</p>"
         '<div class="stats">'
         f"{_stat('Changed', summary.get('changed') or 0)}"
         f"{_stat('Added', summary.get('added') or 0, 'ok')}"

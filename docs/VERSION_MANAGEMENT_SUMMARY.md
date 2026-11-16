@@ -103,6 +103,7 @@ pip install .
 After installation, you can access the version:
 ```python
 from src import __version__
+
 print(__version__)
 ```
 
