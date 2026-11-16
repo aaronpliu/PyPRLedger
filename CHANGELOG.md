@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In the frontend image, nginx's static-asset regex claimed `/api/…` paths ending in `.js` or `.css`, so the offline Swagger bundle under `/api/static-offline-docs` was looked for on the web server's disk and answered 404 — another way to reach a blank docs page. `/api/` is now a `^~` prefix location, which takes precedence over the regex
 
 ### Upgrade Notes
-- Set `WEBHOOK_SHARED_SECRET` if a git provider (or any machine client) posts review data over HTTP without a user token; otherwise those calls now return 401. Sign each request as described above
+- Set `WEBHOOK_SHARED_SECRET` if a git provider (or any machine client) posts review data over HTTP without a user token; otherwise those calls now return 401. Sign each request as described above, or give the caller a Personal Access Token and send it as `Authorization: Bearer pat_...`; `scripts/webhook_curl.sh` signs a request for you
 - Leave `OUTBOUND_TLS_VERIFY=True` unless an on-premise server serves a self-signed certificate
 - Tune `LOGIN_MAX_FAILED_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` when the defaults do not fit; users see a 429 with the retry window when locked
 - Leave `SSE_ALLOW_TOKEN_QUERY=False`. Unset it only for a client that still puts the JWT in the stream URL; the bundled frontend asks for a ticket instead and needs no configuration

@@ -303,6 +303,17 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
 - `DELETE /api/v1/reviews/{project_key}/{repository_slug}/{pull_request_id}` - Soft delete review
 - `POST /api/v1/reviews/{id}/pin` / `DELETE /api/v1/reviews/{id}/pin` - Pin/unpin a review
 - `POST /api/v1/reviews/{id}/associate/{target_id}` / `DELETE /...` - Link/unlink reviews
+
+Writes (`POST`, `PUT`, `PATCH`) need either a user token — `Authorization: Bearer <jwt>` or a
+Personal Access Token `Bearer pat_...` — or a body signed with `WEBHOOK_SHARED_SECRET`:
+
+```
+X-Webhook-Timestamp: <unix seconds>            (accepted within ±300s)
+X-Webhook-Signature: sha256=<hex HMAC-SHA256(secret, "<timestamp>." + raw body)>
+```
+
+`scripts/webhook_curl.sh POST /api/v1/reviews '<json>'` signs and sends one. A request carrying
+neither is refused with 401, so a deployment that never sets the secret fails closed.
 - `GET /api/v1/reviews/statistics` - Get review statistics
 - `GET /api/v1/reviews/project/{project_key}` - Get reviews by project
 - `GET /api/v1/reviews/reviewer/{username}` - Get reviews by reviewer
