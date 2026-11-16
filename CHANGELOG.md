@@ -5,6 +5,11 @@ All notable changes to the PRLedger project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- A repository insights page (`/insights/repository`) answers the question the personal dashboard cannot: how is *this* repository doing? Pick a project and optionally one of its repositories, and one backend reading (`GET /api/v1/insights/repository`, cached for a minute) returns six KPIs (reviews, open PRs, average score, high-score rate, unassigned work, active reviewers), a review/assignment trend, an average-score trend, PR status and reviewer workload distributions, and the last ten reviews. Counting and grouping happen in SQL rather than by pulling rows into the browser, and every query is limited to the caller's repository grants — a scope they hold nothing for answers with an empty reading. The page polls every 30 seconds, pauses while the tab is hidden, and keeps the last good reading when a poll fails
+
 ## [1.40.0] - 2026-11-16
 
 **Backend Version**: 1.40.0
