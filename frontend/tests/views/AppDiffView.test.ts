@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus, { ElSelect } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import { resetJiraSettings } from '@/composables/useJira'
 import AppDiffView from '@/views/releases/AppDiffView.vue'
 import enMessages from '@/locales/en.json'
 import { appVersionDiffApi } from '@/api/appVersionDiff'
@@ -44,6 +45,17 @@ vi.mock('@/api/releaseDiff', () => ({
       git_provider: 'bitbucket_server',
       tags: ['v2.0.0', 'v1.1.0', 'v1.0.0', 'v9.9.9'],
       branches: ['main'],
+    })),
+  },
+}))
+
+// JIRA ticket links are driven by these settings; the drawer's commit cards and
+// the HTML report both read them.
+vi.mock('@/api/rbac', () => ({
+  rbacApi: {
+    getJiraSettings: vi.fn(async () => ({
+      base_url: 'https://jira.example.com',
+      project_keys: [],
     })),
   },
 }))
@@ -172,6 +184,8 @@ beforeEach(() => {
   comparePackages().mockClear()
   // the depth is a preference, so a test that kept one must not hand it to the next
   localStorage.clear()
+  // the JIRA settings are cached per session; a test's must not leak
+  resetJiraSettings()
 })
 
 afterEach(() => {
@@ -512,6 +526,21 @@ describe('AppDiffView', () => {
     expect(drawerNode('drawer-mylang-unavailable')).toBeNull()
   })
 
+  it('links the JIRA ticket key of a drawer commit subject', async () => {
+    const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_LATER)
+
+    await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
+    // the drawer's cards read the JIRA settings on their own clock, so let the
+    // settings promise land before the card's subject is read
+    await flushPromises()
+    await flushPromises()
+
+    // the fixture subject carries PRL-123, and the configured base URL names it
+    const ticket = document.querySelector<HTMLAnchorElement>('a[data-test="commit-ticket"]')
+    expect(ticket?.textContent).toBe('PRL-123')
+    expect(ticket?.getAttribute('href')).toBe('https://jira.example.com/browse/PRL-123')
+  })
+
   it('reads the commits of a release whose own version did not move', async () => {
     const wrapper = await mountOn(RELEASE_EARLIER, RELEASE_REBUILT)
 
@@ -545,22 +574,31 @@ describe('AppDiffView', () => {
     expect(drawerNode('drawer-mylang-added')).toBeNull()
   })
 
-  it('walks the timeline to another pair of the same row', async () => {
+  it('reads every pair of a row at once when three releases are compared', async () => {
     compare().mockResolvedValueOnce(threeReleaseResponse())
     const wrapper = await mountOn('v1.1.0', 'v2.0.0', 'v3.0.0')
 
     await wrapper.find(`[data-test="matrix-row-${APP_NAME}"]`).trigger('click')
     await flushPromises()
 
-    // the timeline carries one edge per release pair, both walkable here
+    // the timeline maps the three releases with one edge per pair, and both
+    // pairs read below it together - a row spanning three releases shows all of
+    // its comparisons, not the first one alone
     expect(drawerNode('drawer-edge-0')).not.toBeNull()
     expect(drawerNode('drawer-edge-1')).not.toBeNull()
+    const sections = document.querySelectorAll('[data-test="drawer-section"]')
+    expect(sections).toHaveLength(2)
+    expect(sections[0].querySelector('[data-test="drawer-pair"]')?.textContent).toBe(
+      'v1.1.0 → v2.0.0',
+    )
+    expect(sections[1].querySelector('[data-test="drawer-pair"]')?.textContent).toBe(
+      'v2.0.0 → v3.0.0',
+    )
 
+    // an edge walks the eye down to its pair instead of swapping it for another
     drawerNode('drawer-edge-1')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
-    await flushPromises()
-
-    expect(drawerNode('drawer-pair')?.textContent ?? '').toBe('v2.0.0 → v3.0.0')
+    expect(sections[1].id).toContain('drawer-pair')
   })
 
   it('shows the releases as columns in timeline order, not the order they were asked for', async () => {

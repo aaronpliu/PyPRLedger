@@ -16,8 +16,11 @@
       </header>
 
       <!-- The version timeline: one node per release, and every edge between two
-           releases is the pair whose commits can be read. An edge the row has no
-           comparison for is drawn but not clickable - it says so on hover. -->
+           releases is the pair whose commits are read below. An edge the row has
+           no comparison for is drawn but cannot be walked - it says so on hover.
+           With three or more releases the row carries several pairs, so an edge
+           walks the eye down to its pair's section instead of swapping one pair
+           for another. -->
       <div class="timeline" data-test="drawer-timeline">
         <template v-for="(boundary, index) in boundaries" :key="boundary.key">
           <span class="tl-node">
@@ -28,11 +31,11 @@
           </span>
           <button
             class="tl-edge"
-            :class="{ active: boundary.key === selectedKey, dim: !boundary.entry }"
+            :class="{ dim: !boundary.entry }"
             :disabled="!boundary.entry"
             :data-test="`drawer-edge-${index}`"
             :title="boundary.entry ? boundary.entry.label : t('appDiff.drawer_no_comparison')"
-            @click="boundary.entry && select(boundary.key)"
+            @click="boundary.entry && reveal(boundary.key)"
           >
             <el-icon><ArrowRight /></el-icon>
           </button>
@@ -45,20 +48,25 @@
         </span>
       </div>
 
-      <!-- The pair the timeline points at, read in two columns: what the later
-           version gained on the left, what it does not hold on the right. -->
-      <template v-if="selectedEntry">
-        <p class="drawer-pair" data-test="drawer-pair">{{ selectedEntry.label }}</p>
+      <!-- Every pair the row carries, one after another: what each later version
+           gained on the left, what it does not hold on the right. A row that spans
+           three or more releases reads all of its pairs here - the timeline above
+           is the map, these sections are the territory - instead of making the
+           reader walk the pairs one click at a time. -->
+      <section
+        v-for="entry in entries"
+        :id="sectionId(entry.key)"
+        :key="entry.key"
+        class="pair-section"
+        :data-test="`drawer-section`"
+      >
+        <p class="drawer-pair" data-test="drawer-pair">{{ entry.label }}</p>
 
-        <p v-if="selectedEntry.code.deferred" class="drawer-note" :data-test="`${scope}-deferred`">
+        <p v-if="entry.code.deferred" class="drawer-note" :data-test="`${scope}-deferred`">
           {{ t('appDiff.code_deferred') }}
         </p>
-        <p
-          v-else-if="selectedEntry.code.unavailable"
-          class="drawer-note"
-          :data-test="`${scope}-unavailable`"
-        >
-          {{ t('appDiff.code_unavailable', { reason: selectedEntry.code.unavailable }) }}
+        <p v-else-if="entry.code.unavailable" class="drawer-note" :data-test="`${scope}-unavailable`">
+          {{ t('appDiff.code_unavailable', { reason: entry.code.unavailable }) }}
         </p>
 
         <template v-else>
@@ -66,16 +74,16 @@
             <el-tag
               size="small"
               effect="plain"
-              :type="verdictType"
+              :type="verdictType(entry)"
               :data-test="`${scope}-verdict`"
             >
-              {{ t(`appDiff.code_verdict_${selectedEntry.code.verdict}`) }}
+              {{ t(`appDiff.code_verdict_${entry.code.verdict}`) }}
             </el-tag>
-            <span :class="`count-${tone}`">
-              {{ t('appDiff.code_added', { count: selectedEntry.code.added_count }) }}
+            <span :class="`count-${tone(entry)}`">
+              {{ t('appDiff.code_added', { count: entry.code.added_count }) }}
             </span>
-            <span v-if="selectedEntry.code.missing_count" class="count-missing">
-              · {{ t('appDiff.code_missing', { count: selectedEntry.code.missing_count }) }}
+            <span v-if="entry.code.missing_count" class="count-missing">
+              · {{ t('appDiff.code_missing', { count: entry.code.missing_count }) }}
             </span>
           </p>
 
@@ -83,65 +91,53 @@
             <section class="commit-col" :data-test="`${scope}-added`">
               <h4>
                 <span class="col-dot col-added" />
-                {{ t('appDiff.code_added_heading') }} ({{ selectedEntry.code.added_commits.length }})
+                {{ t('appDiff.code_added_heading') }} ({{ entry.code.added_commits.length }})
               </h4>
               <ul>
-                <li
-                  v-for="commit in selectedEntry.code.added_commits"
-                  :key="commit.id"
-                  class="commit-card"
-                >
+                <li v-for="commit in entry.code.added_commits" :key="commit.id" class="commit-card">
                   <CommitCard :commit="commit" />
                 </li>
               </ul>
-              <p
-                v-if="!selectedEntry.code.added_commits.length"
-                class="col-empty"
-              >
+              <p v-if="!entry.code.added_commits.length" class="col-empty">
                 {{ t('appDiff.drawer_empty') }}
               </p>
             </section>
 
             <section
               class="commit-col"
-              :class="{ alerted: hasMissing }"
+              :class="{ alerted: hasMissing(entry) }"
               :data-test="`${scope}-missing`"
             >
               <h4 class="missing-heading">
                 <el-icon><WarningFilled /></el-icon>
-                {{ t('appDiff.code_missing_heading') }} ({{
-                  selectedEntry.code.missing_commits.length
-                }})
+                {{ t('appDiff.code_missing_heading') }} ({{ entry.code.missing_commits.length }})
               </h4>
               <ul>
                 <li
-                  v-for="commit in selectedEntry.code.missing_commits"
+                  v-for="commit in entry.code.missing_commits"
                   :key="commit.id"
                   class="commit-card missing"
                 >
                   <CommitCard :commit="commit" missing />
                 </li>
               </ul>
-              <p
-                v-if="!selectedEntry.code.missing_commits.length"
-                class="col-empty"
-              >
+              <p v-if="!entry.code.missing_commits.length" class="col-empty">
                 {{ t('appDiff.drawer_empty') }}
               </p>
             </section>
           </div>
 
-          <p v-if="selectedEntry.code.truncated" class="drawer-note" :data-test="`${scope}-truncated`">
+          <p v-if="entry.code.truncated" class="drawer-note" :data-test="`${scope}-truncated`">
             {{ t('appDiff.code_truncated') }}
           </p>
         </template>
-      </template>
+      </section>
     </div>
   </el-drawer>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowRight, WarningFilled } from '@element-plus/icons-vue'
 import CommitCard from './CommitDiffCard.vue'
@@ -150,11 +146,12 @@ import type { AppDiffCell, AppDiffRow } from '@/utils/appVersionDiff'
 import { codeTone } from '@/utils/appVersionDiff'
 
 /**
- * The drawer a matrix row opens: the row's version timeline on top, and the
- * selected pair's commit comparison read side by side below it.
+ * The drawer a matrix row opens: the row's version timeline on top, and every
+ * pair the row carries read one after another below it.
  *
  * One entry per pair the row appears in, keyed by the same interval refs the
- * timeline edges carry, so a click on an edge is the comparison it names.
+ * timeline edges carry, so a click on an edge brings its pair's section into
+ * view rather than trading the pair on screen for another.
  */
 const props = defineProps<{
   visible: boolean
@@ -184,38 +181,34 @@ const boundaries = computed<Boundary[]>(() =>
   })),
 )
 
-const selectedKey = ref<string | null>(null)
-
-// Opening the drawer lands on its first readable pair; reopening another row
-// does the same instead of remembering the last selection's key.
-watch(
-  () => [props.visible, props.row?.name] as const,
-  ([visible]) => {
-    if (visible) {
-      selectedKey.value = boundaries.value.find((boundary) => boundary.entry)?.key ?? null
-    }
-  },
-)
-
-function select(key: string) {
-  selectedKey.value = key
+/** A pair's section in the drawer, named so the timeline can point at it. */
+function sectionId(key: string): string {
+  return `drawer-pair-${key.replace(/[^a-zA-Z0-9-]/g, '-')}`
 }
 
-const selectedEntry = computed(
-  () => props.entries.find((entry) => entry.key === selectedKey.value) ?? null,
-)
+/** Walk the eye from a timeline edge down to the pair's own section. */
+function reveal(key: string) {
+  const section = document.getElementById(sectionId(key))
+  // some hosts do not implement smooth scrolling; the reveal is a courtesy,
+  // never a crash
+  section?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+}
 
-const tone = computed(() => (selectedEntry.value ? codeTone(selectedEntry.value.code) : 'none'))
+/** How a pair's commits read. `unavailable` and `none` are deliberately different. */
+function tone(entry: { code: AppVersionDiffCode }): string {
+  return codeTone(entry.code)
+}
+
 // A pair that does not hold what it should is the reading that asks for action,
 // so its column wears the warning instead of sitting beside the added one.
-const hasMissing = computed(
-  () => selectedEntry.value !== null && selectedEntry.value.code.missing_count > 0,
-)
-const verdictType = computed<'success' | 'danger' | 'info'>(() => {
-  if (!selectedEntry.value) return 'info'
-  if (selectedEntry.value.code.verdict === 'contained') return 'success'
-  return selectedEntry.value.code.verdict === 'missing' ? 'danger' : 'info'
-})
+function hasMissing(entry: { code: AppVersionDiffCode }): boolean {
+  return entry.code.missing_count > 0
+}
+
+function verdictType(entry: { code: AppVersionDiffCode }): 'success' | 'danger' | 'info' {
+  if (entry.code.verdict === 'contained') return 'success'
+  return entry.code.verdict === 'missing' ? 'danger' : 'info'
+}
 </script>
 
 <style scoped>
@@ -223,6 +216,13 @@ const verdictType = computed<'success' | 'danger' | 'info'>(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* One block per pair; a rule between them keeps three or more of them readable
+   as separate comparisons instead of one long column of commits. */
+.pair-section {
+  padding-top: 8px;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 .drawer-head {
