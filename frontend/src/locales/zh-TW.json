@@ -94,7 +94,9 @@
   },
   "menu": {
     "dashboard": "儀表板",
-    "insights": "倉庫洞察",
+    "overview": "總覽",
+    "myDashboard": "我的儀表板",
+    "repositoryInsights": "倉庫洞察",
     "reviews": "程式碼審查",
     "taskAssignment": "任務分配",
     "scores": "評分",
