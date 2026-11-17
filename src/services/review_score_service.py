@@ -24,6 +24,7 @@ from src.schemas.pull_request import (
     ReviewScoreSummary,
 )
 from src.services.entity_sync_service import EntitySyncService
+from src.services.sse_broker import publish_stream_event
 from src.utils.redis import get_redis_client
 from src.utils.score_utils import normalize_source_filename
 from src.utils.timezone import get_current_time
@@ -132,7 +133,7 @@ class ReviewScoreService:
                 f"Created new score for reviewer '{reviewer.username}' on {target}: {score_data.score}"
             )
 
-        await self._mark_assignment_completed(
+        assignment_completed = await self._mark_assignment_completed(
             db=db,
             review_base_id=review_base_id,
             reviewer=reviewer.username,
@@ -180,6 +181,30 @@ class ReviewScoreService:
         # Update metrics
         self.metrics.observe_review_score(project=project.project_key, score=score_data.score)
 
+        # The write is committed: announce it. Both events carry the same payload
+        # shape the review events do, so the stream stays one shape to read.
+        await publish_stream_event(
+            "score_updated",
+            payload={
+                "review_id": score_obj.id,
+                "project_key": project.project_key,
+                "repository_slug": repository.repository_slug,
+                "pull_request_id": score_data.pull_request_id,
+                "created_date": score_obj.created_date,
+            },
+        )
+        if assignment_completed:
+            await publish_stream_event(
+                "assignment_updated",
+                payload={
+                    "review_id": review_base_id,
+                    "project_key": project.project_key,
+                    "repository_slug": repository.repository_slug,
+                    "pull_request_id": score_data.pull_request_id,
+                    "created_date": score_obj.created_date,
+                },
+            )
+
         # Return enriched response - pass reviewer_obj to avoid lazy loading after commit
         return await self._enrich_score_response(
             score_obj, db, include_details, reviewer_obj=reviewer
@@ -190,7 +215,8 @@ class ReviewScoreService:
         db: AsyncSession,
         review_base_id: int,
         reviewer: str,
-    ) -> None:
+    ) -> bool:
+        """Flip the reviewer's assignment to completed; True when it changed."""
         stmt = select(PullRequestReviewAssignment).where(
             PullRequestReviewAssignment.review_base_id == review_base_id,
             PullRequestReviewAssignment.reviewer == reviewer,
@@ -199,7 +225,7 @@ class ReviewScoreService:
         assignment = result.scalar_one_or_none()
 
         if not assignment or assignment.assignment_status == "completed":
-            return
+            return False
 
         assignment.assignment_status = "completed"
         assignment.updated_date = get_current_time()
@@ -208,6 +234,7 @@ class ReviewScoreService:
             "Marked assignment as completed after score submission: "
             f"review_base_id={review_base_id}, reviewer={reviewer}"
         )
+        return True
 
     async def get_scores_by_review_target(
         self,

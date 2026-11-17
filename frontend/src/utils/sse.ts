@@ -19,12 +19,18 @@ import { useAuthStore } from '@/stores/auth'
 /**
  * The payload a review event carries.
  *
- * Both `review_created` and `review_updated` send the same shape, so a consumer
- * that only wants to know "this repository changed" reads the pair below.
+ * All four stream events send the same shape, so a consumer that only wants to
+ * know "this repository changed" reads the pair below.
  */
+export type SSEStreamEventName =
+  | 'review_created'
+  | 'review_updated'
+  | 'score_updated'
+  | 'assignment_updated'
+
 export interface SSEReviewCreatedEvent {
   /** Which stream event carried it; absent when a caller builds one by hand. */
-  event?: 'review_created' | 'review_updated'
+  event?: SSEStreamEventName
   review_id: number
   project_key: string
   repository_slug: string
@@ -292,9 +298,9 @@ export class SSEService {
       this.currentOnOpen?.()
     })
 
-    // A review the caller re-posts arrives as `review_updated`: both names carry
-    // the same payload shape and mean the same thing to the reader — the list
-    // changed — so they share one handler.
+    // All four names carry the same payload shape and mean the same thing to a
+    // reader — this repository changed — so they share one handler. A score or
+    // an assignment moving without a review being written still lands here.
     const onReviewEvent = (rawEvent: Event) => {
       // Ignore if a newer connection has been created
       if (generation !== this.connectionGeneration) {
@@ -319,6 +325,8 @@ export class SSEService {
 
     this.eventSource.addEventListener('review_created', onReviewEvent)
     this.eventSource.addEventListener('review_updated', onReviewEvent)
+    this.eventSource.addEventListener('score_updated', onReviewEvent)
+    this.eventSource.addEventListener('assignment_updated', onReviewEvent)
 
     this.eventSource.addEventListener('notification', (rawEvent: Event) => {
       // Ignore if a newer connection has been created

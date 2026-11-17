@@ -216,6 +216,29 @@ describe('SSEService event names', () => {
     expect(watcher).toHaveBeenCalledWith(payload)
   })
 
+  it('feeds score and assignment events to the same readers', async () => {
+    createStreamTicket.mockResolvedValue({ ticket: 'ticket-1', expires_in: 60 })
+    const onEvent = vi.fn()
+    const watcher = vi.fn()
+
+    service.addReviewListener(watcher)
+    service.connect('jwt-value', onEvent)
+    await flushPromises()
+
+    const payload = {
+      review_id: 3,
+      project_key: 'CORE',
+      repository_slug: 'app',
+      pull_request_id: '88',
+      created_date: '2026-11-17T10:00:00+00:00',
+    }
+    FakeEventSource.instances[0].message('score_updated', payload)
+    FakeEventSource.instances[0].message('assignment_updated', payload)
+
+    expect(onEvent).toHaveBeenCalledTimes(2)
+    expect(watcher).toHaveBeenCalledTimes(2)
+  })
+
   it('stops feeding a watcher once it detaches', async () => {
     createStreamTicket.mockResolvedValue({ ticket: 'ticket-1', expires_in: 60 })
     const watcher = vi.fn()
