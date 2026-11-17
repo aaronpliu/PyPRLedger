@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.41.1] - 2026-11-17
+
+**Backend Version**: 1.41.1
+**Frontend Version**: 1.37.1
+
+### Added
+- JIRA ticket keys in an App Diff commit subject link to the configured JIRA instance, the way the release notes read them — in the drawer's commit cards and in the exported HTML report, and staying plain text when no JIRA base URL is configured
+
 ### Changed
 - The App Diff drawer reads every pair a row carries at once: a comparison spanning three or more releases shows all of its pairwise commit comparisons one after another (timeline on top as the map, a section per pair below), and a timeline edge brings its pair's section into view instead of trading the pair on screen for another — a row no longer makes the reader walk its pairs one click at a time
-- JIRA ticket keys in an App Diff commit subject link to the configured JIRA instance, the way the release notes read them — in the drawer's commit cards and in the exported HTML report, and staying plain text when no JIRA base URL is configured
+
+### Dependencies
+- Update menu navigation for dashboard
+
+---
 
 ## [1.41.0] - 2026-11-17
 
