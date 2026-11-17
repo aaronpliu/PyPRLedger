@@ -39,6 +39,7 @@ from src.schemas.pull_request import (
 )
 from src.services.auto_assign_service import AutoTaskAssignmentService
 from src.services.entity_sync_service import EntitySyncService
+from src.services.insights_service import invalidate_insights_cache
 from src.services.project_registry_service import ProjectRegistryService
 from src.services.repository_access_service import RepositoryAccessService
 from src.services.review_score_service import ReviewScoreService
@@ -209,6 +210,13 @@ class ReviewService:
                 "assigned_by": review_dict.get("assigned_by"),
             }
             await self.redis_client.publish("reviews:created", json.dumps(event_payload))
+            # The event tells watching pages to refetch; without dropping the
+            # insights cache the refetch would come back with the stale reading.
+            await invalidate_insights_cache(
+                self.redis_client,
+                review_dict.get("project_key"),
+                review_dict.get("repository_slug"),
+            )
             self.metrics.sse_events_published_total.labels(status="success").inc()
             logger.info(
                 "SSE event published",

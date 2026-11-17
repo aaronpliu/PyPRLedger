@@ -21,6 +21,7 @@ from src.schemas.pull_request import ReviewScoreCreate
 from src.services.multi_reviewer_service import MultiReviewerService
 from src.services.review_score_service import ReviewScoreService
 from src.services.sse_broker import REVIEW_CREATED_CHANNEL, publish_stream_event
+from src.utils.redis import get_redis_client
 from src.utils.timezone import get_current_time
 
 
@@ -135,6 +136,14 @@ async def test_submitting_a_score_announces_the_score(db_session, monkeypatch):
     db_session.add(base)
     await db_session.flush()
 
+    # the readings the write is about to make stale, both cache shapes
+    stale_keys = [
+        "insights:repo:CORE:app:30:weekly:user-scope",
+        "insights:repo:CORE:*:30:weekly:user-scope",
+    ]
+    for key in stale_keys:
+        await get_redis_client().set(key, "{}")
+
     await ReviewScoreService().upsert_score(
         ReviewScoreCreate(
             pull_request_id="42",
@@ -152,6 +161,8 @@ async def test_submitting_a_score_announces_the_score(db_session, monkeypatch):
     event, payload = recorder.events[0]
     assert (payload["project_key"], payload["repository_slug"]) == ("CORE", "app")
     assert payload["pull_request_id"] == "42"
+    for key in stale_keys:
+        assert await get_redis_client().get(key) is None
 
 
 @pytest.mark.asyncio

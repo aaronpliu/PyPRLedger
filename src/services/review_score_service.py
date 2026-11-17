@@ -24,6 +24,7 @@ from src.schemas.pull_request import (
     ReviewScoreSummary,
 )
 from src.services.entity_sync_service import EntitySyncService
+from src.services.insights_service import invalidate_insights_cache
 from src.services.sse_broker import publish_stream_event
 from src.utils.redis import get_redis_client
 from src.utils.score_utils import normalize_source_filename
@@ -204,6 +205,11 @@ class ReviewScoreService:
                     "created_date": score_obj.created_date,
                 },
             )
+
+        # The reading is stale the moment this write lands; say so to the cache.
+        await invalidate_insights_cache(
+            self.redis_client, project.project_key, repository.repository_slug
+        )
 
         # Return enriched response - pass reviewer_obj to avoid lazy loading after commit
         return await self._enrich_score_response(

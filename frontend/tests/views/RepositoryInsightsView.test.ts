@@ -13,12 +13,25 @@ const api = vi.hoisted(() => ({
 // The page watches review events on the shared stream; the tests hand it the
 // events directly through the same registry the service would call.
 const sse = vi.hoisted(() => ({ listeners: new Set<(event: any) => void>() }))
+const sseCalls = vi.hoisted(() => ({ connect: [] as any[], connected: false }))
 
 vi.mock('@/utils/sse', () => ({
   sseService: {
     addReviewListener: (handler: (event: any) => void) => sse.listeners.add(handler),
     removeReviewListener: (handler: (event: any) => void) => sse.listeners.delete(handler),
+    isConnected: () => sseCalls.connected,
+    connect: (...args: any[]) => {
+      sseCalls.connect.push(args)
+      sseCalls.connected = true
+    },
+    disconnect: () => {
+      sseCalls.connected = false
+    },
   },
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ accessToken: 'jwt-value' }),
 }))
 
 vi.mock('@/api/insights', () => ({
@@ -114,6 +127,8 @@ describe('RepositoryInsightsView', () => {
     api.getAllProjects.mockReset()
     api.getProjectRepositories.mockReset()
     api.getRepositoryInsights.mockResolvedValue(reading())
+    sseCalls.connect = []
+    sseCalls.connected = false
   })
 
   afterEach(() => {
@@ -244,6 +259,22 @@ describe('RepositoryInsightsView', () => {
     const hint = wrapper.find('[data-test="insights-scope-empty"]')
     expect(hint.exists()).toBe(true)
     expect(hint.text()).toContain('no grant')
+  })
+
+  it('opens the stream when no one else has', async () => {
+    const wrapper = await mountView()
+    await pick(wrapper, 'CORE')
+
+    expect(sseCalls.connect).toHaveLength(1)
+    expect(sseCalls.connect[0][0]).toBe('jwt-value')
+  })
+
+  it('does not reopen a stream another page owns', async () => {
+    sseCalls.connected = true
+    const wrapper = await mountView()
+    await pick(wrapper, 'CORE')
+
+    expect(sseCalls.connect).toHaveLength(0)
   })
 
   it('stops watching the stream once the page is gone', async () => {

@@ -30,12 +30,14 @@ from src.schemas.review import (
     ReviewBaseResponse,
     ReviewWithAssignmentsResponse,
 )
+from src.services.insights_service import invalidate_insights_cache
 from src.services.notification_service import NotificationService
 from src.services.project_registry_service import ProjectRegistryService
 from src.services.repository_access_service import RepositoryAccessService
 from src.services.sse_broker import publish_stream_event
 from src.utils.ai_review_utils import extract_issue_severities
 from src.utils.metrics import MetricsCollector, metrics
+from src.utils.redis import get_redis_client
 from src.utils.timezone import get_current_time
 
 
@@ -814,6 +816,11 @@ class MultiReviewerService:
                     "pull_request_id": base.pull_request_id,
                     "created_date": base.created_date,
                 },
+            )
+            # The reading is stale the moment this status lands; clear the cache
+            # so the refetch the event triggers comes back with it.
+            await invalidate_insights_cache(
+                get_redis_client(), base.project_key, base.repository_slug
             )
 
         # Dispatch notification if assignment is completed

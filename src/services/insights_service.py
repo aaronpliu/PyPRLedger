@@ -47,6 +47,31 @@ logger = logging.getLogger(__name__)
 # close enough to the database to be worth saving the aggregation queries.
 INSIGHTS_CACHE_TTL_SECONDS = 60
 
+
+async def invalidate_insights_cache(
+    redis_client,
+    project_key: str | None,
+    repository_slug: str | None = None,
+) -> None:
+    """Drop the cached readings a write to this repository made stale.
+
+    The stream event tells watching pages to refetch; without this the refetch
+    would be served the very entry the write had just made stale, and the page
+    would faithfully re-display yesterday's numbers. A write can land in the
+    single-repository reading or the project-wide one (whose cache key says
+    ``*`` for the repository), so one pattern clears both. Best effort by
+    design: a cache that refuses to clear costs at most one TTL of staleness,
+    never the write itself.
+    """
+    if not project_key:
+        return
+    try:
+        stale_keys = await redis_client.keys(f"insights:repo:{project_key}:*")
+        if stale_keys:
+            await redis_client.delete(*stale_keys)
+    except Exception as exc:
+        logger.warning("Failed to invalidate insights cache: %s", exc)
+
 # How many rows each distribution keeps. A dashboard reads the shape of the
 # numbers, not the long tail.
 TOP_REVIEWERS = 10

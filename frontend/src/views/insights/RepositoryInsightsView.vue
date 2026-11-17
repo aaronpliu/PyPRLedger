@@ -130,6 +130,7 @@ import RepositoryScopePicker, {
 } from '@/components/insights/RepositoryScopePicker.vue'
 import { insightsApi, type RepositoryInsights } from '@/api/insights'
 import { sseService, type SSEReviewCreatedEvent } from '@/utils/sse'
+import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
 
@@ -146,6 +147,7 @@ const COMPLETED_COLOR = '#909399'
 const scope = ref<RepositoryScope>({ projectKey: '', repositorySlug: '' })
 const days = ref(30)
 const period = ref<'daily' | 'weekly' | 'monthly'>('weekly')
+const authStore = useAuthStore()
 
 const reading = ref<RepositoryInsights | null>(null)
 const loading = ref(false)
@@ -340,6 +342,13 @@ onMounted(() => {
   // The 30s poll is the floor; a review that lands in this scope arrives as an
   // event and the reading is refreshed without waiting for the next tick.
   sseService.addReviewListener(handleReviewEvent)
+  // A listener needs a stream to listen on. The review list and the task board
+  // open the stream behind their own toggles; landing here directly would mean
+  // watching a stream nobody opened. If no one has, this page opens it — the
+  // callback stays empty because the events reach this page as a listener.
+  if (!sseService.isConnected() && authStore.accessToken) {
+    sseService.connect(authStore.accessToken, () => {})
+  }
 })
 
 onUnmounted(() => {
