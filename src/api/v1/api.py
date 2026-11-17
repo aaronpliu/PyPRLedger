@@ -7,6 +7,7 @@ from src.api.v1.endpoints import (
     auth,
     auto_task_assignment,  # Auto-assignment rule management
     delegation,
+    insights,  # Repository insights dashboard
     llm_proxy,
     notifications,  # Notification management endpoints
     personal_access_tokens,
@@ -38,6 +39,9 @@ api_router.include_router(rbac.router, tags=["rbac-management"])
 api_router.include_router(delegation.router, prefix="/rbac/delegations", tags=["role-delegations"])
 
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
+
+# Repository insights: one aggregated reading for the repository dashboard
+api_router.include_router(insights.router, prefix="/insights", tags=["insights"])
 
 # SSE streaming endpoint — mounted at /api/v1/sse/stream
 # Uses separate prefix to avoid route conflicts with reviews router

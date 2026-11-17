@@ -6,6 +6,7 @@
       :width="750"
       placement="bottom-start"
       trigger="click"
+      popper-class="filter-popover"
       :hide-after="0"
       :popper-options="{
         modifiers: [
@@ -247,10 +248,10 @@
         v-for="tag in activeFilterTags"
         :key="tag.key"
         :type="tag.isUnassigned ? 'warning' : undefined"
+        class="active-filter-tag"
         closable
         @close="handleRemoveFilter(tag.key)"
         size="small"
-        style="margin-right: 8px; margin-bottom: 8px"
       >
         <span v-if="tag.isUnassigned" class="tag-unassigned-icon">
           <el-icon><WarningFilled /></el-icon>
@@ -258,7 +259,7 @@
         {{ tag.label }}: {{ tag.value }}
       </el-tag>
       <el-button link type="primary" size="small" @click="handleReset">
-        Clear All
+        {{ t('filters.clear_all', 'Clear All') }}
       </el-button>
     </div>
   </div>
@@ -736,6 +737,9 @@ const handlePopoverHide = () => {
   font-weight: 600;
 }
 
+/* One row, one rhythm: the tags and the Clear All link share the same flex line
+   and the same height, so the button sits on the tags' centre line instead of
+   drifting on the inline margins the tags used to carry. */
 .active-filters-bar {
   display: flex;
   flex-wrap: wrap;
@@ -744,6 +748,16 @@ const handlePopoverHide = () => {
   margin-top: 12px;
   min-height: 32px;
   animation: fadeIn 0.2s ease-in;
+}
+
+.active-filter-tag {
+  height: 24px;
+  line-height: 22px;
+}
+
+.active-filters-bar .el-button {
+  height: 24px;
+  padding: 0 4px;
 }
 
 @keyframes fadeIn {
@@ -813,5 +827,37 @@ const handlePopoverHide = () => {
 
 [data-theme='dark'] .filter-actions {
   border-top-color: var(--el-border-color-dark);
+}
+
+/* On the dark surface the default input border is barely one step away from the
+   background: lift it one ramp step so the search box reads as a box. */
+[data-theme='dark'] .filter-popover-wrapper :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px var(--el-border-color-dark) inset;
+}
+
+[data-theme='dark'] .filter-popover-wrapper :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset;
+}
+</style>
+
+<style>
+/* The popover teleports to the body, so the scoped attribute does not reach its
+   container - this rule lives unscoped and names the popper class instead. */
+[data-theme='dark'] .filter-popover.el-popper {
+  border: 1px solid var(--el-border-color-dark);
+}
+
+[data-theme='dark'] .filter-popover .el-select__wrapper {
+  box-shadow: 0 0 0 1px var(--el-border-color-dark) inset;
+}
+
+[data-theme='dark'] .filter-popover .el-input__wrapper,
+[data-theme='dark'] .filter-popover .el-date-editor.el-input__wrapper {
+  box-shadow: 0 0 0 1px var(--el-border-color-dark) inset;
+}
+
+[data-theme='dark'] .filter-popover .el-input__wrapper.is-focus,
+[data-theme='dark'] .filter-popover .el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset;
 }
 </style>

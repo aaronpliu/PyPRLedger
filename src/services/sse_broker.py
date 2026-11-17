@@ -7,11 +7,12 @@ import logging
 import random
 import time
 from dataclasses import dataclass, field
+from typing import Any
 
 from redis.asyncio.client import PubSub
 
 from src.utils.metrics import metrics
-from src.utils.redis import get_redis_pubsub_client
+from src.utils.redis import get_redis_client, get_redis_pubsub_client
 
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,35 @@ def _reader_may_see_review(
     if allowed_pairs is None:
         return True
     return (review.get("project_key"), review.get("repository_slug")) in allowed_pairs
+
+
+async def publish_stream_event(event: str, payload: dict[str, Any]) -> bool:
+    """Publish one frame onto the review stream channel.
+
+    A score landing or an assignment changing is the same kind of news as a
+    review changing — a repository's on-screen reading went stale — so it rides
+    the channel the review pipeline publishes on, under its own event name. The
+    broker passes the name through to the browser and filters frames by
+    repository grant, exactly as it does for the review events.
+
+    The payload carries the same keys a review event does (``review_id``,
+    ``project_key``, ``repository_slug``, ``pull_request_id``, ``created_date``),
+    so every consumer — filtering, tests, pages — reads one shape.
+
+    A publish failure is logged here and reported by the False return: the
+    write the event accompanies must never fail because its announcement did.
+    """
+    try:
+        frame = {"event": event, **payload}
+        # ``default=str`` lets callers hand a datetime ``created_date`` straight
+        # from the ORM row without pre-serialising it.
+        await get_redis_client().publish(
+            REVIEW_CREATED_CHANNEL, json.dumps(frame, default=str)
+        )
+        return True
+    except Exception as exc:
+        logger.warning("Stream event publish failed for %s: %s", event, exc)
+        return False
 
 
 class SSEBroker:

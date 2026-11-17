@@ -30,11 +30,14 @@ from src.schemas.review import (
     ReviewBaseResponse,
     ReviewWithAssignmentsResponse,
 )
+from src.services.insights_service import invalidate_insights_cache
 from src.services.notification_service import NotificationService
 from src.services.project_registry_service import ProjectRegistryService
 from src.services.repository_access_service import RepositoryAccessService
+from src.services.sse_broker import publish_stream_event
 from src.utils.ai_review_utils import extract_issue_severities
 from src.utils.metrics import MetricsCollector, metrics
+from src.utils.redis import get_redis_client
 from src.utils.timezone import get_current_time
 
 
@@ -794,6 +797,31 @@ class MultiReviewerService:
 
         await db.flush()
         await db.refresh(assignment)
+
+        # The status moved without a review being written, so the review events
+        # alone would leave a watching page stale; say so under its own name.
+        base_result = await db.execute(
+            select(PullRequestReviewBase).where(
+                PullRequestReviewBase.id == assignment.review_base_id
+            )
+        )
+        base = base_result.scalar_one_or_none()
+        if base:
+            await publish_stream_event(
+                "assignment_updated",
+                payload={
+                    "review_id": base.id,
+                    "project_key": base.project_key,
+                    "repository_slug": base.repository_slug,
+                    "pull_request_id": base.pull_request_id,
+                    "created_date": base.created_date,
+                },
+            )
+            # The reading is stale the moment this status lands; clear the cache
+            # so the refetch the event triggers comes back with it.
+            await invalidate_insights_cache(
+                get_redis_client(), base.project_key, base.repository_slug
+            )
 
         # Dispatch notification if assignment is completed
         if status == "completed":

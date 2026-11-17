@@ -16,16 +16,30 @@ import { sseApi } from '@/api/sse'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
 
+/**
+ * The payload a review event carries.
+ *
+ * All four stream events send the same shape, so a consumer that only wants to
+ * know "this repository changed" reads the pair below.
+ */
+export type SSEStreamEventName =
+  | 'review_created'
+  | 'review_updated'
+  | 'score_updated'
+  | 'assignment_updated'
+
 export interface SSEReviewCreatedEvent {
-  event: 'review_created'
-  data: {
-    review_id: number
-    project_key: string
-    repository_slug: string
-    pull_request_id: string
-    created_date: string
-  }
+  /** Which stream event carried it; absent when a caller builds one by hand. */
+  event?: SSEStreamEventName
+  review_id: number
+  project_key: string
+  repository_slug: string
+  pull_request_id: string
+  created_date: string
 }
+
+/** A component that watches review events without owning the stream. */
+export type SSEReviewListener = (event: SSEReviewCreatedEvent) => void
 
 export interface SSECallbackMap {
   review_created: (event: SSEReviewCreatedEvent) => void
@@ -91,6 +105,13 @@ export class SSEService {
    * whichever view currently owns the stream.
    */
   private notificationHandler: SSENotificationHandler | null = null
+
+  /**
+   * Review watchers that do not own the stream. Like the notification handler,
+   * these sit outside `connect()`'s callback chain so a page keeps receiving
+   * across navigations and reconnections.
+   */
+  private reviewListeners = new Set<SSEReviewListener>()
 
   // Store current callbacks so they can be updated
   private currentOnEvent: ((event: SSEReviewCreatedEvent) => void) | null = null
@@ -277,21 +298,35 @@ export class SSEService {
       this.currentOnOpen?.()
     })
 
-    // A review the caller re-posts arrives as `review_updated`: both names carry
-    // the same payload shape and mean the same thing to the reader — the list
-    // changed — so they share one handler.
+    // All four names carry the same payload shape and mean the same thing to a
+    // reader — this repository changed — so they share one handler. A score or
+    // an assignment moving without a review being written still lands here.
     const onReviewEvent = (rawEvent: Event) => {
       // Ignore if a newer connection has been created
       if (generation !== this.connectionGeneration) {
         return
       }
-      if (this.currentOnEvent) {
-        this.handleReviewCreated(rawEvent as MessageEvent, this.currentOnEvent)
+      // One parse, many readers: the page that opened the stream gets the event
+      // through its own callback, and pages that only watch a scope subscribe to
+      // the same stream through `addReviewListener` instead of competing for it.
+      const event = this.parseReviewEvent(rawEvent as MessageEvent)
+      if (!event) {
+        return
+      }
+      this.currentOnEvent?.(event)
+      for (const listener of this.reviewListeners) {
+        try {
+          listener(event)
+        } catch (error) {
+          console.error('[SSE] Review listener failed:', error)
+        }
       }
     }
 
     this.eventSource.addEventListener('review_created', onReviewEvent)
     this.eventSource.addEventListener('review_updated', onReviewEvent)
+    this.eventSource.addEventListener('score_updated', onReviewEvent)
+    this.eventSource.addEventListener('assignment_updated', onReviewEvent)
 
     this.eventSource.addEventListener('notification', (rawEvent: Event) => {
       // Ignore if a newer connection has been created
@@ -454,6 +489,22 @@ export class SSEService {
   }
 
   /**
+   * Subscribe to review events without owning the stream.
+   *
+   * `connect()` keeps a single callback for the page that opened the stream;
+   * a second page that only cares about its own scope (a dashboard watching one
+   * repository, say) would otherwise have to take that callback over.
+   */
+  addReviewListener(handler: SSEReviewListener): void {
+    this.reviewListeners.add(handler)
+  }
+
+  /** Detach a listener added with `addReviewListener`. */
+  removeReviewListener(handler: SSEReviewListener): void {
+    this.reviewListeners.delete(handler)
+  }
+
+  /**
    * Handle an incoming `notification` SSE event
    */
   private handleNotification(rawEvent: MessageEvent): void {
@@ -472,14 +523,9 @@ export class SSEService {
   /**
    * Handle an incoming review_created SSE event
    */
-  private handleReviewCreated(
-    rawEvent: MessageEvent,
-    onEvent: (event: SSEReviewCreatedEvent) => void,
-  ): void {
+  private parseReviewEvent(rawEvent: MessageEvent): SSEReviewCreatedEvent | null {
     try {
-      console.log('[SSE] Raw event received:', rawEvent.data)
       const data = JSON.parse(rawEvent.data)
-      console.log('[SSE] Parsed event:', data)
       if (
         !data ||
         typeof data.review_id !== 'number' ||
@@ -488,12 +534,13 @@ export class SSEService {
         typeof data.pull_request_id !== 'string' ||
         typeof data.created_date !== 'string'
       ) {
-        console.warn('[SSE] Received malformed review_created event — dropping:', rawEvent.data)
-        return
+        console.warn('[SSE] Received malformed review event — dropping:', rawEvent.data)
+        return null
       }
-      onEvent(data)
-    } catch (e) {
-      console.error('[SSE] Failed to parse review_created event:', e, rawEvent.data)
+      return data as SSEReviewCreatedEvent
+    } catch (error) {
+      console.error('[SSE] Failed to parse review event:', error, rawEvent.data)
+      return null
     }
   }
 

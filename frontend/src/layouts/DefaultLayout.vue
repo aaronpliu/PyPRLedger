@@ -18,6 +18,7 @@
               aria-label="Main menu"
             >
               <el-menu-item index="/">{{ t('menu.dashboard') }}</el-menu-item>
+              <el-menu-item index="/insights/repository">{{ t('menu.insights') }}</el-menu-item>
               <el-menu-item index="/reviews">{{ t('menu.reviews') }}</el-menu-item>
               <el-sub-menu v-if="isAdmin" index="/task-assignment">
                 <template #title>{{ t('menu.taskAssignment') }}</template>

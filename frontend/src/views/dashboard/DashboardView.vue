@@ -143,13 +143,17 @@
       <template #header>
         <div class="card-header">
           <span>{{ t('dashboard.recent_reviews') }}</span>
+          <!-- Two exits, one hierarchy: the analytics page is the deeper read and
+               stays quiet; the review list is the every-day path and carries the
+               arrow that promises it. -->
           <div class="header-actions">
-            <el-button type="success" size="small" @click="$router.push('/scores/analytics')">
+            <el-button text size="small" @click="$router.push('/scores/analytics')">
               <el-icon><TrendCharts /></el-icon>
               {{ t('dashboard.view_analytics') }}
             </el-button>
             <el-button type="primary" size="small" @click="$router.push('/reviews')">
               {{ t('dashboard.view_all') }}
+              <el-icon class="view-all-arrow"><ArrowRight /></el-icon>
             </el-button>
           </div>
         </div>
@@ -247,7 +251,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useTheme } from '@/composables/useTheme'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { TrendCharts, Refresh, Link, FullScreen, Close } from '@element-plus/icons-vue'
+import { TrendCharts, Refresh, Link, FullScreen, Close, ArrowRight } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import { reviewsApi } from '@/api/reviews'
@@ -1161,7 +1165,34 @@ onUnmounted(() => {
 
 .header-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+/* Element Plus spaces button siblings with its own margin; the flex gap owns
+   the rhythm here, so the pair does not sit a double space apart. */
+.header-actions .el-button + .el-button {
+  margin-left: 0;
+}
+
+/* the deeper read stays quiet but keeps its own colour to be found by */
+.header-actions .el-button.is-text {
+  color: var(--el-color-success);
+}
+
+.header-actions .el-button.is-text:hover {
+  color: var(--el-color-success);
+  background: var(--el-color-success-light-9);
+}
+
+/* the arrow that promises another page slides toward it on hover */
+.view-all-arrow {
+  margin-left: 4px;
+  transition: transform 0.15s ease;
+}
+
+.header-actions .el-button:hover .view-all-arrow {
+  transform: translateX(2px);
 }
 
 /* Load More Button Container */
