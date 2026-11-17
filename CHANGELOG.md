@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The repository access picker on the admin System User and Git User pages reads as a two-level tree instead of one long checkbox column: a project is the parent row (bold, with a picked count) and its repositories are the indented children beneath it, checking a project takes all of its repositories at once, a half-picked project shows the mixed state on its checkbox, and a filter box narrows the tree to the rows a name matches
+
 ## [1.41.1] - 2026-11-17
 
 **Backend Version**: 1.41.1
