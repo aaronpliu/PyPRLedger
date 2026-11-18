@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - The repository access picker on the admin System User and Git User pages reads as a two-level tree instead of one long checkbox column: a project is the parent row (bold, with a picked count) and its repositories are the indented children beneath it, checking a project takes all of its repositories at once, a half-picked project shows the mixed state on its checkbox, and a filter box narrows the tree to the rows a name matches
+- `/api/health/ready` joins `/api/health` as the readiness probe: it really probes MySQL (`SELECT 1`) and Redis (`PING`) with a short timeout and answers 503 with the failing component named when either is down, while `/api/health` stays the dependency-free liveness answer — a running process with a dead database is no longer reported as healthy
+- The `monitoring` extra no longer declares `opentelemetry-api` and `sentry-sdk[fastapi]`, which were never wired into the code — dead dependencies that pretended observability existed (they return when tracing and error tracking are actually installed)
 
 ## [1.41.1] - 2026-11-17
 
