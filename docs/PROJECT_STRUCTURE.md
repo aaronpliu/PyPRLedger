@@ -324,7 +324,7 @@
 3. **Access Application**
    - API: http://localhost:8000
    - Documentation: http://localhost:8000/api/docs
-   - Grafana: http://localhost:3000
+   - Grafana: http://localhost:3030
    - Prometheus: http://localhost:9090
 
 ---
