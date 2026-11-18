@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Distributed tracing via OpenTelemetry, opt-in with `OTEL_ENABLED=true` (requires the `monitoring` extra and a collector — a Jaeger all-in-one joins the monitoring stack for local use): FastAPI requests, SQLAlchemy queries, Redis calls and Git provider HTTPX calls become spans automatically, `/api/health*` and `/api/metrics` probes are excluded, spans carry the service name and environment, and every log line carries the trace and span ids (`-` when tracing is off) so a slow request in the logs jumps straight to its span view
+
 ### Changed
 - The repository access picker on the admin System User and Git User pages reads as a two-level tree instead of one long checkbox column: a project is the parent row (bold, with a picked count) and its repositories are the indented children beneath it, checking a project takes all of its repositories at once, a half-picked project shows the mixed state on its checkbox, and a filter box narrows the tree to the rows a name matches
 - `/api/health/ready` joins `/api/health` as the readiness probe: it really probes MySQL (`SELECT 1`) and Redis (`PING`) with a short timeout and answers 503 with the failing component named when either is down, while `/api/health` stays the dependency-free liveness answer — a running process with a dead database is no longer reported as healthy

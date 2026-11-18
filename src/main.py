@@ -26,6 +26,7 @@ from src.core.middleware import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
 )
+from src.core.tracing import setup_tracing, shutdown_tracing
 from src.services.pat_service import PATService
 from src.services.project_service import ProjectService
 from src.services.rbac_service import RBACService
@@ -154,6 +155,8 @@ async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
     await init_db()
     await init_redis()
     metrics_collector.startup()
+    # after init_db, so the engine exists for the SQLAlchemy instrumentation
+    setup_tracing(app)
 
     # Initialize metrics with real values from database
     try:
@@ -199,6 +202,7 @@ async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
     await close_redis()
     await get_sse_broker().stop()  # Stop SSE broker (shared pubsub subscription)
 
+    shutdown_tracing()
     metrics_collector.shutdown()
     logger.info("Application shutdown complete")
 

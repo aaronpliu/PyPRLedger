@@ -5,6 +5,36 @@ from pathlib import Path
 import yaml
 
 
+class TraceContextFilter(logging.Filter):
+    """Attach the current OpenTelemetry trace ids to every log record.
+
+    The formatters read ``%(trace_id)s`` and ``%(span_id)s`` unconditionally -
+    they are ``-`` when the SDK is absent or the record is outside a span - so
+    a slow request in the logs can be followed straight into Jaeger when
+    tracing is on, while the same config works when it is off.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        try:
+            from opentelemetry import trace as otel_trace
+
+            self._trace = otel_trace
+        except ImportError:
+            self._trace = None
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        trace_id = span_id = "-"
+        if self._trace is not None:
+            context = self._trace.get_current_span().get_span_context()
+            if context.is_valid:
+                trace_id = format(context.trace_id, "032x")
+                span_id = format(context.span_id, "016x")
+        record.trace_id = trace_id
+        record.span_id = span_id
+        return True
+
+
 def setup_logging(config_path: str | None = None, env_file: str | None = None) -> None:
     """
     Setup logging configuration from YAML file.
