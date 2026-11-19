@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Aggregate release notes: `POST /api/v1/release/aggregate-note/build` assembles one note for an application version span and the packages it moved — the two dependency graphs are diffed, every pinned package is classified as upgraded/added/removed/unchanged, each moved registered package is compared between its two versions with the same release diff the release pages use (run in parallel, cached), and the application's own comparison rides along as the first section. A package that cannot be compared stays legible (`skipped` with the reason — unpinned transitive dependency, not registered, added or removed in the span — or `failed` with the provider error): it never hides and never guessed
+
 ## [1.42.0] - 2026-11-18
 
 **Backend Version**: 1.42.0
