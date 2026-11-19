@@ -94,7 +94,9 @@
   },
   "menu": {
     "dashboard": "仪表板",
-    "insights": "仓库洞察",
+    "overview": "总览",
+    "myDashboard": "我的仪表板",
+    "repositoryInsights": "仓库洞察",
     "reviews": "代码审查",
     "taskAssignment": "任务分配",
     "scores": "评分",

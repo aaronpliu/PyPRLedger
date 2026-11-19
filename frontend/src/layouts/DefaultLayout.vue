@@ -17,8 +17,14 @@
               style="border: none"
               aria-label="Main menu"
             >
-              <el-menu-item index="/">{{ t('menu.dashboard') }}</el-menu-item>
-              <el-menu-item index="/insights/repository">{{ t('menu.insights') }}</el-menu-item>
+              <!-- One entry, two readings: the personal dashboard and the
+                   repository-scoped one are the same kind of page - a summary
+                   you read, not a workflow you work in - so they share a menu. -->
+              <el-sub-menu index="/overview">
+                <template #title>{{ t('menu.overview') }}</template>
+                <el-menu-item index="/">{{ t('menu.myDashboard') }}</el-menu-item>
+                <el-menu-item index="/insights/repository">{{ t('menu.repositoryInsights') }}</el-menu-item>
+              </el-sub-menu>
               <el-menu-item index="/reviews">{{ t('menu.reviews') }}</el-menu-item>
               <el-sub-menu v-if="isAdmin" index="/task-assignment">
                 <template #title>{{ t('menu.taskAssignment') }}</template>

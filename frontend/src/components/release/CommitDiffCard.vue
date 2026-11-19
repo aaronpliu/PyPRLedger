@@ -1,7 +1,21 @@
 <template>
   <div class="card" :data-test="missing ? 'missing-commit' : 'added-commit'">
     <div class="card-body">
-      <span class="subject" :title="fullMessage">{{ subject }}</span>
+      <!-- JIRA ticket keys of the subject link to the configured JIRA, the way
+           the release-notes commit table reads them -->
+      <span class="subject" :title="fullMessage">
+        <template v-for="(segment, index) in subjectSegments" :key="index">
+          <a
+            v-if="segment.url"
+            class="ticket"
+            :href="segment.url"
+            target="_blank"
+            rel="noopener"
+            :data-test="`commit-ticket`"
+          >{{ segment.text }}</a>
+          <template v-else>{{ segment.text }}</template>
+        </template>
+      </span>
       <span v-if="meta" class="meta">{{ meta }}</span>
     </div>
     <a v-if="commit.url" class="id" :href="commit.url" target="_blank" rel="noopener">
@@ -12,10 +26,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import dayjs from 'dayjs'
 import type { AppVersionDiffCommit } from '@/api/appVersionDiff'
 import { commitSubject, shortCommitId } from '@/utils/appVersionDiff'
+import { useJira } from '@/composables/useJira'
+import { jiraTicketSegments } from '@/utils/jira'
 
 /**
  * One commit as a card: subject first, who wrote it and when under it, and the
@@ -28,9 +44,17 @@ const props = defineProps<{
   missing?: boolean
 }>()
 
-const subject = computed(() => commitSubject(props.commit))
 const fullMessage = computed(() => props.commit.message ?? '')
 const id = computed(() => shortCommitId(props.commit))
+
+const { jiraSettings, loadJiraSettings } = useJira()
+onMounted(() => void loadJiraSettings())
+
+/** Subject split into text and JIRA ticket links (a single text segment without JIRA). */
+const subjectSegments = computed(() => {
+  const segments = jiraTicketSegments(commitSubject(props.commit), jiraSettings.value)
+  return segments.length > 0 ? segments : [{ text: '-' }]
+})
 
 const meta = computed(() => {
   const parts: string[] = []
@@ -74,6 +98,16 @@ const meta = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--el-text-color-primary);
+}
+
+/* the ticket reads as a way out, the way it does in the release-notes table */
+.ticket {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.ticket:hover {
+  text-decoration: underline;
 }
 
 .meta {

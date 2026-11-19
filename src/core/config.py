@@ -248,6 +248,17 @@ class Settings(BaseSettings):
     PROMETHEUS_ENABLED: bool = Field(default=True)
     PROMETHEUS_METRICS_PATH: str = Field(default="/api/metrics")
 
+    # Distributed tracing (OpenTelemetry). Opt-in: with OTEL_ENABLED=false the
+    # app starts exactly as before; when true, spans export over OTLP and the
+    # monitoring extra must be installed (src.core.tracing degrades to a
+    # warning when the packages are missing).
+    OTEL_ENABLED: bool = Field(default=False)
+    OTEL_SERVICE_NAME: str = Field(default="prledger-backend")
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = Field(
+        default="http://localhost:4318/v1/traces",
+        description="OTLP/HTTP spans endpoint (the Jaeger all-in-one collects on 4318)",
+    )
+
     # Pagination defaults
     DEFAULT_PAGE_SIZE: int = Field(default=20)
     MAX_PAGE_SIZE: int = Field(default=100)

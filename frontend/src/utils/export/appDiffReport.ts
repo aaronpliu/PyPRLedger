@@ -5,6 +5,7 @@ import type {
   AppVersionDiffResponse,
 } from '@/api/appVersionDiff'
 import i18n from '@/i18n'
+import type { JiraSettings } from '@/utils/jira'
 import { tExport as t } from './shared'
 import {
   buildReportStyle,
@@ -31,6 +32,8 @@ export interface AppDiffReportContext {
   app_name?: string | null
   git_provider?: string | null
   workspace_slug?: string | null
+  /** JIRA link settings: ticket keys in commit subjects link to the instance. */
+  jira?: JiraSettings | null
 }
 
 export interface AppDiffReportInput {

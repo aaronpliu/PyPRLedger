@@ -94,7 +94,9 @@
   },
   "menu": {
     "dashboard": "Dashboard",
-    "insights": "Repository Insights",
+    "overview": "Overview",
+    "myDashboard": "My Dashboard",
+    "repositoryInsights": "Repository Insights",
     "reviews": "Reviews",
     "taskAssignment": "Task Assignment",
     "scores": "Scores",

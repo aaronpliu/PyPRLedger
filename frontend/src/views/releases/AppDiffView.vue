@@ -423,6 +423,7 @@ import type {
 } from '@/api/appVersionDiff'
 import { useRefCandidates } from '@/composables/useRefCandidates'
 import { DEPTHS, depthNumbers, useAppDiffDepth } from '@/composables/useAppDiffDepth'
+import { useJira } from '@/composables/useJira'
 import {
   buildRows,
   isMarked,
@@ -487,6 +488,9 @@ const result = ref<AppVersionDiffResponse | null>(null)
 // numbers behind each depth are the server's to grant: it clamps them to its own
 // ceilings and the answer says what was actually read.
 const { depth, remembered, depthRequest } = useAppDiffDepth()
+// JIRA link settings are per session and shared; the drawer's commit cards and
+// the HTML report both read them.
+const { jiraSettings, loadJiraSettings } = useJira()
 // The first response answers each pair with its first few package comparisons; the
 // rest are read behind it, so a release that moved dozens of packages is drawn
 // without waiting for every one of them.
@@ -670,6 +674,8 @@ function exportReport() {
       context: {
         ...coordinates(),
         app_name: result.value.app_name,
+        // ticket keys in the report's commit subjects link like the page's do
+        jira: jiraSettings.value,
       },
     })
     downloadAppDiffReport(html, appDiffReportFilename(coordinates()))
@@ -904,6 +910,7 @@ onMounted(async () => {
   restoring.value = true
   try {
     readUrl()
+    void loadJiraSettings()
     await loadProjects()
     if (repo.value.project_key && repo.value.repository_slug) {
       await loadRepositories(selectedProjectKey.value)

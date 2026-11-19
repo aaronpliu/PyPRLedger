@@ -209,7 +209,7 @@ docker-compose up -d
 5. Access the application:
 - API: http://localhost:8000
 - API Documentation: http://localhost:8000/api/docs
-- Grafana: http://localhost:3000 (admin/admin)
+- Grafana: http://localhost:3030 (admin/admin)
 - Prometheus: http://localhost:9090
 
 
@@ -567,7 +567,7 @@ Grafana is pre-configured with:
 - Prometheus data source
 - Code review dashboard
 
-Access Grafana at: `http://localhost:3000` (admin/admin)
+Access Grafana at: `http://localhost:3030` (admin/admin)
 
 ## AI-Assisted Development
 

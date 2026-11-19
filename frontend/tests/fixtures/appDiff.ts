@@ -41,7 +41,8 @@ function code(added: number, missing = 0) {
     scan_complete: true,
     added_count: added,
     missing_count: missing,
-    added_commits: [commit('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', 'Add the new module')],
+    // the subject carries a JIRA ticket key, the way real subjects do
+    added_commits: [commit('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', 'PRL-123: add the new module')],
     missing_commits: [],
     truncated: false,
     unavailable: null,

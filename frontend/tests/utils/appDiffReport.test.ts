@@ -135,6 +135,38 @@ describe('appDiffReport', () => {
     expect(html).not.toContain('<Long body')
   })
 
+  it('links a JIRA ticket key in a commit subject when the report carries settings', () => {
+    const withTicket = {
+      ...result,
+      intervals: result.intervals.map((interval) => ({
+        ...interval,
+        code: {
+          ...interval.code!,
+          added_commits: [
+            {
+              ...interval.code!.added_commits[0],
+              message: 'PRL-123: add the new module',
+            },
+          ],
+        },
+      })),
+    }
+    const html = buildAppDiffReportHtml({
+      result: withTicket,
+      context: {
+        ...context,
+        jira: { base_url: 'https://jira.example.com', project_keys: [] },
+      },
+    })
+
+    expect(html).toContain('href="https://jira.example.com/browse/PRL-123"')
+    expect(html).toContain('>PRL-123<')
+
+    // without settings the key stays the plain text it arrived as
+    const plain = buildAppDiffReportHtml({ result: withTicket, context })
+    expect(plain).not.toContain('browse/PRL-123')
+  })
+
   it('escapes a hostile commit message and repository name', () => {
     const hostile = {
       ...result,

@@ -57,7 +57,9 @@ services:
     image: grafana/grafana:latest
     container_name: prledger-grafana
     ports:
-      - "0.0.0.0:3000:3000"
+      # Host port 3030: 3000 is the frontend dev server on the same host.
+      # The container port stays 3000, so healthchecks and provisioning are untouched.
+      - "0.0.0.0:3030:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
@@ -118,6 +120,31 @@ services:
       resources:
         limits:
           memory: 128M
+    networks:
+      - code-review-network
+
+  # ─── Jaeger (tracing) ─────────────────────────────────────
+  # OTLP/HTTP spans land here when the app runs with OTEL_ENABLED=true.
+  # UI: http://localhost:16686
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: prledger-jaeger
+    ports:
+      - "0.0.0.0:16686:16686"  # Jaeger UI
+      - "0.0.0.0:4318:4318"    # OTLP/HTTP spans endpoint
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:16686/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     networks:
       - code-review-network
 

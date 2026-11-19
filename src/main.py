@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi_offline import FastAPIOffline
 from prometheus_fastapi_instrumentator import Instrumentator
+from sqlalchemy import text
 
 from src import __version__
 from src.api import api_router
@@ -25,6 +26,7 @@ from src.core.middleware import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
 )
+from src.core.tracing import setup_tracing, shutdown_tracing
 from src.services.pat_service import PATService
 from src.services.project_service import ProjectService
 from src.services.rbac_service import RBACService
@@ -33,7 +35,7 @@ from src.services.user_service import UserService
 from src.utils.i18n import i18n
 from src.utils.log import get_logger, setup_logging
 from src.utils.metrics import metrics as metrics_collector
-from src.utils.redis import close_redis, init_redis
+from src.utils.redis import close_redis, get_redis_client, init_redis
 
 
 # Configure logging system
@@ -153,6 +155,8 @@ async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
     await init_db()
     await init_redis()
     metrics_collector.startup()
+    # after init_db, so the engine exists for the SQLAlchemy instrumentation
+    setup_tracing(app)
 
     # Initialize metrics with real values from database
     try:
@@ -198,6 +202,7 @@ async def lifespan(app: FastAPIOffline) -> AsyncGenerator:
     await close_redis()
     await get_sse_broker().stop()  # Stop SSE broker (shared pubsub subscription)
 
+    shutdown_tracing()
     metrics_collector.shutdown()
     logger.info("Application shutdown complete")
 
@@ -407,5 +412,39 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 @app.get("/api/health")
 async def health_check() -> dict:
-    """Health check endpoint"""
+    """Liveness probe: the process answers; dependencies are not consulted."""
     return {"status": "healthy", "version": __version__}
+
+
+@app.get("/api/health/ready")
+async def readiness_check() -> JSONResponse:
+    """Readiness probe: the dependencies the app cannot serve without are probed.
+
+    Distinct from liveness on purpose - a running process with a dead MySQL or
+    Redis must be reported as not ready (503), not as healthy, so the load
+    balancer stops sending it work while it still answers pings.
+    """
+    checks: dict[str, str] = {}
+
+    try:
+        async with get_db_context() as session:
+            await asyncio.wait_for(session.execute(text("SELECT 1")), timeout=3.0)
+        checks["database"] = "ok"
+    except Exception:
+        checks["database"] = "unavailable"
+
+    try:
+        await asyncio.wait_for(get_redis_client().ping(), timeout=3.0)
+        checks["redis"] = "ok"
+    except Exception:
+        checks["redis"] = "unavailable"
+
+    ready = all(result == "ok" for result in checks.values())
+    return JSONResponse(
+        status_code=status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "status": "ready" if ready else "unavailable",
+            "version": __version__,
+            "checks": checks,
+        },
+    )

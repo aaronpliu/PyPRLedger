@@ -299,7 +299,7 @@ describe('commit rendering helpers', () => {
   it('takes the first line of what a commit says', () => {
     const commit = codeOf()!.added_commits[0]
 
-    expect(commitSubject(commit)).toBe('Add the new module')
+    expect(commitSubject(commit)).toBe('PRL-123: add the new module')
     expect(commitSubject({ ...commit, message: 'Subject\n\nBody line' })).toBe('Subject')
     expect(commitSubject({ ...commit, message: null })).toBe('')
   })

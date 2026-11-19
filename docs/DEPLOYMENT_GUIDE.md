@@ -334,7 +334,7 @@ Key metrics to monitor:
 
 ### 2. Grafana Dashboards
 
-Access Grafana at: `http://your-server:3000`
+Access Grafana at: `http://your-server:3030`
 
 Pre-configured dashboards:
 - Code Review Overview
