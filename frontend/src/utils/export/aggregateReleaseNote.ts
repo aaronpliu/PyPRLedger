@@ -200,3 +200,74 @@ export function downloadAggregateReleaseNote(html: string, filename: string): vo
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
 }
+
+/**
+ * The same note as markdown, for saving it as a version release.
+ *
+ * A stored release body is markdown by contract (`release_note.body`), so the
+ * combined note lands on the Release Notes page - and from there on the git
+ * provider and in Confluence - through the flows that already exist. Ticket
+ * keys stay plain text here: markdown has no ticket linking, and the subject
+ * itself still reads.
+ */
+export function buildAggregateReleaseNoteMarkdown(result: AggregateReleaseNoteResponse): string {
+  const lines: string[] = []
+
+  lines.push(`## ${t('aggregateNote.report_application')} (${result.source_ref} → ${result.target_ref})`)
+  lines.push('')
+  lines.push(t(`releaseDiff.verdict_${result.application.verdict}`))
+  lines.push('')
+  for (const commit of result.application.added_commits ?? []) {
+    lines.push(commitLine(commit))
+  }
+
+  const compared = result.packages.filter((entry) => entry.status === 'compared' && entry.comparison)
+  const skipped = result.packages.filter((entry) => entry.status !== 'compared')
+
+  if (compared.length > 0) {
+    lines.push('')
+    lines.push(`## ${t('aggregateNote.packages_heading')}`)
+    lines.push('')
+    for (const entry of compared) {
+      lines.push(
+        `### ${entry.name} ${versionSpanText(entry)} — ${t(CHANGE_KEY[entry.change])}, ${t(
+          `releaseDiff.verdict_${entry.comparison!.verdict}`,
+        )}`,
+      )
+      lines.push('')
+      for (const commit of entry.comparison!.added_commits ?? []) {
+        lines.push(commitLine(commit))
+      }
+    }
+  }
+
+  if (skipped.length > 0) {
+    lines.push('')
+    lines.push(`### ${t('aggregateNote.report_not_compared')}`)
+    lines.push('')
+    for (const entry of skipped) {
+      const reason = entry.reason ? ` — ${entry.reason}` : ''
+      lines.push(`- **${entry.name}** ${versionSpanText(entry)}: ${t(CHANGE_KEY[entry.change])}${reason}`)
+    }
+  }
+
+  if (result.unchanged_packages.length > 0) {
+    lines.push('')
+    lines.push(`**${t('aggregateNote.unchanged_label')}** ${result.unchanged_packages.join(', ')}`)
+  }
+
+  return lines.join('\n')
+}
+
+function commitLine(commit: { display_id?: string | null; id: string; message?: string | null; author_name?: string | null }): string {
+  const sha = commit.display_id || commit.id
+  const author = commit.author_name ? ` _(${commit.author_name})_` : ''
+  const message = (commit.message ?? '').split('\n')[0]
+  return `- \`${sha}\` ${message}${author}`
+}
+
+function versionSpanText(entry: AggregatePackageEntry): string {
+  const from = entry.from_version || '—'
+  const to = entry.to_version || '—'
+  return `${from} → ${to}`
+}

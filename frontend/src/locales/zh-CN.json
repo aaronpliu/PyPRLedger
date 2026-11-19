@@ -1449,7 +1449,19 @@
     "status_compared": "已比对",
     "status_skipped": "已跳过",
     "status_failed": "失败",
-    "unchanged_label": "未变动："
+    "unchanged_label": "未变动：",
+    "report_not_compared": "未比对",
+    "save": "保存为发布说明",
+    "save_title": "保存为版本发布",
+    "save_tag": "标签",
+    "save_name": "标题",
+    "save_status": "状态",
+    "save_draft": "草稿",
+    "save_published": "发布",
+    "save_confluence": "同时写入 Confluence",
+    "save_note": "说明将归档到目标版本之下，起始版本记为上一版本；可在发布说明页管理与发布。",
+    "save_confirm": "保存",
+    "saved": "发布说明已保存，可在发布说明页管理。"
   },
   "appDiff": {
     "title": "应用版本对比",

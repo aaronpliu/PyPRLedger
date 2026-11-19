@@ -126,7 +126,16 @@ function noteFixture(): AggregateReleaseNoteResponse {
 
 // The build endpoint answers from the fixture, so every state the page reads
 // is produced without a running backend.
-const { buildMock } = vi.hoisted(() => ({ buildMock: vi.fn() }))
+const { buildMock, createNoteMock } = vi.hoisted(() => ({
+  buildMock: vi.fn(),
+  createNoteMock: vi.fn(),
+}))
+
+vi.mock('@/api/releaseNotes', () => ({
+  releaseNotesApi: {
+    create: createNoteMock,
+  },
+}))
 
 vi.mock('@/api/aggregateReleaseNote', () => ({
   aggregateReleaseNoteApi: {
@@ -136,6 +145,7 @@ vi.mock('@/api/aggregateReleaseNote', () => ({
 
 beforeEach(() => {
   buildMock.mockImplementation(async () => noteFixture())
+  createNoteMock.mockReset()
 })
 
 afterEach(() => {
@@ -156,6 +166,9 @@ async function mountView() {
   await router.isReady()
 
   mounted = mount(AggregateReleaseNoteView, {
+    // no teleport stub: stubbing it makes every Element Plus popper render
+    // inline, and that races the selects into a recursive-update loop in jsdom.
+    // The save dialog lands in document.body, where the save test reads it.
     global: { plugins: [ElementPlus, i18n, router] },
   })
   await flushPromises()
@@ -249,5 +262,58 @@ describe('AggregateReleaseNoteView', () => {
     expect(revokeObjectURL).toHaveBeenCalledTimes(1)
 
     vi.restoreAllMocks()
+  })
+
+  it('files the note under the target release with its source as the previous tag', async () => {
+    const wrapper = await mountView()
+    await openRepository(wrapper)
+    await pick(wrapper, 2, 'v1.0.0')
+    await pick(wrapper, 3, 'v2.0.0')
+    await wrapper.find('[data-test=build-button]').trigger('click')
+    await flushPromises()
+
+    await wrapper.find('[data-test=save-button]').trigger('click')
+    // the dialog body renders on first open, a few ticks behind the flag,
+    // teleported to <body> where the wrapper's finders cannot reach it
+    await flushPromises()
+    await flushPromises()
+    await flushPromises()
+
+    // the dialog renders through whatever teleport Element Plus chooses; read
+    // it from the wrapper when it stays inline, from the body when it does not
+    const findInDialog = (selector: string) => {
+      const scoped = wrapper.find(`[data-test=save-dialog] ${selector}`)
+      if (scoped.exists()) return scoped
+      const global = document.body.querySelector(selector)
+      expect(global).not.toBeNull()
+      return { element: global! }
+    }
+
+    expect(
+      wrapper.find('[data-test=save-dialog]').exists() ||
+        document.body.querySelector('[data-test=save-dialog]'),
+    ).toBeTruthy()
+    // the tag and the span are the target's, prefilled for the reader; the
+    // data-test attribute lands on the inner input (el-input fallthrough)
+    const tagInput = findInDialog('input[data-test=save-tag]')
+    expect((tagInput.element as HTMLInputElement).value).toBe('v2.0.0')
+
+    const confirm = findInDialog('[data-test=save-confirm]')
+    ;(confirm.element as HTMLElement).click()
+    await flushPromises()
+
+    expect(createNoteMock).toHaveBeenCalledTimes(1)
+    const payload = createNoteMock.mock.calls[0][0]
+    expect(payload).toMatchObject({
+      project_key: 'CORE',
+      repository_slug: 'app',
+      tag_name: 'v2.0.0',
+      previous_tag: 'v1.0.0',
+      status: 'draft',
+    })
+    // the body is the markdown note: app section, packages, unchanged line
+    expect(payload.body).toContain('## Application')
+    expect(payload.body).toContain('### pkgA')
+    expect(payload.body).toContain('pkgC@3.2.0')
   })
 })

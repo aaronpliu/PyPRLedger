@@ -1449,7 +1449,19 @@
     "status_compared": "Compared",
     "status_skipped": "Skipped",
     "status_failed": "Failed",
-    "unchanged_label": "Unchanged:"
+    "unchanged_label": "Unchanged:",
+    "report_not_compared": "Not compared",
+    "save": "Save as release note",
+    "save_title": "Save as a version release",
+    "save_tag": "Tag",
+    "save_name": "Title",
+    "save_status": "Status",
+    "save_draft": "Draft",
+    "save_published": "Published",
+    "save_confluence": "Also write to Confluence",
+    "save_note": "The note files under the target release with its source remembered as the previous tag; manage and publish it from the Release Notes page.",
+    "save_confirm": "Save",
+    "saved": "Release note saved. Manage it on the Release Notes page."
   },
   "appDiff": {
     "title": "App Diff",

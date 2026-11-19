@@ -1449,7 +1449,19 @@
     "status_compared": "已比對",
     "status_skipped": "已跳過",
     "status_failed": "失敗",
-    "unchanged_label": "未變動："
+    "unchanged_label": "未變動：",
+    "report_not_compared": "未比對",
+    "save": "儲存為發布說明",
+    "save_title": "儲存為版本發布",
+    "save_tag": "標籤",
+    "save_name": "標題",
+    "save_status": "狀態",
+    "save_draft": "草稿",
+    "save_published": "發布",
+    "save_confluence": "同時寫入 Confluence",
+    "save_note": "說明將歸檔到目標版本之下，起始版本記為上一版本；可在發布說明頁管理與發布。",
+    "save_confirm": "儲存",
+    "saved": "發布說明已儲存，可在發布說明頁管理。"
   },
   "appDiff": {
     "title": "應用版本對比",

@@ -10,13 +10,21 @@
           <div class="header-end">
             <el-button
               v-if="result"
-              type="primary"
               plain
               :icon="Download"
               :data-test="'export-button'"
               @click="exportNote"
             >
               {{ t('aggregateNote.export') }}
+            </el-button>
+            <el-button
+              v-if="result"
+              type="success"
+              plain
+              data-test="save-button"
+              @click="openSaveDialog"
+            >
+              {{ t('aggregateNote.save') }}
             </el-button>
             <el-button
               type="primary"
@@ -278,6 +286,48 @@
           </el-tag>
         </div>
       </div>
+
+      <!-- Saving the note files it under the application's target release, from
+           where the existing flows carry it: the Release Notes page, the git
+           provider release, the Confluence page. -->
+      <el-dialog
+        v-model="saveDialogVisible"
+        :title="t('aggregateNote.save_title')"
+        width="520px"
+        data-test="save-dialog"
+      >
+        <el-form label-width="130px">
+          <el-form-item :label="t('aggregateNote.save_tag')">
+            <el-input v-model="saveForm.tag_name" data-test="save-tag" />
+          </el-form-item>
+          <el-form-item :label="t('aggregateNote.save_name')">
+            <el-input v-model="saveForm.name" data-test="save-name" />
+          </el-form-item>
+          <el-form-item :label="t('aggregateNote.save_status')">
+            <el-radio-group v-model="saveForm.status" data-test="save-status">
+              <el-radio-button value="draft">{{ t('aggregateNote.save_draft') }}</el-radio-button>
+              <el-radio-button value="published">{{ t('aggregateNote.save_published') }}</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="saveForm.status === 'published'">
+            <el-checkbox v-model="saveForm.sync_to_confluence" data-test="save-confluence">
+              {{ t('aggregateNote.save_confluence') }}
+            </el-checkbox>
+          </el-form-item>
+          <p class="save-note">{{ t('aggregateNote.save_note') }}</p>
+        </el-form>
+        <template #footer>
+          <el-button @click="saveDialogVisible = false">{{ t('common.cancel') }}</el-button>
+          <el-button
+            type="primary"
+            :loading="saving"
+            data-test="save-confirm"
+            @click="saveNote"
+          >
+            {{ t('aggregateNote.save_confirm') }}
+          </el-button>
+        </template>
+      </el-dialog>
     </el-card>
   </div>
 </template>
@@ -292,9 +342,9 @@ import CommitTable from '@/components/release/CommitTable.vue'
 import { projectsApi } from '@/api/projects'
 import type { CloudWorkspaceOption, ProjectSummary, RepositorySummary } from '@/api/projects'
 import { releaseDiffApi } from '@/api/releaseDiff'
-import {
-  aggregateReleaseNoteApi,
-} from '@/api/aggregateReleaseNote'
+import { releaseNotesApi } from '@/api/releaseNotes'
+import type { ReleaseNoteStatus } from '@/api/releaseNotes'
+import { aggregateReleaseNoteApi } from '@/api/aggregateReleaseNote'
 import type {
   AggregatePackageChange,
   AggregatePackageEntry,
@@ -306,6 +356,7 @@ import { useJira } from '@/composables/useJira'
 import {
   aggregateNoteFilename,
   buildAggregateReleaseNoteHtml,
+  buildAggregateReleaseNoteMarkdown,
   downloadAggregateReleaseNote,
 } from '@/utils/export/aggregateReleaseNote'
 
@@ -501,6 +552,55 @@ function exportNote() {
   downloadAggregateReleaseNote(html, aggregateNoteFilename(context))
 }
 
+// ─── Saving the note as a version release ─────────────────────────────────
+
+const saveDialogVisible = ref(false)
+const saving = ref(false)
+const saveForm = ref({
+  tag_name: '',
+  name: '',
+  status: 'draft' as ReleaseNoteStatus,
+  sync_to_confluence: false,
+})
+
+function openSaveDialog() {
+  if (!result.value) return
+  saveForm.value = {
+    // the note files under the span's target release, with its source remembered
+    tag_name: result.value.target_ref,
+    name: `${result.value.app_name} ${result.value.target_ref}`,
+    status: 'draft',
+    sync_to_confluence: false,
+  }
+  saveDialogVisible.value = true
+}
+
+async function saveNote() {
+  if (!result.value) return
+  saving.value = true
+  try {
+    await releaseNotesApi.create({
+      project_key: selectedProjectKey.value,
+      repository_slug: selectedRepositorySlug.value,
+      git_provider: repo.value.git_provider,
+      workspace_slug: selectedWorkspaceSlug.value || undefined,
+      tag_name: saveForm.value.tag_name.trim(),
+      name: saveForm.value.name.trim() || undefined,
+      previous_tag: result.value.source_ref,
+      body: buildAggregateReleaseNoteMarkdown(result.value),
+      status: saveForm.value.status,
+      sync_to_confluence: saveForm.value.status === 'published' && saveForm.value.sync_to_confluence,
+    })
+    saveDialogVisible.value = false
+    ElMessage.success(t('aggregateNote.saved'))
+  } catch {
+    // the error message names the conflict (a release under that tag) or the
+    // failure; the dialog stays open so the reader can adjust and retry
+  } finally {
+    saving.value = false
+  }
+}
+
 onMounted(() => {
   void loadProjects()
   void loadJiraSettings()
@@ -639,5 +739,11 @@ watch(isCloudProvider, (cloud) => {
   font-size: 13px;
   color: var(--el-text-color-secondary);
   margin-right: 4px;
+}
+
+.save-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>
