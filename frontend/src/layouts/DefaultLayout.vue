@@ -55,6 +55,7 @@
                 <el-menu-item index="/releases/notes">{{ t('menu.releaseNotes') }}</el-menu-item>
                 <el-menu-item index="/releases/dependency-graph">{{ t('menu.releaseDependencyGraph') }}</el-menu-item>
                 <el-menu-item index="/releases/apps">{{ t('menu.appDiff') }}</el-menu-item>
+                <el-menu-item index="/releases/combined-notes">{{ t('menu.aggregateReleaseNotes') }}</el-menu-item>
               </el-sub-menu>
               <el-menu-item index="/notifications">{{ t('menu.notifications') }}</el-menu-item>
             </el-menu>

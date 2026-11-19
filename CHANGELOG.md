@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- The Combined Release Notes page (`/releases/combined-notes`) turns the aggregate note into a reader's page: pick an application and the two releases of the span, and the note assembles the application's own comparison first, then one collapsible block per package the span moved (version span, change kind, comparison verdict or the reason it cannot be compared, its commits with JIRA-linked subjects), and the unchanged packages as one line of tags — everything exportable as a standalone HTML report built the same way the other release reports are
 - Aggregate release notes: `POST /api/v1/release/aggregate-note/build` assembles one note for an application version span and the packages it moved — the two dependency graphs are diffed, every pinned package is classified as upgraded/added/removed/unchanged, each moved registered package is compared between its two versions with the same release diff the release pages use (run in parallel, cached), and the application's own comparison rides along as the first section. A package that cannot be compared stays legible (`skipped` with the reason — unpinned transitive dependency, not registered, added or removed in the span — or `failed` with the provider error): it never hides and never guessed
 
 ## [1.42.0] - 2026-11-18
