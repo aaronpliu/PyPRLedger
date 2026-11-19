@@ -211,7 +211,7 @@
           :closable="false"
           class="app-verdict"
           :title="t('aggregateNote.app_verdict_title', { app: result.app_name })"
-          :description="t(`releaseDiff.verdict_${result.application.verdict}`)"
+          :description="t(`appDiff.code_verdict_${result.application.verdict}`)"
         />
 
         <div class="summary" data-test="summary">
@@ -258,7 +258,7 @@
                   effect="plain"
                   class="package-tag"
                 >
-                  {{ t(`releaseDiff.verdict_${entry.comparison.verdict}`) }}
+                  {{ t(`appDiff.code_verdict_${entry.comparison.verdict}`) }}
                 </el-tag>
               </span>
             </template>

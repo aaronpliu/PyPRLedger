@@ -76,7 +76,7 @@ function packageSection(entry: AggregatePackageEntry, context: AggregateNoteRepo
     entry.comparison && entry.status === 'compared'
       ? `<p class="status status-${
           entry.comparison.verdict === 'contained' ? 'ok' : 'missing'
-        }">${escapeHtml(t(`releaseDiff.verdict_${entry.comparison.verdict}`))}</p>`
+        }">${escapeHtml(t(`appDiff.code_verdict_${entry.comparison.verdict}`))}</p>`
       : ''
 
   const commits =
@@ -116,7 +116,7 @@ export function buildAggregateReleaseNoteHtml(input: AggregateNoteReportInput): 
   const applicationSection = `<section class="report-section">
   <h2>${escapeHtml(t('aggregateNote.report_application'))}</h2>
   <p class="status status-${appVerdict === 'contained' ? 'ok' : 'missing'}">${escapeHtml(
-    t(`releaseDiff.verdict_${appVerdict}`),
+    t(`appDiff.code_verdict_${appVerdict}`),
   )}</p>
   <div class="stats">
     ${stat(t('aggregateNote.stat_app_commits'), result.application.added_count)}
@@ -215,7 +215,7 @@ export function buildAggregateReleaseNoteMarkdown(result: AggregateReleaseNoteRe
 
   lines.push(`## ${t('aggregateNote.report_application')} (${result.source_ref} → ${result.target_ref})`)
   lines.push('')
-  lines.push(t(`releaseDiff.verdict_${result.application.verdict}`))
+  lines.push(t(`appDiff.code_verdict_${result.application.verdict}`))
   lines.push('')
   for (const commit of result.application.added_commits ?? []) {
     lines.push(commitLine(commit))
@@ -231,7 +231,7 @@ export function buildAggregateReleaseNoteMarkdown(result: AggregateReleaseNoteRe
     for (const entry of compared) {
       lines.push(
         `### ${entry.name} ${versionSpanText(entry)} — ${t(CHANGE_KEY[entry.change])}, ${t(
-          `releaseDiff.verdict_${entry.comparison!.verdict}`,
+          `appDiff.code_verdict_${entry.comparison!.verdict}`,
         )}`,
       )
       lines.push('')
