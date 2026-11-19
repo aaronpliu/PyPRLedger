@@ -2,16 +2,18 @@
 
 One note for an application version span and the packages it moved:
 
-* ``POST /release/aggregate-note/build`` - the two dependency graphs are diffed
-  (every package the application pins is classified as upgraded, added, removed
-  or unchanged), each moved package is resolved to its repository through the
-  project registry and compared between its two versions with the same release
-  diff the release pages use, and the application's own comparison rides along
-  as the note's first section.
+* ``POST /release/aggregate-note/build`` - the packages the application
+  carries come from the project registry (the registrations grouped under its
+  name that are marked as packages), and each package's ``from`` and ``to``
+  versions are read off its own tag timeline: the newest tag it had released
+  by each end of the span. A package the span moved is compared between those
+  two versions with the same release diff the release pages use, and the
+  application's own comparison rides along as the note's first section. No
+  dependency database is involved.
 
 A package that cannot be compared stays legible: it is ``skipped`` with the
-reason (not registered, added or removed in this span) or ``failed`` with the
-provider error - never silently missing, never guessed at.
+reason (not registered, nothing released in the span, an undated span ref) or
+``failed`` with the provider error - never silently missing, never guessed at.
 """
 
 from __future__ import annotations
@@ -48,14 +50,14 @@ def get_aggregate_release_note_service() -> AggregateReleaseNoteService:
     response_model=AggregateReleaseNoteResponse,
     summary="Build the combined release note for an application and its packages",
     description=(
-        "The note one release actually deserves when the application pins packages:\n\n"
+        "The note one release actually deserves when the application carries packages:\n\n"
         "* `application` - the app's own comparison between `source_ref` and `target_ref`.\n"
-        "* `packages` - one entry per pinned package the span moved, compared between its "
-        "two pinned versions. Packages the registry cannot settle on are `skipped` with "
-        "the reason; a provider failure is `failed` and never takes the note down.\n"
-        "* `unchanged_packages` - everything both versions hold at the same version.\n\n"
-        "Only the packages the application *declares* are compared commit by commit; "
-        "the transitive closure is summarized."
+        "* `packages` - one entry per package the span moved, compared between the two "
+        "versions its own tag timeline places at each end of the span. Packages the "
+        "registry cannot settle on are `skipped` with the reason; a provider failure is "
+        "`failed` and never takes the note down.\n"
+        "* `unchanged_packages` - every package that held the same version across the span.\n\n"
+        "The package list comes from the project registry; no dependency database is asked."
     ),
 )
 async def build_aggregate_note(

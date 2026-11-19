@@ -1,11 +1,10 @@
 """Schemas for the aggregate release note.
 
 One application version span, one note: the application's own commits plus the
-commits every package it pins gained between the two versions. The scope rule
-is deliberate - only the packages the application declares (its workspace pins)
-are compared commit by commit; the transitive closure the dependency database
-adds is summarized, because a change two levels down the graph says nothing
-about this release unless the application pins it.
+commits every package it carries gained between the two versions. The packages
+come from the project registry and their versions from their own tag
+timelines - no dependency database is involved - so a package the span did not
+move reads as the unchanged line it is, and one that cannot be placed says why.
 """
 
 from __future__ import annotations
