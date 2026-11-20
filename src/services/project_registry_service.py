@@ -115,6 +115,23 @@ class ProjectRegistryService:
             )
             return dependency_app_name(self.DEFAULT_APP_NAME)
 
+    async def get_registry_kind(
+        self, project_key: str, repository_slug: str, db: AsyncSession
+    ) -> str | None:
+        """How a repository is classified in the registry.
+
+        Args:
+            project_key: The project key
+            repository_slug: The repository slug
+            db: Database session
+
+        Returns:
+            'application', 'package', or None when the repository is
+            unclassified or not registered at all
+        """
+        entry = await self._get_registry_entry(project_key, repository_slug, db)
+        return entry.registry_kind if entry else None
+
     async def update_app_alias(
         self,
         project_key: str,

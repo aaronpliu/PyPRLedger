@@ -40,6 +40,16 @@ class ReleaseNoteStatus:
     VALUES = (DRAFT, PUBLISHED)
 
 
+class ReleaseNoteKind:
+    """What a release's body covers."""
+
+    SINGLE = "single"
+    COMBINED = "combined"
+
+    VALUES = (SINGLE, COMBINED)
+    VALID_KINDS = VALUES
+
+
 class ReleaseNote(Base):
     """A released (or drafted) version of a repository with its notes."""
 
@@ -88,6 +98,26 @@ class ReleaseNote(Base):
     # provider for the same commits on every view.
     contributors: Mapped[list[dict] | None] = mapped_column(
         JSON, nullable=True, comment="Contributors of the release scope (one entry per person)"
+    )
+
+    # What the body covers. "single" is the ordinary per-repository note the
+    # generator writes; "combined" is the aggregate note of an application
+    # version span - the application plus the packages it pins - filed here so
+    # one slot per tag serves both kinds. The kind decides what overwrites
+    # what: a combined save takes the slot, a single save does not.
+    note_kind: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=ReleaseNoteKind.SINGLE,
+        server_default=ReleaseNoteKind.SINGLE,
+        comment="single (per-repository) or combined (application + packages)",
+    )
+
+    # The packages a combined note carried when it was written (name, change,
+    # version span, compare status), so the note can be audited or re-rendered
+    # without asking the dependency database again.
+    packages_snapshot: Mapped[list[dict] | None] = mapped_column(
+        JSON, nullable=True, comment="Packages a combined note carried (one entry per package)"
     )
 
     # Provider side release (GitHub Enterprise), set when pushed or imported
@@ -157,6 +187,8 @@ class ReleaseNote(Base):
             "previous_tag": self.previous_tag,
             "status": self.status,
             "is_prerelease": self.is_prerelease,
+            "note_kind": self.note_kind,
+            "packages_snapshot": self.packages_snapshot or [],
             "author": self.author,
             "contributors": self.contributors or [],
             "external_provider": self.external_provider,

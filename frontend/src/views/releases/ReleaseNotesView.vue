@@ -592,6 +592,17 @@
                   >
                     {{ t('releaseNotes.ai_summary') }}
                   </el-checkbox>
+                  <!-- only applications carry packages: the registry says which
+                       repositories are applications, and the backend refuses the rest -->
+                  <el-checkbox
+                    v-if="isApplication"
+                    v-model="includePackages"
+                    size="small"
+                    style="margin-left: 8px"
+                    data-test="include-packages"
+                  >
+                    {{ t('releaseNotes.include_packages') }}
+                  </el-checkbox>
                   <span v-if="generatedCount !== null" class="generated-hint">
                     {{ t('releaseNotes.generated', { count: generatedCount }) }}
                   </span>
@@ -1246,9 +1257,12 @@ import {
   releaseNotesApi,
   type ReleaseNote,
   type ReleaseNoteContributor,
+  type ReleaseNotePackageSnapshot,
   type ReleaseNoteReaction,
   type ReleaseNoteReactor,
 } from '@/api/releaseNotes'
+import { aggregateReleaseNoteApi } from '@/api/aggregateReleaseNote'
+import { buildCombinedNoteBody } from '@/utils/export/aggregateReleaseNote'
 import type {
   ReleaseNoteExportRequest,
   ReleaseNotePreviewResponse,
@@ -1534,6 +1548,32 @@ function clearSummaryState() {
 
 // The switch is about the next pass: what it says now belongs to the previous one
 watch(aiSummary, clearSummaryState)
+
+// ---- Combined notes (application + the packages it pins) -------------------
+//
+// One generate pass can cover the whole release: the application's own notes
+// plus one rendered section per package the dependency database says the span
+// moved. The combined note is about what an *application* release carries -
+// the project registry is what says what an application is, so the switch is
+// only offered for repositories registered as one, and the backend refuses
+// anything else.
+const includePackages = ref(false)
+// The packages the last combined pass carried: saved with the release as the
+// snapshot, so the note can be audited without asking the database again
+const combinedPackages = ref<ReleaseNotePackageSnapshot[] | null>(null)
+
+const isApplication = computed(() => {
+  const slug = repo.value.repository_slug
+  return Boolean(slug) && repositories.value.some(
+    (r) => r.repository_slug === slug && r.registry_kind === 'application',
+  )
+})
+
+// The switch is about the next pass: a snapshot left over from the previous one
+// would be saved under a release it does not describe
+watch(includePackages, () => {
+  combinedPackages.value = null
+})
 
 const formCard = ref<HTMLElement | null>(null)
 
@@ -2419,6 +2459,7 @@ function resetForm() {
   editingStatus.value = 'draft'
   generatedCount.value = null
   previewContributors.value = null
+  combinedPackages.value = null
   clearSummaryState()
   clearEditorScope()
   form.value = {
@@ -2637,38 +2678,97 @@ async function generateNotes() {
   clearSummaryState()
   generating.value = true
   try {
-    const preview = await releaseNotesApi.preview({
-      ...coordinates(),
-      version: form.value.tag_name.trim(),
-      previous_version: form.value.previous_tag.trim() || undefined,
-      max_commits: PREVIEW_MAX_COMMITS,
-      language: locale.value,
-      summarize: aiSummary.value && llmEnabled.value,
-    })
-    form.value.body = preview.body
-    if (!form.value.name.trim()) {
-      form.value.name = preview.suggested_name
-    }
-    generatedCount.value = preview.commit_count
-    // The people behind those commits came back with them, so the credits are saved
-    // with the notes instead of being read again when the release is shown
-    previewContributors.value = preview.contributors ?? []
-    // The notes and the commits they were built from come out of the same answer, so
-    // the panel beside them is what the body was made of - not a second reading of
-    // the repository that could disagree with it.
-    applyEditorScope(preview.commits as CommitInfo[], preview)
-    // The server falls back to the deterministic notes when the LLM call fails,
-    // so the answer says which one is on screen rather than assuming the switch
-    summarizedByAi.value = preview.summary_source === 'llm'
-    summaryNotice.value = preview.summary_notice ?? null
-    summaryError.value = preview.summary_error ?? null
-    if (preview.truncated) {
-      ElMessage.warning(t('releaseNotes.generate_truncated'))
+    if (includePackages.value && isApplication.value) {
+      await generateCombinedNotes()
+    } else {
+      await generateSingleNotes()
     }
   } catch {
     ElMessage.error(t('releaseNotes.generate_failed'))
   } finally {
     generating.value = false
+  }
+}
+
+/** The ordinary single-repository pass: the application's own scope. */
+async function generateSingleNotes() {
+  const preview = await releaseNotesApi.preview({
+    ...coordinates(),
+    version: form.value.tag_name.trim(),
+    previous_version: form.value.previous_tag.trim() || undefined,
+    max_commits: PREVIEW_MAX_COMMITS,
+    language: locale.value,
+    summarize: aiSummary.value && llmEnabled.value,
+  })
+  form.value.body = preview.body
+  if (!form.value.name.trim()) {
+    form.value.name = preview.suggested_name
+  }
+  generatedCount.value = preview.commit_count
+  // The people behind those commits came back with them, so the credits are saved
+  // with the notes instead of being read again when the release is shown
+  previewContributors.value = preview.contributors ?? []
+  // The notes and the commits they were built from come out of the same answer, so
+  // the panel beside them is what the body was made of - not a second reading of
+  // the repository that could disagree with it.
+  applyEditorScope(preview.commits as CommitInfo[], preview)
+  // The server falls back to the deterministic notes when the LLM call fails,
+  // so the answer says which one is on screen rather than assuming the switch
+  summarizedByAi.value = preview.summary_source === 'llm'
+  summaryNotice.value = preview.summary_notice ?? null
+  summaryError.value = preview.summary_error ?? null
+  if (preview.truncated) {
+    ElMessage.warning(t('releaseNotes.generate_truncated'))
+  }
+}
+
+/**
+ * The combined pass: the application's own rendered notes plus one section per
+ * package the span moved, each rendered like a release note by the same builder
+ * the single pass uses.
+ *
+ * The span is the two tags the form already holds, so the combined note files
+ * under the same tag the single one would - one slot per release, whichever
+ * kind of body fills it.
+ */
+async function generateCombinedNotes() {
+  const sourceRef = form.value.previous_tag.trim()
+  if (!sourceRef) {
+    // a combined note is a span: without the version it starts from there is
+    // nothing to place a package's from-version against
+    ElMessage.warning(t('releaseNotes.combined_needs_previous'))
+    return
+  }
+  const result = await aggregateReleaseNoteApi.build({
+    ...coordinates(),
+    source_ref: sourceRef,
+    target_ref: form.value.tag_name.trim(),
+    language: locale.value,
+    summarize: aiSummary.value && llmEnabled.value,
+  })
+  form.value.body = buildCombinedNoteBody(result, t)
+  if (!form.value.name.trim()) {
+    form.value.name = `${result.app_name} ${result.target_ref}`
+  }
+  generatedCount.value = result.summary.app_commits + result.summary.package_commits
+  // credits are a per-repository concept; a combined note's authors live in
+  // its rendered sections, so no credits panel is filled for it
+  previewContributors.value = []
+  combinedPackages.value = result.packages.map((entry) => ({
+    name: entry.name,
+    change: entry.change,
+    from_version: entry.from_version,
+    to_version: entry.to_version,
+    status: entry.status,
+  }))
+  // the one AI pass runs over the application's scope, and the answer says
+  // which summary is on screen the same way the single pass does
+  summarizedByAi.value = result.summary_source === 'llm'
+  summaryNotice.value = (result.summary_notice as SummaryNotice | null) ?? null
+  if (result.dependency_source === 'none') {
+    // the database holds no record for this span: the note is the application's
+    // own comparison, and saying so beats a package section that never comes
+    ElMessage.info(t('releaseNotes.combined_monolithic'))
   }
 }
 
@@ -2710,6 +2810,11 @@ async function saveRelease(status: 'draft' | 'published') {
         is_prerelease: form.value.is_prerelease,
         status,
         contributors,
+        // A combined save takes the tag slot: whatever release stood there is
+        // overwritten, and the snapshot says which packages the body covered
+        ...(combinedPackages.value
+          ? { note_kind: 'combined' as const, packages_snapshot: combinedPackages.value }
+          : {}),
         sync_to_confluence: asksForConfluenceSync.value,
       })
     }

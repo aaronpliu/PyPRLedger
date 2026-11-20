@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import {
   buildAggregateReleaseNoteHtml,
   buildAggregateReleaseNoteMarkdown,
+  buildCombinedNoteBody,
 } from '@/utils/export/aggregateReleaseNote'
 import type {
   AggregatePackageEntry,
@@ -48,6 +49,7 @@ function comparedEntry(): AggregatePackageEntry {
       added_complete: true,
       rendered_truncated: false,
     },
+    body: '### ✨ Added\n\n- PRL-10: pkgA work',
   }
 }
 
@@ -62,7 +64,7 @@ function skippedEntry(): AggregatePackageEntry {
   }
 }
 
-function noteFixture(packages: AggregatePackageEntry[]): AggregateReleaseNoteResponse {
+function noteFixture(packages: AggregatePackageEntry[], overrides: Partial<AggregateReleaseNoteResponse> = {}): AggregateReleaseNoteResponse {
   return {
     app_name: 'MyApp',
     project_key: 'CORE',
@@ -96,15 +98,18 @@ function noteFixture(packages: AggregatePackageEntry[]): AggregateReleaseNoteRes
       rendered_truncated: false,
     },
     packages,
+    dependency_source: 'database',
     unchanged_packages: ['pkgC@3.2.0'],
     summary: {
       packages_changed: packages.length,
       packages_compared: 1,
       packages_skipped: packages.length - 1,
       packages_failed: 0,
+      unchanged_packages: 1,
       app_commits: 1,
       package_commits: 1,
     },
+    ...overrides,
   }
 }
 
@@ -136,6 +141,42 @@ describe('buildAggregateReleaseNoteMarkdown', () => {
     const markdown = buildAggregateReleaseNoteMarkdown(noteFixture([comparedEntry()]))
 
     expect(markdown).toContain('**Unchanged:** pkgC@3.2.0')
+  })
+})
+
+describe('buildCombinedNoteBody', () => {
+  it('composes the rendered sections into one release-note body', () => {
+    const result = noteFixture([comparedEntry(), skippedEntry()], {
+      application_body: '## MyApp v2.0.0\n\nSummary of the release.\n\n### ✨ Added\n\n- the thing',
+    })
+    const body = buildCombinedNoteBody(result)
+
+    // the application's own notes open the body, rendered by the backend
+    expect(body).toContain('## MyApp v2.0.0')
+    expect(body).toContain('Summary of the release.')
+    expect(body).toContain('### ✨ Added')
+    // one section per moved package, headed by its version span, its body the
+    // rendered release note the backend answered with
+    expect(body).toContain('## pkgA (1.2.0 → 1.4.0)')
+    expect(body).toContain('PRL-10')
+  })
+
+  it('keeps a package without a body legible instead of hiding it', () => {
+    const result = noteFixture([skippedEntry()], { application_body: '## MyApp v2.0.0' })
+    const body = buildCombinedNoteBody(result)
+
+    // the skipped section says what happened - change, status, reason - so the
+    // note never reads as if the closure had not moved
+    expect(body).toContain('## pkgY (0.9.0 → 1.0.0)')
+    expect(body).toContain("registered as 'pkgY'")
+    expect(body).not.toContain('PRL-10')
+  })
+
+  it('names what stayed put as one line', () => {
+    const result = noteFixture([comparedEntry()], { application_body: '' })
+    const body = buildCombinedNoteBody(result)
+
+    expect(body).toContain('pkgC@3.2.0')
   })
 })
 

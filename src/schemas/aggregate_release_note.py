@@ -1,10 +1,13 @@
 """Schemas for the aggregate release note.
 
 One application version span, one note: the application's own commits plus the
-commits every package it carries gained between the two versions. The packages
-come from the project registry and their versions from their own tag
-timelines - no dependency database is involved - so a package the span did not
-move reads as the unchanged line it is, and one that cannot be placed says why.
+commits every package it pins gained between the two versions. The scope rule
+is deliberate - only the packages the application declares (its exact pins, as
+the dependency database holds them) are compared commit by commit; a transitive
+dependency is a skipped entry with its reason, because a change two levels down
+says nothing about this release unless the application pins it. An application
+the database holds no record for is monolithic: the note degrades to the
+application's own comparison and says so.
 """
 
 from __future__ import annotations
@@ -45,6 +48,19 @@ class AggregateReleaseNoteRequest(ReleaseDiffRepository):
         default=False,
         description="Bypass the caches of the graph and the per-package comparisons",
     )
+    summarize: bool = Field(
+        default=False,
+        description=(
+            "Run the optional LLM pass over the application's own scope: one "
+            "summary paragraph and section hints for its commits. A pass that "
+            "fails degrades to the deterministic notes."
+        ),
+    )
+    language: str | None = Field(
+        default=None,
+        max_length=8,
+        description="Language the rendered bodies are written in (en / zh-CN / zh-TW)",
+    )
 
 
 class AggregatePackageRepository(BaseModel):
@@ -72,6 +88,13 @@ class AggregatePackageEntry(BaseModel):
     reason: str | None = None
     repository: AggregatePackageRepository | None = None
     comparison: ReleaseCompareResponse | None = None
+    body: str | None = Field(
+        default=None,
+        description=(
+            "The package's rendered release note body (categorized sections, "
+            "ticket links, authors), set for compared entries"
+        ),
+    )
 
 
 class AggregateReleaseNoteSummary(BaseModel):
@@ -81,6 +104,7 @@ class AggregateReleaseNoteSummary(BaseModel):
     packages_compared: int = 0
     packages_skipped: int = 0
     packages_failed: int = 0
+    unchanged_packages: int = 0
     app_commits: int = 0
     package_commits: int = 0
 
@@ -94,7 +118,27 @@ class AggregateReleaseNoteResponse(BaseModel):
     git_provider: str | None = None
     source_ref: str
     target_ref: str
+    dependency_source: str = Field(
+        default="none",
+        description=(
+            "'database' when the dependency database held a record for both refs "
+            "of the span and the packages are its answer; 'none' when the "
+            "application is monolithic - no packages, none guessed"
+        ),
+    )
     application: ReleaseCompareResponse
+    application_body: str | None = Field(
+        default=None,
+        description="The application's rendered release note body (categorized sections, ticket links, authors)",
+    )
+    summary_source: str | None = Field(
+        default=None,
+        description="'llm' when the optional AI pass answered, 'deterministic' when it ran and degraded",
+    )
+    summary_notice: str | None = Field(
+        default=None,
+        description="Why there is no AI summary, when the pass was asked for and could not be made",
+    )
     packages: list[AggregatePackageEntry] = Field(default_factory=list)
     unchanged_packages: list[str] = Field(
         default_factory=list,

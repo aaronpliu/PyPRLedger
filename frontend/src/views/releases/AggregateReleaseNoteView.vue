@@ -589,6 +589,16 @@ async function saveNote() {
       previous_tag: result.value.source_ref,
       body: buildAggregateReleaseNoteMarkdown(result.value),
       status: saveForm.value.status,
+      // the combined note takes the tag slot: whatever release stood there is
+      // overwritten, and the snapshot says which packages the body covered
+      note_kind: 'combined',
+      packages_snapshot: result.value.packages.map((entry) => ({
+        name: entry.name,
+        change: entry.change,
+        from_version: entry.from_version,
+        to_version: entry.to_version,
+        status: entry.status,
+      })),
       sync_to_confluence: saveForm.value.status === 'published' && saveForm.value.sync_to_confluence,
     })
     saveDialogVisible.value = false

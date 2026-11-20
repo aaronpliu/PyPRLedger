@@ -38,7 +38,50 @@ export interface AggregateNoteReportContext {
 export interface AggregateNoteReportInput {
   result: AggregateReleaseNoteResponse
   context: AggregateNoteReportContext
+
   generatedAt?: Date
+}
+
+/**
+ * The combined note as one markdown body, from the rendered sections the
+ * backend answers with: the application's own release note first (summary,
+ * categorized sections, ticket links, authors), then one section per package
+ * the span moved, then the lines that keep the rest legible - a package that
+ * could not be compared says why, and the unchanged ones are named.
+ *
+ * This is what a combined release saves with: the body reads like a release
+ * note, not like a commit listing.
+ */
+export function buildCombinedNoteBody(
+  result: AggregateReleaseNoteResponse,
+  translate: (key: string) => string = t,
+): string {
+  const parts: string[] = []
+
+  if (result.application_body) {
+    parts.push(result.application_body.trim())
+  }
+
+  for (const entry of result.packages) {
+    const heading = `## ${entry.name} (${versionSpan(entry)})`
+    if (entry.body) {
+      parts.push(`${heading}\n\n${entry.body.trim()}`)
+    } else {
+      // skipped or failed: the section says what happened instead of hiding
+      const change = translate(CHANGE_KEY[entry.change])
+      const status = translate(`aggregateNote.status_${entry.status}`)
+      const reason = entry.reason ? ` - ${entry.reason}` : ''
+      parts.push(`${heading}\n\n_${change}, ${status}${reason}_`)
+    }
+  }
+
+  if (result.unchanged_packages.length) {
+    parts.push(
+      `_${translate('aggregateNote.unchanged_label')}: ${result.unchanged_packages.join(', ')}_`,
+    )
+  }
+
+  return parts.join('\n\n')
 }
 
 function i18nLocale(): string {

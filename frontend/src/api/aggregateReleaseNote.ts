@@ -17,6 +17,10 @@ export interface AggregateReleaseNoteRequest {
   include_commits?: boolean
   /** Bypass the caches of the graph and the per-package comparisons */
   refresh?: boolean
+  /** Run the one optional AI pass over the application's own scope */
+  summarize?: boolean
+  /** Language the rendered bodies are written in (en / zh-CN / zh-TW) */
+  language?: string
 }
 
 export interface AggregatePackageRepository {
@@ -44,6 +48,11 @@ export interface AggregatePackageEntry {
   /** Where the commits are read from, when the registry settles the name */
   repository?: AggregatePackageRepository | null
   comparison?: ReleaseCompareResponse | null
+  /**
+   * The package's rendered release note body (categorized sections, ticket
+   * links, authors), set for compared entries
+   */
+  body?: string | null
 }
 
 export interface AggregateReleaseNoteSummary {
@@ -51,6 +60,7 @@ export interface AggregateReleaseNoteSummary {
   packages_compared: number
   packages_skipped: number
   packages_failed: number
+  unchanged_packages: number
   app_commits: number
   package_commits: number
 }
@@ -62,8 +72,20 @@ export interface AggregateReleaseNoteResponse {
   git_provider: string | null
   source_ref: string
   target_ref: string
+  /**
+   * Where the package relationship came from: `database` when the dependency
+   * database held a record for both refs of the span, `none` when the
+   * application is monolithic - no packages, none guessed
+   */
+  dependency_source: 'database' | 'none'
   /** The application's own half of the note */
   application: ReleaseCompareResponse
+  /** The application's rendered release note body (categorized sections, ticket links, authors) */
+  application_body?: string | null
+  /** `llm` when the optional AI pass answered, `deterministic` when it ran and degraded */
+  summary_source?: 'llm' | 'deterministic' | null
+  /** Why there is no AI summary, when the pass was asked for and could not be made */
+  summary_notice?: string | null
   packages: AggregatePackageEntry[]
   /** `name@version` of every package both versions hold unchanged */
   unchanged_packages: string[]
