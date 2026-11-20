@@ -800,6 +800,17 @@
                   <el-tag v-if="note.is_prerelease" size="small" type="warning" round>
                     {{ t('releaseNotes.badge_prerelease') }}
                   </el-tag>
+                  <!-- a combined release carries its packages: the badge says the
+                       body covers more than the application's own commits -->
+                  <el-tag
+                    v-if="note.note_kind === 'combined'"
+                    size="small"
+                    type="primary"
+                    effect="plain"
+                    round
+                  >
+                    {{ t('releaseNotes.badge_combined') }}
+                  </el-tag>
                   <el-tag v-if="note.status === 'draft'" size="small" type="info" round>
                     {{ t('releaseNotes.badge_draft') }}
                   </el-tag>

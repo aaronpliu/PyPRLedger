@@ -1269,6 +1269,7 @@
     "cancel": "取消",
     "badge_latest": "最新",
     "badge_prerelease": "預發佈",
+    "badge_combined": "組合",
     "badge_draft": "草稿",
     "tag_link_hint": "在程式碼庫中開啟該標籤",
     "tag": "Tag / 版本號",

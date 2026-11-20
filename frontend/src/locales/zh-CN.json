@@ -1269,6 +1269,7 @@
     "cancel": "取消",
     "badge_latest": "最新",
     "badge_prerelease": "预发布",
+    "badge_combined": "组合",
     "badge_draft": "草稿",
     "tag_link_hint": "在代码库中打开该标签",
     "tag": "Tag / 版本号",

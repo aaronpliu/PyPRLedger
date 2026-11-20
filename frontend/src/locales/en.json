@@ -1269,6 +1269,7 @@
     "cancel": "Cancel",
     "badge_latest": "Latest",
     "badge_prerelease": "Pre-release",
+    "badge_combined": "Combined",
     "badge_draft": "Draft",
     "tag_link_hint": "Open this tag in the repository",
     "tag": "Tag / Version",
