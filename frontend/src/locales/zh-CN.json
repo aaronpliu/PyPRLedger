@@ -456,7 +456,9 @@
       "assign": "分配",
       "items_selected": "已选择 {count} 条审查 | 已选择 {count} 条审查",
       "clear_selection": "清除选择"
-    }
+    },
+    "severity": "严重度",
+    "no_severity_issues": "无问题"
   },
   "scores": {
     "score_list": "评分列表",

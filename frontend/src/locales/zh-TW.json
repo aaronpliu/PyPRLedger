@@ -456,7 +456,9 @@
       "assign": "指派",
       "items_selected": "已選擇 {count} 條審查 | 已選擇 {count} 條審查",
       "clear_selection": "清除選擇"
-    }
+    },
+    "severity": "嚴重度",
+    "no_severity_issues": "無問題"
   },
   "scores": {
     "score_list": "評分列表",

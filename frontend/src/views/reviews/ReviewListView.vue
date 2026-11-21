@@ -495,26 +495,44 @@
               </div>
             </div>
             <span v-else class="text-secondary">{{ t('reviews.no_scores') }}</span>
-            <div v-if="getCriticalCount(row) > 0" class="critical-flag">
+          </template>
+        </el-table-column>
+
+        <!-- Severity: what the AI review found, one circle per level it reported -
+             the letter is the level (C/H/M/L), the number is how many issues
+             carry it, and the circle wears the level's own colour. Two per line
+             keeps the column narrow; hovering a circle spells the level out and
+             says where its issues are. -->
+        <el-table-column :label="t('reviews.severity')" width="110">
+          <template #default="{ row }">
+            <div v-if="getSeverityStats(row).length" class="severity-chips">
               <el-tooltip
+                v-for="stat in getSeverityStats(row)"
+                :key="stat.severity"
                 placement="top"
                 effect="dark"
-                :disabled="getCriticalIssues(row).length === 0"
+                :disabled="stat.issues.length === 0"
               >
                 <template #content>
-                  <div v-for="(issue, idx) in getCriticalIssues(row).slice(0, 3)" :key="idx" class="critical-tooltip-item">
+                  <div class="critical-tooltip-item">
+                    <b :class="['severity-fullname', `severity-fullname-${stat.severity}`]">
+                      {{ severityFullName(stat.severity) }} ({{ stat.count }})
+                    </b>
+                  </div>
+                  <div v-for="(issue, idx) in stat.issues.slice(0, 3)" :key="idx" class="critical-tooltip-item">
                     <b>{{ issue.file }}</b>
                     <div>{{ issue.description }}</div>
                   </div>
-                  <div v-if="getCriticalCount(row) > 3" class="critical-tooltip-more">
-                    ...and {{ getCriticalCount(row) - 3 }} more
+                  <div v-if="stat.issues.length > 3" class="critical-tooltip-more">
+                    ...and {{ stat.issues.length - 3 }} more
                   </div>
                 </template>
-                <el-tag type="danger" effect="dark" size="small" class="critical-badge">
-                  {{ getCriticalCount(row) }} Critical
-                </el-tag>
+                <span :class="['severity-chip', `severity-chip-${stat.severity}`]">
+                  {{ stat.letter }}<span class="severity-chip-count">{{ stat.count }}</span>
+                </span>
               </el-tooltip>
             </div>
+            <span v-else class="text-secondary">{{ t('reviews.no_severity_issues') }}</span>
           </template>
         </el-table-column>
         
@@ -1091,16 +1109,44 @@ const getStatusType = (status: string) => {
   return types[status] || 'info'
 }
 
-const getCriticalIssues = (row: any): AIReviewIssue[] => {
-  const suggestions = row.ai_suggestions
-  if (!suggestions?.issues) return []
-  return suggestions.issues.filter((issue: AIReviewIssue) => issue.severity === 'critical')
+// The severity levels the AI review reports, most severe first, each shown as
+// one letter (C/H/M/L) with the number of issues that carry it
+const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'] as const
+const SEVERITY_LETTER: Record<string, string> = {
+  critical: 'C',
+  high: 'H',
+  medium: 'M',
+  low: 'L',
 }
 
-const getCriticalCount = (row: any): number => {
-  const summaryCount = row.ai_suggestions?.summary?.critical_count
-  if (typeof summaryCount === 'number') return summaryCount
-  return getCriticalIssues(row).length
+const getSeverityIssues = (row: any, severity: string): AIReviewIssue[] => {
+  const suggestions = row.ai_suggestions
+  if (!suggestions?.issues) return []
+  return suggestions.issues.filter(
+    (issue: AIReviewIssue) => issue.severity?.toLowerCase() === severity
+  )
+}
+
+const getSeverityStats = (row: any) =>
+  SEVERITY_ORDER.map((severity) => {
+    const issues = getSeverityIssues(row, severity)
+    return {
+      severity,
+      letter: SEVERITY_LETTER[severity] ?? severity.charAt(0).toUpperCase(),
+      count: issues.length,
+      issues,
+    }
+  }).filter((stat) => stat.count > 0)
+
+// The circle carries the letter; the hover spells the level out
+const severityFullName = (severity: string): string => {
+  const names: Record<string, string> = {
+    critical: t('filters.critical', 'Critical'),
+    high: t('filters.high', 'High'),
+    medium: t('filters.medium', 'Medium'),
+    low: t('filters.low', 'Low'),
+  }
+  return names[severity] ?? severity.charAt(0).toUpperCase() + severity.slice(1)
 }
 
 // Get primary reviewer for multi-reviewer display
@@ -2272,12 +2318,119 @@ html.dark .el-tag--danger {
   color: #ef4444;
 }
 
-.critical-flag {
-  margin-top: 4px;
+/* The severity circles: one letter for the level, one number for how many
+   issues carry it, and the level's own colour behind them - the same palette
+   the AI review results panel paints its badges with. Two per line keeps the
+   column narrow; the circle shape is what makes the letter read as a badge,
+   not a word. */
+.severity-chips {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: start;
+  gap: 4px;
 }
 
-.critical-badge {
-  font-weight: 600;
+.severity-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.severity-chip-count {
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+/* The tooltip spells the level out in a badge that wears the very colours its
+   circle wears: same border, same fill, same letter colour, so the popup and
+   the column agree on what level they are talking about */
+.severity-fullname {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.severity-fullname-critical {
+  background-color: #fee2e2;
+  border: 1px solid #ef4444;
+  color: #b91c1c;
+}
+
+.severity-fullname-high {
+  background-color: #ffedd5;
+  border: 1px solid #f97316;
+  color: #c2410c;
+}
+
+.severity-fullname-medium {
+  background-color: #fef9c3;
+  border: 1px solid #eab308;
+  color: #a16207;
+}
+
+.severity-fullname-low {
+  background-color: #dbeafe;
+  border: 1px solid #3b82f6;
+  color: #1d4ed8;
+}
+
+.severity-chip-critical {
+  background-color: #fee2e2;
+  border: 1px solid #ef4444;
+  color: #b91c1c;
+}
+
+.severity-chip-high {
+  background-color: #ffedd5;
+  border: 1px solid #f97316;
+  color: #c2410c;
+}
+
+.severity-chip-medium {
+  background-color: #fef9c3;
+  border: 1px solid #eab308;
+  color: #a16207;
+}
+
+.severity-chip-low {
+  background-color: #dbeafe;
+  border: 1px solid #3b82f6;
+  color: #1d4ed8;
+}
+
+[data-theme='dark'] .severity-chip-critical {
+  background-color: #7f1d1d;
+  border-color: #fca5a5;
+  color: #fecaca;
+}
+
+[data-theme='dark'] .severity-chip-high {
+  background-color: #7c2d12;
+  border-color: #fdba74;
+  color: #fed7aa;
+}
+
+[data-theme='dark'] .severity-chip-medium {
+  background-color: #713f12;
+  border-color: #fde047;
+  color: #fde68a;
+}
+
+[data-theme='dark'] .severity-chip-low {
+  background-color: #1e3a8a;
+  border-color: #60a5fa;
+  color: #bfdbfe;
 }
 
 .critical-tooltip-item {

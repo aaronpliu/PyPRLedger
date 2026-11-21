@@ -456,7 +456,9 @@
       "assign": "Assign",
       "items_selected": "{count} item selected | {count} items selected",
       "clear_selection": "Clear Selection"
-    }
+    },
+    "severity": "Severity",
+    "no_severity_issues": "No issues"
   },
   "scores": {
     "score_list": "Score List",
