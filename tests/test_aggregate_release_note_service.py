@@ -291,6 +291,38 @@ async def test_unreachable_database_degrades_the_same_way() -> None:
 
 
 @pytest.mark.asyncio
+async def test_plan_answers_versions_without_comparisons() -> None:
+    diff = StubDiff()
+    service = make_service(diff=diff)
+    plan = await service.plan(make_request(), db=None)
+
+    # the declared pins of each ref: the authoritative answer to what each
+    # version of the application carries
+    assert plan.source_pins == {"pkgA": "1.2.0", "pkgB": "1.0.0", "pkgY": "0.9.0"}
+    assert plan.target_pins == {"pkgA": "1.4.0", "pkgX": "0.1.0", "pkgY": "1.0.0"}
+    assert plan.dependency_source == "database"
+    # one entry per package the span moved, with the version it moves between
+    moved = {entry.name: entry for entry in plan.packages}
+    assert moved["pkgA"].from_version == "1.2.0" and moved["pkgA"].to_version == "1.4.0"
+    assert moved["pkgB"].reason is not None  # dropped by the release
+    assert moved["pkgC"].pinned is False  # transitive: no comparison promised
+    assert plan.unchanged_packages == ["pkgD@2.0.0"]
+    # the plan is versions only: not a single provider comparison was asked for
+    assert diff.asked == []
+
+
+@pytest.mark.asyncio
+async def test_plan_of_a_monolithic_application_is_empty_and_honest() -> None:
+    service = make_service(client=StubClient(broken=True))
+    plan = await service.plan(make_request(), db=None)
+
+    assert plan.dependency_source == "none"
+    assert plan.source_pins == {}
+    assert plan.target_pins == {}
+    assert plan.packages == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("kind", [None, "package"])
 async def test_only_applications_get_a_combined_note(kind: str | None) -> None:
     # the combined note is about what an application release carries; the

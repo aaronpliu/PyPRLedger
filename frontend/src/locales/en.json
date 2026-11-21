@@ -1304,6 +1304,7 @@
     "generate_truncated": "The commit list was truncated - raise Max Commits for complete notes",
     "generate_failed": "Failed to generate the release notes",
     "include_packages": "Include packages",
+    "combined_packages_heading": "Packages in this release",
     "include_packages_help": "Generates one combined note: the application's own notes plus a section per package the release carries.",
     "combined_needs_previous": "A combined note needs the version the release starts from - fill in \"From version\" first",
     "combined_monolithic": "No dependency record for this span - the note covers the application's own commits only",

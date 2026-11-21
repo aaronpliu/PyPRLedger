@@ -30,6 +30,7 @@ from src.core.database import get_db_session
 from src.core.permissions import CurrentRepositoryAccess, get_current_user_with_token
 from src.models.auth_user import AuthUser
 from src.schemas.aggregate_release_note import (
+    AggregateNotePlanResponse,
     AggregateReleaseNoteRequest,
     AggregateReleaseNoteResponse,
 )
@@ -85,6 +86,37 @@ async def build_aggregate_note(
     )
     try:
         return await service.build(payload, db)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "bad_request", "message": str(e)},
+        )
+
+
+@router.post(
+    "/plan",
+    response_model=AggregateNotePlanResponse,
+    summary="Preview the dependency versions an application version span carries",
+    description=(
+        "What the dependency database says each ref of the application declares, "
+        "before any note is built: the declared pins of the source and target "
+        "versions, one entry per package the span moved (with the version it "
+        "moves from and to), and the packages held unchanged. Two dependency "
+        "lookups and a classification - no repository resolution, no commit "
+        "comparison, no AI - so it answers while the release is still being "
+        "typed. Only applications get a plan; anything else is refused."
+    ),
+)
+async def plan_aggregate_note(
+    payload: AggregateReleaseNoteRequest,
+    access: CurrentRepositoryAccess,
+    current_user: Annotated[AuthUser, Depends(get_current_user_with_token)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[AggregateReleaseNoteService, Depends(get_aggregate_release_note_service)],
+) -> AggregateNotePlanResponse:
+    payload = await with_repository_provider(payload, db)
+    try:
+        return await service.plan(payload, db)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

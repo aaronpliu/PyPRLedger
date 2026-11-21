@@ -145,3 +145,52 @@ class AggregateReleaseNoteResponse(BaseModel):
         description="'name@version' of every package both versions hold unchanged",
     )
     summary: AggregateReleaseNoteSummary = Field(default_factory=AggregateReleaseNoteSummary)
+
+
+class AggregateNotePlanEntry(BaseModel):
+    """One package the span moved, as the dependency database places it.
+
+    The plan is versions only - no repository resolution, no commit
+    comparison - so it can be shown while the release is still being typed.
+    """
+
+    name: str
+    change: str = Field(description="'upgraded' | 'added' | 'removed'")
+    from_version: str = Field(description="Empty when the package was added in this span")
+    to_version: str = Field(description="Empty when the package was removed in this span")
+    pinned: bool = Field(description="Whether the application declares the package")
+    reason: str | None = Field(
+        default=None,
+        description="Why the package will not get a commit comparison, when it will not",
+    )
+
+
+class AggregateNotePlanResponse(BaseModel):
+    """The dependency versions a span carries, before any note is built.
+
+    The declared pins of each ref are the authoritative answer to "what does
+    this version of the application carry": what the dependency database holds,
+    not an inference. An application with no record is monolithic - empty pins,
+    no packages, none guessed.
+    """
+
+    app_name: str
+    source_ref: str
+    target_ref: str
+    dependency_source: str = Field(
+        default="none",
+        description="'database' when both refs have records, 'none' when the application is monolithic",
+    )
+    source_pins: dict[str, str] = Field(
+        default_factory=dict,
+        description="What the application's source version declares: '{package: version}'",
+    )
+    target_pins: dict[str, str] = Field(
+        default_factory=dict,
+        description="What the application's target version declares: '{package: version}'",
+    )
+    packages: list[AggregateNotePlanEntry] = Field(default_factory=list)
+    unchanged_packages: list[str] = Field(
+        default_factory=list,
+        description="'name@version' of every package both versions hold at the same version",
+    )

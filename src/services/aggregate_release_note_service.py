@@ -49,6 +49,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.exceptions import DependencyApiException, GitServiceException
 from src.schemas.aggregate_release_note import (
+    AggregateNotePlanEntry,
+    AggregateNotePlanResponse,
     AggregatePackageEntry,
     AggregatePackageRepository,
     AggregateReleaseNoteRequest,
@@ -95,6 +97,105 @@ class AggregateReleaseNoteService:
         self.client = client or DependencyApiClient()
         self.metrics = metrics
 
+    async def plan(
+        self, request: AggregateReleaseNoteRequest, db: AsyncSession
+    ) -> AggregateNotePlanResponse:
+        """What the dependency database says the span carries - versions only.
+
+        No repository resolution, no commit comparison, no AI: two dependency
+        lookups and a classification, cheap enough to run while the release is
+        still being typed. The declared pins of each ref are the authoritative
+        answer to what that version of the application carries; a monolithic
+        application answers with empty pins and no packages.
+
+        Raises:
+            ValueError: If the repository is not registered as an application
+        """
+        app_name = await self._require_application(request, db)
+
+        source_record, target_record = await self._dependency_records(app_name, request)
+        plan = AggregateNotePlanResponse(
+            app_name=app_name,
+            source_ref=request.source_ref,
+            target_ref=request.target_ref,
+        )
+        if not source_record or not target_record:
+            return plan  # monolithic: empty pins, no packages, none guessed
+
+        plan.dependency_source = SOURCE_DATABASE
+        plan.source_pins = {
+            str(name): str(version)
+            for name, version in (source_record.get("dependencies") or {}).items()
+            if version
+        }
+        plan.target_pins = {
+            str(name): str(version)
+            for name, version in (target_record.get("dependencies") or {}).items()
+            if version
+        }
+
+        old_versions = self._version_map(source_record)
+        new_versions = self._version_map(target_record)
+        pinned = self._pinned_names(source_record, target_record)
+        plan.unchanged_packages = sorted(
+            f"{name}@{version}"
+            for name, version in new_versions.items()
+            if version and name not in pinned and old_versions.get(name) == version
+        )
+        plan.packages = [
+            AggregateNotePlanEntry(
+                name=name,
+                change=change,
+                from_version=from_version,
+                to_version=to_version,
+                pinned=is_pinned,
+                reason=self._plan_reason(request, change, from_version, to_version, is_pinned),
+            )
+            for name, change, from_version, to_version, is_pinned in self._classify(
+                pinned, old_versions, new_versions
+            )
+        ]
+        return plan
+
+    @staticmethod
+    def _plan_reason(
+        request: AggregateReleaseNoteRequest,
+        change: str,
+        from_version: str,
+        to_version: str,
+        is_pinned: bool,
+    ) -> str | None:
+        """Why the plan does not promise a commit comparison for this package."""
+        if not is_pinned:
+            return "the application does not declare this package (transitive dependency)"
+        if change == "removed":
+            return f"the package is no longer part of {request.target_ref}"
+        if not from_version:
+            return f"the package was not part of {request.source_ref}"
+        return None
+
+    async def _require_application(
+        self, request: AggregateReleaseNoteRequest, db: AsyncSession
+    ) -> str:
+        """The application's dependency name, refusing anything but an application.
+
+        A combined note is about what an application release carries, and only
+        the project registry says what an application is.
+        """
+        kind = await self.registry.get_registry_kind(
+            request.project_key, request.repository_slug, db
+        )
+        if kind != "application":
+            raise ValueError(
+                f"{request.project_key}/{request.repository_slug} is not registered as an "
+                f"application in the project registry "
+                f"(registry_kind='{kind or 'unclassified'}'), so there is nothing to combine: "
+                f"combined release notes are for applications only"
+            )
+        return request.app_name or await self.registry.get_dependency_app_name(
+            request.project_key, request.repository_slug, db
+        )
+
     async def build(
         self, request: AggregateReleaseNoteRequest, db: AsyncSession
     ) -> AggregateReleaseNoteResponse:
@@ -113,20 +214,7 @@ class AggregateReleaseNoteService:
                 a combined note is about what an application release carries,
                 and only the project registry says what an application is
         """
-        kind = await self.registry.get_registry_kind(
-            request.project_key, request.repository_slug, db
-        )
-        if kind != "application":
-            raise ValueError(
-                f"{request.project_key}/{request.repository_slug} is not registered as an "
-                f"application in the project registry "
-                f"(registry_kind='{kind or 'unclassified'}'), so there is nothing to combine: "
-                f"combined release notes are for applications only"
-            )
-
-        app_name = request.app_name or await self.registry.get_dependency_app_name(
-            request.project_key, request.repository_slug, db
-        )
+        app_name = await self._require_application(request, db)
 
         # the declared relationship: what each ref of the application pins
         source_record, target_record = await self._dependency_records(app_name, request)

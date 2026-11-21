@@ -636,6 +636,95 @@
                 <div v-else-if="aiSummary" class="field-hint">
                   {{ t('releaseNotes.ai_summary_help') }}
                 </div>
+                <!-- What the span will carry, before anything is generated: the
+                     declared pins of the two versions the form holds, one line
+                     per package the span moves, from what version to what. -->
+                <div
+                  v-if="dependencyPlan && !combinedEntries"
+                  class="combined-packages"
+                  data-test="dependency-plan"
+                >
+                  <div class="combined-packages-heading">
+                    {{ t('releaseNotes.combined_packages_heading') }}
+                    <span v-if="planLoading" class="combined-package-reason">
+                      {{ t('common.loading') }}
+                    </span>
+                  </div>
+                  <div
+                    v-for="entry in dependencyPlan.packages"
+                    :key="entry.name"
+                    class="combined-package"
+                  >
+                    <span class="combined-package-name">{{ entry.name }}</span>
+                    <el-tag
+                      size="small"
+                      :type="entry.pinned ? 'primary' : 'info'"
+                      effect="plain"
+                      round
+                    >
+                      {{ t(`aggregateNote.change_${entry.change}`) }}
+                    </el-tag>
+                    <span class="combined-package-span">
+                      {{ entry.from_version || '—' }} → {{ entry.to_version || '—' }}
+                    </span>
+                    <span v-if="entry.reason" class="combined-package-reason">
+                      {{ entry.reason }}
+                    </span>
+                  </div>
+                  <div
+                    v-if="dependencyPlan.unchanged_packages.length"
+                    class="combined-package-reason"
+                    style="padding: 4px 0 2px"
+                  >
+                    {{ t('aggregateNote.unchanged_label') }}:
+                    {{ dependencyPlan.unchanged_packages.join(', ') }}
+                  </div>
+                  <div
+                    v-if="!dependencyPlan.packages.length && dependencyPlan.dependency_source === 'none'"
+                    class="combined-package-reason"
+                  >
+                    {{ t('releaseNotes.combined_monolithic') }}
+                  </div>
+                </div>
+                <!-- The packages a combined pass covered, at a glance: the editor
+                     below holds the rendered sections, this says which package
+                     moved from what version to what - and which one could not be
+                     compared, with the reason it says so. -->
+                <div
+                  v-if="combinedEntries && combinedEntries.length"
+                  class="combined-packages"
+                  data-test="combined-packages"
+                >
+                  <div class="combined-packages-heading">
+                    {{ t('releaseNotes.combined_packages_heading') }}
+                  </div>
+                  <div
+                    v-for="entry in combinedEntries"
+                    :key="entry.name"
+                    class="combined-package"
+                    :data-test="`combined-package-${entry.name}`"
+                  >
+                    <span class="combined-package-name">{{ entry.name }}</span>
+                    <el-tag
+                      size="small"
+                      :type="entry.status === 'failed' ? 'danger' : entry.status === 'compared' ? 'primary' : 'info'"
+                      effect="plain"
+                      round
+                    >
+                      {{ t(`aggregateNote.change_${entry.change}`) }}
+                    </el-tag>
+                    <span class="combined-package-span">
+                      {{ entry.from_version || '—' }} → {{ entry.to_version || '—' }}
+                    </span>
+                    <span
+                      v-if="entry.status !== 'compared'"
+                      class="combined-package-reason"
+                      :title="entry.reason || ''"
+                    >
+                      {{ t(`aggregateNote.status_${entry.status}`) }}{{ entry.reason ? ` · ${entry.reason}` : '' }}
+                    </span>
+                  </div>
+                </div>
                 <MdEditor
                   v-model="form.body"
                   :toolbars="toolbars"
@@ -1272,7 +1361,7 @@ import {
   type ReleaseNoteReaction,
   type ReleaseNoteReactor,
 } from '@/api/releaseNotes'
-import { aggregateReleaseNoteApi } from '@/api/aggregateReleaseNote'
+import { aggregateReleaseNoteApi, type AggregateNotePlanResponse, type AggregatePackageEntry } from '@/api/aggregateReleaseNote'
 import { buildCombinedNoteBody } from '@/utils/export/aggregateReleaseNote'
 import type {
   ReleaseNoteExportRequest,
@@ -1572,6 +1661,16 @@ const includePackages = ref(false)
 // The packages the last combined pass carried: saved with the release as the
 // snapshot, so the note can be audited without asking the database again
 const combinedPackages = ref<ReleaseNotePackageSnapshot[] | null>(null)
+// The same packages as the answer returned them - with the reasons a skipped
+// or failed comparison carries - for the panel above the editor
+const combinedEntries = ref<AggregatePackageEntry[] | null>(null)
+// What the span will carry, while the release is still being typed: once both
+// tags are in, the dependency database is asked what each version declares -
+// versions only, no comparisons, so the answer comes back while typing
+const dependencyPlan = ref<AggregateNotePlanResponse | null>(null)
+const planLoading = ref(false)
+let planToken = 0
+let planTimer: ReturnType<typeof setTimeout> | null = null
 
 const isApplication = computed(() => {
   const slug = repo.value.repository_slug
@@ -1584,7 +1683,31 @@ const isApplication = computed(() => {
 // would be saved under a release it does not describe
 watch(includePackages, () => {
   combinedPackages.value = null
+  combinedEntries.value = null
 })
+
+// Once both tags of the span are in, ask the dependency database what each
+// version declares - versions only, no comparisons - so the versions are on
+// screen before anything is generated. Registered after ``form`` and ``repo``
+// exist: a watch reads its sources when it is set up, not only on change.
+async function fetchDependencyPlan(sourceRef: string, targetRef: string) {
+  const token = ++planToken
+  planLoading.value = true
+  try {
+    const plan = await aggregateReleaseNoteApi.plan({
+      ...coordinates(),
+      source_ref: sourceRef,
+      target_ref: targetRef,
+    })
+    // only the newest ask answers: an older one for tags already edited away
+    // would put versions on screen that the form no longer holds
+    if (token === planToken) dependencyPlan.value = plan
+  } catch {
+    // a plan that cannot be read says nothing; the generate pass will
+  } finally {
+    if (token === planToken) planLoading.value = false
+  }
+}
 
 const formCard = ref<HTMLElement | null>(null)
 
@@ -1662,6 +1785,21 @@ const editingId = ref<number | null>(null)
 const editingStatus = ref<'draft' | 'published'>('draft')
 // The draft / edit panel is only rendered while it is actually needed
 const editorOpen = ref(false)
+
+// The typed-versions preview: both tags of the span in the form, the switch on,
+// and the repository an application - then the dependency database is asked what
+// each version declares, debounced so typing does not ask on every keystroke
+watch(
+  [includePackages, isApplication, () => form.value.tag_name, () => form.value.previous_tag],
+  ([included, application, tag, previous]) => {
+    dependencyPlan.value = null
+    if (planTimer) clearTimeout(planTimer)
+    if (!included || !application || !tag?.trim() || !previous?.trim()) return
+    planTimer = setTimeout(() => {
+      void fetchDependencyPlan(previous.trim(), tag.trim())
+    }, 400)
+  },
+)
 
 // ------------------------------------------------------------------ #
 // Theme
@@ -2471,6 +2609,8 @@ function resetForm() {
   generatedCount.value = null
   previewContributors.value = null
   combinedPackages.value = null
+  combinedEntries.value = null
+  dependencyPlan.value = null
   clearSummaryState()
   clearEditorScope()
   form.value = {
@@ -2765,6 +2905,8 @@ async function generateCombinedNotes() {
   // credits are a per-repository concept; a combined note's authors live in
   // its rendered sections, so no credits panel is filled for it
   previewContributors.value = []
+  // the typed-versions preview has done its job: the answer now carries statuses
+  dependencyPlan.value = null
   combinedPackages.value = result.packages.map((entry) => ({
     name: entry.name,
     change: entry.change,
@@ -2772,6 +2914,7 @@ async function generateCombinedNotes() {
     to_version: entry.to_version,
     status: entry.status,
   }))
+  combinedEntries.value = result.packages
   // the one AI pass runs over the application's scope, and the answer says
   // which summary is on screen the same way the single pass does
   summarizedByAi.value = result.summary_source === 'llm'
@@ -3991,6 +4134,47 @@ onBeforeUnmount(() => {
 .generated-hint {
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+.combined-packages {
+  flex-basis: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-fill-color-lighter);
+}
+
+.combined-packages-heading {
+  margin-bottom: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.combined-package {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13px;
+}
+
+.combined-package-name {
+  font-weight: 600;
+  min-width: 140px;
+}
+
+.combined-package-span {
+  font-family: var(--el-font-family-monospace, monospace);
+  color: var(--el-text-color-regular);
+}
+
+.combined-package-reason {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .field-hint {

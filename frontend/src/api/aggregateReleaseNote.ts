@@ -102,4 +102,40 @@ export const aggregateReleaseNoteApi = {
   build(payload: AggregateReleaseNoteRequest): Promise<AggregateReleaseNoteResponse> {
     return request.post('/release/aggregate-note/build', payload)
   },
+
+  /**
+   * What the dependency database says the span carries - versions only, no
+   * comparisons: the declared pins of each ref and one entry per package the
+   * span moved. Cheap enough to preview while the release is being typed.
+   */
+  plan(payload: AggregateReleaseNoteRequest): Promise<AggregateNotePlanResponse> {
+    return request.post('/release/aggregate-note/plan', payload)
+  },
+}
+
+/** One package the span moved, as the dependency database places it. */
+export interface AggregateNotePlanEntry {
+  name: string
+  change: 'upgraded' | 'added' | 'removed'
+  from_version: string
+  to_version: string
+  /** Whether the application declares the package */
+  pinned: boolean
+  /** Why the package will not get a commit comparison, when it will not */
+  reason?: string | null
+}
+
+/** The dependency versions a span carries, before any note is built. */
+export interface AggregateNotePlanResponse {
+  app_name: string
+  source_ref: string
+  target_ref: string
+  /** 'database' when both refs have records, 'none' when the application is monolithic */
+  dependency_source: 'database' | 'none'
+  /** What the application's source version declares: '{package: version}' */
+  source_pins: Record<string, string>
+  /** What the application's target version declares: '{package: version}' */
+  target_pins: Record<string, string>
+  packages: AggregateNotePlanEntry[]
+  unchanged_packages: string[]
 }
