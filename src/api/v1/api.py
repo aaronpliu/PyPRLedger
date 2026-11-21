@@ -14,6 +14,7 @@ from src.api.v1.endpoints import (
     project_registry,
     projects,
     rbac,
+    release_aggregate_note,
     release_dependency_graph,
     release_diff,
     release_notes,
@@ -75,6 +76,7 @@ api_router.include_router(search.router, prefix="/search", tags=["search"])
 
 # Release diff endpoints (compare / check releases against git provider)
 api_router.include_router(release_diff.router, tags=["release-diff"])
+api_router.include_router(release_aggregate_note.router, tags=["release-aggregate-note"])
 
 # Release notes (version releases with their notes, GitHub Releases style)
 api_router.include_router(release_notes.router, tags=["release-notes"])

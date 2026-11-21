@@ -42,6 +42,25 @@ export interface ReleaseNote {
    * (empty for notes written by hand).
    */
   contributors?: ReleaseNoteContributor[]
+  /**
+   * What the body covers: 'single' (per-repository) or 'combined' (an
+   * application version span plus the packages it pins).
+   */
+  note_kind?: ReleaseNoteKind
+  /** The packages a combined note carried, stored with the release */
+  packages_snapshot?: ReleaseNotePackageSnapshot[] | null
+}
+
+/** What a release's body covers. */
+export type ReleaseNoteKind = 'single' | 'combined'
+
+/** One package a combined note carried, stored with the release. */
+export interface ReleaseNotePackageSnapshot {
+  name: string
+  change: 'upgraded' | 'added' | 'removed'
+  from_version: string
+  to_version: string
+  status: 'compared' | 'skipped' | 'failed'
 }
 
 export interface ReleaseNoteReactor {
@@ -94,6 +113,10 @@ export interface ReleaseNoteCreateRequest extends ReleaseNoteCoordinates {
   previous_tag?: string | null
   status?: ReleaseNoteStatus
   is_prerelease?: boolean
+  /** What the body covers; a combined save takes the tag slot even when taken */
+  note_kind?: ReleaseNoteKind
+  /** The packages a combined note carried */
+  packages_snapshot?: ReleaseNotePackageSnapshot[] | null
   /** Credits of the notes being saved, as the note generator returned them */
   contributors?: ReleaseNoteContributor[] | null
   /** Write the release to Confluence too when publishing it (ignored if not set up) */

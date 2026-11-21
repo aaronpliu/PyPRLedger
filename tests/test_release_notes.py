@@ -642,6 +642,69 @@ async def test_duplicate_tag_is_rejected(db_session: AsyncSession) -> None:
         await service.create_note(create_payload(name="Duplicate"), author="alice")
 
 
+async def test_combined_note_takes_the_tag_slot(db_session: AsyncSession) -> None:
+    service = build_service(db_session)
+    single = await service.create_note(create_payload(status="published"), author="alice")
+
+    snapshot = [{"name": "pkgA", "change": "upgraded", "from_version": "1.2.0", "to_version": "1.4.0", "status": "compared"}]
+    combined = await service.create_note(
+        create_payload(
+            name="MyApp v1.0.0 combined",
+            body="## MyApp v1.0.0\n\n### pkgA",
+            note_kind="combined",
+            packages_snapshot=snapshot,
+        ),
+        author="bob",
+    )
+
+    # one slot per tag: the combined note overwrote the single one, content and all
+    assert combined.id == single.id
+    assert combined.note_kind == "combined"
+    assert combined.packages_snapshot == snapshot
+    assert combined.name == "MyApp v1.0.0 combined"
+    assert combined.author == "bob"
+    # the incoming draft takes the slot back to a draft
+    assert combined.status == "draft"
+    assert combined.published_date is None
+
+
+async def test_combined_note_overwrites_a_combined_note(db_session: AsyncSession) -> None:
+    service = build_service(db_session)
+    first = await service.create_note(
+        create_payload(note_kind="combined", packages_snapshot=[{"name": "pkgA"}]), author="alice"
+    )
+    second = await service.create_note(
+        create_payload(body="updated body", note_kind="combined"), author="bob"
+    )
+
+    assert second.id == first.id
+    assert second.body == "updated body"
+    assert second.packages_snapshot is None  # a combined save replaces the snapshot too
+
+
+async def test_single_note_never_takes_a_taken_slot(db_session: AsyncSession) -> None:
+    service = build_service(db_session)
+    combined = await service.create_note(
+        create_payload(note_kind="combined", packages_snapshot=[{"name": "pkgA"}]), author="alice"
+    )
+
+    # the combined note owns the tag: a single save is told the slot is taken
+    with pytest.raises(ValueError, match="already exists"):
+        await service.create_note(create_payload(name="Duplicate"), author="bob")
+
+    reread = await service.get_note(combined.id)
+    assert reread is not None
+    assert reread.note_kind == "combined"
+    assert reread.author == "alice"
+
+
+async def test_single_note_cannot_carry_a_package_snapshot(db_session: AsyncSession) -> None:
+    service = build_service(db_session)
+
+    with pytest.raises(ValueError, match="single note cannot carry"):
+        await service.create_note(create_payload(packages_snapshot=[{"name": "pkgA"}]))
+
+
 async def test_list_flags_the_latest_published_release(db_session: AsyncSession) -> None:
     service = build_service(db_session)
 

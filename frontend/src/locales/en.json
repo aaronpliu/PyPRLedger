@@ -1268,6 +1268,7 @@
     "cancel": "Cancel",
     "badge_latest": "Latest",
     "badge_prerelease": "Pre-release",
+    "badge_combined": "Combined",
     "badge_draft": "Draft",
     "tag_link_hint": "Open this tag in the repository",
     "tag": "Tag / Version",
@@ -1301,6 +1302,11 @@
     "retry_ai_summary": "Try again",
     "generate_truncated": "The commit list was truncated - raise Max Commits for complete notes",
     "generate_failed": "Failed to generate the release notes",
+    "include_packages": "Include packages",
+    "combined_packages_heading": "Packages in this release",
+    "include_packages_help": "Generates one combined note: the application's own notes plus a section per package the release carries.",
+    "combined_needs_previous": "A combined note needs the version the release starts from - fill in \"From version\" first",
+    "combined_monolithic": "No dependency record for this span - the note covers the application's own commits only",
     "prerelease": "Set as a pre-release",
     "released_by": "Released by {author}",
     "contributors": "Contributors",
@@ -1413,6 +1419,15 @@
     "status_merged": "Merged",
     "status_closed": "Closed",
     "status_draft": "Draft"
+  },
+  "aggregateNote": {
+    "change_upgraded": "Upgraded",
+    "change_added": "Added",
+    "change_removed": "Removed",
+    "status_compared": "Compared",
+    "status_skipped": "Skipped",
+    "status_failed": "Failed",
+    "unchanged_label": "Unchanged:"
   },
   "appDiff": {
     "title": "App Diff",

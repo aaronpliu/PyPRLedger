@@ -1268,6 +1268,7 @@
     "cancel": "取消",
     "badge_latest": "最新",
     "badge_prerelease": "預發佈",
+    "badge_combined": "組合",
     "badge_draft": "草稿",
     "tag_link_hint": "在程式碼庫中開啟該標籤",
     "tag": "Tag / 版本號",
@@ -1301,6 +1302,11 @@
     "retry_ai_summary": "重試",
     "generate_truncated": "提交列表被截斷，如需完整說明請調大 Max Commits",
     "generate_failed": "產生版本說明失敗",
+    "include_packages": "包含依賴套件",
+    "combined_packages_heading": "本次發布攜帶的套件",
+    "include_packages_help": "產生一條組合說明：應用自身的說明，加上本次發布攜帶的每個套件的章節。",
+    "combined_needs_previous": "組合說明需要起始版本——請先填寫「起始版本」",
+    "combined_monolithic": "該版本區間無依賴記錄——說明僅涵蓋應用自身的提交",
     "prerelease": "標記為預發佈",
     "released_by": "發佈人 {author}",
     "contributors": "貢獻者",
@@ -1413,6 +1419,15 @@
     "status_merged": "已合併",
     "status_closed": "已關閉",
     "status_draft": "草稿"
+  },
+  "aggregateNote": {
+    "change_upgraded": "升級",
+    "change_added": "新增",
+    "change_removed": "移除",
+    "status_compared": "已比對",
+    "status_skipped": "已跳過",
+    "status_failed": "失敗",
+    "unchanged_label": "未變動："
   },
   "appDiff": {
     "title": "應用版本對比",

@@ -1268,6 +1268,7 @@
     "cancel": "取消",
     "badge_latest": "最新",
     "badge_prerelease": "预发布",
+    "badge_combined": "组合",
     "badge_draft": "草稿",
     "tag_link_hint": "在代码库中打开该标签",
     "tag": "Tag / 版本号",
@@ -1301,6 +1302,11 @@
     "retry_ai_summary": "重试",
     "generate_truncated": "提交列表被截断，如需完整说明请调大 Max Commits",
     "generate_failed": "生成版本说明失败",
+    "include_packages": "包含依赖包",
+    "combined_packages_heading": "本次发布携带的包",
+    "include_packages_help": "生成一条组合说明：应用自身的说明，加上本次发布携带的每个包的章节。",
+    "combined_needs_previous": "组合说明需要起始版本——请先填写“起始版本”",
+    "combined_monolithic": "该版本区间无依赖记录——说明仅覆盖应用自身的提交",
     "prerelease": "标记为预发布",
     "released_by": "发布人 {author}",
     "contributors": "贡献者",
@@ -1413,6 +1419,15 @@
     "status_merged": "已合并",
     "status_closed": "已关闭",
     "status_draft": "草稿"
+  },
+  "aggregateNote": {
+    "change_upgraded": "升级",
+    "change_added": "新增",
+    "change_removed": "移除",
+    "status_compared": "已比对",
+    "status_skipped": "已跳过",
+    "status_failed": "失败",
+    "unchanged_label": "未变动："
   },
   "appDiff": {
     "title": "应用版本对比",

@@ -169,6 +169,22 @@ class ReleaseNoteCreateRequest(ReleaseNoteCoordinates):
     )
     status: str = Field(default="draft", description="draft or published")
     is_prerelease: bool = Field(default=False, description="Mark the version as a pre-release")
+    note_kind: str = Field(
+        default="single",
+        description=(
+            "What the body covers: 'single' (per-repository) or 'combined' "
+            "(an application version span plus the packages it pins). A "
+            "combined save takes the tag slot even when a release already "
+            "exists there; a single save does not."
+        ),
+    )
+    packages_snapshot: list[dict] | None = Field(
+        default=None,
+        description=(
+            "The packages a combined note carried (name, change, version span, "
+            "compare status), stored with the release for audit and re-render"
+        ),
+    )
     contributors: list[ReleaseNoteContributor] | None = Field(
         default=None,
         description=(
@@ -243,6 +259,14 @@ class ReleaseNoteResponse(BaseModel):
     previous_tag: str | None = None
     status: str
     is_prerelease: bool
+    note_kind: str = Field(
+        default="single",
+        description="'single' (per-repository) or 'combined' (application + packages)",
+    )
+    packages_snapshot: list[dict] | None = Field(
+        default=None,
+        description="The packages a combined note carried (one entry per package)",
+    )
     is_latest: bool = Field(default=False, description="Latest published, non pre-release version")
     author: str | None = None
     author_avatar_url: str | None = Field(

@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.core.exceptions import NotFoundException
 from src.models.auth_user import AuthUser
-from src.models.release_note import ReleaseNote, ReleaseNoteStatus
+from src.models.release_note import ReleaseNote, ReleaseNoteKind, ReleaseNoteStatus
 from src.models.release_note_reaction import ReleaseNoteReaction
 from src.models.user import User
 from src.schemas.release_diff import ReleaseCompareRequest
@@ -964,18 +964,54 @@ class ReleaseNoteService:
         *,
         author: str | None = None,
     ) -> ReleaseNote:
-        """Create a draft or publish a version release."""
+        """Create a draft or publish a version release.
+
+        One slot per tag serves both kinds of note: a **combined** save (an
+        application version span plus the packages it pins) takes the slot
+        even when a release already exists there - the combined note is what
+        that tag publishes, and whatever stood there is overwritten. A
+        **single** save keeps the ordinary rule: a tag that is taken stays
+        taken, and the caller is told so.
+        """
         tag_name = request.tag_name.strip()
+        kind = (request.note_kind or ReleaseNoteKind.SINGLE).strip().lower()
+        if kind not in ReleaseNoteKind.VALID_KINDS:
+            raise ValueError(f"Invalid note_kind '{request.note_kind}'")
+        if kind == ReleaseNoteKind.SINGLE and request.packages_snapshot:
+            raise ValueError("A single note cannot carry a package snapshot")
+
         existing = await self.get_note_by_tag(
             project_key=request.project_key,
             repository_slug=request.repository_slug,
             tag_name=tag_name,
         )
-        if existing:
+        if existing and kind != ReleaseNoteKind.COMBINED:
             raise ValueError(
                 f"Release '{tag_name}' already exists for "
                 f"{request.project_key}/{request.repository_slug}"
             )
+
+        if existing:
+            # the combined note takes the slot: the tag publishes what the
+            # combined note says, whatever kind of note stood there before
+            existing.name = (request.name or tag_name).strip()
+            existing.body = request.body or ""
+            existing.previous_tag = request.previous_tag
+            existing.status = request.status
+            existing.is_prerelease = request.is_prerelease
+            existing.author = author
+            existing.note_kind = kind
+            existing.packages_snapshot = request.packages_snapshot
+            existing.contributors = self._stored_credits(request.contributors)
+            existing.published_date = (
+                get_current_time() if request.status == ReleaseNoteStatus.PUBLISHED else None
+            )
+            await self.db.flush()
+            logger.info(
+                f"Combined release note took over the tag slot: {tag_name} "
+                f"({request.project_key}/{request.repository_slug}, status={request.status})"
+            )
+            return existing
 
         note = ReleaseNote(
             project_key=request.project_key,
@@ -988,6 +1024,8 @@ class ReleaseNoteService:
             is_prerelease=request.is_prerelease,
             author=author,
             contributors=self._stored_credits(request.contributors),
+            note_kind=kind,
+            packages_snapshot=request.packages_snapshot,
         )
         if request.status == ReleaseNoteStatus.PUBLISHED:
             note.published_date = get_current_time()
@@ -996,7 +1034,7 @@ class ReleaseNoteService:
         await self.db.flush()
         logger.info(
             f"Release note created: {tag_name} "
-            f"({request.project_key}/{request.repository_slug}, status={request.status})"
+            f"({request.project_key}/{request.repository_slug}, status={request.status}, kind={kind})"
         )
         return note
 

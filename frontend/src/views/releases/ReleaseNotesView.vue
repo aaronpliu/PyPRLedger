@@ -408,44 +408,92 @@
           </template>
 
           <el-form v-if="editorOpen" class="editor-form" :model="form" label-position="top">
-            <el-form-item :label="t('releaseNotes.tag')" required>
-              <el-select
-                v-model="form.tag_name"
-                filterable
-                remote
-                clearable
-                default-first-option
-                :remote-method="onRefSearch"
-                :loading="refsLoading"
-                :disabled="Boolean(editingId)"
-                :placeholder="t('releaseNotes.tag_placeholder')"
-                style="width: 100%"
-                @change="onEditorScopeChange"
-              >
-                <el-option v-for="tag in candidateTags" :key="tag" :label="tag" :value="tag" />
-                <!-- Only a tag the repository reports can carry a note: a name typed
-                     by hand would be a note about a release that does not exist. -->
-                <template #empty>
-                  <p class="ref-empty">{{ t('releaseNotes.ref_no_match') }}</p>
-                </template>
-              </el-select>
-              <el-tooltip :content="t('releaseNotes.refresh_tags')" placement="top">
-                <el-button
-                  link
-                  type="primary"
-                  size="small"
-                  :icon="Refresh"
-                  :loading="refsLoading"
-                  :disabled="!hasCoordinates"
-                  :aria-label="t('releaseNotes.refresh_tags')"
-                  @click="loadRefs(true)"
-                />
-              </el-tooltip>
+            <!-- The three short answers a release is identified by, on one line:
+                 none of their values runs long, and the lines they free are the
+                 ones the notes themselves are written in. -->
+            <el-row :gutter="16" class="editor-head-row">
+              <el-col :xs="24" :md="8">
+                <el-form-item :label="t('releaseNotes.tag')" required>
+                  <div class="tag-picker">
+                    <el-select
+                      v-model="form.tag_name"
+                      filterable
+                      remote
+                      clearable
+                      default-first-option
+                      :remote-method="onRefSearch"
+                      :loading="refsLoading"
+                      :disabled="Boolean(editingId)"
+                      :placeholder="t('releaseNotes.tag_placeholder')"
+                      @change="onEditorScopeChange"
+                    >
+                      <el-option v-for="tag in candidateTags" :key="tag" :label="tag" :value="tag" />
+                      <!-- Only a tag the repository reports can carry a note: a name typed
+                           by hand would be a note about a release that does not exist. -->
+                      <template #empty>
+                        <p class="ref-empty">{{ t('releaseNotes.ref_no_match') }}</p>
+                      </template>
+                    </el-select>
+                    <el-tooltip :content="t('releaseNotes.refresh_tags')" placement="top">
+                      <el-button
+                        link
+                        type="primary"
+                        size="small"
+                        :icon="Refresh"
+                        :loading="refsLoading"
+                        :disabled="!hasCoordinates"
+                        :aria-label="t('releaseNotes.refresh_tags')"
+                        @click="loadRefs(true)"
+                      />
+                    </el-tooltip>
+                  </div>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="8">
+                <el-form-item>
+                  <template #label>
+                    <!-- The help is one icon away rather than a line of its own:
+                         the row stays one row tall. -->
+                    <span class="label-with-hint">
+                      {{ t('releaseNotes.previous_tag') }}
+                      <el-tooltip :content="t('releaseNotes.previous_tag_help')" placement="top">
+                        <el-icon class="label-hint-icon"><InfoFilled /></el-icon>
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <el-select
+                    v-model="form.previous_tag"
+                    filterable
+                    remote
+                    clearable
+                    :remote-method="onRefSearch"
+                    :disabled="Boolean(editingId)"
+                    :placeholder="t('releaseNotes.previous_tag_placeholder')"
+                    @change="onEditorScopeChange"
+                  >
+                    <el-option v-for="ref in candidateRefs" :key="ref" :label="ref" :value="ref" />
+                    <template #empty>
+                      <p class="ref-empty">{{ t('releaseNotes.ref_no_match') }}</p>
+                    </template>
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="8">
+                <el-form-item :label="t('releaseNotes.release_title')">
+                  <el-input
+                    v-model="form.name"
+                    clearable
+                    :placeholder="form.tag_name || t('releaseNotes.title_placeholder')"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
 
-              <!-- What the notes are supposed to account for, folded away until it is
-                   asked for: a writer reads it while writing, but it must not push the
-                   form apart for someone who does not. -->
-              <div v-if="hasCoordinates && form.tag_name" class="editor-commits-trigger">
+            <!-- What the notes are supposed to account for, folded away until it is
+                 asked for: a writer reads it while writing, but it must not push the
+                 form apart for someone who does not. -->
+            <el-form-item v-if="hasCoordinates && form.tag_name">
+              <div class="editor-commits-trigger">
                 <el-button
                   link
                   type="primary"
@@ -534,34 +582,6 @@
               </div>
             </el-form-item>
 
-            <el-form-item :label="t('releaseNotes.previous_tag')">
-              <el-select
-                v-model="form.previous_tag"
-                filterable
-                remote
-                clearable
-                :remote-method="onRefSearch"
-                :disabled="Boolean(editingId)"
-                :placeholder="t('releaseNotes.previous_tag_placeholder')"
-                style="width: 100%"
-                @change="onEditorScopeChange"
-              >
-                <el-option v-for="ref in candidateRefs" :key="ref" :label="ref" :value="ref" />
-                <template #empty>
-                  <p class="ref-empty">{{ t('releaseNotes.ref_no_match') }}</p>
-                </template>
-              </el-select>
-              <div class="field-hint">{{ t('releaseNotes.previous_tag_help') }}</div>
-            </el-form-item>
-
-            <el-form-item :label="t('releaseNotes.release_title')">
-              <el-input
-                v-model="form.name"
-                clearable
-                :placeholder="form.tag_name || t('releaseNotes.title_placeholder')"
-              />
-            </el-form-item>
-
             <el-form-item :label="t('releaseNotes.notes')">
               <div class="notes-editor">
                 <div class="notes-toolbar">
@@ -591,6 +611,17 @@
                     style="margin-left: 8px"
                   >
                     {{ t('releaseNotes.ai_summary') }}
+                  </el-checkbox>
+                  <!-- only applications carry packages: the registry says which
+                       repositories are applications, and the backend refuses the rest -->
+                  <el-checkbox
+                    v-if="isApplication"
+                    v-model="includePackages"
+                    size="small"
+                    style="margin-left: 8px"
+                    data-test="include-packages"
+                  >
+                    {{ t('releaseNotes.include_packages') }}
                   </el-checkbox>
                   <span v-if="generatedCount !== null" class="generated-hint">
                     {{ t('releaseNotes.generated', { count: generatedCount }) }}
@@ -624,6 +655,95 @@
                 </div>
                 <div v-else-if="aiSummary" class="field-hint">
                   {{ t('releaseNotes.ai_summary_help') }}
+                </div>
+                <!-- What the span will carry, before anything is generated: the
+                     declared pins of the two versions the form holds, one line
+                     per package the span moves, from what version to what. -->
+                <div
+                  v-if="dependencyPlan && !combinedEntries"
+                  class="combined-packages"
+                  data-test="dependency-plan"
+                >
+                  <div class="combined-packages-heading">
+                    {{ t('releaseNotes.combined_packages_heading') }}
+                    <span v-if="planLoading" class="combined-package-reason">
+                      {{ t('common.loading') }}
+                    </span>
+                  </div>
+                  <div
+                    v-for="entry in dependencyPlan.packages"
+                    :key="entry.name"
+                    class="combined-package"
+                  >
+                    <span class="combined-package-name">{{ entry.name }}</span>
+                    <el-tag
+                      size="small"
+                      :type="entry.pinned ? 'primary' : 'info'"
+                      effect="plain"
+                      round
+                    >
+                      {{ t(`aggregateNote.change_${entry.change}`) }}
+                    </el-tag>
+                    <span class="combined-package-span">
+                      {{ entry.from_version || '—' }} → {{ entry.to_version || '—' }}
+                    </span>
+                    <span v-if="entry.reason" class="combined-package-reason">
+                      {{ entry.reason }}
+                    </span>
+                  </div>
+                  <div
+                    v-if="dependencyPlan.unchanged_packages.length"
+                    class="combined-package-reason"
+                    style="padding: 4px 0 2px"
+                  >
+                    {{ t('aggregateNote.unchanged_label') }}:
+                    {{ dependencyPlan.unchanged_packages.join(', ') }}
+                  </div>
+                  <div
+                    v-if="!dependencyPlan.packages.length && dependencyPlan.dependency_source === 'none'"
+                    class="combined-package-reason"
+                  >
+                    {{ t('releaseNotes.combined_monolithic') }}
+                  </div>
+                </div>
+                <!-- The packages a combined pass covered, at a glance: the editor
+                     below holds the rendered sections, this says which package
+                     moved from what version to what - and which one could not be
+                     compared, with the reason it says so. -->
+                <div
+                  v-if="combinedEntries && combinedEntries.length"
+                  class="combined-packages"
+                  data-test="combined-packages"
+                >
+                  <div class="combined-packages-heading">
+                    {{ t('releaseNotes.combined_packages_heading') }}
+                  </div>
+                  <div
+                    v-for="entry in combinedEntries"
+                    :key="entry.name"
+                    class="combined-package"
+                    :data-test="`combined-package-${entry.name}`"
+                  >
+                    <span class="combined-package-name">{{ entry.name }}</span>
+                    <el-tag
+                      size="small"
+                      :type="entry.status === 'failed' ? 'danger' : entry.status === 'compared' ? 'primary' : 'info'"
+                      effect="plain"
+                      round
+                    >
+                      {{ t(`aggregateNote.change_${entry.change}`) }}
+                    </el-tag>
+                    <span class="combined-package-span">
+                      {{ entry.from_version || '—' }} → {{ entry.to_version || '—' }}
+                    </span>
+                    <span
+                      v-if="entry.status !== 'compared'"
+                      class="combined-package-reason"
+                      :title="entry.reason || ''"
+                    >
+                      {{ t(`aggregateNote.status_${entry.status}`) }}{{ entry.reason ? ` · ${entry.reason}` : '' }}
+                    </span>
+                  </div>
                 </div>
                 <MdEditor
                   v-model="form.body"
@@ -788,6 +908,17 @@
                   </el-tag>
                   <el-tag v-if="note.is_prerelease" size="small" type="warning" round>
                     {{ t('releaseNotes.badge_prerelease') }}
+                  </el-tag>
+                  <!-- a combined release carries its packages: the badge says the
+                       body covers more than the application's own commits -->
+                  <el-tag
+                    v-if="note.note_kind === 'combined'"
+                    size="small"
+                    type="primary"
+                    effect="plain"
+                    round
+                  >
+                    {{ t('releaseNotes.badge_combined') }}
                   </el-tag>
                   <el-tag v-if="note.status === 'draft'" size="small" type="info" round>
                     {{ t('releaseNotes.badge_draft') }}
@@ -1246,9 +1377,12 @@ import {
   releaseNotesApi,
   type ReleaseNote,
   type ReleaseNoteContributor,
+  type ReleaseNotePackageSnapshot,
   type ReleaseNoteReaction,
   type ReleaseNoteReactor,
 } from '@/api/releaseNotes'
+import { aggregateReleaseNoteApi, type AggregateNotePlanResponse, type AggregatePackageEntry } from '@/api/aggregateReleaseNote'
+import { buildCombinedNoteBody } from '@/utils/export/aggregateReleaseNote'
 import type {
   ReleaseNoteExportRequest,
   ReleaseNotePreviewResponse,
@@ -1535,6 +1669,66 @@ function clearSummaryState() {
 // The switch is about the next pass: what it says now belongs to the previous one
 watch(aiSummary, clearSummaryState)
 
+// ---- Combined notes (application + the packages it pins) -------------------
+//
+// One generate pass can cover the whole release: the application's own notes
+// plus one rendered section per package the dependency database says the span
+// moved. The combined note is about what an *application* release carries -
+// the project registry is what says what an application is, so the switch is
+// only offered for repositories registered as one, and the backend refuses
+// anything else.
+const includePackages = ref(false)
+// The packages the last combined pass carried: saved with the release as the
+// snapshot, so the note can be audited without asking the database again
+const combinedPackages = ref<ReleaseNotePackageSnapshot[] | null>(null)
+// The same packages as the answer returned them - with the reasons a skipped
+// or failed comparison carries - for the panel above the editor
+const combinedEntries = ref<AggregatePackageEntry[] | null>(null)
+// What the span will carry, while the release is still being typed: once both
+// tags are in, the dependency database is asked what each version declares -
+// versions only, no comparisons, so the answer comes back while typing
+const dependencyPlan = ref<AggregateNotePlanResponse | null>(null)
+const planLoading = ref(false)
+let planToken = 0
+let planTimer: ReturnType<typeof setTimeout> | null = null
+
+const isApplication = computed(() => {
+  const slug = repo.value.repository_slug
+  return Boolean(slug) && repositories.value.some(
+    (r) => r.repository_slug === slug && r.registry_kind === 'application',
+  )
+})
+
+// The switch is about the next pass: a snapshot left over from the previous one
+// would be saved under a release it does not describe
+watch(includePackages, () => {
+  combinedPackages.value = null
+  combinedEntries.value = null
+})
+
+// Once both tags of the span are in, ask the dependency database what each
+// version declares - versions only, no comparisons - so the versions are on
+// screen before anything is generated. Registered after ``form`` and ``repo``
+// exist: a watch reads its sources when it is set up, not only on change.
+async function fetchDependencyPlan(sourceRef: string, targetRef: string) {
+  const token = ++planToken
+  planLoading.value = true
+  try {
+    const plan = await aggregateReleaseNoteApi.plan({
+      ...coordinates(),
+      source_ref: sourceRef,
+      target_ref: targetRef,
+    })
+    // only the newest ask answers: an older one for tags already edited away
+    // would put versions on screen that the form no longer holds
+    if (token === planToken) dependencyPlan.value = plan
+  } catch {
+    // a plan that cannot be read says nothing; the generate pass will
+  } finally {
+    if (token === planToken) planLoading.value = false
+  }
+}
+
 const formCard = ref<HTMLElement | null>(null)
 
 /**
@@ -1611,6 +1805,21 @@ const editingId = ref<number | null>(null)
 const editingStatus = ref<'draft' | 'published'>('draft')
 // The draft / edit panel is only rendered while it is actually needed
 const editorOpen = ref(false)
+
+// The typed-versions preview: both tags of the span in the form, the switch on,
+// and the repository an application - then the dependency database is asked what
+// each version declares, debounced so typing does not ask on every keystroke
+watch(
+  [includePackages, isApplication, () => form.value.tag_name, () => form.value.previous_tag],
+  ([included, application, tag, previous]) => {
+    dependencyPlan.value = null
+    if (planTimer) clearTimeout(planTimer)
+    if (!included || !application || !tag?.trim() || !previous?.trim()) return
+    planTimer = setTimeout(() => {
+      void fetchDependencyPlan(previous.trim(), tag.trim())
+    }, 400)
+  },
+)
 
 // ------------------------------------------------------------------ #
 // Theme
@@ -2419,6 +2628,9 @@ function resetForm() {
   editingStatus.value = 'draft'
   generatedCount.value = null
   previewContributors.value = null
+  combinedPackages.value = null
+  combinedEntries.value = null
+  dependencyPlan.value = null
   clearSummaryState()
   clearEditorScope()
   form.value = {
@@ -2637,38 +2849,100 @@ async function generateNotes() {
   clearSummaryState()
   generating.value = true
   try {
-    const preview = await releaseNotesApi.preview({
-      ...coordinates(),
-      version: form.value.tag_name.trim(),
-      previous_version: form.value.previous_tag.trim() || undefined,
-      max_commits: PREVIEW_MAX_COMMITS,
-      language: locale.value,
-      summarize: aiSummary.value && llmEnabled.value,
-    })
-    form.value.body = preview.body
-    if (!form.value.name.trim()) {
-      form.value.name = preview.suggested_name
-    }
-    generatedCount.value = preview.commit_count
-    // The people behind those commits came back with them, so the credits are saved
-    // with the notes instead of being read again when the release is shown
-    previewContributors.value = preview.contributors ?? []
-    // The notes and the commits they were built from come out of the same answer, so
-    // the panel beside them is what the body was made of - not a second reading of
-    // the repository that could disagree with it.
-    applyEditorScope(preview.commits as CommitInfo[], preview)
-    // The server falls back to the deterministic notes when the LLM call fails,
-    // so the answer says which one is on screen rather than assuming the switch
-    summarizedByAi.value = preview.summary_source === 'llm'
-    summaryNotice.value = preview.summary_notice ?? null
-    summaryError.value = preview.summary_error ?? null
-    if (preview.truncated) {
-      ElMessage.warning(t('releaseNotes.generate_truncated'))
+    if (includePackages.value && isApplication.value) {
+      await generateCombinedNotes()
+    } else {
+      await generateSingleNotes()
     }
   } catch {
     ElMessage.error(t('releaseNotes.generate_failed'))
   } finally {
     generating.value = false
+  }
+}
+
+/** The ordinary single-repository pass: the application's own scope. */
+async function generateSingleNotes() {
+  const preview = await releaseNotesApi.preview({
+    ...coordinates(),
+    version: form.value.tag_name.trim(),
+    previous_version: form.value.previous_tag.trim() || undefined,
+    max_commits: PREVIEW_MAX_COMMITS,
+    language: locale.value,
+    summarize: aiSummary.value && llmEnabled.value,
+  })
+  form.value.body = preview.body
+  if (!form.value.name.trim()) {
+    form.value.name = preview.suggested_name
+  }
+  generatedCount.value = preview.commit_count
+  // The people behind those commits came back with them, so the credits are saved
+  // with the notes instead of being read again when the release is shown
+  previewContributors.value = preview.contributors ?? []
+  // The notes and the commits they were built from come out of the same answer, so
+  // the panel beside them is what the body was made of - not a second reading of
+  // the repository that could disagree with it.
+  applyEditorScope(preview.commits as CommitInfo[], preview)
+  // The server falls back to the deterministic notes when the LLM call fails,
+  // so the answer says which one is on screen rather than assuming the switch
+  summarizedByAi.value = preview.summary_source === 'llm'
+  summaryNotice.value = preview.summary_notice ?? null
+  summaryError.value = preview.summary_error ?? null
+  if (preview.truncated) {
+    ElMessage.warning(t('releaseNotes.generate_truncated'))
+  }
+}
+
+/**
+ * The combined pass: the application's own rendered notes plus one section per
+ * package the span moved, each rendered like a release note by the same builder
+ * the single pass uses.
+ *
+ * The span is the two tags the form already holds, so the combined note files
+ * under the same tag the single one would - one slot per release, whichever
+ * kind of body fills it.
+ */
+async function generateCombinedNotes() {
+  const sourceRef = form.value.previous_tag.trim()
+  if (!sourceRef) {
+    // a combined note is a span: without the version it starts from there is
+    // nothing to place a package's from-version against
+    ElMessage.warning(t('releaseNotes.combined_needs_previous'))
+    return
+  }
+  const result = await aggregateReleaseNoteApi.build({
+    ...coordinates(),
+    source_ref: sourceRef,
+    target_ref: form.value.tag_name.trim(),
+    language: locale.value,
+    summarize: aiSummary.value && llmEnabled.value,
+  })
+  form.value.body = buildCombinedNoteBody(result, t)
+  if (!form.value.name.trim()) {
+    form.value.name = `${result.app_name} ${result.target_ref}`
+  }
+  generatedCount.value = result.summary.app_commits + result.summary.package_commits
+  // credits are a per-repository concept; a combined note's authors live in
+  // its rendered sections, so no credits panel is filled for it
+  previewContributors.value = []
+  // the typed-versions preview has done its job: the answer now carries statuses
+  dependencyPlan.value = null
+  combinedPackages.value = result.packages.map((entry) => ({
+    name: entry.name,
+    change: entry.change,
+    from_version: entry.from_version,
+    to_version: entry.to_version,
+    status: entry.status,
+  }))
+  combinedEntries.value = result.packages
+  // the one AI pass runs over the application's scope, and the answer says
+  // which summary is on screen the same way the single pass does
+  summarizedByAi.value = result.summary_source === 'llm'
+  summaryNotice.value = (result.summary_notice as SummaryNotice | null) ?? null
+  if (result.dependency_source === 'none') {
+    // the database holds no record for this span: the note is the application's
+    // own comparison, and saying so beats a package section that never comes
+    ElMessage.info(t('releaseNotes.combined_monolithic'))
   }
 }
 
@@ -2710,6 +2984,11 @@ async function saveRelease(status: 'draft' | 'published') {
         is_prerelease: form.value.is_prerelease,
         status,
         contributors,
+        // A combined save takes the tag slot: whatever release stood there is
+        // overwritten, and the snapshot says which packages the body covered
+        ...(combinedPackages.value
+          ? { note_kind: 'combined' as const, packages_snapshot: combinedPackages.value }
+          : {}),
         sync_to_confluence: asksForConfluenceSync.value,
       })
     }
@@ -3845,6 +4124,39 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 
+/* The row that holds the three short answers: one line tall, so the notes
+   below it get the vertical room the three stacked fields used to take */
+.editor-head-row {
+  row-gap: 0;
+}
+
+/* The tag select and its refresh share the column: the select takes what is
+   left of the small button instead of a fixed width per column */
+.tag-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.tag-picker .el-select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* A label that carries its help as an icon, not as a line under the control */
+.label-with-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.label-hint-icon {
+  color: var(--el-text-color-secondary);
+  font-size: 14px;
+  cursor: help;
+}
+
 /* A panel of its own, because it is one: the commits are read while the notes are
    written, and a block drawn like the rest of the form is one a reader takes for a
    piece of it and forgets is open. The border is what says it folds away again. */
@@ -3875,6 +4187,47 @@ onBeforeUnmount(() => {
 .generated-hint {
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+.combined-packages {
+  flex-basis: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-fill-color-lighter);
+}
+
+.combined-packages-heading {
+  margin-bottom: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.combined-package {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13px;
+}
+
+.combined-package-name {
+  font-weight: 600;
+  min-width: 140px;
+}
+
+.combined-package-span {
+  font-family: var(--el-font-family-monospace, monospace);
+  color: var(--el-text-color-regular);
+}
+
+.combined-package-reason {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .field-hint {

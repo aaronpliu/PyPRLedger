@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.43.0] - 2026-11-21
+
+**Backend Version**: 1.43.0
+**Frontend Version**: 1.39.0
+
+### Added
+- Combined release notes folded into Release Notes: for repositories registered as applications in the project registry, the generate panel offers an "Include packages" switch — one generate pass covers the application's own rendered release note plus one rendered section per package the span moved (categorized sections, JIRA ticket links, authors, three languages), with the one optional AI summary over the application's scope
+- Dependency version preview before generating: once the switch is on and both tags of the span are filled in, a lightweight `POST /api/v1/release/aggregate-note/plan` answers (debounced) what each package version declares, so the versions are on screen before anything is generated
+- Combined releases save as a version release of their own: a new `note_kind` (single/combined) plus a `packages_snapshot` on `ReleaseNote` (migration 041), a combined save taking the tag slot over any existing release, and a "Combined" badge on the release list
+- "Full Changelog" hyperlinks between versions: the application section links to the application's comparison, and each package section to the comparison between the two versions it moved between, on the package's repository
+
+### Changed
+- Release notes editor layout: Tag/Version, Previous Version and Release Title share one line, leaving the vertical room to the notes themselves
+- Unchanged packages no longer appear in the note markdown — the page still shows them, the release note only says what moved
+- The standalone Combined Release Notes page is retired; `/releases/combined-notes` redirects to Release Notes, where the capability lives now
+
+---
+
 ## [1.42.0] - 2026-11-18
 
 **Backend Version**: 1.42.0

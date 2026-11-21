@@ -22,7 +22,7 @@ A production-ready FastAPI + Vue 3 PR Code Review Result Storage System with MyS
 - **Frontend**: Vue 3 + Element Plus SPA with review listing, detail views, task assignment management, release tooling, analytics dashboards, and rule management UI
 - **Database Integration**: MySQL database with SQLAlchemy ORM and Alembic migrations
 - **Caching Layer**: Redis integration for improved performance
-- **Monitoring**: Prometheus metrics collection with Grafana dashboards
+- **Monitoring & Observability**: Prometheus metrics with Grafana dashboards, opt-in OpenTelemetry tracing (FastAPI, SQLAlchemy, Redis, HTTPX spans → Jaeger), and liveness/readiness health probes (`/api/health`, `/api/health/ready`)
 - **Async Operations**: Full async/await support for high concurrency
 - **Docker Support**: Complete Docker Compose setup for easy deployment
 - **AI-Assisted Development**: OpenSpec spec-driven development workflow with Codegraph codebase graph engine and OpenCode agent orchestration
@@ -49,7 +49,7 @@ PyPRLedger/
 │       │   ├── export/           # Export utilities (PDF, Excel, CSV, JSON)
 │       │   └── releaseDependencyGraph.ts  # Graph model, cycle marking, depth filtering
 │       └── views/                # Page views (reviews, scores, releases, admin, auth, dashboard)
-├── grafana/                      # Grafana configuration
+├── monitoring/                   # Prometheus, Grafana, Alertmanager, Jaeger stack
 ├── logs/                         # Application logs
 ├── openspec/                     # OpenSpec spec-driven development artifacts
 │   ├── changes/archive/          # Archived changes
@@ -209,8 +209,9 @@ docker-compose up -d
 5. Access the application:
 - API: http://localhost:8000
 - API Documentation: http://localhost:8000/api/docs
-- Grafana: http://localhost:3030 (admin/admin)
+- Grafana: http://localhost:3030 (admin/admin; host port 3030 so the frontend dev server keeps 3000)
 - Prometheus: http://localhost:9090
+- Jaeger (when tracing is enabled): http://localhost:16686
 
 
 ## 💻 Local Development Setup
@@ -548,6 +549,13 @@ alembic revision --autogenerate -m "description"
 
 ## Monitoring
 
+The monitoring stack (Prometheus + Grafana + Alertmanager + Jaeger) deploys from
+`monitoring/docker-compose.yml`:
+
+```bash
+cd monitoring && docker compose up -d
+```
+
 ### Prometheus Metrics
 
 The system exposes the following metrics:
@@ -559,7 +567,41 @@ The system exposes the following metrics:
 - Database metrics
 - System metrics
 
-Access metrics at: `http://localhost:8000/metrics`
+Access metrics at: `http://localhost:8000/api/metrics` (path set by `PROMETHEUS_METRICS_PATH`)
+
+### Health Checks
+
+Two probes with distinct jobs:
+
+| Endpoint | Job | Behaviour |
+|---|---|---|
+| `GET /api/health` | Liveness | The process answers; dependencies are not consulted |
+| `GET /api/health/ready` | Readiness | Probes MySQL (`SELECT 1`) and Redis (`PING`), 3s timeout each; answers 503 naming the failing component when either is down |
+
+Point the load balancer or orchestrator at `/api/health/ready`, not at liveness.
+
+### Distributed Tracing (OpenTelemetry)
+
+Opt-in. With `OTEL_ENABLED=true` (and the `monitoring` extra installed), every
+request becomes a server span with SQLAlchemy queries, Redis calls, and Git
+provider HTTPX calls as children, so a slow release diff reads hop by hop.
+Health and metrics probes are excluded, and every log line carries its trace
+and span ids for jumping from a slow request in the logs to its span view.
+
+```bash
+uv sync --extra monitoring
+cd monitoring && docker compose up -d jaeger
+```
+
+```dotenv
+OTEL_ENABLED=True
+OTEL_SERVICE_NAME=prledger-backend
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces
+```
+
+View spans at `http://localhost:16686`. With the stack in the podman VM,
+use `http://192.168.64.2:16686` and point the export endpoint at
+`http://192.168.64.2:4318/v1/traces`.
 
 ### Grafana Dashboards
 
@@ -567,7 +609,8 @@ Grafana is pre-configured with:
 - Prometheus data source
 - Code review dashboard
 
-Access Grafana at: `http://localhost:3030` (admin/admin)
+Access Grafana at: `http://localhost:3030` (admin/admin); Alertmanager listens
+on `http://localhost:9093`.
 
 ## AI-Assisted Development
 
