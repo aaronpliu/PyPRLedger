@@ -1747,12 +1747,13 @@ describe('ReleaseNotesView', { timeout: 20_000 }, () => {
     )
     expect(panel.text()).toContain('abc1234')
     expect(panel.text()).toContain(enMessages.releaseNotes.editor_commits_help)
-    // the list opens between the tag and its predecessor, where the scope is decided
+    // the list opens right under the row that decides the scope (tag,
+    // predecessor and title share one line now), before the notes are written
     const items = wrapper.findAll('.editor-form .el-form-item')
-    const tagIndex = items.findIndex((item: AnyWrapper) =>
-      item.text().includes(enMessages.releaseNotes.tag),
+    const titleIndex = items.findIndex((item: AnyWrapper) =>
+      item.text().includes(enMessages.releaseNotes.release_title),
     )
-    expect(items[tagIndex + 1].find('[data-test="editor-commits"]').exists()).toBe(true)
+    expect(items[titleIndex + 2].find('[data-test="editor-commits"]').exists()).toBe(true)
   })
 
   it('opens and closes the commits of a draft from the same label', async () => {

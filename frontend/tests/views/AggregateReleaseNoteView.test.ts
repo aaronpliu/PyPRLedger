@@ -313,9 +313,10 @@ describe('AggregateReleaseNoteView', () => {
       previous_tag: 'v1.0.0',
       status: 'draft',
     })
-    // the body is the markdown note: app section, packages, unchanged line
+    // the body is the markdown note: app section and packages, but not the
+    // unchanged list - what the release says is what moved
     expect(payload.body).toContain('## Application')
     expect(payload.body).toContain('### pkgA')
-    expect(payload.body).toContain('pkgC@3.2.0')
+    expect(payload.body).not.toContain('pkgC@3.2.0')
   })
 })

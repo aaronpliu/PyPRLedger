@@ -21,6 +21,7 @@ from src.core.exceptions import DependencyApiException
 from src.schemas.aggregate_release_note import AggregateReleaseNoteRequest
 from src.schemas.release_diff import ReleaseCompareResponse
 from src.services.aggregate_release_note_service import AggregateReleaseNoteService
+from src.services.git_providers import get_git_provider
 
 
 PROJECT_KEY = "PROJ"
@@ -130,12 +131,14 @@ def make_service(
     diff: StubDiff | None = None,
     registry: StubRegistry | None = None,
     client: StubClient | None = None,
+    provider_factory=None,
 ) -> AggregateReleaseNoteService:
     return AggregateReleaseNoteService(
         diff=diff or StubDiff(),
         registry=registry or StubRegistry(),
         client=client
         or StubClient({"v1.0.0": RECORD_V1, "v2.0.0": RECORD_V2}),
+        provider_factory=provider_factory or get_git_provider,
     )
 
 
@@ -288,6 +291,34 @@ async def test_unreachable_database_degrades_the_same_way() -> None:
     assert note.dependency_source == "none"
     assert note.packages == []
     assert note.application.verdict == "contained"
+
+
+@pytest.mark.asyncio
+async def test_full_changelog_links_to_the_comparison() -> None:
+    # a platform that has a compare page: every section's "Full Changelog"
+    # points at the span it describes - the application's own, and each
+    # package's between the versions it moved between
+    class StubProvider:
+        def web_compare_url(self, remote_key, repository_slug, from_ref, to_ref):
+            return f"https://git.example.com/{remote_key}/{repository_slug}/compare/{from_ref}...{to_ref}"
+
+    def factory(name: str):
+        return StubProvider()
+
+    service = make_service(provider_factory=factory)
+    note = await service.build(make_request(), db=None)
+
+    assert note.application_body is not None
+    assert (
+        "[v1.0.0...v2.0.0](https://git.example.com/PROJ/myapp/compare/v1.0.0...v2.0.0)"
+        in note.application_body
+    )
+    pkga = next(entry for entry in note.packages if entry.name == "pkgA")
+    assert pkga.body is not None
+    assert (
+        "[1.2.0...1.4.0](https://git.example.com/PROJA/pkgA-repo/compare/1.2.0...1.4.0)"
+        in pkga.body
+    )
 
 
 @pytest.mark.asyncio

@@ -137,10 +137,12 @@ describe('buildAggregateReleaseNoteMarkdown', () => {
     expect(markdown).not.toContain('### pkgY')
   })
 
-  it('summarizes what stayed put as one line', () => {
+  it('leaves the unchanged packages out of the markdown', () => {
     const markdown = buildAggregateReleaseNoteMarkdown(noteFixture([comparedEntry()]))
 
-    expect(markdown).toContain('**Unchanged:** pkgC@3.2.0')
+    // what a version release says is what moved, not a list of what did not
+    expect(markdown).not.toContain('pkgC@3.2.0')
+    expect(markdown).not.toContain('Unchanged')
   })
 })
 
@@ -172,11 +174,17 @@ describe('buildCombinedNoteBody', () => {
     expect(body).not.toContain('PRL-10')
   })
 
-  it('names what stayed put as one line', () => {
-    const result = noteFixture([comparedEntry()], { application_body: '' })
+  it('leaves the unchanged packages out of the body', () => {
+    const result = noteFixture([comparedEntry(), skippedEntry()], {
+      application_body: '',
+      unchanged_packages: ['pkgC@3.2.0'],
+    })
     const body = buildCombinedNoteBody(result)
 
-    expect(body).toContain('pkgC@3.2.0')
+    // what the release says is what moved; the unchanged list is for the page,
+    // not for the note
+    expect(body).not.toContain('pkgC@3.2.0')
+    expect(body).not.toContain('unchanged')
   })
 })
 

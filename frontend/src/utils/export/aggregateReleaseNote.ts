@@ -47,7 +47,8 @@ export interface AggregateNoteReportInput {
  * backend answers with: the application's own release note first (summary,
  * categorized sections, ticket links, authors), then one section per package
  * the span moved, then the lines that keep the rest legible - a package that
- * could not be compared says why, and the unchanged ones are named.
+ * could not be compared says why. The unchanged packages stay out: what the
+ * release says is what moved, not a list of what did not.
  *
  * This is what a combined release saves with: the body reads like a release
  * note, not like a commit listing.
@@ -75,12 +76,8 @@ export function buildCombinedNoteBody(
     }
   }
 
-  if (result.unchanged_packages.length) {
-    parts.push(
-      `_${translate('aggregateNote.unchanged_label')}: ${result.unchanged_packages.join(', ')}_`,
-    )
-  }
-
+  // the unchanged packages are the release's quiet half: the answer carries
+  // them, but a note that names what did not happen buries what did
   return parts.join('\n\n')
 }
 
@@ -294,11 +291,8 @@ export function buildAggregateReleaseNoteMarkdown(result: AggregateReleaseNoteRe
     }
   }
 
-  if (result.unchanged_packages.length > 0) {
-    lines.push('')
-    lines.push(`**${t('aggregateNote.unchanged_label')}** ${result.unchanged_packages.join(', ')}`)
-  }
-
+  // the unchanged packages stay out of the markdown: what a version release
+  // says is what moved, not a list of what did not
   return lines.join('\n')
 }
 

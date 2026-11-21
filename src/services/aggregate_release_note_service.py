@@ -43,7 +43,7 @@ Where the relationship comes from:
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,8 +64,13 @@ from src.schemas.release_note import (
     SUMMARY_LLM,
 )
 from src.services.dependency_api_client import DependencyApiClient
+from src.services.git_providers import BaseGitProvider, get_git_provider
 from src.services.project_registry_service import ProjectRegistryService
-from src.services.release_diff_service import ReleaseDiffService
+from src.services.release_diff_service import (
+    ReleaseDiffService,
+    resolve_provider_name,
+    resolve_remote_project_key,
+)
 from src.services.release_note_llm_service import ReleaseNoteLlmService
 from src.services.release_note_service import (
     build_release_notes_markdown,
@@ -91,11 +96,48 @@ class AggregateReleaseNoteService:
         registry: ProjectRegistryService | None = None,
         client: DependencyApiClient | None = None,
         metrics: Any = metrics_collector,
+        provider_factory: Callable[[str], BaseGitProvider] = get_git_provider,
     ) -> None:
         self.diff = diff or ReleaseDiffService()
         self.registry = registry or ProjectRegistryService()
         self.client = client or DependencyApiClient()
         self.metrics = metrics
+        self.provider_factory = provider_factory
+
+    def compare_url(
+        self,
+        request: AggregateReleaseNoteRequest,
+        source_ref: str,
+        target_ref: str,
+        *,
+        project_key: str | None = None,
+        repository_slug: str | None = None,
+    ) -> str | None:
+        """Browsable comparison link for one section's span, when the platform has one.
+
+        The application section links to the application's own comparison; each
+        package section links to the comparison between the two versions that
+        package moved between, on the package's repository. Best effort, like
+        the release page's link: an unknown provider or a missing host leaves
+        the range plain text rather than failing the note.
+        """
+        try:
+            provider_name = resolve_provider_name(request.git_provider)
+            provider = self.provider_factory(provider_name)
+            remote_key = resolve_remote_project_key(
+                project_key or request.project_key,
+                provider_name,
+                request.workspace_slug,
+            )
+            return provider.web_compare_url(
+                remote_key,
+                repository_slug or request.repository_slug,
+                source_ref,
+                target_ref,
+            )
+        except Exception as e:  # noqa: BLE001 - a link is never worth a note
+            logger.warning(f"Could not build the release comparison link: {e}")
+            return None
 
     async def plan(
         self, request: AggregateReleaseNoteRequest, db: AsyncSession
@@ -243,6 +285,7 @@ class AggregateReleaseNoteService:
             previous_version=request.source_ref,
             summary=summary,
             language=request.language,
+            compare_url=self.compare_url(request, request.source_ref, request.target_ref),
         )
 
         self.metrics.increment_release_diff("aggregate_note", request.git_provider or "default", "built")
@@ -455,6 +498,13 @@ class AggregateReleaseNoteService:
             previous_version=entry.from_version,
             summary=None,
             language=request.language,
+            compare_url=self.compare_url(
+                request,
+                entry.from_version,
+                entry.to_version,
+                project_key=entry.repository.project_key if entry.repository else None,
+                repository_slug=entry.repository.repository_slug if entry.repository else None,
+            ),
         )
 
     async def _compare_application(self, request: AggregateReleaseNoteRequest) -> ReleaseCompareResponse:
@@ -516,6 +566,7 @@ class AggregateReleaseNoteService:
         previous_version: str | None,
         summary: str | None,
         language: str | None,
+        compare_url: str | None = None,
     ) -> str | None:
         """One section's body, in the shape the Release Notes page publishes.
 
@@ -533,6 +584,7 @@ class AggregateReleaseNoteService:
             jira_project_keys=project_keys,
             language=language,
             summary=summary,
+            compare_url=compare_url,
         )
         return body or None
 

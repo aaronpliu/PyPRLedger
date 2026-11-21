@@ -408,44 +408,92 @@
           </template>
 
           <el-form v-if="editorOpen" class="editor-form" :model="form" label-position="top">
-            <el-form-item :label="t('releaseNotes.tag')" required>
-              <el-select
-                v-model="form.tag_name"
-                filterable
-                remote
-                clearable
-                default-first-option
-                :remote-method="onRefSearch"
-                :loading="refsLoading"
-                :disabled="Boolean(editingId)"
-                :placeholder="t('releaseNotes.tag_placeholder')"
-                style="width: 100%"
-                @change="onEditorScopeChange"
-              >
-                <el-option v-for="tag in candidateTags" :key="tag" :label="tag" :value="tag" />
-                <!-- Only a tag the repository reports can carry a note: a name typed
-                     by hand would be a note about a release that does not exist. -->
-                <template #empty>
-                  <p class="ref-empty">{{ t('releaseNotes.ref_no_match') }}</p>
-                </template>
-              </el-select>
-              <el-tooltip :content="t('releaseNotes.refresh_tags')" placement="top">
-                <el-button
-                  link
-                  type="primary"
-                  size="small"
-                  :icon="Refresh"
-                  :loading="refsLoading"
-                  :disabled="!hasCoordinates"
-                  :aria-label="t('releaseNotes.refresh_tags')"
-                  @click="loadRefs(true)"
-                />
-              </el-tooltip>
+            <!-- The three short answers a release is identified by, on one line:
+                 none of their values runs long, and the lines they free are the
+                 ones the notes themselves are written in. -->
+            <el-row :gutter="16" class="editor-head-row">
+              <el-col :xs="24" :md="8">
+                <el-form-item :label="t('releaseNotes.tag')" required>
+                  <div class="tag-picker">
+                    <el-select
+                      v-model="form.tag_name"
+                      filterable
+                      remote
+                      clearable
+                      default-first-option
+                      :remote-method="onRefSearch"
+                      :loading="refsLoading"
+                      :disabled="Boolean(editingId)"
+                      :placeholder="t('releaseNotes.tag_placeholder')"
+                      @change="onEditorScopeChange"
+                    >
+                      <el-option v-for="tag in candidateTags" :key="tag" :label="tag" :value="tag" />
+                      <!-- Only a tag the repository reports can carry a note: a name typed
+                           by hand would be a note about a release that does not exist. -->
+                      <template #empty>
+                        <p class="ref-empty">{{ t('releaseNotes.ref_no_match') }}</p>
+                      </template>
+                    </el-select>
+                    <el-tooltip :content="t('releaseNotes.refresh_tags')" placement="top">
+                      <el-button
+                        link
+                        type="primary"
+                        size="small"
+                        :icon="Refresh"
+                        :loading="refsLoading"
+                        :disabled="!hasCoordinates"
+                        :aria-label="t('releaseNotes.refresh_tags')"
+                        @click="loadRefs(true)"
+                      />
+                    </el-tooltip>
+                  </div>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="8">
+                <el-form-item>
+                  <template #label>
+                    <!-- The help is one icon away rather than a line of its own:
+                         the row stays one row tall. -->
+                    <span class="label-with-hint">
+                      {{ t('releaseNotes.previous_tag') }}
+                      <el-tooltip :content="t('releaseNotes.previous_tag_help')" placement="top">
+                        <el-icon class="label-hint-icon"><InfoFilled /></el-icon>
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <el-select
+                    v-model="form.previous_tag"
+                    filterable
+                    remote
+                    clearable
+                    :remote-method="onRefSearch"
+                    :disabled="Boolean(editingId)"
+                    :placeholder="t('releaseNotes.previous_tag_placeholder')"
+                    @change="onEditorScopeChange"
+                  >
+                    <el-option v-for="ref in candidateRefs" :key="ref" :label="ref" :value="ref" />
+                    <template #empty>
+                      <p class="ref-empty">{{ t('releaseNotes.ref_no_match') }}</p>
+                    </template>
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :xs="24" :md="8">
+                <el-form-item :label="t('releaseNotes.release_title')">
+                  <el-input
+                    v-model="form.name"
+                    clearable
+                    :placeholder="form.tag_name || t('releaseNotes.title_placeholder')"
+                  />
+                </el-form-item>
+              </el-col>
+            </el-row>
 
-              <!-- What the notes are supposed to account for, folded away until it is
-                   asked for: a writer reads it while writing, but it must not push the
-                   form apart for someone who does not. -->
-              <div v-if="hasCoordinates && form.tag_name" class="editor-commits-trigger">
+            <!-- What the notes are supposed to account for, folded away until it is
+                 asked for: a writer reads it while writing, but it must not push the
+                 form apart for someone who does not. -->
+            <el-form-item v-if="hasCoordinates && form.tag_name">
+              <div class="editor-commits-trigger">
                 <el-button
                   link
                   type="primary"
@@ -532,34 +580,6 @@
                   :empty-text="t('releaseNotes.commits_empty')"
                 />
               </div>
-            </el-form-item>
-
-            <el-form-item :label="t('releaseNotes.previous_tag')">
-              <el-select
-                v-model="form.previous_tag"
-                filterable
-                remote
-                clearable
-                :remote-method="onRefSearch"
-                :disabled="Boolean(editingId)"
-                :placeholder="t('releaseNotes.previous_tag_placeholder')"
-                style="width: 100%"
-                @change="onEditorScopeChange"
-              >
-                <el-option v-for="ref in candidateRefs" :key="ref" :label="ref" :value="ref" />
-                <template #empty>
-                  <p class="ref-empty">{{ t('releaseNotes.ref_no_match') }}</p>
-                </template>
-              </el-select>
-              <div class="field-hint">{{ t('releaseNotes.previous_tag_help') }}</div>
-            </el-form-item>
-
-            <el-form-item :label="t('releaseNotes.release_title')">
-              <el-input
-                v-model="form.name"
-                clearable
-                :placeholder="form.tag_name || t('releaseNotes.title_placeholder')"
-              />
             </el-form-item>
 
             <el-form-item :label="t('releaseNotes.notes')">
@@ -4102,6 +4122,39 @@ onBeforeUnmount(() => {
   gap: 6px;
   flex-basis: 100%;
   margin-top: 2px;
+}
+
+/* The row that holds the three short answers: one line tall, so the notes
+   below it get the vertical room the three stacked fields used to take */
+.editor-head-row {
+  row-gap: 0;
+}
+
+/* The tag select and its refresh share the column: the select takes what is
+   left of the small button instead of a fixed width per column */
+.tag-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.tag-picker .el-select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* A label that carries its help as an icon, not as a line under the control */
+.label-with-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.label-hint-icon {
+  color: var(--el-text-color-secondary);
+  font-size: 14px;
+  cursor: help;
 }
 
 /* A panel of its own, because it is one: the commits are read while the notes are
