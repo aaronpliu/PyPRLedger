@@ -1,19 +1,14 @@
-import { beforeAll, describe, expect, it } from 'vitest'
-import {
-  buildAggregateReleaseNoteHtml,
-  buildAggregateReleaseNoteMarkdown,
-  buildCombinedNoteBody,
-} from '@/utils/export/aggregateReleaseNote'
+import { describe, expect, it } from 'vitest'
+import { buildCombinedNoteBody } from '@/utils/export/aggregateReleaseNote'
 import type {
   AggregatePackageEntry,
   AggregateReleaseNoteResponse,
 } from '@/api/aggregateReleaseNote'
-import enMessages from '@/locales/en.json'
-import i18n from '@/i18n'
 
-// The report and the markdown body read the same response; the tests below pin
-// the contract the readers depend on - legibility for what cannot be compared,
-// links where a URL exists, nothing unescaped.
+// The combined body reads the response the backend answers with; the tests
+// below pin the contract the release depends on - the rendered sections in
+// order, legibility for what cannot be compared, and nothing that did not
+// move.
 
 function comparedEntry(): AggregatePackageEntry {
   return {
@@ -113,39 +108,6 @@ function noteFixture(packages: AggregatePackageEntry[], overrides: Partial<Aggre
   }
 }
 
-describe('buildAggregateReleaseNoteMarkdown', () => {
-  it('opens with the application section and its commits', () => {
-    const markdown = buildAggregateReleaseNoteMarkdown(noteFixture([comparedEntry()]))
-
-    expect(markdown).toContain('## Application (v1.0.0 → v2.0.0)')
-    expect(markdown).toContain('- `abc1234` PRL-9: ship the feature')
-  })
-
-  it('keeps a compared package readable between its two versions', () => {
-    const markdown = buildAggregateReleaseNoteMarkdown(noteFixture([comparedEntry()]))
-
-    expect(markdown).toContain('### pkgA 1.2.0 → 1.4.0')
-    // only the subject line survives: a commit body would bury the release
-    expect(markdown).toContain('- `aaa1111` PRL-10: pkgA work _(alice)_')
-    expect(markdown).not.toContain('long body ignored')
-  })
-
-  it('keeps a package without a comparison legible, with its reason', () => {
-    const markdown = buildAggregateReleaseNoteMarkdown(noteFixture([skippedEntry()]))
-
-    expect(markdown).toContain("**pkgY** 0.9.0 → 1.0.0: Upgraded — no repository is registered as 'pkgY'")
-    expect(markdown).not.toContain('### pkgY')
-  })
-
-  it('leaves the unchanged packages out of the markdown', () => {
-    const markdown = buildAggregateReleaseNoteMarkdown(noteFixture([comparedEntry()]))
-
-    // what a version release says is what moved, not a list of what did not
-    expect(markdown).not.toContain('pkgC@3.2.0')
-    expect(markdown).not.toContain('Unchanged')
-  })
-})
-
 describe('buildCombinedNoteBody', () => {
   it('composes the rendered sections into one release-note body', () => {
     const result = noteFixture([comparedEntry(), skippedEntry()], {
@@ -185,28 +147,5 @@ describe('buildCombinedNoteBody', () => {
     // not for the note
     expect(body).not.toContain('pkgC@3.2.0')
     expect(body).not.toContain('unchanged')
-  })
-})
-
-describe('buildAggregateReleaseNoteHtml', () => {
-  beforeAll(() => {
-    // the report reads the same dictionary through tExport
-    void i18n.global.setLocaleMessage('en', enMessages)
-  })
-
-  it('renders one section per package and the unchanged line', () => {
-    const html = buildAggregateReleaseNoteHtml({
-      result: noteFixture([comparedEntry(), skippedEntry()]),
-      context: { project_key: 'CORE', repository_slug: 'app' },
-    })
-
-    expect(html).toContain('pkgA')
-    expect(html).toContain('1.2.0 → 1.4.0')
-    expect(html).toContain("no repository is registered as &#39;pkgY&#39;")
-    expect(html).toContain('pkgC@3.2.0')
-    // commit URLs become links, and the JIRA ticket reads as plain text here
-    // (the markdown body is where providers can link them)
-    expect(html).toContain('href="https://git.example.com/commits/c1"')
-    expect(html).toContain('PRL-9: ship the feature')
   })
 })

@@ -132,11 +132,13 @@ const routes: RouteRecordRaw[] = [
         name: 'AppVersionDiff',
         component: () => import('@/views/releases/AppDiffView.vue'),
       },
-      // Aggregate release notes (one note for a release and the packages it moved)
+      // The combined note of an application version span is generated from the
+      // Release Notes page itself (the "Include packages" switch), so the page
+      // that used to build it standalone is retired - and its bookmark lands
+      // where the notes live now
       {
         path: 'releases/combined-notes',
-        name: 'AggregateReleaseNote',
-        component: () => import('@/views/releases/AggregateReleaseNoteView.vue'),
+        redirect: { name: 'ReleaseNotes' },
       },
       // Legacy path kept so old bookmarks keep working
       {
