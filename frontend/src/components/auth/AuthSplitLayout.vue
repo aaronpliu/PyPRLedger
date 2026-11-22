@@ -25,7 +25,9 @@
       <div class="brand-grid" aria-hidden="true"></div>
 
       <div class="brand-content">
-        <h1 class="brand-title">PR Ledger</h1>
+        <h1 class="brand-title">
+          <BrandLogo variant="full-light" alt="PR Ledger" />
+        </h1>
         <p class="brand-tagline">{{ t('auth.brand_tagline') }}</p>
         <div class="brand-line"></div>
 
@@ -51,6 +53,7 @@ import { useI18n } from 'vue-i18n'
 import { MagicStick, Collection, DataAnalysis } from '@element-plus/icons-vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 
 const { t } = useI18n()
 
@@ -176,10 +179,9 @@ const brandPoints = computed(() => [
 }
 
 .brand-title {
-  font-size: 2.5rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0 0 10px 0;
+  --brand-logo-height: 160px;
+  margin: 0 0 6px 0;
+  line-height: 0;
 }
 
 .brand-tagline {
@@ -274,6 +276,22 @@ const brandPoints = computed(() => [
 }
 
 /* ---- Responsive ---- */
+/* A short viewport has to fit the lockup, the story and the three points:
+   shrink the lockup before anything else gets clipped by the panel */
+@media (max-height: 720px) and (min-width: 961px) {
+  .brand-title {
+    --brand-logo-height: 108px;
+  }
+
+  .brand-line {
+    margin-bottom: 24px;
+  }
+
+  .brand-points {
+    gap: 16px;
+  }
+}
+
 @media (max-width: 960px) {
   .auth-split {
     flex-direction: column;
@@ -289,6 +307,11 @@ const brandPoints = computed(() => [
 
   .brand-content {
     max-width: none;
+  }
+
+  /* the compact header band has no room for a full-height lockup */
+  .brand-title {
+    --brand-logo-height: 76px;
   }
 
   .brand-points {

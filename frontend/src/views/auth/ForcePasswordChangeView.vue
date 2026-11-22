@@ -3,6 +3,7 @@
     <!-- Password Change Card -->
     <el-card class="auth-card" shadow="always">
       <div class="card-header">
+        <BrandLogo variant="mark" :height="46" chip alt="" class="brand-mark" />
         <h2 class="card-title">{{ t('auth.change_password_title') }}</h2>
         <p class="card-subtitle">{{ t('auth.first_login_password_change') }}</p>
       </div>
@@ -81,6 +82,7 @@ import { ElMessage } from 'element-plus'
 import { Lock } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import AuthSplitLayout from '@/components/auth/AuthSplitLayout.vue'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 import { authApi } from '@/api/auth'
 
 const router = useRouter()
@@ -170,40 +172,97 @@ const handleChangePassword = async () => {
    this page styles only its card and form */
 .auth-card {
   width: 100%;
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
+  border: 1px solid var(--el-border-color-lighter);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px -12px rgba(15, 23, 42, 0.14);
+}
+
+[data-theme='dark'] .auth-card {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 12px 36px -10px rgba(0, 0, 0, 0.5);
+}
+
+.auth-card :deep(.el-card__body) {
+  padding: 32px 28px;
 }
 
 .card-header {
-  text-align: center;
-  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 26px;
+}
+
+/* The system mark, in its white tile, ties the form to the brand panel */
+.brand-mark {
+  margin-bottom: 10px;
 }
 
 .card-title {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 1.4rem;
+  font-weight: 700;
   color: var(--el-text-color-primary);
-  margin: 0 0 8px 0;
+  margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .card-subtitle {
-  font-size: 14px;
+  font-size: 0.9rem;
   color: var(--el-text-color-secondary);
   margin: 0;
+  line-height: 1.5;
 }
 
 .auth-form {
-  padding: 0 8px;
+  padding: 0;
+}
+
+.auth-form :deep(.el-form-item) {
+  margin-bottom: 18px;
+}
+
+.auth-form :deep(.el-input__wrapper) {
+  border-radius: 10px;
+  background: transparent;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.auth-form :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--el-color-primary) 14%, transparent);
+}
+
+.auth-form :deep(.el-input__wrapper.is-focus .el-input__prefix) {
+  color: var(--el-color-primary);
 }
 
 .submit-button {
   width: 100%;
-  height: 44px;
+  height: 46px;
+  border-radius: 10px;
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .inline-error {
   margin-top: 16px;
+}
+
+/* Stacked, the card sits flat: the panel already carries the theme surface */
+@media (max-width: 960px) {
+  .auth-card {
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-card :deep(.el-card__body) {
+    padding: 24px 20px;
+  }
 }
 </style>

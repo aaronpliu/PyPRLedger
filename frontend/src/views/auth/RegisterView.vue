@@ -11,6 +11,7 @@
       <!-- Registration Card -->
       <el-card v-else-if="registrationEnabled" class="auth-card" shadow="always">
         <div class="card-header">
+          <BrandLogo variant="mark" :height="46" chip alt="" class="brand-mark" />
           <h2 class="card-title">{{ t('auth.register_title') }}</h2>
           <p class="card-subtitle">{{ t('auth.registerPrompt') }}</p>
         </div>
@@ -130,6 +131,7 @@ import { User, Lock, Message, Loading } from '@element-plus/icons-vue'
 import { rbacApi } from '@/api/rbac'
 import { useI18n } from 'vue-i18n'
 import AuthSplitLayout from '@/components/auth/AuthSplitLayout.vue'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -246,45 +248,50 @@ const handleRegister = async () => {
 /* Auth Card */
 .auth-card {
   width: 100%;
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--el-bg-color-overlay);
-  border: 1px solid var(--el-border-color);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
+  border: 1px solid var(--el-border-color-lighter);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px -12px rgba(15, 23, 42, 0.14);
 }
 
-.auth-card:hover {
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
+[data-theme='dark'] .auth-card {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 12px 36px -10px rgba(0, 0, 0, 0.5);
+}
+
+.auth-card :deep(.el-card__body) {
+  padding: 32px 28px;
 }
 
 .card-header {
-  margin-bottom: 24px;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 26px;
+}
+
+/* The system mark, in its white tile, ties the form to the brand panel */
+.brand-mark {
+  margin-bottom: 10px;
 }
 
 .card-title {
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: 1.4rem;
+  font-weight: 700;
   color: var(--el-text-color-primary);
-  margin: 0 0 8px 0;
+  margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .card-subtitle {
-  font-size: 0.95rem;
-  color: var(--el-color-primary);
+  font-size: 0.9rem;
+  color: var(--el-text-color-secondary);
   margin: 0;
-  padding: 8px 16px;
-  background: var(--el-fill-color-light);
-  border-radius: 6px;
-  display: inline-block;
-  font-weight: 500;
-  border: 1px solid var(--el-border-color-light);
-}
-
-[data-theme='dark'] .card-subtitle {
-  background: rgba(var(--el-color-primary-rgb), 0.1);
-  border-color: rgba(var(--el-color-primary-rgb), 0.3);
+  line-height: 1.5;
 }
 
 /* Form Styles */
@@ -293,27 +300,25 @@ const handleRegister = async () => {
 }
 
 .auth-form :deep(.el-form-item) {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .auth-form :deep(.el-input__wrapper) {
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 12px 14px;
-  background: var(--el-fill-color-light);
+  background: transparent;
   border: 1.5px solid var(--el-border-color);
   box-shadow: none;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .auth-form :deep(.el-input__wrapper:hover) {
   border-color: var(--el-border-color-hover);
-  background: var(--el-fill-color);
 }
 
 .auth-form :deep(.el-input__wrapper.is-focus) {
   border-color: var(--el-color-primary);
-  background: var(--el-fill-color);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--el-color-primary) 14%, transparent);
 }
 
 .auth-form :deep(.el-input__inner) {
@@ -324,14 +329,20 @@ const handleRegister = async () => {
 .auth-form :deep(.el-input__prefix) {
   color: var(--el-text-color-secondary);
   margin-right: 8px;
+  transition: color 0.2s ease;
+}
+
+.auth-form :deep(.el-input__wrapper.is-focus .el-input__prefix) {
+  color: var(--el-color-primary);
 }
 
 .submit-button {
   width: 100%;
-  height: 44px;
-  border-radius: 8px;
+  height: 46px;
+  border-radius: 10px;
   font-size: 0.95rem;
   font-weight: 600;
+  letter-spacing: 0.01em;
   background: var(--el-color-primary);
   border: none;
   transition: all 0.2s ease;
@@ -340,8 +351,7 @@ const handleRegister = async () => {
 
 .submit-button:hover {
   background: var(--el-color-primary-light-3);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--el-color-primary) 35%, transparent);
 }
 
 .submit-button:active {
@@ -425,15 +435,26 @@ const handleRegister = async () => {
   color: var(--el-color-primary);
 }
 
+/* Stacked, the card sits flat: the panel already carries the theme surface */
+@media (max-width: 960px) {
+  .auth-card {
+    box-shadow: none;
+  }
+}
+
 @media (max-width: 768px) {
   .card-title {
-    font-size: 1.35rem;
+    font-size: 1.3rem;
   }
 }
 
 @media (max-width: 480px) {
+  .auth-card :deep(.el-card__body) {
+    padding: 24px 20px;
+  }
+
   .card-title {
-    font-size: 1.25rem;
+    font-size: 1.2rem;
   }
 }
 </style>
