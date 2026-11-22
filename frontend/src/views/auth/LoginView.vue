@@ -4,8 +4,10 @@
     <el-card class="auth-card" shadow="always">
       <div class="card-header">
         <BrandLogo variant="mark" :height="46" chip alt="" class="brand-mark" />
-        <h2 class="card-title">{{ t('auth.login_title') }}</h2>
-        <p class="card-subtitle">{{ t('auth.login_subtitle') }}</p>
+        <div class="card-header-text">
+          <h2 class="card-title">{{ t('auth.login_title') }}</h2>
+          <p class="card-subtitle">{{ t('auth.login_subtitle') }}</p>
+        </div>
       </div>
         
         <el-form :model="form" :rules="rules" ref="formRef" label-width="0" class="auth-form">
@@ -185,15 +187,22 @@ const handleLogin = async () => {
 
 .card-header {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  align-items: center;
+  gap: 14px;
   margin-bottom: 26px;
+}
+
+/* The mark in its tile, the words beside it: one line, vertically centred */
+.card-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 /* The system mark, in its white tile, ties the form to the brand panel */
 .brand-mark {
-  margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .card-title {
