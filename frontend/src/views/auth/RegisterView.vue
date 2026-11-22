@@ -1,17 +1,5 @@
 <template>
-  <div class="auth-container">
-    <!-- Background Image Slider -->
-    <AuthBackground />
-
-    <!-- Main Content -->
-    <div class="auth-content">
-      <!-- Header -->
-      <div class="auth-header">
-        <h1 class="brand-title">PR Ledger</h1>
-        <p class="brand-subtitle">{{ t('auth.register_subtitle') }}</p>
-        <div class="rainbow-line"></div>
-      </div>
-
+  <AuthSplitLayout>
       <!-- Loading State -->
       <el-card v-if="loadingCheck" class="auth-card" shadow="always">
         <div class="loading-state">
@@ -129,14 +117,7 @@
           </el-result>
         </div>
       </el-card>
-
-      <!-- Theme and Language Switchers -->
-      <div class="auth-switchers">
-        <ThemeSwitcher />
-        <LanguageSwitcher />
-      </div>
-    </div>
-  </div>
+  </AuthSplitLayout>
 </template>
 
 <script setup lang="ts">
@@ -148,9 +129,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { User, Lock, Message, Loading } from '@element-plus/icons-vue'
 import { rbacApi } from '@/api/rbac'
 import { useI18n } from 'vue-i18n'
-import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
-import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
-import AuthBackground from '@/components/auth/AuthBackground.vue'
+import AuthSplitLayout from '@/components/auth/AuthSplitLayout.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -261,90 +240,8 @@ const handleRegister = async () => {
 </script>
 
 <style scoped>
-.auth-container {
-  position: relative;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: var(--el-bg-color);
-}
-
-/* Background Pattern */
-.auth-background {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-}
-
-.gradient-overlay {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-              radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.06) 0%, transparent 40%);
-}
-
-[data-theme='dark'] .gradient-overlay {
-  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 50%),
-              radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.1) 0%, transparent 40%);
-}
-
-/* Main Content */
-.auth-content {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: 520px;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 32px;
-}
-
-/* Header Section */
-.auth-header {
-  text-align: center;
-  width: 100%;
-}
-
-.brand-title {
-  font-size: 2.25rem;
-  font-weight: 700;
-  margin: 0 0 8px 0;
-  color: #ffffff;
-  letter-spacing: -0.02em;
-  /* Ensure visibility against rotating backgrounds */
-  text-shadow: 
-    0 2px 4px rgba(0, 0, 0, 0.3),
-    0 0 20px rgba(0, 0, 0, 0.2),
-    0 0 40px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
-}
-
-.brand-title:hover {
-  text-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.4),
-    0 0 30px rgba(0, 0, 0, 0.3),
-    0 0 60px rgba(0, 0, 0, 0.2);
-  transform: translateY(-1px);
-}
-
-.brand-subtitle {
-  font-size: 0.95rem;
-  color: rgba(255, 255, 255, 0.9);
-  margin: 0 0 16px 0;
-  font-weight: 400;
-  /* Ensure visibility against rotating backgrounds */
-  text-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.3),
-    0 0 10px rgba(0, 0, 0, 0.15);
-}
+/* The container, brand header and background belong to the shared split
+   layout now; this page styles only its cards and form */
 
 /* Auth Card */
 .auth-card {
@@ -388,39 +285,6 @@ const handleRegister = async () => {
 [data-theme='dark'] .card-subtitle {
   background: rgba(var(--el-color-primary-rgb), 0.1);
   border-color: rgba(var(--el-color-primary-rgb), 0.3);
-}
-
-.rainbow-line {
-  width: 100%;
-  max-width: 440px;
-  height: 3px;
-  margin: 0 auto 24px auto;
-  background: linear-gradient(90deg, 
-    rgba(99, 102, 241, 0.8) 0%, 
-    rgba(139, 92, 246, 0.8) 25%, 
-    rgba(236, 72, 153, 0.8) 50%, 
-    rgba(245, 158, 11, 0.8) 75%, 
-    rgba(16, 185, 129, 0.8) 100%);
-  border-radius: 2px;
-  box-shadow: 
-    0 2px 8px rgba(99, 102, 241, 0.4),
-    0 0 20px rgba(139, 92, 246, 0.2);
-  animation: pulse 3s ease-in-out infinite;
-}
-
-[data-theme='dark'] .rainbow-line {
-  box-shadow: 
-    0 2px 12px rgba(99, 102, 241, 0.5),
-    0 0 30px rgba(139, 92, 246, 0.3);
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 0.6;
-  }
-  50% {
-    opacity: 1;
-  }
 }
 
 /* Form Styles */
@@ -561,87 +425,15 @@ const handleRegister = async () => {
   color: var(--el-color-primary);
 }
 
-/* Theme and Language Switchers */
-.auth-switchers {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* Responsive Design */
 @media (max-width: 768px) {
-  .auth-content {
-    padding: 20px;
-    gap: 24px;
-  }
-
-  .brand-title {
-    font-size: 2rem;
-  }
-
   .card-title {
     font-size: 1.35rem;
   }
 }
 
 @media (max-width: 480px) {
-  .auth-content {
-    padding: 16px;
-  }
-
-  .brand-title {
-    font-size: 1.75rem;
-  }
-
   .card-title {
     font-size: 1.25rem;
-  }
-
-  .theme-switcher-container {
-    top: 12px;
-    right: 12px;
-  }
-}
-
-/* Landscape orientation on mobile */
-@media (max-height: 600px) and (orientation: landscape) {
-  .auth-container {
-    padding: 16px 0;
-  }
-
-  .auth-content {
-    gap: 20px;
-  }
-
-  .brand-title {
-    font-size: 1.5rem;
-  }
-}
-
-/* High resolution screens */
-@media (min-width: 1920px) {
-  .auth-content {
-    max-width: 480px;
-  }
-
-  .brand-title {
-    font-size: 2.5rem;
-  }
-}
-
-/* Print styles */
-@media print {
-  .auth-background,
-  .theme-switcher-container {
-    display: none;
-  }
-
-  .auth-container {
-    background: white;
   }
 }
 </style>
