@@ -1473,7 +1473,7 @@ wheels = [
 
 [[package]]
 name = "prledger"
-version = "1.43.0"
+version = "1.43.1"
 source = { virtual = "." }
 dependencies = [
     { name = "aiomysql" },
