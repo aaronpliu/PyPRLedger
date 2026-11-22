@@ -1,5 +1,18 @@
 <template>
   <div class="auth-split">
+    <!-- Form panel: the half that asks for input, first in reading order.
+         Clean, theme-aware, and never overlaid - readability is structural
+         here, not a shadow. -->
+    <main class="form-panel">
+      <div class="form-content">
+        <slot />
+      </div>
+      <div class="form-switchers">
+        <ThemeSwitcher />
+        <LanguageSwitcher />
+      </div>
+    </main>
+
     <!-- Brand panel: the half that tells what the product is. An aurora of
          the brand colours drifting behind the story, so the page keeps an
          atmosphere without asking a photograph to carry it. -->
@@ -29,18 +42,6 @@
         </ul>
       </div>
     </aside>
-
-    <!-- Form panel: the half that asks for input. Clean, theme-aware, and
-         never overlaid - readability is structural here, not a shadow. -->
-    <main class="form-panel">
-      <div class="form-content">
-        <slot />
-      </div>
-      <div class="form-switchers">
-        <ThemeSwitcher />
-        <LanguageSwitcher />
-      </div>
-    </main>
   </div>
 </template>
 
@@ -86,7 +87,9 @@ const brandPoints = computed(() => [
 /* ---- Brand panel ---- */
 .brand-panel {
   position: relative;
-  width: 46%;
+  /* Roughly half the screen, but never wider than the story it tells: past
+     640px the extra room goes to the form, where the user actually works */
+  width: clamp(320px, 46%, 680px);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -116,7 +119,7 @@ const brandPoints = computed(() => [
   width: 480px;
   height: 480px;
   top: -120px;
-  left: -100px;
+  right: -100px;
   background: #0ea5e9;
   animation: aurora-drift 26s ease-in-out infinite alternate;
 }
@@ -125,7 +128,7 @@ const brandPoints = computed(() => [
   width: 420px;
   height: 420px;
   bottom: -140px;
-  left: 35%;
+  right: 35%;
   background: #14b8a6;
   animation: aurora-drift 32s ease-in-out infinite alternate-reverse;
 }
@@ -134,7 +137,7 @@ const brandPoints = computed(() => [
   width: 360px;
   height: 360px;
   top: 30%;
-  right: -120px;
+  left: -120px;
   background: #22d3ee;
   animation: aurora-drift 24s ease-in-out infinite alternate;
 }
@@ -277,6 +280,9 @@ const brandPoints = computed(() => [
   }
 
   .brand-panel {
+    /* Stacked, the brand band reads first again: the form panel follows it in
+       the DOM, so the order is put back explicitly here */
+    order: -1;
     width: 100%;
     padding: 32px 24px;
   }
