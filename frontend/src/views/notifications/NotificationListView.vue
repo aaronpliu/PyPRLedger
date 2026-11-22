@@ -340,6 +340,11 @@ function navigateToRelated(notif: Notification) {
     case 'project':
       router.push(`/projects/${notif.related_id}`)
       break
+    case 'delegation':
+      // Delegation notices point at the delegation board, where access can
+      // be extended or revoked
+      router.push('/delegations')
+      break
     default:
       ElMessage.info(t('notifications.no_related_link'))
   }

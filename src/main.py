@@ -67,6 +67,12 @@ async def delegation_status_cleanup_task():
                 if expired_count > 0:
                     logger.info(f"Auto-updated {expired_count} expired delegations")
 
+                # Warn about delegations about to expire (idempotent - the
+                # service dedupes against notices already sent)
+                warned = await rbac_service.notify_expiring_delegations()
+                if warned > 0:
+                    logger.info(f"Sent {warned} delegation expiry warnings")
+
                 # Activate pending delegations (pending -> active)
                 activated_count = await rbac_service.activate_pending_delegations()
                 if activated_count > 0:

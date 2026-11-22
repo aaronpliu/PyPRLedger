@@ -898,7 +898,111 @@ class ReviewService:
                 logger.exception("Failed to store the failed review payload")
                 await db.rollback()
 
+            # A review that failed to ingest is stuck: the PR sits without AI
+            # analysis until somebody retries it. Admins are the ones who can
+            # act on that, so raise a system alert alongside the raw record.
+            await self._notify_admins_of_review_failure(db, review_data, error_message)
+
             raise  # Re-raise to API endpoint
+
+    async def _notify_admins_of_review_failure(
+        self,
+        db: AsyncSession,
+        review_data: Any,
+        error_message: str,
+    ) -> None:
+        """Send a system_alert notification to admin-role users
+
+        Best-effort by design: this runs inside the failure path of the review
+        ingestion, and no notification problem may ever mask the original
+        error or break the API response.
+        """
+        try:
+            from src.models.auth_user import AuthUser
+            from src.models.notification import Notification
+            from src.models.rbac import UserRoleAssignment
+            from src.models.role import Role
+            from src.schemas.notification import NotificationCreate
+            from src.services.notification_service import NotificationService
+
+            project_key = getattr(review_data, "project_key", None) or "unknown"
+            repository_slug = getattr(review_data, "repository_slug", None) or "unknown"
+            pull_request_id = getattr(review_data, "pull_request_id", None)
+            related_id = str(pull_request_id) if pull_request_id else None
+
+            # One alert per PR is enough - a retry loop would otherwise hammer
+            # every admin with the same message
+            if related_id:
+                stmt = select(Notification.id).where(
+                    and_(
+                        Notification.type == "system_alert",
+                        Notification.related_id == related_id,
+                    )
+                )
+                existing = (await db.execute(stmt.limit(1))).scalar_one_or_none()
+                if existing is not None:
+                    logger.info(f"System alert for PR {pull_request_id} already exists; skipping")
+                    return
+
+            # Recipients: holders of the admin roles (same set entity sync
+            # treats as non-downgradable)
+            admin_stmt = (
+                select(AuthUser.username)
+                .join(
+                    UserRoleAssignment,
+                    UserRoleAssignment.auth_user_id == AuthUser.id,
+                )
+                .join(Role, UserRoleAssignment.role_id == Role.id)
+                .where(Role.name.in_(["review_admin", "system_admin"]))
+                .distinct()
+            )
+            admin_result = await db.execute(admin_stmt)
+            admin_usernames = [row[0] for row in admin_result.all()]
+
+            if not admin_usernames:
+                logger.warning("No admin users found; review failure alert not delivered")
+                return
+
+            notification_service = NotificationService()
+            title = (
+                f"AI review failed: PR #{pull_request_id}"
+                if pull_request_id
+                else "AI review failed"
+            )
+            message = (
+                f"AI review ingestion failed for PR #{pull_request_id} "
+                f"in {project_key}/{repository_slug}: {error_message[:300]}. "
+                f"The raw record was saved and can be retried from Failed Review Records."
+            )
+
+            for username in admin_usernames:
+                await notification_service.create_notification(
+                    db,
+                    NotificationCreate(
+                        user_id=username,
+                        type="system_alert",
+                        title=title,
+                        message=message,
+                        related_id=related_id,
+                        related_type="pull_request",
+                        priority="high",
+                        channel="in_app",
+                    ),
+                )
+            logger.info(
+                f"System alert dispatched to {len(admin_usernames)} admins "
+                f"for failed review PR #{pull_request_id} in {project_key}/{repository_slug}"
+            )
+
+            # The alerts are their own transaction: the request is about to
+            # fail with a 500, and whatever rollback follows must not take
+            # the alerts with it
+            await db.commit()
+        except Exception as alert_error:
+            logger.warning(
+                f"Failed to dispatch review failure system alert: {alert_error}",
+                exc_info=True,
+            )
 
     async def get_review(
         self,

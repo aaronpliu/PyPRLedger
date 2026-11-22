@@ -833,7 +833,192 @@ class RBACService:
             await self.db.commit()
             logger.info(f"Marked {count} delegations as expired")
 
+            # The people involved just lost (or lost access they granted):
+            # tell both sides rather than leaving them to discover it
+            await self._notify_delegation_parties(
+                expired_assignments,
+                priority="normal",
+            )
+
         return count
+
+    async def notify_expiring_delegations(self, days: int = 7) -> int:
+        """Notify delegatees and delegators about delegations about to expire
+
+        Delegated access silently lapsing is a classic "why can't I review
+        anymore" support ticket; a warning a week out gives both sides time
+        to extend or plan. Idempotent: any delegation already warned about in
+        the look-back window is skipped, so the background task can call this
+        on every cycle without spamming.
+
+        Args:
+            days: Warn when expiry falls within this many days
+
+        Returns:
+            Number of delegations warned about
+        """
+        from datetime import UTC, timedelta
+        from datetime import datetime as dt
+
+        now = dt.now(UTC)
+
+        stmt = (
+            select(UserRoleAssignment)
+            .where(
+                and_(
+                    UserRoleAssignment.is_delegated == True,
+                    UserRoleAssignment.delegation_status == "active",
+                    UserRoleAssignment.expires_at.is_not(None),
+                    UserRoleAssignment.expires_at > now,
+                    UserRoleAssignment.expires_at <= now + timedelta(days=days),
+                )
+            )
+            .join(Role, UserRoleAssignment.role_id == Role.id)
+            .order_by(UserRoleAssignment.expires_at)
+        )
+        result = await self.db.execute(stmt)
+        expiring = result.scalars().all()
+
+        if not expiring:
+            return 0
+
+        already_notified = await self._notified_delegation_ids()
+        to_warn = [a for a in expiring if str(a.id) not in already_notified]
+        if not to_warn:
+            return 0
+
+        await self._notify_delegation_parties(to_warn, priority="high")
+        logger.info(f"Sent expiry warnings for {len(to_warn)} delegations")
+        return len(to_warn)
+
+    async def _notified_delegation_ids(self) -> set[str]:
+        """related_ids of delegations that already received an expiry notice
+        recently - the dedupe key that lets the background task run freely"""
+        from datetime import UTC, timedelta
+        from datetime import datetime as dt
+
+        from src.models.notification import Notification
+
+        # Retention is far longer than the warning window, so looking back a
+        # month reliably covers every delegation still inside it
+        since = dt.now(UTC) - timedelta(days=31)
+        stmt = select(Notification.related_id).where(
+            and_(
+                Notification.type == "delegation_expiry",
+                Notification.related_type == "delegation",
+                Notification.created_at >= since,
+            )
+        )
+        result = await self.db.execute(stmt)
+        return {rid for (rid,) in result.all() if rid}
+
+    async def _notify_delegation_parties(
+        self,
+        assignments: list[UserRoleAssignment],
+        priority: str,
+    ) -> int:
+        """Send a delegation_expiry notification to each delegatee and delegator
+
+        Returns:
+            Number of notifications created
+        """
+        from src.models.auth_user import AuthUser
+        from src.schemas.notification import NotificationCreate
+        from src.services.notification_service import NotificationService
+
+        if not assignments:
+            return 0
+
+        # Role names and usernames come from joins; fetch them in bulk so a
+        # batch of expiring delegations costs three queries, not nine
+        role_ids = {a.role_id for a in assignments}
+        roles_result = await self.db.execute(select(Role).where(Role.id.in_(role_ids)))
+        role_names = {r.id: r.name for r in roles_result.scalars().all()}
+
+        user_ids = {a.auth_user_id for a in assignments}
+        user_ids.update(a.delegator_id for a in assignments if a.delegator_id)
+        users_result = await self.db.execute(
+            select(AuthUser.id, AuthUser.username).where(AuthUser.id.in_(user_ids))
+        )
+        usernames = dict(users_result.all())
+
+        notification_service = NotificationService()
+        created = 0
+        for assignment in assignments:
+            role_name = role_names.get(assignment.role_id, f"role #{assignment.role_id}")
+            delegatee = usernames.get(assignment.auth_user_id, "unknown")
+            delegator = usernames.get(assignment.delegator_id, "unknown")
+            expires = (
+                assignment.expires_at.replace(tzinfo=None).isoformat()
+                if assignment.expires_at
+                else "unknown"
+            )
+
+            recipients = [
+                (
+                    usernames.get(assignment.auth_user_id),
+                    f"Delegation expiring: {role_name}"
+                    if priority == "high"
+                    else f"Delegation expired: {role_name}",
+                    (
+                        f"The {role_name} role delegated to you by {delegator} "
+                        f"expires at {expires}. Ask {delegator} to extend it if you still need access."
+                        if priority == "high"
+                        else (
+                            f"The {role_name} role delegated to you by {delegator} "
+                            f"has expired. Your delegated access is no longer active."
+                        )
+                    ),
+                ),
+                (
+                    usernames.get(assignment.delegator_id) if assignment.delegator_id else None,
+                    f"Delegation expiring: {role_name}"
+                    if priority == "high"
+                    else f"Delegation expired: {role_name}",
+                    (
+                        f"The {role_name} role you delegated to {delegatee} "
+                        f"expires at {expires}. Extend or revoke it in Delegation Management."
+                        if priority == "high"
+                        else (
+                            f"The {role_name} role you delegated to {delegatee} "
+                            f"has expired and is no longer active."
+                        )
+                    ),
+                ),
+            ]
+
+            # Notification.user_id is a username (FK to user.username), so an
+            # unknown/missing username simply means there is nobody to tell
+            for username, title, message in recipients:
+                if not username:
+                    continue
+                try:
+                    await notification_service.create_notification(
+                        self.db,
+                        NotificationCreate(
+                            user_id=username,
+                            type="delegation_expiry",
+                            title=title,
+                            message=message,
+                            related_id=str(assignment.id),
+                            related_type="delegation",
+                            priority=priority,
+                            channel="in_app",
+                        ),
+                    )
+                    created += 1
+                except Exception as e:
+                    # A notification must never break the cleanup loop
+                    logger.warning(
+                        f"Failed to send delegation expiry notification to {username}: {e}"
+                    )
+
+        if created > 0:
+            # The status flip was already committed; the notices about it are
+            # committed here so a later rollback cannot erase them
+            await self.db.commit()
+
+        return created
 
     async def activate_pending_delegations(self) -> int:
         """Activate pending delegations whose start time has been reached
