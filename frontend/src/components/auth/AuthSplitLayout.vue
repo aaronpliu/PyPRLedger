@@ -1,7 +1,17 @@
 <template>
   <div class="auth-split">
+    <!-- One continuous brand canvas: the aurora and grid span the whole page,
+         so there is no left/right seam to read - the form simply floats on
+         the same backdrop the story sits on -->
+    <div class="aurora" aria-hidden="true">
+      <span class="aurora-blob aurora-blob-sky"></span>
+      <span class="aurora-blob aurora-blob-teal"></span>
+      <span class="aurora-blob aurora-blob-cyan"></span>
+    </div>
+    <div class="brand-grid" aria-hidden="true"></div>
+
     <!-- Form panel: the half that asks for input, first in reading order.
-         Clean, theme-aware, and never overlaid - readability is structural
+         Clean, theme-aware card on the canvas - readability is structural
          here, not a shadow. -->
     <main class="form-panel">
       <div class="form-content">
@@ -13,17 +23,8 @@
       </div>
     </main>
 
-    <!-- Brand panel: the half that tells what the product is. An aurora of
-         the brand colours drifting behind the story, so the page keeps an
-         atmosphere without asking a photograph to carry it. -->
+    <!-- Brand column: the half that tells what the product is -->
     <aside class="brand-panel">
-      <div class="aurora" aria-hidden="true">
-        <span class="aurora-blob aurora-blob-sky"></span>
-        <span class="aurora-blob aurora-blob-teal"></span>
-        <span class="aurora-blob aurora-blob-cyan"></span>
-      </div>
-      <div class="brand-grid" aria-hidden="true"></div>
-
       <div class="brand-content">
         <h1 class="brand-title">
           <BrandLogo variant="full-light" alt="PR Ledger" />
@@ -83,13 +84,18 @@ const brandPoints = computed(() => [
 
 <style scoped>
 .auth-split {
+  position: relative;
   display: flex;
   min-height: 100vh;
+  /* One navy canvas carries both halves: whatever divides them is content,
+     not a painted boundary */
+  overflow: hidden;
+  background: linear-gradient(160deg, #0a1628 0%, #102a43 55%, #0a1628 100%);
+  color: #ffffff;
 }
 
-/* ---- Brand panel ---- */
+/* ---- Brand column ---- */
 .brand-panel {
-  position: relative;
   /* Roughly half the screen, but never wider than the story it tells: past
      640px the extra room goes to the form, where the user actually works */
   width: clamp(320px, 46%, 680px);
@@ -97,19 +103,17 @@ const brandPoints = computed(() => [
   display: flex;
   align-items: center;
   padding: 48px clamp(32px, 5vw, 72px);
-  overflow: hidden;
-  background: linear-gradient(160deg, #0a1628 0%, #102a43 55%, #0a1628 100%);
-  color: #ffffff;
 }
 
-/* The aurora: three soft blobs of the brand palette drifting slowly behind
-   the text. Animations are decoration only - a reader who prefers stillness
-   gets the same panel without the drift. */
+/* The aurora: three soft blobs of the brand palette drifting slowly across
+   the whole canvas. Animations are decoration only - a reader who prefers
+   stillness gets the same page without the drift. */
 .aurora {
   position: absolute;
   inset: 0;
-  filter: blur(80px);
-  opacity: 0.55;
+  filter: blur(90px);
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .aurora-blob {
@@ -119,28 +123,28 @@ const brandPoints = computed(() => [
 }
 
 .aurora-blob-sky {
-  width: 480px;
-  height: 480px;
-  top: -120px;
-  right: -100px;
+  width: 620px;
+  height: 620px;
+  top: -180px;
+  right: -120px;
   background: #0ea5e9;
   animation: aurora-drift 26s ease-in-out infinite alternate;
 }
 
 .aurora-blob-teal {
-  width: 420px;
-  height: 420px;
-  bottom: -140px;
-  right: 35%;
+  width: 540px;
+  height: 540px;
+  bottom: -180px;
+  right: 30%;
   background: #14b8a6;
   animation: aurora-drift 32s ease-in-out infinite alternate-reverse;
 }
 
 .aurora-blob-cyan {
-  width: 360px;
-  height: 360px;
-  top: 30%;
-  left: -120px;
+  width: 480px;
+  height: 480px;
+  top: 26%;
+  left: -160px;
   background: #22d3ee;
   animation: aurora-drift 24s ease-in-out infinite alternate;
 }
@@ -252,12 +256,13 @@ const brandPoints = computed(() => [
 
 /* ---- Form panel ---- */
 .form-panel {
+  position: relative;
+  z-index: 1;
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 48px 24px;
-  background: var(--el-bg-color);
 }
 
 .form-content {
@@ -265,14 +270,41 @@ const brandPoints = computed(() => [
   max-width: 480px;
 }
 
+/* The switchers live on the navy canvas now, so they get a glass tile of
+   their own instead of relying on a light surface behind them */
 .form-switchers {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: 16px;
+  right: 16px;
   z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 14px;
+  background: rgba(10, 22, 40, 0.55);
+  border: 1px solid rgba(148, 197, 233, 0.22);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.form-switchers :deep(.el-button) {
+  border-color: rgba(148, 197, 233, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+}
+
+.form-switchers :deep(.el-button:hover) {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.form-switchers :deep(.language-mark__glyph) {
+  color: rgba(226, 232, 240, 0.55);
+}
+
+.form-switchers :deep(.language-mark__glyph.is-current) {
+  color: #ffffff;
 }
 
 /* ---- Responsive ---- */
@@ -301,7 +333,7 @@ const brandPoints = computed(() => [
     /* Stacked, the brand band reads first again: the form panel follows it in
        the DOM, so the order is put back explicitly here */
     order: -1;
-    width: 100%;
+    width: auto;
     padding: 32px 24px;
   }
 
