@@ -1071,7 +1071,9 @@
     "desc_review_assigned": "Notify when you are assigned to review a pull request",
     "desc_review_completed": "Notify when a pull request you reviewed is completed",
     "desc_delegation_expiry": "Notify when a role delegation is about to expire",
-    "desc_system_alert": "Important system-wide announcements and alerts"
+    "desc_system_alert": "Important system-wide announcements and alerts",
+    "view_related": "View {target}",
+    "column_empty": "Nothing here"
   },
   "time": {
     "just_now": "Just now",

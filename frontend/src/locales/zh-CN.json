@@ -1071,7 +1071,9 @@
     "desc_review_assigned": "当您被分配审查拉取请求时通知",
     "desc_review_completed": "当您审查的拉取请求完成时通知",
     "desc_delegation_expiry": "当角色委托即将到期时通知",
-    "desc_system_alert": "重要的系统公告和警报"
+    "desc_system_alert": "重要的系统公告和警报",
+    "view_related": "查看{target}",
+    "column_empty": "暂无消息"
   },
   "time": {
     "just_now": "刚刚",

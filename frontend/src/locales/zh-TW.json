@@ -1071,7 +1071,9 @@
     "desc_review_assigned": "當您被分配審查拉取請求時通知",
     "desc_review_completed": "當您審查的拉取請求完成時通知",
     "desc_delegation_expiry": "當角色委託即將到期時通知",
-    "desc_system_alert": "重要的系統公告和警報"
+    "desc_system_alert": "重要的系統公告和警報",
+    "view_related": "查看{target}",
+    "column_empty": "暫無訊息"
   },
   "time": {
     "just_now": "剛剛",
