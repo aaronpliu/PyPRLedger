@@ -163,8 +163,14 @@ const handleCommand = (command: string) => {
   overflow-y: auto;
 }
 
+/* exactly the height of .admin-header, so the two top borders and the first
+   menu item line up with the content column instead of drifting a few px */
 .sidebar-header {
-  padding: 20px;
+  height: 60px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
   color: var(--el-text-color-primary);
   border-bottom: 1px solid var(--el-border-color-lighter);
 }

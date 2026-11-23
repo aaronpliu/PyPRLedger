@@ -40,6 +40,12 @@ vi.mock('@/api/reviews', () => ({
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: api.push }) }))
 
+// The view reads the auth store for the primary-reviewer pick; the real store
+// pulls in the real router, which this file stubs out entirely
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ currentUser: { username: 'alice' } }),
+}))
+
 const mountedWrappers: any[] = []
 
 function trendDay(date: string) {
