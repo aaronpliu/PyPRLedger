@@ -88,9 +88,10 @@ const brandPoints = computed(() => [
   display: flex;
   min-height: 100vh;
   /* One navy canvas carries both halves: whatever divides them is content,
-     not a painted boundary */
+     not a painted boundary. Two steps lighter than the old near-black so
+     the page reads deep blue rather than charcoal */
   overflow: hidden;
-  background: linear-gradient(160deg, #0a1628 0%, #102a43 55%, #0a1628 100%);
+  background: linear-gradient(160deg, #14304a 0%, #1f4266 55%, #14304a 100%);
   color: #ffffff;
 }
 
