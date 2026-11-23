@@ -54,23 +54,54 @@ const handleLanguageChange = (lang: string) => {
 </script>
 
 <style scoped>
+/* The two glyphs overlap into a layered monogram: "A" sits behind and
+   slightly up-left, "文" in front and down-right, so the mark stays one
+   compact glyph-sized icon with visible depth */
 .language-mark {
   display: inline-flex;
-  align-items: baseline;
-  gap: 2px;
-  font-size: 18px;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
   user-select: none;
 }
 
+.language-mark {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* both glyphs in bold theme text colour; the inactive one just steps back
+   through opacity, keeping the layered look legible in black */
 .language-mark__glyph {
-  color: var(--el-text-color-placeholder);
-  transition: color 0.15s ease;
+  color: var(--el-text-color-primary);
+  font-weight: 700;
+  transition: opacity 0.15s ease;
+  opacity: 0.4;
+}
+
+.language-mark__glyph:nth-child(1) {
+  transform: translateX(-0.3em);
+}
+
+.language-mark__glyph:nth-child(2) {
+  /* pull the second glyph up into the first: the overlap is the depth, and
+     the DOM order already paints it in front */
+  margin-top: -0.55em;
+  transform: translateX(0.3em);
+  position: relative;
+  z-index: 1;
 }
 
 .language-mark__glyph.is-current {
-  color: var(--el-text-color-primary);
-  font-weight: 600;
+  opacity: 1;
 }
 </style>

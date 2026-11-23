@@ -120,8 +120,10 @@ const brandPoints = computed(() => [
 .aurora {
   position: absolute;
   inset: 0;
-  filter: blur(90px);
-  opacity: 0.5;
+  /* the blobs sit at full brand saturation; the layer opacity is the single
+     dial that keeps their glow from dazzling against the lighter canvas */
+  filter: blur(110px);
+  opacity: 0.25;
   pointer-events: none;
 }
 
@@ -409,12 +411,17 @@ const brandPoints = computed(() => [
   color: #ffffff;
 }
 
+/* the switcher paints its glyphs in theme text colour; on the navy glass tile
+   that would be black on dark, so invert here - and compensate the inactive
+   glyph's opacity step so both stay legible */
 .form-switchers :deep(.language-mark__glyph) {
-  color: rgba(226, 232, 240, 0.55);
+  color: #e2e8f0;
+  opacity: 0.55;
 }
 
 .form-switchers :deep(.language-mark__glyph.is-current) {
   color: #ffffff;
+  opacity: 1;
 }
 
 /* ---- Responsive ---- */
