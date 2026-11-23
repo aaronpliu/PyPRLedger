@@ -10,6 +10,14 @@
     </div>
     <div class="brand-grid" aria-hidden="true"></div>
 
+    <!-- Star dust: three layers of tiny drifting specks, each with its own
+         twinkle rhythm - near-field depth in front of the aurora -->
+    <div class="starfield" aria-hidden="true">
+      <span class="dust dust-1"></span>
+      <span class="dust dust-2"></span>
+      <span class="dust dust-3"></span>
+    </div>
+
     <!-- Form panel: the half that asks for input, first in reading order.
          Clean, theme-aware card on the canvas - readability is structural
          here, not a shadow. -->
@@ -159,9 +167,110 @@ const brandPoints = computed(() => [
   }
 }
 
+/* ---- Star dust ---- */
+/* Three layers of specks: each layer is a single element whose box-shadow
+   paints ~10 dots across the canvas (vw/vh keeps the spread responsive at
+   any window size). Layers differ in size, tint and rhythm so the twinkle
+   never syncs into a blink. Slow alternating drift, no loop jump. */
+.starfield {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dust {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  border-radius: 50%;
+  background: transparent;
+  animation:
+    dust-twinkle 9s ease-in-out infinite,
+    dust-drift 70s ease-in-out infinite alternate;
+}
+
+.dust-1 {
+  /* warm white pinpricks */
+  box-shadow:
+    8vw 12vh 0 0 rgba(255, 255, 255, 0.7),
+    22vw 68vh 0 0 rgba(255, 255, 255, 0.45),
+    35vw 30vh 0 0 rgba(255, 255, 255, 0.6),
+    47vw 82vh 0 0 rgba(255, 255, 255, 0.5),
+    58vw 18vh 0 0 rgba(255, 255, 255, 0.55),
+    66vw 55vh 0 0 rgba(255, 255, 255, 0.4),
+    74vw 40vh 0 0 rgba(255, 255, 255, 0.6),
+    88vw 25vh 0 0 rgba(255, 255, 255, 0.5),
+    92vw 72vh 0 0 rgba(255, 255, 255, 0.45),
+    15vw 88vh 0 0 rgba(255, 255, 255, 0.35);
+  animation-duration: 9s, 70s;
+}
+
+.dust-2 {
+  /* cool sky-tinted grains, a beat slower */
+  box-shadow:
+    5vw 45vh 0 0 rgba(148, 197, 233, 0.55),
+    18vw 22vh 0 0 rgba(148, 197, 233, 0.4),
+    28vw 76vh 0 0 rgba(148, 197, 233, 0.5),
+    41vw 58vh 0 0 rgba(148, 197, 233, 0.35),
+    52vw 8vh 0 0 rgba(148, 197, 233, 0.5),
+    63vw 90vh 0 0 rgba(148, 197, 233, 0.4),
+    78vw 62vh 0 0 rgba(148, 197, 233, 0.45),
+    85vw 12vh 0 0 rgba(148, 197, 233, 0.5),
+    96vw 48vh 0 0 rgba(148, 197, 233, 0.4),
+    33vw 92vh 0 0 rgba(148, 197, 233, 0.35);
+  animation-duration: 13s, 85s;
+  animation-delay: -4s, -20s;
+}
+
+.dust-3 {
+  /* a few larger sparkles that carry their own halo */
+  width: 2px;
+  height: 2px;
+  box-shadow:
+    12vw 35vh 0 1px rgba(125, 211, 252, 0.7),
+    12vw 35vh 0 5px rgba(125, 211, 252, 0.12),
+    44vw 15vh 0 1px rgba(255, 255, 255, 0.65),
+    44vw 15vh 0 5px rgba(255, 255, 255, 0.1),
+    57vw 66vh 0 1px rgba(125, 211, 252, 0.6),
+    57vw 66vh 0 5px rgba(125, 211, 252, 0.1),
+    81vw 34vh 0 1px rgba(255, 255, 255, 0.6),
+    81vw 34vh 0 5px rgba(255, 255, 255, 0.09),
+    91vw 82vh 0 1px rgba(125, 211, 252, 0.6),
+    91vw 82vh 0 5px rgba(125, 211, 252, 0.1);
+  animation-duration: 17s, 100s;
+  animation-delay: -8s, -40s;
+}
+
+@keyframes dust-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes dust-drift {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(46px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .aurora-blob {
     animation: none;
+  }
+
+  /* stillness keeps the specks, drops the twinkle and the drift */
+  .dust {
+    animation: none;
+    opacity: 0.5;
   }
 }
 
