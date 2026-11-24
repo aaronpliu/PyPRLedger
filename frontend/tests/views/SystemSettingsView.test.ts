@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import { createI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
@@ -79,13 +79,17 @@ async function mountView(banners: BannerItem[], confluence: ConfluenceSettings =
   const wrapper = mount(SystemSettingsView, { global: { plugins: [ElementPlus, i18n] } })
   mountedWrappers.push(wrapper)
   await flushPromises()
+  // The dialogs are append-to-body, so their DOM teleports outside the
+  // wrapper - anchor at document.body instead. Declaration order is preserved
+  // by teleport, so first = banner dialog, last = confluence target dialog.
+  const bodyDialogs = () => Array.from(document.body.querySelectorAll('.el-dialog'))
   return {
     wrapper,
-    dialog: () => wrapper.findComponent({ name: 'ElDialog' }),
-    // The confluence card is the last one, so its dialog is the last on the page
-    // (banner and festival cards each contribute one earlier).
-    targetDialog: () =>
-      wrapper.findAllComponents({ name: 'ElDialog' }).slice(-1)[0],
+    dialog: () => new DOMWrapper(bodyDialogs()[0]),
+    targetDialog: () => {
+      const dialogs = bodyDialogs()
+      return new DOMWrapper(dialogs[dialogs.length - 1])
+    },
   }
 }
 
