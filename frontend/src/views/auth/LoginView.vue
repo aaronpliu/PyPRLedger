@@ -1,22 +1,14 @@
 <template>
-  <div class="auth-container">
-    <!-- Background Image Slider -->
-    <AuthBackground />
-
-    <!-- Main Content -->
-    <div class="auth-content">
-      <!-- Header -->
-      <div class="auth-header">
-        <h1 class="brand-title">PR Ledger</h1>
-        <p class="brand-subtitle">{{ t('auth.login_subtitle') }}</p>
-        <div class="rainbow-line"></div>
-      </div>
-
-      <!-- Login Card -->
-      <el-card class="auth-card" shadow="always">
-        <div class="card-header">
+  <AuthSplitLayout>
+    <!-- Login Card -->
+    <el-card class="auth-card" shadow="always">
+      <div class="card-header">
+        <BrandLogo variant="mark" :height="46" chip alt="" class="brand-mark" />
+        <div class="card-header-text">
           <h2 class="card-title">{{ t('auth.login_title') }}</h2>
+          <p class="card-subtitle">{{ t('auth.login_subtitle') }}</p>
         </div>
+      </div>
         
         <el-form :model="form" :rules="rules" ref="formRef" label-width="0" class="auth-form">
           <el-form-item prop="username">
@@ -76,14 +68,7 @@
           </div>
         </el-form>
       </el-card>
-
-      <!-- Theme and Language Switchers -->
-      <div class="auth-switchers">
-        <ThemeSwitcher />
-        <LanguageSwitcher />
-      </div>
-    </div>
-  </div>
+</AuthSplitLayout>
 </template>
 
 <script setup lang="ts">
@@ -95,9 +80,8 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { rbacApi } from '@/api/rbac'
 import { useI18n } from 'vue-i18n'
-import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
-import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
-import AuthBackground from '@/components/auth/AuthBackground.vue'
+import AuthSplitLayout from '@/components/auth/AuthSplitLayout.vue'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -177,132 +161,63 @@ const handleLogin = async () => {
 </script>
 
 <style scoped>
-.auth-container {
-  position: relative;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: var(--el-bg-color);
-}
-
-/* Main Content */
-.auth-content {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: 520px;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 32px;
-}
-
-/* Header Section */
-.auth-header {
-  text-align: center;
-  width: 100%;
-}
-
-.brand-title {
-  font-size: 2.25rem;
-  font-weight: 700;
-  margin: 0 0 8px 0;
-  color: #ffffff;
-  letter-spacing: -0.02em;
-  /* Ensure visibility against rotating backgrounds */
-  text-shadow: 
-    0 2px 4px rgba(0, 0, 0, 0.3),
-    0 0 20px rgba(0, 0, 0, 0.2),
-    0 0 40px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
-}
-
-.brand-title:hover {
-  text-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.4),
-    0 0 30px rgba(0, 0, 0, 0.3),
-    0 0 60px rgba(0, 0, 0, 0.2);
-  transform: translateY(-1px);
-}
-
-.brand-subtitle {
-  font-size: 0.95rem;
-  color: rgba(255, 255, 255, 0.9);
-  margin: 0 0 16px 0;
-  font-weight: 400;
-  /* Ensure visibility against rotating backgrounds */
-  text-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.3),
-    0 0 10px rgba(0, 0, 0, 0.15);
-}
-
-.rainbow-line {
-  width: 100%;
-  max-width: 440px;
-  height: 3px;
-  margin: 0 auto 24px auto;
-  background: linear-gradient(90deg, 
-    rgba(99, 102, 241, 0.8) 0%, 
-    rgba(139, 92, 246, 0.8) 25%, 
-    rgba(236, 72, 153, 0.8) 50%, 
-    rgba(245, 158, 11, 0.8) 75%, 
-    rgba(16, 185, 129, 0.8) 100%);
-  border-radius: 2px;
-  box-shadow: 
-    0 2px 8px rgba(99, 102, 241, 0.4),
-    0 0 20px rgba(139, 92, 246, 0.2);
-  animation: pulse 3s ease-in-out infinite;
-}
-
-[data-theme='dark'] .rainbow-line {
-  box-shadow: 
-    0 2px 12px rgba(99, 102, 241, 0.5),
-    0 0 30px rgba(139, 92, 246, 0.3);
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 0.6;
-  }
-  50% {
-    opacity: 1;
-  }
-}
+/* The page's own styles start at the card: the container, the brand header and
+   the switchers live in the shared split layout now */
 
 /* Auth Card */
 .auth-card {
   width: 100%;
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--el-bg-color-overlay);
-  border: 1px solid var(--el-border-color);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
+  border: 1px solid var(--el-border-color-lighter);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px -12px rgba(15, 23, 42, 0.14);
 }
 
-.auth-card:hover {
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
+[data-theme='dark'] .auth-card {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 12px 36px -10px rgba(0, 0, 0, 0.5);
+}
+
+.auth-card :deep(.el-card__body) {
+  padding: 32px 28px;
 }
 
 .card-header {
-  margin-bottom: 24px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 26px;
+}
+
+/* The mark in its tile, the words beside it: one line, vertically centred */
+.card-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The system mark, in its white tile, ties the form to the brand panel */
+.brand-mark {
+  flex-shrink: 0;
 }
 
 .card-title {
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: 1.4rem;
+  font-weight: 700;
   color: var(--el-text-color-primary);
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .card-subtitle {
   font-size: 0.9rem;
   color: var(--el-text-color-secondary);
   margin: 0;
+  line-height: 1.5;
 }
 
 /* Form Styles */
@@ -311,27 +226,25 @@ const handleLogin = async () => {
 }
 
 .auth-form :deep(.el-form-item) {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .auth-form :deep(.el-input__wrapper) {
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 12px 14px;
-  background: var(--el-fill-color-light);
+  background: transparent;
   border: 1.5px solid var(--el-border-color);
   box-shadow: none;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .auth-form :deep(.el-input__wrapper:hover) {
   border-color: var(--el-border-color-hover);
-  background: var(--el-fill-color);
 }
 
 .auth-form :deep(.el-input__wrapper.is-focus) {
   border-color: var(--el-color-primary);
-  background: var(--el-fill-color);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--el-color-primary) 14%, transparent);
 }
 
 .auth-form :deep(.el-input__inner) {
@@ -342,14 +255,21 @@ const handleLogin = async () => {
 .auth-form :deep(.el-input__prefix) {
   color: var(--el-text-color-secondary);
   margin-right: 8px;
+  transition: color 0.2s ease;
+}
+
+/* the field tells you it is listening: its icon joins the focus colour */
+.auth-form :deep(.el-input__wrapper.is-focus .el-input__prefix) {
+  color: var(--el-color-primary);
 }
 
 .submit-button {
   width: 100%;
-  height: 44px;
-  border-radius: 8px;
+  height: 46px;
+  border-radius: 10px;
   font-size: 0.95rem;
   font-weight: 600;
+  letter-spacing: 0.01em;
   background: var(--el-color-primary);
   border: none;
   transition: all 0.2s ease;
@@ -358,8 +278,7 @@ const handleLogin = async () => {
 
 .submit-button:hover {
   background: var(--el-color-primary-light-3);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--el-color-primary) 35%, transparent);
 }
 
 /* Inline Error Message */
@@ -388,8 +307,8 @@ const handleLogin = async () => {
 /* Footer */
 .auth-footer {
   text-align: center;
-  margin-top: 20px;
-  padding-top: 20px;
+  margin-top: 16px;
+  padding-top: 16px;
   border-top: 1px solid var(--el-border-color-lighter);
   color: var(--el-text-color-secondary);
   font-size: 0.9rem;
@@ -408,87 +327,27 @@ const handleLogin = async () => {
   text-decoration: underline;
 }
 
-/* Theme and Language Switchers */
-.auth-switchers {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+/* Stacked, the panel behind the card already carries the theme surface, so the
+   card drops its shadow and sits flat instead of nesting frames in frames */
+@media (max-width: 960px) {
+  .auth-card {
+    box-shadow: none;
+  }
 }
 
-/* Responsive Design */
 @media (max-width: 768px) {
-  .auth-content {
-    padding: 20px;
-    gap: 24px;
-  }
-
-  .brand-title {
-    font-size: 2rem;
-  }
-
   .card-title {
-    font-size: 1.35rem;
+    font-size: 1.3rem;
   }
 }
 
 @media (max-width: 480px) {
-  .auth-content {
-    padding: 16px;
-  }
-
-  .brand-title {
-    font-size: 1.75rem;
+  .auth-card :deep(.el-card__body) {
+    padding: 24px 20px;
   }
 
   .card-title {
-    font-size: 1.25rem;
-  }
-
-  .theme-switcher-container {
-    top: 12px;
-    right: 12px;
-  }
-}
-
-/* Landscape orientation on mobile */
-@media (max-height: 600px) and (orientation: landscape) {
-  .auth-container {
-    padding: 16px 0;
-  }
-
-  .auth-content {
-    gap: 20px;
-  }
-
-  .brand-title {
-    font-size: 1.5rem;
-  }
-}
-
-/* High resolution screens */
-@media (min-width: 1920px) {
-  .auth-content {
-    max-width: 480px;
-  }
-
-  .brand-title {
-    font-size: 2.5rem;
-  }
-}
-
-/* Print styles */
-@media print {
-  .auth-background,
-  .theme-switcher-container {
-    display: none;
-  }
-
-  .auth-container {
-    background: white;
+    font-size: 1.2rem;
   }
 }
 </style>

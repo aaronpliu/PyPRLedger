@@ -178,7 +178,14 @@
     "registration_disabled": "注册已禁用",
     "registration_disabled_message": "系统管理员已禁用用户注册功能。",
     "contact_admin": "请联系您的管理员为您创建账户。",
-    "back_to_login": "返回登录"
+    "back_to_login": "返回登录",
+    "brand_tagline": "一个工作台，覆盖 Pull Request 的完整生命周期——审查、评分、发布。",
+    "brand_point_review_title": "AI 辅助代码审查",
+    "brand_point_review_desc": "按严重度（Critical 到 Low）标记问题，AI 审查记录全程可追溯。",
+    "brand_point_release_title": "发布说明自动生成",
+    "brand_point_release_desc": "一条说明覆盖应用及其携带的依赖包，随时可发布。",
+    "brand_point_insight_title": "多人评分与分析",
+    "brand_point_insight_desc": "任务分配、评分与趋势，尽在一处。"
   },
   "dashboard": {
     "welcome": "欢迎使用 PR Ledger",
@@ -456,7 +463,9 @@
       "assign": "分配",
       "items_selected": "已选择 {count} 条审查 | 已选择 {count} 条审查",
       "clear_selection": "清除选择"
-    }
+    },
+    "severity": "严重度",
+    "no_severity_issues": "无问题"
   },
   "scores": {
     "score_list": "评分列表",
@@ -1062,7 +1071,9 @@
     "desc_review_assigned": "当您被分配审查拉取请求时通知",
     "desc_review_completed": "当您审查的拉取请求完成时通知",
     "desc_delegation_expiry": "当角色委托即将到期时通知",
-    "desc_system_alert": "重要的系统公告和警报"
+    "desc_system_alert": "重要的系统公告和警报",
+    "view_related": "查看{target}",
+    "column_empty": "暂无消息"
   },
   "time": {
     "just_now": "刚刚",

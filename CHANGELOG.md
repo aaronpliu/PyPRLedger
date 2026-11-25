@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.43.2] - 2026-11-23
+
+**Backend Version**: 1.43.2
+**Frontend Version**: 1.39.2
+
+### Fixed
+- My Dashboard "Recent Reviews": reviewer column was blank because the list endpoint returns one row per PR with reviewers in `all_reviewers` (the `reviewer`/`reviewer_info` fields stay null); the column now renders the same three-way display as the reviews list - primary reviewer (own assignment first) with a `+N` badge and a hover tooltip listing every reviewer, plus an "Unassigned" tag for empty slots
+- Admin panel alignment: sidebar header was ~65px tall against a fixed 60px top header, so the two top borders and the first menu item sat a few pixels off; both are now exactly 60px high
+
+### Changed
+- Login page background: deeper canvas gradient with a calmer aurora layer (opacity 0.25, blur 110px) so the glow no longer dazzles against the lighter canvas
+- Login page ambient animation: three-layer star-dust field (warm white / sky / teal specks with halos, staggered 9-17s twinkle, slow sinking drift) with a static fallback under `prefers-reduced-motion`
+- Language switcher mark: the A/文 glyphs now stack into one compact layered mark in bold theme text colour, with depth from overlapping layers and automatic white inversion on the dark auth glass tile
+
+---
+
+## [1.43.1] - 2026-11-22
+
+**Backend Version**: 1.43.1
+**Frontend Version**: 1.39.1
+
+### Added
+- Notification triggers: delegation expiry warnings (7 days ahead, high priority) and expiry notices to delegatee and delegator, wired into the delegation cleanup task with idempotent dedupe
+- Notification triggers: system alerts to review/system admins when AI review ingestion fails (one alert per PR, best-effort delivery)
+- System brand logo: white-tile mark on auth cards and app header, full lockup on the auth brand panel, favicon and apple-touch-icon (quantised assets, ~96KB total)
+- Reviews page: severity column for issues
+
+### Changed
+- Notification page re-designed as a priority board: always-visible Urgent/High/Normal/Low columns, full-height layout with in-column scrolling, compact stat chips and filters
+- Notification bell popup widened (420px) with wrapping text - no more horizontal scrollbar
+- Login landing page: unified navy canvas (aurora and grid span the whole page, no seam between form and brand), floating theme-aware form card, glass tile for theme/language switchers, logo and title aligned on one line
+- Clicking a delegation notification now navigates to Delegation Management
+
+### Removed
+- Legacy `public/auth-bg` photo carousel assets (3.9MB) and unused `favicon.svg`
+
+---
+
 ## [1.43.0] - 2026-11-21
 
 **Backend Version**: 1.43.0

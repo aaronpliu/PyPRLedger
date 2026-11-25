@@ -294,9 +294,11 @@ onUnmounted(() => {
 }
 
 .notification-dropdown {
-  width: 380px;
-  max-height: 500px;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  max-height: 520px;
   padding: 0;
+  overflow: hidden;
 }
 
 .notification-header {
@@ -313,8 +315,8 @@ onUnmounted(() => {
 }
 
 .notification-list {
-  max-height: 350px;
-  overflow-y: auto;
+  max-height: 360px;
+  overflow: hidden auto;
 }
 
 .empty-state {
@@ -335,6 +337,10 @@ onUnmounted(() => {
   padding: 0 !important;
   height: auto !important;
   line-height: normal !important;
+  /* el-dropdown-item wraps its text in nowrap by default - long titles are
+     exactly what pushes the popup into a horizontal scrollbar */
+  white-space: normal !important;
+  overflow-wrap: anywhere;
 }
 
 .notification-item.unread {
@@ -365,6 +371,7 @@ onUnmounted(() => {
   color: var(--el-text-color-regular);
   margin-bottom: 8px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;

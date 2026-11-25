@@ -178,7 +178,14 @@
     "registration_disabled": "Registration Disabled",
     "registration_disabled_message": "User registration is currently disabled by the system administrator.",
     "contact_admin": "Please contact your administrator to create an account for you.",
-    "back_to_login": "Back to Login"
+    "back_to_login": "Back to Login",
+    "brand_tagline": "One workspace for the life of a pull request - reviewed, scored, and shipped.",
+    "brand_point_review_title": "AI-assisted code review",
+    "brand_point_review_desc": "Issues flagged by severity, from critical to low, with traceable AI review records.",
+    "brand_point_release_title": "Release notes that write themselves",
+    "brand_point_release_desc": "One note spanning the application and the packages it carries, ready to publish.",
+    "brand_point_insight_title": "Multi-reviewer scoring & analytics",
+    "brand_point_insight_desc": "Assignments, scores and trends across teams - all in one place."
   },
   "dashboard": {
     "welcome": "Welcome to PR Ledger",
@@ -456,7 +463,9 @@
       "assign": "Assign",
       "items_selected": "{count} item selected | {count} items selected",
       "clear_selection": "Clear Selection"
-    }
+    },
+    "severity": "Severity",
+    "no_severity_issues": "No issues"
   },
   "scores": {
     "score_list": "Score List",
@@ -1062,7 +1071,9 @@
     "desc_review_assigned": "Notify when you are assigned to review a pull request",
     "desc_review_completed": "Notify when a pull request you reviewed is completed",
     "desc_delegation_expiry": "Notify when a role delegation is about to expire",
-    "desc_system_alert": "Important system-wide announcements and alerts"
+    "desc_system_alert": "Important system-wide announcements and alerts",
+    "view_related": "View {target}",
+    "column_empty": "Nothing here"
   },
   "time": {
     "just_now": "Just now",

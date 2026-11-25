@@ -191,7 +191,29 @@
         </el-table-column>
         <el-table-column label="Reviewer" width="150">
           <template #default="{ row }">
-            {{ row.reviewer_info?.display_name || row.reviewer }}
+            <!-- The list endpoint returns one row per PR with reviewers in
+                 all_reviewers; reviewer/reviewer_info stay null there -->
+            <div v-if="row.all_reviewers && row.all_reviewers.length > 0">
+              <el-tooltip placement="top" effect="light">
+                <template #content>
+                  <div>
+                    <div v-for="rev in row.all_reviewers" :key="rev.username">
+                      {{ rev.display_name }} ({{ rev.username }})
+                    </div>
+                  </div>
+                </template>
+                <span>
+                  {{ getPrimaryReviewer(row) }}
+                  <span v-if="row.total_reviewers > 1"> +{{ row.total_reviewers - 1 }}</span>
+                </span>
+              </el-tooltip>
+            </div>
+            <span v-else-if="row.reviewer || row.reviewer_info?.display_name">
+              {{ row.reviewer_info?.display_name || row.reviewer }}
+            </span>
+            <el-tag v-else type="warning" effect="plain" size="small">
+              {{ t('reviews.unassigned', 'Unassigned') }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="PR User" width="150">
@@ -256,11 +278,13 @@ import * as echarts from 'echarts'
 import type { EChartsOption } from 'echarts'
 import { reviewsApi } from '@/api/reviews'
 import type { Review } from '@/api/reviews'
+import { useAuthStore } from '@/stores/auth'
 import dayjs from 'dayjs'
 import { useI18n } from 'vue-i18n'
 
 const { t, locale } = useI18n()
 const router = useRouter()
+const authStore = useAuthStore()
 
 // Helper function to get chart axis colors based on theme
 const { primaryColor } = useTheme()
@@ -977,6 +1001,21 @@ const loadMoreReviews = async () => {
   currentPage.value++
   await loadRecentReviews(false) // Don't reset, append to existing
   loadingMore.value = false
+}
+
+// Same primary-reviewer pick as the reviews list: prefer the current user's
+// own assignment, then the first reviewer in the list
+const getPrimaryReviewer = (row: any) => {
+  if (!row.all_reviewers || row.all_reviewers.length === 0) {
+    return row.reviewer_info?.display_name || row.reviewer || ''
+  }
+
+  const currentUsername = authStore.currentUser?.username
+  const mine = currentUsername
+    ? row.all_reviewers.find((rev: any) => rev.username === currentUsername)
+    : null
+  const primary = mine || row.all_reviewers[0]
+  return primary?.display_name || primary?.username || ''
 }
 
 const formatDate = (dateStr: string) => {

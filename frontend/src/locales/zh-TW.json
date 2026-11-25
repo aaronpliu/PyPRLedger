@@ -178,7 +178,14 @@
     "registration_disabled": "註冊已停用",
     "registration_disabled_message": "系統管理員已停用使用者註冊功能。",
     "contact_admin": "請聯絡您的管理員為您建立帳戶。",
-    "back_to_login": "返回登入"
+    "back_to_login": "返回登入",
+    "brand_tagline": "一個工作台，涵蓋 Pull Request 的完整生命週期——審查、評分、發布。",
+    "brand_point_review_title": "AI 輔助程式碼審查",
+    "brand_point_review_desc": "按嚴重度（Critical 到 Low）標記問題，AI 審查記錄全程可追溯。",
+    "brand_point_release_title": "發布說明自動生成",
+    "brand_point_release_desc": "一條說明涵蓋應用及其攜帶的依賴套件，隨時可發布。",
+    "brand_point_insight_title": "多人評分與分析",
+    "brand_point_insight_desc": "任務分配、評分與趨勢，盡在一處。"
   },
   "dashboard": {
     "welcome": "歡迎使用 PR Ledger",
@@ -456,7 +463,9 @@
       "assign": "指派",
       "items_selected": "已選擇 {count} 條審查 | 已選擇 {count} 條審查",
       "clear_selection": "清除選擇"
-    }
+    },
+    "severity": "嚴重度",
+    "no_severity_issues": "無問題"
   },
   "scores": {
     "score_list": "評分列表",
@@ -1062,7 +1071,9 @@
     "desc_review_assigned": "當您被分配審查拉取請求時通知",
     "desc_review_completed": "當您審查的拉取請求完成時通知",
     "desc_delegation_expiry": "當角色委託即將到期時通知",
-    "desc_system_alert": "重要的系統公告和警報"
+    "desc_system_alert": "重要的系統公告和警報",
+    "view_related": "查看{target}",
+    "column_empty": "暫無訊息"
   },
   "time": {
     "just_now": "剛剛",

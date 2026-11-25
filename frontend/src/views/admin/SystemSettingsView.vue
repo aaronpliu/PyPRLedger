@@ -181,6 +181,7 @@
       <!-- Add and edit share one dialog -->
       <el-dialog
         v-model="editorVisible"
+        append-to-body
         :title="editingId ? t('admin.systemSettings.bannerEdit') : t('admin.systemSettings.bannerAdd')"
         width="560px"
         :close-on-click-modal="false"
@@ -398,6 +399,7 @@
       <!-- Add and edit share one dialog -->
       <el-dialog
         v-model="festivalEditorVisible"
+        append-to-body
         :title="
           festivalEditingId
             ? t('admin.systemSettings.festivalEdit')
@@ -838,6 +840,7 @@
       <!-- One dialog for both levels; which one it edits is what is open -->
       <el-dialog
         v-model="targetEditorVisible"
+        append-to-body
         :title="
           targetScope === 'project'
             ? t('admin.systemSettings.confluenceProjectTarget')

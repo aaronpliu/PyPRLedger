@@ -187,6 +187,84 @@ async def test_a_failed_flush_keeps_the_cause_and_is_recorded(
     assert failed[0].error_details["error_type"] == "IntegrityError"
 
 
+async def test_a_failed_review_raises_a_system_alert_for_admins(
+    db_session: AsyncSession, provider: StubProvider, monkeypatch
+) -> None:
+    """A failed ingestion must alert the admin roles, once per PR."""
+    from src.models.auth_user import AuthUser
+    from src.models.notification import Notification
+    from src.models.rbac import UserRoleAssignment
+    from src.models.role import Role
+    from src.utils.password import hash_password
+
+    service = ReviewService()
+    await service.upsert_review(review_payload(), db_session)
+
+    # two admins and one plain reviewer
+    admin_role = Role(name="review_admin", description="admin", permissions={"reviews": ["read"]})
+    system_role = Role(name="system_admin", description="admin", permissions={"users": ["manage"]})
+    reviewer_role = Role(name="reviewer", description="reviewer", permissions={"reviews": ["read"]})
+    db_session.add_all([admin_role, system_role, reviewer_role])
+    await db_session.flush()
+
+    users: dict[str, AuthUser] = {}
+    for name, role in (
+        ("admin_one", admin_role),
+        ("admin_two", system_role),
+        ("plain_reviewer", reviewer_role),
+    ):
+        user = AuthUser(username=name, email=f"{name}@test.com", password_hash=hash_password("pw"))
+        db_session.add(user)
+        await db_session.flush()
+        db_session.add(
+            UserRoleAssignment(
+                auth_user_id=user.id,
+                role_id=role.id,
+                resource_type="global",
+                resource_id=None,
+            )
+        )
+        users[name] = user
+    await db_session.commit()
+
+    async def conflicting_sync(self: EntitySyncService, project_key: str) -> None:
+        self.db.add(
+            Project(
+                project_id=PROJECT_ID,
+                project_name="duplicate",
+                project_key="OTHER",
+                project_url="https://bitbucket.org/other/",
+                git_provider="bitbucket_cloud",
+            )
+        )
+        await self.db.flush()
+        return None
+
+    monkeypatch.setattr(EntitySyncService, "sync_project", conflicting_sync)
+
+    with pytest.raises(IntegrityError):
+        await service.upsert_review(review_payload(pull_request_id="99"), db_session)
+
+    stmt = select(Notification).where(Notification.type == "system_alert")
+    alerts = (await db_session.execute(stmt)).scalars().all()
+
+    # every admin was told, the plain reviewer was not
+    assert {a.user_id for a in alerts} == {"admin_one", "admin_two"}
+    assert all(a.priority == "high" for a in alerts)
+    assert all(a.related_id == "99" for a in alerts)
+    assert all(a.related_type == "pull_request" for a in alerts)
+    assert all("AI review failed" in a.title for a in alerts)
+
+    # a second failure for the same PR must not spam another round of alerts
+    await db_session.rollback()
+    with pytest.raises(IntegrityError):
+        await service.upsert_review(review_payload(pull_request_id="99"), db_session)
+
+    stmt = select(Notification).where(Notification.type == "system_alert")
+    alerts_after = (await db_session.execute(stmt)).scalars().all()
+    assert len(alerts_after) == len(alerts)
+
+
 async def test_a_reposted_review_publishes_an_update(
     db_session: AsyncSession, provider: StubProvider
 ) -> None:

@@ -4,7 +4,10 @@
     <el-header class="layout-header" role="banner">
       <div class="header-content">
         <div class="header-left">
-          <h1 class="logo" role="heading" aria-level="1">PR Ledger</h1>
+          <h1 class="logo" role="heading" aria-level="1">
+            <BrandLogo variant="mark" :height="30" chip alt="" />
+            <span>PR Ledger</span>
+          </h1>
           <nav role="navigation" aria-label="Main navigation">
             <el-menu
               mode="horizontal"
@@ -128,6 +131,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts'
+import BrandLogo from '@/components/common/BrandLogo.vue'
 import NotificationBell from '@/components/common/NotificationBell.vue'
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 import ThemeSwitcher from '@/components/common/ThemeSwitcher.vue'
@@ -236,10 +240,14 @@ const handleCommand = (command: string) => {
 }
 
 .logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 20px;
   font-weight: bold;
   flex: 0 0 auto;
   white-space: nowrap;
+  margin: 0;
 }
 
 /* Every menu item stays visible: the menu never collapses into "..." and scrolls

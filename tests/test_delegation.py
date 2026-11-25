@@ -549,3 +549,187 @@ class TestRoleDelegation:
             )
 
         assert "Delegation already exists" in str(exc_info.value)
+
+
+class TestDelegationExpiryNotifications:
+    """Delegations tell both sides when access lapses or is about to"""
+
+    @pytest.mark.asyncio
+    async def test_expired_delegation_notifies_both_parties(
+        self,
+        db: AsyncSession,
+        rbac_service: RBACService,
+        test_roles: dict[str, Role],
+        test_users: dict[str, AuthUser],
+    ):
+        """Marking a delegation expired sends a notice to delegatee and delegator"""
+        admin_user = test_users["admin_user"]
+        junior_user = test_users["junior_user"]
+        reviewer_role = test_roles["reviewer"]
+
+        await rbac_service.assign_role(
+            auth_user_id=admin_user.id,
+            role_id=reviewer_role.id,
+            resource_type="global",
+            resource_id=None,
+        )
+
+        past_time = datetime.now(UTC) - timedelta(days=10)
+        delegation = await rbac_service.delegate_role(
+            delegator_id=admin_user.id,
+            delegatee_id=junior_user.id,
+            role_id=reviewer_role.id,
+            resource_type="global",
+            resource_id=None,
+            delegation_scope={"reviews": ["read"]},
+            starts_at=past_time - timedelta(days=20),
+            expires_at=past_time,
+        )
+
+        count = await rbac_service.update_expired_delegations()
+        assert count >= 1
+
+        from sqlalchemy import select
+
+        from src.models.notification import Notification
+
+        stmt = select(Notification).where(Notification.type == "delegation_expiry")
+        notifications = (await db.execute(stmt)).scalars().all()
+
+        assert len(notifications) == 2
+        assert {n.user_id for n in notifications} == {
+            admin_user.username,
+            junior_user.username,
+        }
+        assert all(n.priority == "normal" for n in notifications)
+        assert all(n.related_type == "delegation" for n in notifications)
+        assert all(n.related_id == str(delegation.id) for n in notifications)
+        assert all("expired" in n.title.lower() for n in notifications)
+
+    @pytest.mark.asyncio
+    async def test_expiring_delegation_sends_high_priority_warning(
+        self,
+        db: AsyncSession,
+        rbac_service: RBACService,
+        test_roles: dict[str, Role],
+        test_users: dict[str, AuthUser],
+    ):
+        """A delegation inside the warning window warns both sides at high priority"""
+        admin_user = test_users["admin_user"]
+        junior_user = test_users["junior_user"]
+        reviewer_role = test_roles["reviewer"]
+
+        await rbac_service.assign_role(
+            auth_user_id=admin_user.id,
+            role_id=reviewer_role.id,
+            resource_type="global",
+            resource_id=None,
+        )
+
+        now = datetime.now(UTC)
+        delegation = await rbac_service.delegate_role(
+            delegator_id=admin_user.id,
+            delegatee_id=junior_user.id,
+            role_id=reviewer_role.id,
+            resource_type="global",
+            resource_id=None,
+            delegation_scope={"reviews": ["read"]},
+            starts_at=now,
+            expires_at=now + timedelta(days=3),
+        )
+
+        warned = await rbac_service.notify_expiring_delegations(days=7)
+        assert warned == 1
+
+        from sqlalchemy import select
+
+        from src.models.notification import Notification
+
+        stmt = select(Notification).where(Notification.type == "delegation_expiry")
+        notifications = (await db.execute(stmt)).scalars().all()
+
+        assert len(notifications) == 2
+        assert all(n.priority == "high" for n in notifications)
+        assert all(n.related_id == str(delegation.id) for n in notifications)
+        assert all("expiring" in n.title.lower() for n in notifications)
+
+    @pytest.mark.asyncio
+    async def test_expiry_warning_is_sent_once(
+        self,
+        db: AsyncSession,
+        rbac_service: RBACService,
+        test_roles: dict[str, Role],
+        test_users: dict[str, AuthUser],
+    ):
+        """The background task runs every few minutes; the warning must not repeat"""
+        admin_user = test_users["admin_user"]
+        junior_user = test_users["junior_user"]
+        reviewer_role = test_roles["reviewer"]
+
+        await rbac_service.assign_role(
+            auth_user_id=admin_user.id,
+            role_id=reviewer_role.id,
+            resource_type="global",
+            resource_id=None,
+        )
+
+        now = datetime.now(UTC)
+        await rbac_service.delegate_role(
+            delegator_id=admin_user.id,
+            delegatee_id=junior_user.id,
+            role_id=reviewer_role.id,
+            resource_type="global",
+            resource_id=None,
+            delegation_scope={"reviews": ["read"]},
+            starts_at=now,
+            expires_at=now + timedelta(days=5),
+        )
+
+        first = await rbac_service.notify_expiring_delegations(days=7)
+        second = await rbac_service.notify_expiring_delegations(days=7)
+
+        assert first == 1
+        assert second == 0
+
+        from sqlalchemy import select
+
+        from src.models.notification import Notification
+
+        stmt = select(Notification).where(Notification.type == "delegation_expiry")
+        notifications = (await db.execute(stmt)).scalars().all()
+        assert len(notifications) == 2
+
+    @pytest.mark.asyncio
+    async def test_delegation_far_from_expiry_is_not_warned(
+        self,
+        db: AsyncSession,
+        rbac_service: RBACService,
+        test_roles: dict[str, Role],
+        test_users: dict[str, AuthUser],
+    ):
+        """A delegation expiring outside the window stays silent"""
+        admin_user = test_users["admin_user"]
+        junior_user = test_users["junior_user"]
+        reviewer_role = test_roles["reviewer"]
+
+        await rbac_service.assign_role(
+            auth_user_id=admin_user.id,
+            role_id=reviewer_role.id,
+            resource_type="global",
+            resource_id=None,
+        )
+
+        now = datetime.now(UTC)
+        await rbac_service.delegate_role(
+            delegator_id=admin_user.id,
+            delegatee_id=junior_user.id,
+            role_id=reviewer_role.id,
+            resource_type="global",
+            resource_id=None,
+            delegation_scope={"reviews": ["read"]},
+            starts_at=now,
+            expires_at=now + timedelta(days=30),
+        )
+
+        warned = await rbac_service.notify_expiring_delegations(days=7)
+        assert warned == 0
